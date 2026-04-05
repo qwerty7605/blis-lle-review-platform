@@ -16,7 +16,7 @@ export const dashboardModules = {
     routeName: 'dashboard-home',
     label: 'Dashboard',
     title: 'Dashboard',
-    sub: 'Your LLE review performance at a glance',
+    sub: 'See recent exams, active notices, and your current rooms in one place',
     icon: LayoutDashboard,
   },
   rooms: {
@@ -38,9 +38,9 @@ export const dashboardModules = {
   reviewBot: {
     key: 'reviewBot',
     routeName: 'dashboard-review-bot',
-    label: 'Practice',
-    title: 'Weak-Area Practice',
-    sub: 'Practice approved remedial questions based on weak subject/topic areas',
+    label: 'Review Bot',
+    title: 'Review Bot',
+    sub: 'Study with a BLIS tutor bot across the 6 core subjects',
     icon: Sparkles,
   },
   room: {
@@ -75,14 +75,6 @@ export const dashboardModules = {
     sub: 'Review aggregate and student-level insights',
     icon: BarChart3,
   },
-  students: {
-    key: 'students',
-    routeName: 'dashboard-students',
-    label: 'Students',
-    title: 'Students',
-    sub: 'Browse current students by year level and review their performance',
-    icon: UserRound,
-  },
   settings: {
     key: 'settings',
     routeName: 'dashboard-settings',
@@ -112,7 +104,8 @@ export const dashboardModules = {
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics'],
   staff_master_examiner: ['library', 'room', 'exams', 'reports', 'settings'],
-  admin: ['users', 'library', 'room', 'students', 'settings', 'audit'],
+  faculty: ['library', 'room', 'exams', 'reports', 'settings'],
+  admin: ['users', 'room', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {
