@@ -1,120 +1,163 @@
-import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { reviewBotApi } from '@/api'
+import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 
 function firstApiError(error, fallbackMessage) {
   return error?.response?.data?.message ?? fallbackMessage
 }
 
-function normalizeQuestionRecord(question) {
+function asList(value) {
+  return Array.isArray(value) ? value : []
+}
+
+function subjectSortIndex(label) {
+  const index = LIBRARY_SUBJECT_CATEGORIES.indexOf(label)
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index
+}
+
+function normalizeSubjectRecord(subject) {
+  if (!subject || typeof subject !== 'object') return null
+
+  const label = String(subject.subject ?? '').trim()
+  if (!label) return null
+
+  const focusAreas = asList(subject.focus_areas)
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+
+  return {
+    subject: label,
+    description: String(subject.description ?? '').trim() || 'Practice questions for this BLIS core subject.',
+    focus_areas: focusAreas,
+    topic_count: Number(subject.topic_count ?? 0),
+    bot_ready: Boolean(subject.bot_ready ?? true),
+  }
+}
+
+function normalizeGeneratedQuestion(question, index) {
   if (!question || typeof question !== 'object') return null
 
-  const rawOptions = Array.isArray(question.options) ? question.options : []
+  const prompt = String(question.prompt ?? '').trim()
+  const type = String(question.type ?? 'multiple_choice').trim() || 'multiple_choice'
+  const subject = String(question.subject ?? '').trim() || 'General'
+  const correctOptionId = String(question.correct_option_id ?? '').trim()
+  const explanation = String(question.explanation ?? '').trim()
+  const rawOptions = asList(question.options)
+
   const options = rawOptions
-    .map((option) => {
+    .map((option, optionIndex) => {
       if (!option || typeof option !== 'object') return null
 
-      const id = Number(option.id ?? 0)
+      const id = String(option.id ?? `opt-${optionIndex + 1}`).trim() || `opt-${optionIndex + 1}`
       const text = String(option.text ?? '').trim()
 
-      if (!id || !text) return null
+      if (!text) return null
 
-      return {
-        id,
-        label: String(option.label ?? '').trim(),
-        text,
-        is_correct: typeof option.is_correct === 'boolean' ? option.is_correct : null,
-      }
+      return { id, text }
     })
     .filter(Boolean)
 
-  if (!question.question_id || !String(question.question_text ?? '').trim() || options.length < 2) {
+  if (!prompt || !correctOptionId || options.length < 2) {
     return null
   }
 
   return {
-    id: Number(question.question_id),
-    itemNumber: Number(question.item_number ?? 0),
-    prompt: String(question.question_text ?? '').trim(),
-    type: String(question.question_type ?? 'multiple_choice'),
-    subject: String(question.subject ?? '').trim() || 'General',
-    topic: String(question.topic ?? '').trim() || '',
+    id: String(question.id ?? `question-${index + 1}`),
+    prompt,
+    type,
+    subject,
     options,
-    answer: {
-      selected_option_id: Number(question.answer?.selected_option_id ?? 0) || null,
-      answer_text: question.answer?.answer_text ?? '',
-      is_correct: typeof question.answer?.is_correct === 'boolean' ? question.answer.is_correct : null,
-    },
-    correctAnswer: question.correct_answer ?? null,
+    correct_option_id: correctOptionId,
+    explanation: explanation || 'Review the correct idea before moving on.',
   }
-}
-
-function formatWeakAreaLabel(weakArea) {
-  if (!weakArea || typeof weakArea !== 'object') return 'No weak area available yet'
-  if (String(weakArea.basis ?? '') === 'topic' && String(weakArea.topic ?? '').trim()) {
-    return `${weakArea.subject} • ${weakArea.topic}`
-  }
-
-  return String(weakArea.subject ?? '').trim() || 'No weak area available yet'
 }
 
 export function useReviewBotModule() {
-  const route = useRoute()
-  const router = useRouter()
-  const overviewLoading = ref(false)
+  const rawSubjectOptions = ref([])
+  const reviewLoading = ref(false)
   const quizLoading = ref(false)
   const reviewError = ref('')
   const reviewMessage = ref('')
+  const generatorMode = ref('core_blueprint')
+  const quizSubmitted = ref(false)
   const generatedQuestions = ref([])
-  const currentAttempt = ref(null)
-  const practiceOverview = ref({
-    weak_area: null,
-    available_questions: 0,
-  })
   const answers = reactive({})
 
   const form = reactive({
     questionCount: 10,
+    subjects: [],
   })
-  const autoStartHandled = ref(false)
 
-  const questionCountOptions = [5, 10, 15, 20]
+  const questionCountOptions = [5, 10, 15, 20, 30]
+
+  const subjectOptions = computed(() => (
+    [...rawSubjectOptions.value].sort((left, right) => subjectSortIndex(left.subject) - subjectSortIndex(right.subject))
+  ))
+
+  const selectedSubjects = computed(() => (
+    subjectOptions.value.filter((subject) => form.subjects.includes(subject.subject))
+  ))
+
+  const availableBotTopicCount = computed(() => (
+    subjectOptions.value.reduce((total, subject) => total + Number(subject.topic_count ?? 0), 0)
+  ))
+
+  const selectedFocusAreas = computed(() => {
+    const source = selectedSubjects.value.length > 0 ? selectedSubjects.value : subjectOptions.value.slice(0, 2)
+
+    return [...new Set(
+      source.flatMap((subject) => subject.focus_areas ?? []),
+    )].slice(0, 6)
+  })
+
+  const hasFullCoverage = computed(() => (
+    subjectOptions.value.length > 0 && form.subjects.length === subjectOptions.value.length
+  ))
 
   const hasQuiz = computed(() => generatedQuestions.value.length > 0)
-  const weakArea = computed(() => practiceOverview.value?.weak_area ?? null)
-  const availableQuestions = computed(() => Number(practiceOverview.value?.available_questions ?? 0))
-  const weakAreaLabel = computed(() => formatWeakAreaLabel(weakArea.value))
-  const weakAreaBasisLabel = computed(() => (
-    !weakArea.value
-      ? 'Awaiting diagnostics'
-      : (String(weakArea.value?.basis ?? '') === 'topic' ? 'Topic weakness' : 'Subject weakness')
-  ))
   const canGenerate = computed(() => (
-    Number(form.questionCount) >= 3
-    && weakArea.value
-    && availableQuestions.value > 0
-    && !quizLoading.value
+    form.subjects.length > 0
+    && Number(form.questionCount) >= 3
+    && Number(form.questionCount) <= 30
   ))
-  const attemptSubmitted = computed(() => String(currentAttempt.value?.status ?? '') === 'submitted')
-  const answeredCount = computed(() => Number(currentAttempt.value?.answered_count ?? 0))
-  const allAnswered = computed(() => (
-    hasQuiz.value && answeredCount.value === generatedQuestions.value.length
+
+  const answeredCount = computed(() => (
+    generatedQuestions.value.filter((question) => Boolean(answers[question.id])).length
   ))
-  const correctCount = computed(() => Number(currentAttempt.value?.correct_answers ?? 0))
-  const scorePercent = computed(() => Number(currentAttempt.value?.score_percent ?? 0))
 
-  function questionHasAnswer(question) {
-    if (!question || typeof question !== 'object') return false
+  const correctCount = computed(() => {
+    if (!quizSubmitted.value) return 0
 
-    const hasSelectedOption = Number(question.answer?.selected_option_id ?? 0) > 0
-    const hasTextAnswer = String(question.answer?.answer_text ?? '').trim().length > 0
+    return generatedQuestions.value.filter((question) => (
+      String(answers[question.id] ?? '') === String(question.correct_option_id)
+    )).length
+  })
 
-    return hasSelectedOption || hasTextAnswer
-  }
+  const scorePercent = computed(() => {
+    if (!quizSubmitted.value || generatedQuestions.value.length === 0) return 0
+    return Math.round((correctCount.value / generatedQuestions.value.length) * 100)
+  })
 
-  function questionFeedbackVisible(question) {
-    return attemptSubmitted.value || questionHasAnswer(question)
-  }
+  const generatorLabel = computed(() => {
+    if (generatorMode.value === 'core_blueprint') return 'BLIS Core Bot'
+    return 'BLIS Review Bot'
+  })
+
+  const generatorDescription = computed(() => {
+    if (generatorMode.value === 'core_blueprint') {
+      return 'The bot built this set from its built-in BLIS core subject reviewer.'
+    }
+
+    return 'A BLIS practice set is ready for you.'
+  })
+
+  const scoreMessage = computed(() => {
+    if (!quizSubmitted.value) return ''
+    if (scorePercent.value >= 85) return 'Strong work. You are showing solid recall in this review set.'
+    if (scorePercent.value >= 75) return 'Good job. Review the missed explanations to keep improving.'
+    return 'Use the explanations below and try another set after reviewing the weak areas.'
+  })
 
   function clearAnswers() {
     Object.keys(answers).forEach((key) => {
@@ -122,22 +165,10 @@ export function useReviewBotModule() {
     })
   }
 
-  function hydrateAttemptPayload(data) {
-    currentAttempt.value = data?.attempt ?? null
-    generatedQuestions.value = Array.isArray(data?.questions)
-      ? data.questions.map(normalizeQuestionRecord).filter(Boolean)
-      : []
-
-    clearAnswers()
-
-    generatedQuestions.value.forEach((question) => {
-      answers[question.id] = question.answer?.selected_option_id ?? null
-    })
-  }
-
   function resetQuizState() {
-    currentAttempt.value = null
     generatedQuestions.value = []
+    quizSubmitted.value = false
+    generatorMode.value = 'core_blueprint'
     clearAnswers()
   }
 
@@ -145,195 +176,135 @@ export function useReviewBotModule() {
     form.questionCount = Number(count)
   }
 
-  async function loadOverview() {
-    overviewLoading.value = true
+  function toggleSubject(subject) {
+    if (form.subjects.includes(subject)) {
+      form.subjects = form.subjects.filter((item) => item !== subject)
+      return
+    }
+
+    form.subjects = [...form.subjects, subject]
+  }
+
+  function selectAllSubjects() {
+    form.subjects = subjectOptions.value.map((subject) => subject.subject)
+  }
+
+  function clearSelectedSubjects() {
+    form.subjects = []
+  }
+
+  function answerQuestion(questionId, optionId) {
+    if (quizSubmitted.value) return
+    answers[questionId] = optionId
+  }
+
+  function submitQuiz() {
+    reviewError.value = ''
+    reviewMessage.value = ''
+
+    if (!hasQuiz.value) {
+      reviewError.value = 'Generate a BLIS review set first.'
+      return
+    }
+
+    quizSubmitted.value = true
+    reviewMessage.value = `Score: ${correctCount.value}/${generatedQuestions.value.length}`
+  }
+
+  async function loadSubjectOptions() {
+    reviewLoading.value = true
     reviewError.value = ''
 
     try {
-      const { data } = await reviewBotApi.overview()
-      practiceOverview.value = {
-        weak_area: data?.weak_area ?? null,
-        available_questions: Number(data?.available_questions ?? 0),
-      }
+      const { data } = await reviewBotApi.listSubjects()
+      rawSubjectOptions.value = asList(data?.subjects)
+        .map(normalizeSubjectRecord)
+        .filter(Boolean)
+
+      form.subjects = form.subjects.filter((selected) => (
+        rawSubjectOptions.value.some((subject) => subject.subject === selected)
+      ))
     } catch (error) {
-      reviewError.value = firstApiError(error, 'Unable to load weak-area practice right now.')
+      reviewError.value = firstApiError(error, 'Unable to load BLIS review subjects.')
     } finally {
-      overviewLoading.value = false
+      reviewLoading.value = false
     }
   }
-
-  function autoStartRequested() {
-    return String(route.query?.auto_start ?? '') === '1'
-  }
-
-  async function clearAutoStartQuery() {
-    if (!autoStartRequested()) return
-
-    const nextQuery = {
-      ...route.query,
-    }
-
-    delete nextQuery.auto_start
-    delete nextQuery.launch
-
-    await router.replace({
-      query: nextQuery,
-    })
-  }
-
-  async function maybeAutoStartRecommendedPractice() {
-    if (!autoStartRequested() || autoStartHandled.value) {
-      return
-    }
-
-    autoStartHandled.value = true
-
-    if (canGenerate.value) {
-      await generateQuiz()
-      await clearAutoStartQuery()
-      return
-    }
-
-    if (!weakArea.value) {
-      reviewError.value = 'Recommended practice is not ready yet because no weak area has been detected from your submitted exams.'
-    } else if (availableQuestions.value <= 0) {
-      reviewError.value = 'Recommended practice is not ready yet because no approved remedial questions are available for your current weak area.'
-    }
-
-    await clearAutoStartQuery()
-  }
-
-  watch(
-    () => String(route.query?.auto_start ?? ''),
-    (value) => {
-      if (value === '1') {
-        autoStartHandled.value = false
-        void maybeAutoStartRecommendedPractice()
-      }
-    },
-  )
-
-  watch(
-    [weakArea, availableQuestions, overviewLoading],
-    ([nextWeakArea, nextAvailableQuestions, nextOverviewLoading]) => {
-      if (
-        autoStartRequested()
-        && !autoStartHandled.value
-        && !nextOverviewLoading
-        && nextWeakArea
-        && Number(nextAvailableQuestions) > 0
-      ) {
-        void maybeAutoStartRecommendedPractice()
-      }
-    },
-  )
 
   async function generateQuiz() {
     if (!canGenerate.value) {
-      reviewError.value = weakArea.value
-        ? 'No approved remedial questions are ready for this weak area yet.'
-        : 'No weak-area recommendation is available yet.'
+      reviewError.value = 'Choose at least one BLIS core subject and a valid question count first.'
       return
     }
 
     quizLoading.value = true
     reviewError.value = ''
     reviewMessage.value = ''
+    quizSubmitted.value = false
+    clearAnswers()
 
     try {
-      const { data } = await reviewBotApi.startAttempt({
+      const payload = {
         question_count: Number(form.questionCount),
-      })
+        subjects: [...form.subjects],
+      }
 
-      hydrateAttemptPayload(data)
-      reviewMessage.value = String(data?.message ?? 'Practice attempt started.')
+      const { data } = await reviewBotApi.generateQuiz(payload)
+      const questions = asList(data?.questions)
+        .map(normalizeGeneratedQuestion)
+        .filter(Boolean)
+
+      generatedQuestions.value = questions
+      generatorMode.value = String(data?.generator ?? 'core_blueprint')
+      reviewMessage.value = String(data?.message ?? 'Quiz ready.')
+
+      if (questions.length === 0) {
+        reviewError.value = 'No review questions were generated for this request.'
+      }
     } catch (error) {
       resetQuizState()
-      reviewError.value = firstApiError(error, 'Unable to start weak-area practice right now.')
-    } finally {
-      quizLoading.value = false
-    }
-  }
-
-  async function answerQuestion(questionId, optionId) {
-    if (attemptSubmitted.value || !currentAttempt.value?.id) return
-
-    answers[questionId] = optionId
-    reviewError.value = ''
-
-    try {
-      const { data } = await reviewBotApi.saveAnswer(currentAttempt.value.id, {
-        question_id: Number(questionId),
-        selected_option_id: Number(optionId),
-      })
-      hydrateAttemptPayload(data)
-    } catch (error) {
-      reviewError.value = firstApiError(error, 'Unable to save this practice answer.')
-    }
-  }
-
-  async function submitQuiz() {
-    reviewError.value = ''
-    reviewMessage.value = ''
-
-    if (!currentAttempt.value?.id) {
-      reviewError.value = 'Start a practice attempt first.'
-      return
-    }
-
-    if (!allAnswered.value) {
-      reviewError.value = 'Answer every question before submitting your practice attempt.'
-      return
-    }
-
-    quizLoading.value = true
-
-    try {
-      const { data } = await reviewBotApi.submitAttempt(currentAttempt.value.id)
-      hydrateAttemptPayload(data)
-      reviewMessage.value = String(data?.message ?? 'Practice attempt submitted.')
-      await loadOverview()
-    } catch (error) {
-      reviewError.value = firstApiError(error, 'Unable to submit your practice attempt right now.')
+      reviewError.value = firstApiError(error, 'Unable to generate a BLIS review set right now.')
     } finally {
       quizLoading.value = false
     }
   }
 
   onMounted(() => {
-    void (async () => {
-      await loadOverview()
-      await maybeAutoStartRecommendedPractice()
-    })()
+    loadSubjectOptions()
   })
 
   return {
-    availableQuestions,
-    answeredCount,
-    allAnswered,
-    answerQuestion,
-    answers,
-    attemptSubmitted,
-    canGenerate,
-    correctCount,
-    form,
-    generateQuiz,
-    generatedQuestions,
-    hasQuiz,
-    loadOverview,
-    overviewLoading,
-    questionCountOptions,
-    questionFeedbackVisible,
-    questionHasAnswer,
+    subjectOptions,
+    reviewLoading,
     quizLoading,
-    resetQuizState,
     reviewError,
     reviewMessage,
+    generatorMode,
+    generatorLabel,
+    generatorDescription,
+    quizSubmitted,
+    generatedQuestions,
+    answers,
+    form,
+    questionCountOptions,
+    selectedSubjects,
+    selectedFocusAreas,
+    availableBotTopicCount,
+    hasFullCoverage,
+    hasQuiz,
+    canGenerate,
+    answeredCount,
+    correctCount,
     scorePercent,
+    scoreMessage,
     setQuestionCount,
+    toggleSubject,
+    selectAllSubjects,
+    clearSelectedSubjects,
+    answerQuestion,
     submitQuiz,
-    weakArea,
-    weakAreaBasisLabel,
-    weakAreaLabel,
+    generateQuiz,
+    loadSubjectOptions,
+    resetQuizState,
   }
 }

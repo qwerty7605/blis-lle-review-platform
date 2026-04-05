@@ -53,14 +53,14 @@
     </aside>
 
     <section class="layout-main">
-      <header class="layout-topbar">
+      <header class="layout-topbar" :class="{ 'is-student-dashboard-home': isStudentDashboardHome }">
         <div>
           <h1>{{ pageTitle }}</h1>
           <p>{{ pageSubtitle }}</p>
         </div>
       </header>
 
-      <main class="layout-content">
+      <main class="layout-content" :class="{ 'is-student-dashboard-home': isStudentDashboardHome }">
         <RouterView />
       </main>
     </section>
@@ -92,6 +92,9 @@ const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLow
 const navItems = computed(() => getDashboardNavItems(normalizedRole.value))
 
 const currentRouteName = computed(() => String(route.name ?? ''))
+const isStudentDashboardHome = computed(() => (
+  normalizedRole.value === 'student' && currentRouteName.value === 'dashboard-home'
+))
 
 const pageTitle = computed(() => String(route.meta?.title ?? 'Dashboard'))
 const pageSubtitle = computed(() => String(route.meta?.sub ?? 'Manage your modules and workflows.'))
@@ -402,12 +405,37 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.layout-topbar.is-student-dashboard-home {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.layout-topbar.is-student-dashboard-home h1 {
+  font-size: 24px;
+}
+
+.layout-topbar.is-student-dashboard-home p {
+  margin-top: 4px;
+  font-size: 14px;
+}
+
 .layout-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 22px 24px;
   background: transparent;
+}
+
+.layout-content.is-student-dashboard-home {
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
+
+.layout-content.is-student-dashboard-home > * {
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 900px) {
@@ -472,6 +500,11 @@ onBeforeUnmount(() => {
   .layout-topbar,
   .layout-content {
     padding: 16px;
+  }
+
+  .layout-content.is-student-dashboard-home {
+    overflow: visible;
+    display: block;
   }
 }
 </style>

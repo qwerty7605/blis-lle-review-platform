@@ -1,8 +1,7 @@
-import { computed, onMounted, ref, watch } from 'vue'
-import { useAuthStore } from '@/store/auth.store'
-import { ClipboardList, DoorOpen, Gauge, ShieldCheck } from 'lucide-vue-next'
+import { computed, onMounted, ref } from 'vue'
+import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
+import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 import { formatDateTime } from './useDashboardFormatters'
-import { useDashboardDataServices } from './useDashboardDataServices'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -10,395 +9,300 @@ function firstApiError(error, fallbackMessage) {
   return error?.response?.data?.message ?? fallbackMessage
 }
 
-function numericValue(value) {
-  const numeric = Number(value)
-  return Number.isFinite(numeric) ? numeric : null
+function asList(value) {
+  return Array.isArray(value) ? value : []
 }
 
-function countValue(value) {
-  const numeric = Number(value)
-  return Number.isFinite(numeric) ? Math.max(0, Math.round(numeric)) : 0
+function scoreTone(score) {
+  const numericScore = Number(score ?? 0)
+  if (numericScore >= 85) return 'success'
+  if (numericScore >= 75) return 'navy'
+  if (numericScore >= 60) return 'gold'
+  return 'danger'
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value))
+function trendTone(trend) {
+  if (trend === 'up') return 'success'
+  if (trend === 'down') return 'danger'
+  if (trend === 'steady') return 'navy'
+  return 'neutral'
 }
 
-const NUMBER_FORMATTER = new Intl.NumberFormat()
-
-function formatPercent(value, options = {}) {
-  const {
-    fallback = 'N/A',
-    minimumFractionDigits = 0,
-    maximumFractionDigits = 2,
-  } = options
-  const numeric = numericValue(value)
-  if (numeric === null) return fallback
-
-  return `${new Intl.NumberFormat(undefined, {
-    minimumFractionDigits,
-    maximumFractionDigits,
-  }).format(numeric)}%`
+function bandLabel(band) {
+  if (band === 'strong') return 'Doing Well'
+  if (band === 'developing') return 'Almost There'
+  if (band === 'focus') return 'Review More'
+  return 'No Data'
 }
 
-function formatCount(value) {
-  return NUMBER_FORMATTER.format(countValue(value))
+function humanizeFeatureKey(feature) {
+  return String(feature ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 export function useStudentInsightsModule() {
-  const auth = useAuthStore()
-  const services = useDashboardDataServices()
-
-  const insightsLoading = ref(false)
-  const insightsError = ref('')
-  const insightsLoaded = ref(false)
-  const insights = ref({
-    summary: {},
-    subjects: [],
-    topic_performance: [],
-    focus_subjects: [],
-    weak_area: null,
-    score_history: [],
-    recent_activity: [],
+  const analyticsLoading = ref(false)
+  const analyticsLoaded = ref(false)
+  const analyticsError = ref('')
+  const stats = ref({
+    completed_attempts: 0,
+    average_score_percent: null,
+    latest_score_percent: null,
+    latest_score_delta: null,
+    focus_subjects_count: 0,
+    passing_threshold: 75,
+  })
+  const subjectRows = ref([])
+  const historyRows = ref([])
+  const recentAttemptRows = ref([])
+  const predictiveModel = ref({
+    status: 'awaiting_ml_api',
+    title: 'Predictive Readiness Model',
+    description: 'Prepared for future J48 (C4.5) and logistic regression API integration.',
+    ml_api_endpoint: null,
+    expected_inputs: [],
+    probability_percent: null,
+    risk_band: null,
+    decision_rules: [],
   })
 
-  const isStudentRole = computed(() => String(auth.user?.role ?? '').toLowerCase() === 'student')
-
-  async function loadInsights(force = false) {
-    if (!isStudentRole.value) return
-    if (insightsLoading.value && !force) return
-
-    insightsLoading.value = true
-    insightsError.value = ''
-
-    try {
-      const { data } = await services.getStudentAnalyticsOverview()
-      insights.value = {
-        summary: data?.summary ?? {},
-        subjects: Array.isArray(data?.subjects) ? data.subjects : [],
-        topic_performance: Array.isArray(data?.topic_performance) ? data.topic_performance : [],
-        focus_subjects: Array.isArray(data?.focus_subjects) ? data.focus_subjects : [],
-        weak_area: data?.weak_area ?? null,
-        score_history: Array.isArray(data?.score_history) ? data.score_history : [],
-        recent_activity: Array.isArray(data?.recent_activity) ? data.recent_activity : [],
-      }
-    } catch (error) {
-      insightsError.value = firstApiError(error, 'Unable to load your analytics right now.')
-    } finally {
-      insightsLoading.value = false
-      insightsLoaded.value = true
-    }
-  }
-
-  watch(
-    () => auth.user?.id,
-    (userId, previousUserId) => {
-      if (String(userId ?? '') === String(previousUserId ?? '')) return
-
-      insights.value = {
-        summary: {},
-        subjects: [],
-        topic_performance: [],
-        focus_subjects: [],
-        weak_area: null,
-        score_history: [],
-        recent_activity: [],
-      }
-      insightsLoaded.value = false
-      insightsError.value = ''
-
-      if (userId && isStudentRole.value) {
-        void loadInsights(true)
-      }
-    },
-  )
-
-  onMounted(() => {
-    if (isStudentRole.value) {
-      void loadInsights()
-    }
-  })
-
-  const summary = computed(() => {
-    const raw = insights.value.summary ?? {}
-
-    return {
-      roomsJoined: countValue(raw.rooms_joined),
-      availableExams: countValue(raw.available_exams),
-      pendingExams: countValue(raw.pending_exams),
-      attemptsStarted: countValue(raw.attempts_started),
-      attemptsSubmitted: countValue(raw.attempts_submitted),
-      completedExams: countValue(raw.completed_exams),
-      inProgressAttempts: countValue(raw.in_progress_attempts),
-      passingAttempts: countValue(raw.passing_attempts),
-      failingAttempts: countValue(raw.failing_attempts),
-      passingThreshold: numericValue(raw.passing_threshold) ?? 75,
-      averageScorePercent: numericValue(raw.average_score_percent),
-      passRatePercent: numericValue(raw.pass_rate_percent),
-      bestScorePercent: numericValue(raw.best_score_percent),
-      latestScorePercent: numericValue(raw.latest_score_percent),
-    }
-  })
-
-  const subjects = computed(() => (
-    (insights.value.subjects ?? []).map((subject, index) => {
-      const score = numericValue(subject?.score ?? subject?.average_score_percent) ?? 0
-
-      return {
-        id: `${subject?.label ?? 'subject'}-${index}`,
-        label: String(subject?.label ?? 'Uncategorized'),
-        score,
-        scoreLabel: formatPercent(score, { maximumFractionDigits: 0 }),
-        latestScorePercent: numericValue(subject?.latest_score_percent),
-        passRatePercent: numericValue(subject?.pass_rate_percent),
-        passRateLabel: formatPercent(subject?.pass_rate_percent),
-        attemptsSubmitted: countValue(subject?.attempts_submitted),
-        lastSubmittedAt: subject?.last_submitted_at ?? null,
-      }
-    })
-  ))
-
-  const focusSubjects = computed(() => {
-    const threshold = summary.value.passingThreshold
-    const backendFocusLabels = new Set(
-      (insights.value.focus_subjects ?? []).map((subject) => String(subject?.label ?? '').trim()).filter(Boolean),
+  const subjects = computed(() => {
+    const incoming = new Map(
+      asList(subjectRows.value).map((subject) => [subject.label, subject]),
     )
 
-    return subjects.value.filter((subject) => (
-      backendFocusLabels.size > 0
-        ? backendFocusLabels.has(subject.label)
-        : subject.score < threshold
-    ))
-  })
+    return LIBRARY_SUBJECT_CATEGORIES.map((label) => {
+      const subject = incoming.get(label) ?? {
+        label,
+        attempts_count: 0,
+        average_score_percent: null,
+        latest_score_percent: null,
+        best_score_percent: null,
+        trend: 'none',
+        trend_delta: null,
+        performance_band: 'not_started',
+      }
 
-  const strongestSubject = computed(() => {
-    if (subjects.value.length === 0) return null
-
-    return [...subjects.value]
-      .sort((left, right) => right.score - left.score)[0] ?? null
-  })
-
-  const weakestSubject = computed(() => {
-    if (subjects.value.length === 0) return null
-
-    return [...subjects.value]
-      .sort((left, right) => left.score - right.score)[0] ?? null
-  })
-
-  const weakArea = computed(() => {
-    const raw = insights.value.weak_area
-    if (!raw || typeof raw !== 'object') return null
-
-    return {
-      basis: String(raw.basis ?? 'subject'),
-      subject: String(raw.subject ?? '').trim(),
-      topic: String(raw.topic ?? '').trim(),
-      subjectScore: numericValue(raw.subject_score),
-      topicScore: numericValue(raw.topic_score),
-    }
+      return {
+        ...subject,
+        scoreTone: scoreTone(subject.average_score_percent ?? subject.latest_score_percent ?? 0),
+        trendTone: trendTone(subject.trend),
+        bandLabel: bandLabel(subject.performance_band),
+        coveragePercent: Math.max(0, Math.min(100, Number(subject.average_score_percent ?? 0))),
+      }
+    })
   })
 
   const scoreHistory = computed(() => (
-    (insights.value.score_history ?? []).map((entry, index) => {
-      const score = numericValue(entry?.score_percent ?? entry?.score) ?? 0
-
-      return {
-        id: entry?.attempt_id ?? index + 1,
-        label: String(entry?.label ?? `Attempt ${index + 1}`),
-        shortLabel: String(entry?.short_label ?? `A${index + 1}`),
-        subject: entry?.subject ?? null,
-        roomName: entry?.room_name ?? null,
-        submittedAt: entry?.submitted_at ?? null,
-        score,
-        scoreLabel: formatPercent(score, { maximumFractionDigits: 0 }),
-      }
-    })
+    asList(historyRows.value).map((attempt) => ({
+      ...attempt,
+      score: Number(attempt.score_percent ?? 0),
+      scoreTone: scoreTone(attempt.score_percent),
+      submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a',
+    }))
   ))
 
-  const activities = computed(() => (
-    (insights.value.recent_activity ?? []).map((activity, index) => {
-      const status = String(activity?.status ?? '').toLowerCase()
-      const scorePercent = numericValue(activity?.score_percent)
-      const roomLabel = activity?.room_name
-        ? `${activity.room_name}${activity?.room_code ? ` (${activity.room_code})` : ''}`
-        : 'Exam activity'
-      const stateLabel = status === 'submitted'
-        ? 'Submitted'
-        : (status === 'in_progress' ? 'In progress' : 'Started')
-
-      return {
-        id: activity?.id ?? index + 1,
-        title: String(activity?.title ?? 'Exam Activity'),
-        meta: `${roomLabel} • ${formatDateTime(activity?.occurred_at)}`,
-        score: status === 'submitted'
-          ? formatPercent(scorePercent, { maximumFractionDigits: 0 })
-          : stateLabel,
-        positive: status === 'submitted'
-          ? (scorePercent ?? 0) >= summary.value.passingThreshold
-          : true,
-      }
-    })
+  const recentAttempts = computed(() => (
+    asList(recentAttemptRows.value).map((attempt) => ({
+      ...attempt,
+      scoreDisplay: attempt.score_percent === null ? 'N/A' : `${Number(attempt.score_percent).toFixed(1)}%`,
+      scoreTone: scoreTone(attempt.score_percent),
+      submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a',
+    }))
   ))
 
-  const averageScore = computed(() => summary.value.averageScorePercent ?? 0)
-  const averageScoreLabel = computed(() => formatPercent(summary.value.averageScorePercent))
-  const passingRateLabel = computed(() => formatPercent(summary.value.passRatePercent))
-  const bestScoreLabel = computed(() => formatPercent(summary.value.bestScorePercent))
-
-  const marginFromPassing = computed(() => {
-    if (summary.value.averageScorePercent === null) return null
-
-    return Number((summary.value.averageScorePercent - summary.value.passingThreshold).toFixed(2))
-  })
-
-  const marginLabel = computed(() => {
-    if (marginFromPassing.value === null) return 'N/A'
-    const prefix = marginFromPassing.value >= 0 ? '+' : ''
-    return `${prefix}${marginFromPassing.value.toFixed(2)} pts`
-  })
-
-  const passingRateValue = computed(() => clamp(summary.value.passRatePercent ?? 0, 0, 100))
-  const passingRateStatusLabel = computed(() => {
-    if (summary.value.attemptsSubmitted === 0) return 'No completed exams yet'
-    if ((summary.value.passRatePercent ?? 0) >= 75) return 'Most recent sessions are passing'
-    if ((summary.value.passRatePercent ?? 0) >= 50) return 'Mixed results across recent sessions'
-    return 'Review needed on recent sessions'
-  })
-
-  const standingTone = computed(() => {
-    if (summary.value.attemptsSubmitted === 0) {
-      return summary.value.availableExams > 0 ? 'navy' : 'neutral'
-    }
-
-    return (summary.value.averageScorePercent ?? 0) >= summary.value.passingThreshold
-      ? 'success'
-      : 'danger'
-  })
-
-  const standingLabel = computed(() => {
-    if (summary.value.attemptsSubmitted === 0) {
-      return summary.value.availableExams > 0 ? 'Ready To Start' : 'Awaiting Activity'
-    }
-
-    return standingTone.value === 'success' ? 'On Track' : 'Needs Attention'
-  })
-
-  const standingHeadline = computed(() => {
-    if (summary.value.attemptsSubmitted === 0) {
-      return summary.value.availableExams > 0
-        ? 'You have exam activity ready to start'
-        : 'Your dashboard is ready when classes assign work'
-    }
-
-    return standingTone.value === 'success'
-      ? 'Your current performance is above the passing line'
-      : 'A few recent results need review before the next exam'
-  })
-
-  const standingMessage = computed(() => {
-    if (summary.value.attemptsSubmitted === 0) {
-      if (summary.value.availableExams > 0) {
-        return `${formatCount(summary.value.availableExams)} assigned exam(s) across ${formatCount(summary.value.roomsJoined)} room(s). Start with your pending sessions to build your record.`
-      }
-
-      return 'Join a room or wait for an assigned exam to start seeing performance insights here.'
-    }
-
-    const focusCount = formatCount(focusSubjects.value.length)
-    const focusLine = focusSubjects.value.length > 0
-      ? `${focusCount} subject(s) are below the ${formatPercent(summary.value.passingThreshold, { maximumFractionDigits: 0 })} target.`
-      : 'All tracked subjects are currently above the passing target.'
-
-    return `${formatCount(summary.value.completedExams)} completed exam(s), ${formatCount(summary.value.pendingExams)} still pending. ${focusLine}`
-  })
-
-  const recentResults = computed(() => (
-    [...scoreHistory.value]
-      .reverse()
-      .slice(0, 4)
-      .map((entry) => ({
-        ...entry,
-        meta: [
-          entry.subject,
-          entry.roomName,
-          entry.submittedAt ? formatDateTime(entry.submittedAt) : null,
-        ].filter(Boolean).join(' • '),
-      }))
+  const averageScore = computed(() => (
+    stats.value.average_score_percent === null ? null : Number(stats.value.average_score_percent)
   ))
 
-  const statCards = computed(() => [
-    {
-      label: 'Overall Average',
-      value: averageScoreLabel.value,
-      trend: `${formatCount(summary.value.attemptsSubmitted)} submitted attempt(s)`,
-      positive: (summary.value.averageScorePercent ?? 0) >= summary.value.passingThreshold,
-      tone: 'navy',
-      icon: Gauge,
-    },
-    {
-      label: 'Passing Rate',
-      value: passingRateLabel.value,
-      trend: `${formatCount(summary.value.passingAttempts)} passing / ${formatCount(summary.value.attemptsSubmitted)} submitted`,
-      positive: (summary.value.passRatePercent ?? 0) >= 50,
-      tone: 'success',
-      icon: ShieldCheck,
-    },
-    {
-      label: 'Completed Exams',
-      value: formatCount(summary.value.completedExams),
-      trend: `${formatCount(summary.value.pendingExams)} pending`,
-      positive: summary.value.completedExams > 0,
+  const strongestSubject = computed(() => (
+    subjects.value
+      .filter((subject) => subject.attempts_count > 0 && subject.average_score_percent !== null)
+      .sort((left, right) => Number(right.average_score_percent ?? 0) - Number(left.average_score_percent ?? 0))[0]
+      ?? null
+  ))
+
+  const focusSubjects = computed(() => (
+    subjects.value
+      .filter((subject) => subject.attempts_count > 0 && subject.performance_band === 'focus')
+      .sort((left, right) => Number(left.average_score_percent ?? 0) - Number(right.average_score_percent ?? 0))
+  ))
+
+  const strengths = computed(() => (
+    subjects.value
+      .filter((subject) => subject.attempts_count > 0 && subject.performance_band === 'strong')
+      .sort((left, right) => Number(right.average_score_percent ?? 0) - Number(left.average_score_percent ?? 0))
+      .slice(0, 3)
+  ))
+
+  const latestScoreDeltaText = computed(() => {
+    const delta = Number(stats.value.latest_score_delta ?? 0)
+    if (!Number.isFinite(delta) || delta === 0) return 'Same as your last exam'
+    return delta > 0
+      ? `Up ${Math.abs(delta).toFixed(1)} points`
+      : `Down ${Math.abs(delta).toFixed(1)} points`
+  })
+
+  const statCards = computed(() => {
+    const latestScore = stats.value.latest_score_percent
+    const focusCount = Number(stats.value.focus_subjects_count ?? 0)
+
+    return [
+      {
+        label: 'Exams Taken',
+        value: String(stats.value.completed_attempts ?? 0),
+        hint: 'Finished exams',
+        tone: 'navy',
+      },
+      {
+        label: 'Overall Average',
+        value: averageScore.value === null ? 'N/A' : `${averageScore.value.toFixed(1)}%`,
+        hint: averageScore.value === null
+          ? 'Take one exam to see this'
+          : 'Based on finished exams',
+        tone: 'success',
+      },
+      {
+        label: 'Latest Result',
+        value: latestScore === null ? 'N/A' : `${Number(latestScore).toFixed(1)}%`,
+        hint: latestScore === null
+          ? 'Shows after your next exam'
+          : latestScoreDeltaText.value,
+        tone: 'gold',
+      },
+      {
+        label: 'Review Areas',
+        value: String(focusCount),
+        hint: focusCount === 0
+          ? 'All attempted subjects are 75%+'
+          : `${focusCount} subject${focusCount === 1 ? '' : 's'} below 75%`,
+        tone: focusCount === 0 ? 'success' : 'danger',
+      },
+    ]
+  })
+
+  const guidanceItems = computed(() => {
+    if ((stats.value.completed_attempts ?? 0) === 0) {
+      return [
+        {
+          title: 'Take your first exam',
+          description: 'Finish one exam to unlock your scores and subject feedback.',
+          tone: 'navy',
+        },
+      ]
+    }
+
+    const items = []
+
+    if (focusSubjects.value.length > 0) {
+      const subjectLabels = focusSubjects.value.slice(0, 2).map((subject) => subject.label).join(', ')
+      items.push({
+        title: 'Start with these subjects',
+        description: `${subjectLabels} are still below 75%.`,
+        tone: 'danger',
+      })
+    } else {
+      items.push({
+        title: 'You are on track',
+        description: 'All attempted subjects are already at 75% or higher.',
+        tone: 'success',
+      })
+    }
+
+    if (strengths.value.length > 0) {
+      items.push({
+        title: 'Strongest subject',
+        description: strengths.value[0].label,
+        tone: 'navy',
+      })
+    }
+
+    items.push({
+      title: 'Latest trend',
+      description: latestScoreDeltaText.value,
       tone: 'gold',
-      icon: ClipboardList,
-    },
-    {
-      label: 'Rooms Joined',
-      value: formatCount(summary.value.roomsJoined),
-      trend: `${formatCount(summary.value.availableExams)} assigned exam(s)`,
-      positive: summary.value.roomsJoined > 0,
-      tone: 'navy',
-      icon: DoorOpen,
-    },
-  ])
+    })
 
-  const hasInsightsData = computed(() => (
-    summary.value.availableExams > 0
-    || summary.value.attemptsStarted > 0
-    || subjects.value.length > 0
-    || scoreHistory.value.length > 0
-  ))
+    return items
+  })
 
-  const showInitialLoading = computed(() => insightsLoading.value && !insightsLoaded.value)
+  const predictivePanel = computed(() => ({
+    ...predictiveModel.value,
+    statusLabel: predictiveModel.value.status === 'awaiting_ml_api' ? 'Coming Soon' : 'Connected',
+    featureLabels: asList(predictiveModel.value.expected_inputs).map(humanizeFeatureKey),
+  }))
+
+  const hasAttemptData = computed(() => (stats.value.completed_attempts ?? 0) > 0)
+
+  async function loadAnalytics() {
+    analyticsLoading.value = true
+    analyticsError.value = ''
+
+    try {
+      const { data } = await studentAnalyticsApi.summary()
+
+      stats.value = {
+        completed_attempts: Number(data?.stats?.completed_attempts ?? 0),
+        average_score_percent: data?.stats?.average_score_percent === null
+          ? null
+          : Number(data?.stats?.average_score_percent),
+        latest_score_percent: data?.stats?.latest_score_percent === null
+          ? null
+          : Number(data?.stats?.latest_score_percent),
+        latest_score_delta: data?.stats?.latest_score_delta === null
+          ? null
+          : Number(data?.stats?.latest_score_delta),
+        focus_subjects_count: Number(data?.stats?.focus_subjects_count ?? 0),
+        passing_threshold: Number(data?.stats?.passing_threshold ?? 75),
+      }
+      subjectRows.value = asList(data?.subjects)
+      historyRows.value = asList(data?.history)
+      recentAttemptRows.value = asList(data?.recent_attempts)
+      predictiveModel.value = {
+        ...predictiveModel.value,
+        ...(data?.predictive_model ?? {}),
+      }
+    } catch (error) {
+      analyticsError.value = firstApiError(error, 'Unable to load student analytics right now.')
+      stats.value = {
+        completed_attempts: 0,
+        average_score_percent: null,
+        latest_score_percent: null,
+        latest_score_delta: null,
+        focus_subjects_count: 0,
+        passing_threshold: 75,
+      }
+      subjectRows.value = []
+      historyRows.value = []
+      recentAttemptRows.value = []
+    } finally {
+      analyticsLoading.value = false
+      analyticsLoaded.value = true
+    }
+  }
+
+  onMounted(() => {
+    loadAnalytics()
+  })
 
   return {
-    activities,
-    averageScore,
-    averageScoreLabel,
-    bestScoreLabel,
-    focusSubjects,
-    formatPercent,
-    hasInsightsData,
-    insightsError,
-    insightsLoaded,
-    insightsLoading,
-    loadInsights,
-    marginFromPassing,
-    marginLabel,
-    passingRateLabel,
-    passingRateStatusLabel,
-    passingRateValue,
-    recentResults,
-    scoreHistory,
+    analyticsLoading,
+    analyticsLoaded,
+    analyticsError,
+    hasAttemptData,
     statCards,
-    standingHeadline,
-    standingLabel,
-    standingMessage,
-    standingTone,
-    strongestSubject,
     subjects,
-    showInitialLoading,
-    summary,
-    weakArea,
-    weakestSubject,
+    averageScore,
+    strongestSubject,
+    focusSubjects,
+    strengths,
+    scoreHistory,
+    recentAttempts,
+    guidanceItems,
+    predictivePanel,
+    loadAnalytics,
   }
 }
