@@ -19,7 +19,11 @@
             <h3>{{ strongestSubject ? `Excelling in ${strongestSubject.label}` : 'Begin your journey' }}</h3>
             <p v-if="strongestSubject">
               You're holding a powerful {{ averageScoreLabel }} average across {{ summary.attemptsSubmitted }} submissions.
-              {{ focusSubjects.length === 0 ? 'Everything is on track. Keep it up!' : `Keep pushing on ${focusSubjects.length} specific focus areas.` }}
+              {{
+                weakArea
+                  ? `Current review target: ${weakArea.subject}${weakArea.topic ? ` • ${weakArea.topic}` : ''}.`
+                  : (focusSubjects.length === 0 ? 'Everything is on track. Keep it up!' : `Keep pushing on ${focusSubjects.length} specific focus areas.`)
+              }}
             </p>
             <p v-else>
               Complete your first exam to unlock deep analytics, mastery tracks, and trend visualizations.
@@ -166,6 +170,7 @@ const {
   strongestSubject,
   subjects,
   summary,
+  weakArea,
 } = useStudentInsightsModule()
 
 const scrollToFocus = () => {

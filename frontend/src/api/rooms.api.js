@@ -41,8 +41,11 @@ class RoomsApi {
     return http.delete(`/rooms/${roomId}/leave`)
   }
 
-  exportGrades(roomId) {
-    return http.get(`/rooms/${roomId}/export-grades`, { responseType: 'blob' })
+  exportGrades(roomId, params = {}) {
+    return http.get(`/rooms/${roomId}/export-grades`, {
+      params,
+      responseType: 'blob',
+    })
   }
 }
 

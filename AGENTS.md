@@ -81,16 +81,19 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - Service ports:
   - App (nginx): `http://localhost:8080`
   - phpMyAdmin: `http://localhost:8081`
+- The `queue` service runs Laravel background jobs, including AI remedial generation. Bank save/import now queues generation instead of waiting on OpenAI inline.
 - MySQL container is intentionally named `lnu_lle_db`.
 - MySQL volume name is `blis_system_mysql_data`.
 
 ## Common Commands
 
 - Start stack: `docker compose up -d`
+- Start or restart the queue worker after compose changes: `docker compose up -d queue`
 - Stop stack: `docker compose down`
 - Reset DB schema + reseed: `docker compose exec -T php php artisan migrate:fresh --seed`
 - Seed only: `docker compose exec -T php php artisan db:seed`
 - Run migrations: `docker compose exec -T php php artisan migrate`
+- Watch queued job logs: `docker compose logs -f queue`
 - Install PHP deps in container: `docker compose exec -T php composer install`
 - List users/roles quickly:
   - `docker compose exec -T php php artisan tinker --execute="dump(App\\Models\\User::select('id','name','email','student_id','role')->get()->toArray());"`

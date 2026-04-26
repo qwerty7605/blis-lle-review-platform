@@ -12,7 +12,7 @@ export function useLibraryModule() {
   const auth = useAuthStore()
 
   const canManageLibraries = computed(() => (
-    ['staff_master_examiner'].includes(String(auth.user?.role ?? 'student').toLowerCase())
+    ['staff_master_examiner', 'admin'].includes(String(auth.user?.role ?? 'student').toLowerCase())
   ))
 
   const libraryModule = useLibraryManager({
@@ -22,6 +22,7 @@ export function useLibraryModule() {
 
   onMounted(() => {
     libraryModule.loadLibraryBanks()
+    libraryModule.loadRemedialQueue()
   })
 
   return libraryModule

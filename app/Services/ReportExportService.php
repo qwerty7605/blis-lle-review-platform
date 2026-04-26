@@ -14,6 +14,175 @@ use Illuminate\Support\Collection;
 class ReportExportService
 {
     /**
+     * Build a room-level gradebook across all exams assigned to the room.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildRoomGradebook(Room $room): array
+    {
+        $exams = $room->exams()
+            ->select('exams.id', 'exams.title', 'exams.subject', 'exams.total_items')
+            ->orderBy('exam_room.created_at')
+            ->get();
+
+        $students = $room->currentStudentMembers()
+            ->select('users.id', 'users.name', 'users.email', 'users.student_id')
+            ->orderBy('users.name')
+            ->get();
+
+        $examIds = $exams->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $studentIds = $students->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        $attempts = ExamAttempt::query()
+            ->where('room_id', (int) $room->id)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->when(
+                count($examIds) > 0,
+                fn ($query) => $query->whereIn('exam_id', $examIds),
+                fn ($query) => $query->whereRaw('1 = 0')
+            )
+            ->when(
+                count($studentIds) > 0,
+                fn ($query) => $query->whereIn('user_id', $studentIds),
+                fn ($query) => $query->whereRaw('1 = 0')
+            )
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'exam_id',
+                'user_id',
+                'correct_answers',
+                'score_percent',
+                'submitted_at',
+            ]);
+
+        $latestAttemptsByStudentExam = $attempts
+            ->groupBy(fn (ExamAttempt $attempt): string => $attempt->user_id . ':' . $attempt->exam_id)
+            ->map(fn (Collection $group): ?ExamAttempt => $group->first());
+
+        $rows = $students->map(function (User $student) use ($exams, $latestAttemptsByStudentExam): array {
+            $examEntries = [];
+            $scoreValues = collect();
+
+            foreach ($exams as $exam) {
+                /** @var ExamAttempt|null $attempt */
+                $attempt = $latestAttemptsByStudentExam->get($student->id . ':' . $exam->id);
+                $scorePercent = !is_null($attempt?->score_percent)
+                    ? round((float) $attempt->score_percent, 2)
+                    : null;
+
+                if (!is_null($scorePercent)) {
+                    $scoreValues->push($scorePercent);
+                }
+
+                $examEntries[] = [
+                    'exam_id' => (int) $exam->id,
+                    'exam_title' => (string) $exam->title,
+                    'subject' => $exam->subject,
+                    'total_items' => (int) ($exam->total_items ?? 0),
+                    'attempt_id' => $attempt ? (int) $attempt->id : null,
+                    'correct_answers' => $attempt ? (int) $attempt->correct_answers : null,
+                    'score_percent' => $scorePercent,
+                    'submitted_at' => $attempt?->submitted_at,
+                ];
+            }
+
+            return [
+                'student' => [
+                    'id' => (int) $student->id,
+                    'name' => (string) $student->name,
+                    'email' => (string) $student->email,
+                    'student_id' => $student->student_id,
+                ],
+                'summary' => [
+                    'completed_exams' => $scoreValues->count(),
+                    'average_score_percent' => $scoreValues->isNotEmpty()
+                        ? round((float) $scoreValues->avg(), 2)
+                        : null,
+                ],
+                'exam_entries' => $examEntries,
+            ];
+        })->values()->all();
+
+        $allScores = collect($rows)
+            ->flatMap(fn (array $row) => collect($row['exam_entries'] ?? [])
+                ->map(fn (array $entry) => $entry['score_percent'] ?? null))
+            ->filter(fn ($value) => !is_null($value))
+            ->map(fn ($value) => (float) $value)
+            ->values();
+
+        return [
+            'room' => [
+                'id' => (int) $room->id,
+                'name' => $room->name,
+                'code' => $room->code,
+            ],
+            'exams' => $exams->map(fn (Exam $exam) => [
+                'id' => (int) $exam->id,
+                'title' => (string) $exam->title,
+                'subject' => $exam->subject,
+                'total_items' => (int) ($exam->total_items ?? 0),
+            ])->values()->all(),
+            'rows' => $rows,
+            'summary' => [
+                'students_total' => (int) $students->count(),
+                'exams_total' => (int) $exams->count(),
+                'submitted_attempts' => (int) $attempts->count(),
+                'average_score_percent' => $allScores->isNotEmpty()
+                    ? round((float) $allScores->avg(), 2)
+                    : null,
+            ],
+            'generated_at' => now(),
+        ];
+    }
+
+    /**
+     * @return array{headers: array<int, string>, rows: array<int, array<int, mixed>>}
+     */
+    public function buildRoomGradebookTable(array $gradebook): array
+    {
+        $headers = [
+            'Student Name',
+            'Student ID',
+            'Email',
+            'Completed Exams',
+            'Average Score %',
+        ];
+
+        foreach (($gradebook['exams'] ?? []) as $exam) {
+            $headers[] = (string) ($exam['title'] ?? 'Exam') . ' (%)';
+        }
+
+        $rows = [];
+
+        foreach (($gradebook['rows'] ?? []) as $row) {
+            $student = $row['student'] ?? [];
+            $summary = $row['summary'] ?? [];
+            $line = [
+                (string) ($student['name'] ?? ''),
+                (string) ($student['student_id'] ?? ''),
+                (string) ($student['email'] ?? ''),
+                (int) ($summary['completed_exams'] ?? 0),
+                is_null($summary['average_score_percent'] ?? null) ? 'N/A' : (float) $summary['average_score_percent'],
+            ];
+
+            foreach (($row['exam_entries'] ?? []) as $entry) {
+                $line[] = is_null($entry['score_percent'] ?? null)
+                    ? 'N/A'
+                    : (float) $entry['score_percent'];
+            }
+
+            $rows[] = $line;
+        }
+
+        return [
+            'headers' => $headers,
+            'rows' => $rows,
+        ];
+    }
+
+    /**
      * Build session-level results using the latest attempt per student.
      *
      * @return array<string, mixed>

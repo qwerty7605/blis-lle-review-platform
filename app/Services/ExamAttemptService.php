@@ -10,6 +10,7 @@ class ExamAttemptService
 {
     public function __construct(
         private readonly ExamDeliveryModeService $deliveryModeService,
+        private readonly ExamResultFeedbackService $examResultFeedbackService,
     ) {
     }
 
@@ -80,6 +81,9 @@ class ExamAttemptService
         $visibilityMode = $attempt->exam?->results_visibility_mode ?? 'hidden';
         $showPerQuestionFeedback = $isSubmitted && $visibilityMode === 'visible';
         $answersByQuestionId = $attempt->answers->keyBy('question_bank_question_id');
+        $feedback = $isSubmitted
+            ? $this->examResultFeedbackService->buildForAttempt($attempt)
+            : null;
 
         $questions = $attempt->attemptQuestions
             ->sortBy('item_number')
@@ -177,6 +181,7 @@ class ExamAttemptService
                 'name' => $attempt->room?->name,
                 'code' => $attempt->room?->code,
             ],
+            'feedback' => $feedback,
             'questions' => $questions,
         ];
     }
