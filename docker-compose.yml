@@ -52,6 +52,19 @@ services:
     networks:
       - appnet
 
+  queue:
+    build: .
+    working_dir: /var/www
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=300
+    volumes:
+      - ./:/var/www
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - appnet
+
 volumes:  
   mysql_data:
     name: blis_system_mysql_data

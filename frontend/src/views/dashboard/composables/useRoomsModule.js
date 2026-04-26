@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
 import {
   formatClockTime,
@@ -13,6 +14,64 @@ function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
   return error?.response?.data?.message ?? fallbackMessage
+}
+
+function extractDownloadFilename(contentDisposition, fallbackName) {
+  if (typeof contentDisposition !== 'string' || contentDisposition.trim() === '') {
+    return fallbackName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]).replace(/"/g, '').trim()
+    } catch (error) {
+      // Fall back to plain filename parsing below.
+    }
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  if (plainMatch?.[1]) {
+    return plainMatch[1].trim()
+  }
+
+  return fallbackName
+}
+
+function saveDownloadedBlob(response, fallbackName) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+  const blob = response?.data instanceof Blob
+    ? response.data
+    : new Blob([response?.data ?? ''])
+
+  const contentDisposition = response?.headers?.['content-disposition']
+  const filename = extractDownloadFilename(contentDisposition, fallbackName)
+
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+async function resolveBlobApiError(error, fallbackMessage) {
+  const blobPayload = error?.response?.data
+  if (blobPayload instanceof Blob) {
+    try {
+      const text = await blobPayload.text()
+      const parsed = JSON.parse(text)
+      const message = String(parsed?.message ?? '').trim()
+      if (message) return message
+    } catch (parseError) {
+      // Ignore and fall back.
+    }
+  }
+
+  return firstApiError(error, fallbackMessage)
 }
 
 function displayMemberRole(role) {
@@ -45,6 +104,38 @@ function normalizeRoomExam(exam) {
     schedule_end_at: exam?.schedule_end_at ?? null,
     delivery_mode: normalizeExamDeliveryMode(exam?.delivery_mode),
     room_assignment_archived: Boolean(exam?.room_assignment_archived ?? exam?.room_archived_at),
+  }
+}
+
+function deriveReadinessLevel(score) {
+  if (score >= 90) {
+    return {
+      level: 'exam_ready',
+      label: 'Exam Ready',
+      message: 'Your current result is already in a strong readiness range.',
+    }
+  }
+
+  if (score >= 75) {
+    return {
+      level: 'near_ready',
+      label: 'Near Ready',
+      message: 'You are passing, but a few weak areas still need targeted review.',
+    }
+  }
+
+  if (score >= 60) {
+    return {
+      level: 'developing',
+      label: 'Developing',
+      message: 'You are improving, but your weaker concepts still need more practice.',
+    }
+  }
+
+  return {
+    level: 'needs_reinforcement',
+    label: 'Needs Reinforcement',
+    message: 'Focus on the weakest concepts first before the next official assessment.',
   }
 }
 
@@ -161,6 +252,7 @@ function examScheduleEnd(exam) {
 
 export function useRoomsModule({ mode = 'student' } = {}) {
   const auth = useAuthStore()
+  const router = useRouter()
   const services = useDashboardDataServices()
 
   const modeKey = String(mode ?? 'student').toLowerCase()
@@ -175,12 +267,22 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const showJoinRoomModal = ref(false)
   const showEditRoomModal = ref(false)
   const showDeleteRoomModal = ref(false)
+  const showRoomExportModal = ref(false)
   const showLeaveRoomModal = ref(false)
   const editRoomName = ref('')
   const roomLoading = ref(false)
   const roomDetailsLoading = ref(false)
+  const roomExporting = ref(false)
   const roomError = ref('')
   const roomMessage = ref('')
+  const roomExportFormats = [
+    { value: 'xlsx', label: 'XLSX' },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'csv', label: 'CSV' },
+  ]
+  const roomExportForm = reactive({
+    format: 'xlsx',
+  })
 
   const roomLiveBoardActive = ref(false)
   const liveBoardExam = ref(null)
@@ -207,6 +309,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const showStudentExitConfirmModal = ref(false)
   const selectedStudentExam = ref(null)
   const studentExamAttempt = ref(null)
+  const studentExamFeedback = ref(null)
   const studentExamReviewVisible = ref(false)
   const studentExamQuestions = ref([])
   const studentExamCurrentIndex = ref(0)
@@ -309,6 +412,10 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   ))
 
   const studentExamResultSummary = computed(() => {
+    const feedback = studentExamFeedback.value && typeof studentExamFeedback.value === 'object'
+      ? studentExamFeedback.value
+      : null
+    const feedbackSummary = feedback?.summary ?? {}
     const total = Math.max(0, Number(studentExamAttempt.value?.total_items ?? studentExamQuestions.value.length))
     const answered = Math.max(0, Number(studentExamAttempt.value?.answered_count ?? 0))
     const correct = Math.max(0, Number(studentExamAttempt.value?.correct_answers ?? 0))
@@ -319,6 +426,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     const submittedAtText = studentExamAttempt.value?.submitted_at
       ? formatDateTime(studentExamAttempt.value.submitted_at)
       : 'n/a'
+    const readinessLevel = feedback?.readiness_level ?? deriveReadinessLevel(score)
 
     let tone = 'needs-work'
     let label = 'Needs more review'
@@ -351,12 +459,28 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       score,
       scoreDisplay: score.toFixed(2),
       submittedAtText,
-      tone,
-      label,
-      headline,
-      message,
+      tone: String(feedbackSummary.tone ?? tone),
+      label: String(feedbackSummary.label ?? label),
+      headline: String(feedbackSummary.headline ?? headline),
+      message: String(feedbackSummary.message ?? message),
+      subjectBreakdown: Array.isArray(feedback?.subject_breakdown) ? feedback.subject_breakdown : [],
+      topicWeakness: feedback?.topic_weakness ?? null,
+      readinessLevel,
+      primaryFocus: feedback?.primary_focus ?? null,
+      secondaryFocuses: Array.isArray(feedback?.secondary_focuses) ? feedback.secondary_focuses : [],
+      strength: feedback?.strength ?? null,
+      historicalReference: feedback?.historical_reference ?? null,
+      recommendedActions: Array.isArray(feedback?.recommended_actions) ? feedback.recommended_actions : [],
+      recommendedPracticeArea: feedback?.recommended_practice_area ?? null,
+      practice: feedback?.practice ?? null,
     }
   })
+
+  const studentExamReviewActionLabel = computed(() => (
+    String(selectedStudentExam.value?.results_visibility_mode ?? 'hidden') === 'visible'
+      ? 'Review Answers'
+      : 'Review Responses'
+  ))
 
   const liveBoardRoom = computed(() => {
     const roomId = Number(liveBoardRoomId.value)
@@ -575,23 +699,25 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   async function exportRoomGrades() {
     if (!selectedRoom.value) return
-    roomDetailsLoading.value = true
+    roomExporting.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    const format = ['xlsx', 'pdf', 'csv'].includes(String(roomExportForm.format))
+      ? String(roomExportForm.format)
+      : 'xlsx'
+    const code = String(selectedRoom.value.code || '').trim()
+    const fallbackName = `room-${code || selectedRoom.value.id}-grades.${format}`
+
     try {
-      const response = await services.exportRoomGradesCsv(selectedRoom.value.id)
-      const blob = new Blob([response.data], { type: 'text/csv' })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      const code = String(selectedRoom.value.code || '').trim()
-      link.download = `room-${code || selectedRoom.value.id}-grades.csv`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      const response = await services.exportRoomGrades(selectedRoom.value.id, { format })
+      saveDownloadedBlob(response, fallbackName)
+      roomMessage.value = 'Room grade export generated successfully.'
+      showRoomExportModal.value = false
     } catch (e) {
-      roomError.value = firstApiError(e, 'Failed to export room grades.')
+      roomError.value = await resolveBlobApiError(e, 'Failed to export room grades.')
     } finally {
-      roomDetailsLoading.value = false
+      roomExporting.value = false
     }
   }
 
@@ -817,6 +943,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       : null
 
     studentExamAttempt.value = payload?.attempt ?? null
+    studentExamFeedback.value = payload?.feedback ?? null
     selectedStudentExam.value = examPayload ?? selectedStudentExam.value
     studentExamQuestions.value = payload?.questions ?? []
     studentExamReviewVisible.value = nextAttemptStatus === 'submitted' ? false : studentExamReviewVisible.value
@@ -951,6 +1078,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showStudentExitConfirmModal.value = false
     selectedStudentExam.value = null
     studentExamAttempt.value = null
+    studentExamFeedback.value = null
     studentExamReviewVisible.value = false
     studentExamQuestions.value = []
     studentExamCurrentIndex.value = 0
@@ -1019,6 +1147,19 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     if (isExamMobileViewport.value) {
       examAttemptSidebarCollapsed.value = true
     }
+  }
+
+  function openWeakAreaPractice() {
+    const routeName = String(studentExamResultSummary.value?.practice?.route_name ?? 'dashboard-review-bot')
+
+    closeExamSimulationModal()
+    router.push({
+      name: routeName,
+      query: {
+        auto_start: '1',
+        launch: String(Date.now()),
+      },
+    })
   }
 
   function closeStudentExamExitConfirm() {
@@ -1196,6 +1337,18 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   function closeDeleteRoomModal() {
     showDeleteRoomModal.value = false
+  }
+
+  function openRoomExportModal() {
+    if (!selectedRoom.value) return
+    roomExportForm.format = 'xlsx'
+    showRoomExportModal.value = true
+  }
+
+  function closeRoomExportModal() {
+    if (roomExporting.value) return
+    showRoomExportModal.value = false
+    roomExportForm.format = 'xlsx'
   }
 
   function openLeaveRoomModal() {
@@ -1664,12 +1817,16 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showJoinRoomModal,
     showEditRoomModal,
     showDeleteRoomModal,
+    showRoomExportModal,
     showLeaveRoomModal,
     editRoomName,
     roomLoading,
     roomDetailsLoading,
+    roomExporting,
     roomError,
     roomMessage,
+    roomExportFormats,
+    roomExportForm,
     roomLiveBoardActive,
     liveBoardExam,
     liveBoardRoom,
@@ -1711,6 +1868,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isCurrentQuestionInputLocked,
     studentExamUnansweredCount,
     studentExamResultSummary,
+    studentExamReviewActionLabel,
     displayMemberRole,
     yearLevelLabel,
     canRemoveRoomMember,
@@ -1733,6 +1891,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     goToStudentExamQuestion,
     handleExamAttemptCloseClick,
     showStudentExamResultSummary,
+    openWeakAreaPractice,
     closeStudentExamExitConfirm,
     confirmStudentExamExit,
     openStudentExamSubmitConfirm,
@@ -1749,6 +1908,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     closeEditRoomModal,
     openDeleteRoomModal,
     closeDeleteRoomModal,
+    openRoomExportModal,
+    closeRoomExportModal,
     openLeaveRoomModal,
     closeLeaveRoomModal,
     selectRoom,

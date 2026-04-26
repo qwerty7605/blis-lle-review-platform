@@ -402,11 +402,130 @@
                   </span>
                 </div>
 
+                <div
+                  v-if="studentExamResultSummary.primaryFocus || studentExamResultSummary.strength || studentExamResultSummary.readinessLevel || studentExamResultSummary.recommendedPracticeArea"
+                  class="exam-result-insights"
+                >
+                  <article
+                    v-if="studentExamResultSummary.primaryFocus"
+                    class="exam-feedback-card is-focus"
+                  >
+                    <span class="exam-feedback-kicker">
+                      {{ studentExamResultSummary.primaryFocus.basis === 'topic' ? 'Topic Weakness' : 'Weakest Subject' }}
+                    </span>
+                    <strong>{{ studentExamResultSummary.primaryFocus.label }}</strong>
+                    <p>
+                      {{ studentExamResultSummary.primaryFocus.correct_count }}/{{ studentExamResultSummary.primaryFocus.total_items }}
+                      correct
+                      <span v-if="studentExamResultSummary.primaryFocus.missed_count > 0">
+                        • {{ studentExamResultSummary.primaryFocus.missed_count }} missed
+                      </span>
+                    </p>
+                  </article>
+
+                  <article
+                    v-if="studentExamResultSummary.strength"
+                    class="exam-feedback-card is-strength"
+                  >
+                    <span class="exam-feedback-kicker">Strongest Area</span>
+                    <strong>{{ studentExamResultSummary.strength.label }}</strong>
+                    <p>
+                      {{ studentExamResultSummary.strength.correct_count }}/{{ studentExamResultSummary.strength.total_items }}
+                      correct
+                    </p>
+                  </article>
+
+                  <article
+                    v-if="studentExamResultSummary.readinessLevel"
+                    class="exam-feedback-card"
+                  >
+                    <span class="exam-feedback-kicker">Readiness Level</span>
+                    <strong>{{ studentExamResultSummary.readinessLevel.label }}</strong>
+                    <p>{{ studentExamResultSummary.readinessLevel.message }}</p>
+                  </article>
+
+                  <article
+                    v-if="studentExamResultSummary.recommendedPracticeArea"
+                    class="exam-feedback-card"
+                  >
+                    <span class="exam-feedback-kicker">Recommended Practice</span>
+                    <strong>{{ studentExamResultSummary.recommendedPracticeArea.label }}</strong>
+                    <p>
+                      {{
+                        studentExamResultSummary.recommendedPracticeArea.can_start
+                          ? `${studentExamResultSummary.recommendedPracticeArea.available_questions} approved remedial question(s) available.`
+                          : 'No approved remedial set is ready yet, so review your notes and subject materials first.'
+                      }}
+                    </p>
+                  </article>
+                </div>
+
+                <section
+                  v-if="studentExamResultSummary.subjectBreakdown.length > 0"
+                  class="exam-feedback-panel"
+                >
+                  <strong>Subject Breakdown</strong>
+                  <div class="exam-subject-breakdown">
+                    <article
+                      v-for="subject in studentExamResultSummary.subjectBreakdown"
+                      :key="subject.subject"
+                      class="exam-subject-breakdown-card"
+                    >
+                      <span class="exam-feedback-kicker">{{ subject.subject }}</span>
+                      <strong>{{ Number(subject.score_percent ?? 0).toFixed(2) }}%</strong>
+                      <p>
+                        {{ subject.correct_count }}/{{ subject.total_items }} correct
+                        <span v-if="subject.missed_count > 0"> • {{ subject.missed_count }} missed</span>
+                      </p>
+                    </article>
+                  </div>
+                </section>
+
+                <div v-if="studentExamResultSummary.secondaryFocuses.length > 0" class="exam-feedback-tags">
+                  <span
+                    v-for="focus in studentExamResultSummary.secondaryFocuses"
+                    :key="`${focus.basis}-${focus.topic_id || focus.subject}`"
+                    class="pill neutral"
+                  >
+                    Also review {{ focus.label }}
+                  </span>
+                </div>
+
+                <section v-if="studentExamResultSummary.recommendedActions.length > 0" class="exam-feedback-panel">
+                  <strong>How To Improve Next</strong>
+                  <ul class="exam-feedback-list">
+                    <li
+                      v-for="(action, actionIndex) in studentExamResultSummary.recommendedActions"
+                      :key="`student-exam-feedback-${actionIndex}`"
+                    >
+                      {{ action }}
+                    </li>
+                  </ul>
+                  <p
+                    v-if="studentExamResultSummary.historicalReference?.matches_primary_focus"
+                    class="exam-feedback-trend"
+                  >
+                    This focus area also matches your recent performance trend.
+                  </p>
+                </section>
+
                 <div class="exam-result-actions">
                   <button type="button" class="ghost-btn" @click="openStudentExamReview">
-                    Review Answers
+                    {{ studentExamReviewActionLabel }}
                   </button>
-                  <button type="button" class="primary-btn" @click="handleExamAttemptCloseClick">
+                  <button
+                    v-if="studentExamResultSummary.practice?.can_start"
+                    type="button"
+                    class="primary-btn"
+                    @click="openWeakAreaPractice"
+                  >
+                    Start Recommended Practice
+                  </button>
+                  <button
+                    type="button"
+                    :class="studentExamResultSummary.practice?.can_start ? 'ghost-btn' : 'primary-btn'"
+                    @click="handleExamAttemptCloseClick"
+                  >
                     Done
                   </button>
                 </div>
@@ -700,6 +819,7 @@ const {
   isCurrentQuestionInputLocked,
   studentExamUnansweredCount,
   studentExamResultSummary,
+  studentExamReviewActionLabel,
   yearLevelLabel,
   canStudentOpenExam,
   isStudentExamInProgress,
@@ -720,6 +840,7 @@ const {
   goToStudentExamQuestion,
   handleExamAttemptCloseClick,
   showStudentExamResultSummary,
+  openWeakAreaPractice,
   closeStudentExamExitConfirm,
   confirmStudentExamExit,
   openStudentExamSubmitConfirm,

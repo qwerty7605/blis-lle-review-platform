@@ -187,7 +187,7 @@
                 </p>
               </div>
               <div class="room-detail-head-actions">
-                <button class="ghost-btn room-head-edit-btn" :disabled="roomLoading || roomDetailsLoading" @click="exportRoomGrades">
+                <button class="ghost-btn room-head-edit-btn" :disabled="roomLoading || roomDetailsLoading || roomExporting" @click="openRoomExportModal">
                   <Download :size="14" />
                   Export Grades
                 </button>
@@ -417,6 +417,44 @@
     </teleport>
 
     <teleport to="body">
+      <div v-if="showRoomExportModal" class="modal-backdrop" @click.self="closeRoomExportModal">
+        <div class="modal-card">
+          <header class="modal-head">
+            <h4>Export Room Grades</h4>
+            <button type="button" class="modal-close" @click="closeRoomExportModal">
+              <X :size="16" />
+            </button>
+          </header>
+
+          <p class="muted">
+            This export generates a room-level gradebook for <strong>{{ selectedRoom?.name }}</strong>
+            <span v-if="selectedRoom?.code">(<code>{{ selectedRoom.code }}</code>)</span>.
+            Use the Reports module for exam-specific detailed exports.
+          </p>
+
+          <label class="field-stack">
+            <span class="field-label">Export Format</span>
+            <select v-model="roomExportForm.format" class="text-input" :disabled="roomExporting">
+              <option v-for="format in roomExportFormats" :key="format.value" :value="format.value">
+                {{ format.label }}
+              </option>
+            </select>
+            <small class="muted">Default format is XLSX for class record use.</small>
+          </label>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" :disabled="roomExporting" @click="closeRoomExportModal">Cancel</button>
+            <button type="button" class="primary-btn" :disabled="roomExporting" @click="exportRoomGrades">
+              <RefreshCw v-if="roomExporting" :size="16" class="spin-soft" />
+              <Download v-else :size="16" />
+              <span>{{ roomExporting ? 'Exporting...' : 'Export Gradebook' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
       <div v-if="showDeleteRoomModal" class="modal-backdrop" @click.self="closeDeleteRoomModal">
         <div class="modal-card">
           <header class="modal-head">
@@ -478,11 +516,15 @@ const {
   showCreateRoomModal,
   showEditRoomModal,
   showDeleteRoomModal,
+  showRoomExportModal,
   editRoomName,
   roomLoading,
   roomDetailsLoading,
+  roomExporting,
   roomError,
   roomMessage,
+  roomExportFormats,
+  roomExportForm,
   roomLiveBoardActive,
   liveBoardExam,
   liveBoardRoom,
@@ -508,6 +550,8 @@ const {
   closeEditRoomModal,
   openDeleteRoomModal,
   closeDeleteRoomModal,
+  openRoomExportModal,
+  closeRoomExportModal,
   selectRoom,
   handleCreateRoom,
   handleUpdateRoom,

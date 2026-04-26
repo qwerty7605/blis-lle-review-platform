@@ -38,9 +38,9 @@ export const dashboardModules = {
   reviewBot: {
     key: 'reviewBot',
     routeName: 'dashboard-review-bot',
-    label: 'Review Bot',
-    title: 'Review Bot',
-    sub: 'Generate AI-powered practice questions from the teacher library',
+    label: 'Practice',
+    title: 'Weak-Area Practice',
+    sub: 'Practice approved remedial questions based on weak subject/topic areas',
     icon: Sparkles,
   },
   room: {
@@ -112,7 +112,7 @@ export const dashboardModules = {
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics'],
   staff_master_examiner: ['library', 'room', 'exams', 'reports', 'settings'],
-  admin: ['users', 'room', 'students', 'settings', 'audit'],
+  admin: ['users', 'library', 'room', 'students', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {

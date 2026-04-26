@@ -29,7 +29,7 @@ export function useDashboardDataServices() {
     archiveRoomExam: (roomId, examId) => roomsApi.archiveExam(roomId, examId),
     restoreRoomExam: (roomId, examId) => roomsApi.restoreExam(roomId, examId),
     leaveRoom: (roomId) => roomsApi.leave(roomId),
-    exportRoomGradesCsv: (roomId) => roomsApi.exportGrades(roomId),
+    exportRoomGrades: (roomId, params) => roomsApi.exportGrades(roomId, params),
 
     getLibraryBanks: () => questionsApi.listBanks(),
 

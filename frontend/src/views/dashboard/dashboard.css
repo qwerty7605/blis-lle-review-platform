@@ -1758,6 +1758,114 @@
   font-size: 14px;
 }
 
+.exam-result-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.exam-feedback-card {
+  border-radius: 14px;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  padding: 14px 16px;
+  background: #ffffff;
+  display: grid;
+  gap: 6px;
+}
+
+.exam-feedback-card.is-focus {
+  background: linear-gradient(180deg, rgba(255, 245, 245, 0.98), rgba(255, 236, 236, 0.94));
+  border-color: rgba(198, 40, 40, 0.18);
+}
+
+.exam-feedback-card.is-strength {
+  background: linear-gradient(180deg, rgba(241, 248, 233, 0.98), rgba(232, 245, 233, 0.94));
+  border-color: rgba(46, 125, 50, 0.18);
+}
+
+.exam-feedback-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lnu-text-muted);
+}
+
+.exam-feedback-card strong {
+  color: var(--lnu-navy-deep);
+  font-size: 15px;
+}
+
+.exam-feedback-card p {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+}
+
+.exam-feedback-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exam-feedback-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  background: linear-gradient(180deg, rgba(247, 249, 253, 0.98), rgba(241, 245, 251, 0.94));
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.exam-feedback-panel > strong {
+  color: var(--lnu-navy-deep);
+  font-size: 15px;
+}
+
+.exam-feedback-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+  color: var(--lnu-text);
+}
+
+.exam-feedback-list li {
+  line-height: 1.5;
+}
+
+.exam-feedback-trend {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+}
+
+.exam-subject-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.exam-subject-breakdown-card {
+  border-radius: 14px;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  background: #fff;
+  padding: 14px 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.exam-subject-breakdown-card strong {
+  color: var(--lnu-navy-deep);
+  font-size: 22px;
+}
+
+.exam-subject-breakdown-card p {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+}
+
 .exam-result-actions {
   display: flex;
   justify-content: flex-end;
@@ -3931,6 +4039,10 @@
 
   .exam-result-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .exam-result-insights {
+    grid-template-columns: 1fr;
   }
 
   .exam-sidebar-inline-toggle {

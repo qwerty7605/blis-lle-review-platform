@@ -6,9 +6,13 @@ use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\ExamAttemptAnswer;
 use App\Models\ExamAttemptQuestion;
+use App\Models\PracticeAttempt;
+use App\Models\PracticeAttemptAnswer;
 use App\Models\QuestionBank;
+use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\SystemSetting;
+use App\Models\Topic;
 use App\Models\User;
 use App\Services\AuditLogService;
 use App\Services\AuthTokenCookieService;
@@ -16,6 +20,8 @@ use App\Services\DashboardAnalyticsService;
 use App\Services\ExamAttemptService;
 use App\Services\ExamDeliveryModeService;
 use App\Services\Library\DocxQuestionParser;
+use App\Services\PracticeAttemptService;
+use App\Services\RemedialQuestionService;
 use App\Services\ReviewBotService;
 use App\Services\ReportExportService;
 use App\Services\RoleService;
@@ -37,10 +43,16 @@ $authTokenCookieService = app(AuthTokenCookieService::class);
 $dashboardAnalyticsService = app(DashboardAnalyticsService::class);
 $deliveryModeService = app(ExamDeliveryModeService::class);
 $examAttemptService = app(ExamAttemptService::class);
+$practiceAttemptService = app(PracticeAttemptService::class);
+$remedialQuestionService = app(RemedialQuestionService::class);
 $reportExportService = app(ReportExportService::class);
 $reviewBotService = app(ReviewBotService::class);
 
 $canManageRooms = static function (User $user) use ($roleService): bool {
+    return $roleService->canManageRooms($user);
+};
+
+$canManageQuestionLibrary = static function (User $user) use ($roleService): bool {
     return $roleService->canManageRooms($user);
 };
 
@@ -165,7 +177,7 @@ $systemSettingBooleanKeys = [
 
 $findAccessibleQuestionBank = static function (User $user, int $bankId, bool $admin): ?QuestionBank {
     return QuestionBank::query()
-        ->withCount('questions')
+        ->withCount('assessmentQuestions')
         ->whereKey($bankId)
         ->when(!$admin, fn ($query) => $query->where('created_by', $user->id))
         ->first();
@@ -204,7 +216,7 @@ $findAccessibleQuestionBanks = static function (User $user, array $bankIds, bool
     $orderLookup = array_flip($normalizedBankIds);
 
     return QuestionBank::query()
-        ->withCount('questions')
+        ->withCount('assessmentQuestions')
         ->whereIn('id', $normalizedBankIds)
         ->when(!$admin, fn ($query) => $query->where('created_by', $user->id))
         ->get()
@@ -419,6 +431,7 @@ Route::get('/settings/public/legal', function () use ($systemSettingDefaults) {
 
 Route::middleware('auth:sanctum')->group(function () use (
     $canManageRooms,
+    $canManageQuestionLibrary,
     $ensureActive,
     $isAdmin,
     $isStaffMasterExaminer,
@@ -436,6 +449,8 @@ Route::middleware('auth:sanctum')->group(function () use (
     $authTokenCookieService,
     $dashboardAnalyticsService,
     $ensureTeacherReportAccess,
+    $practiceAttemptService,
+    $remedialQuestionService,
     $reportExportService,
     $reviewBotService,
     $syncExamRoomAssignments,
@@ -787,63 +802,109 @@ Route::middleware('auth:sanctum')->group(function () use (
         return response()->json(['message' => 'Room deleted']);
     });
 
-    Route::get('/rooms/{room}/export-grades', function (Request $request, Room $room) use ($canManageRooms, $ensureActive) {
+    Route::get('/rooms/{room}/export-grades', function (
+        Request $request,
+        Room $room
+    ) use (
+        $canManageRooms,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $reportExportService
+    ) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
 
         $user = $request->user();
-        if (!$canManageRooms($user) && (int)$room->created_by !== (int)$user->id) {
+
+        if (!$canManageRooms($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $exams = $room->exams()->orderBy('exam_room.created_at')->get();
-        $members = $room->members()->where('role', \App\Models\User::ROLE_STUDENT)->orderBy('name')->get();
+        if (!$isAdmin($user) && (int) $room->created_by !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
-        $headers = [
-            "Content-type"        => "text/csv",
-            "Content-Disposition" => "attachment; filename=room-grades-{$room->id}.csv",
-            "Pragma"              => "no-cache",
-            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
-            "Expires"             => "0"
-        ];
+        $validated = $request->validate([
+            'format' => ['nullable', Rule::in(['xlsx', 'csv', 'pdf'])],
+        ]);
 
-        $callback = function() use ($exams, $members, $room) {
-            $file = fopen('php://output', 'w');
+        $format = strtolower((string) ($validated['format'] ?? 'xlsx'));
+        $gradebook = $reportExportService->buildRoomGradebook($room);
+        $table = $reportExportService->buildRoomGradebookTable($gradebook);
+        $fileLabel = Str::slug(trim((string) ($room->code ?: $room->name ?: 'room')));
+        $timestamp = now()->format('Ymd_His');
+        $baseFilename = ($fileLabel !== '' ? $fileLabel : ('room-' . $room->id)) . '-grades-' . $timestamp;
 
-            $headerRow = ['Student Name', 'ID Number', 'Email'];
-            foreach ($exams as $exam) {
-                $headerRow[] = $exam->title . " (Score/Total)";
-            }
-            fputcsv($file, $headerRow);
+        $recordAudit(
+            $user,
+            'room.export.grades',
+            'room',
+            $room->id,
+            'Exported room gradebook',
+            [
+                'format' => $format,
+                'students_total' => $gradebook['summary']['students_total'] ?? 0,
+                'exams_total' => $gradebook['summary']['exams_total'] ?? 0,
+            ],
+            $request,
+        );
 
-            foreach ($members as $student) {
-                $row = [
-                    $student->name,
-                    $student->student_id ?? 'N/A',
-                    $student->email,
-                ];
-
-                foreach ($exams as $exam) {
-                    $attempt = \App\Models\ExamAttempt::where('exam_id', $exam->id)
-                        ->where('user_id', $student->id)
-                        ->where('room_id', $room->id)
-                        ->latest('submitted_at')
-                        ->first();
-
-                    if ($attempt && $attempt->status === \App\Models\ExamAttempt::STATUS_SUBMITTED) {
-                        $row[] = "{$attempt->score}/{$exam->total_items}";
-                    } else {
-                        $row[] = 'N/A';
-                    }
+        if ($format === 'csv') {
+            return response()->streamDownload(function () use ($table): void {
+                $stream = fopen('php://output', 'w');
+                if ($stream === false) {
+                    return;
                 }
-                fputcsv($file, $row);
-            }
 
-            fclose($file);
-        };
+                fputcsv($stream, $table['headers']);
 
-        return response()->stream($callback, 200, $headers);
+                foreach ($table['rows'] as $row) {
+                    fputcsv($stream, $row);
+                }
+
+                fclose($stream);
+            }, $baseFilename . '.csv', [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+            ]);
+        }
+
+        if ($format === 'pdf') {
+            return Pdf::loadView('reports.room_grades_pdf', [
+                'gradebook' => $gradebook,
+            ])
+                ->setPaper('a4', 'landscape')
+                ->download($baseFilename . '.pdf');
+        }
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Room Grades');
+        $sheet->fromArray($table['headers'], null, 'A1');
+
+        if (!empty($table['rows'])) {
+            $sheet->fromArray($table['rows'], null, 'A2');
+        }
+
+        $highestColumn = $sheet->getHighestColumn();
+        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
+
+        for ($columnIndex = 1; $columnIndex <= count($table['headers']); $columnIndex++) {
+            $columnName = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex);
+            $sheet->getColumnDimension($columnName)->setAutoSize(true);
+        }
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'blis_room_xlsx_');
+
+        if ($tempFile === false) {
+            return response()->json(['message' => 'Unable to generate export file.'], 500);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $baseFilename . '.xlsx')->deleteFileAfterSend(true);
     });
 
     Route::post('/rooms/{room}/exams/{exam}/archive', function (
@@ -1159,21 +1220,26 @@ Route::middleware('auth:sanctum')->group(function () use (
         return response()->json(['message' => 'Left room successfully']);
     });
 
-    Route::get('/library/banks', function (Request $request) use ($isStaffMasterExaminer, $ensureActive) {
+    Route::get('/library/banks', function (Request $request) use ($canManageQuestionLibrary, $ensureActive, $isAdmin) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
 
         $user = $request->user();
 
-        if (!$isStaffMasterExaminer($user)) {
+        if (!$canManageQuestionLibrary($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $query = QuestionBank::query()
             ->with('creator:id,name')
-            ->withCount('questions')
-            ->where('created_by', $user->id)
+            ->withCount([
+                'assessmentQuestions',
+                'remedialQuestions as remedial_pending_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_PENDING_REVIEW),
+                'remedialQuestions as remedial_approved_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_APPROVED),
+                'remedialQuestions as remedial_rejected_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_REJECTED),
+            ])
+            ->when(!$isAdmin($user), fn ($query) => $query->where('created_by', $user->id))
             ->latest();
 
         return response()->json([
@@ -1181,14 +1247,87 @@ Route::middleware('auth:sanctum')->group(function () use (
         ]);
     });
 
-    Route::post('/library/import/preview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+    Route::get('/library/banks/{bank}/questions', function (
+        Request $request,
+        QuestionBank $bank
+    ) use ($canManageQuestionLibrary, $ensureActive, $isAdmin, $recordAudit) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
 
         $user = $request->user();
 
-        if (!$isStaffMasterExaminer($user)) {
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if (!$isAdmin($user) && (int) $bank->created_by !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $bank->load('creator:id,name')->loadCount([
+            'assessmentQuestions',
+            'remedialQuestions as remedial_pending_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_PENDING_REVIEW),
+            'remedialQuestions as remedial_approved_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_APPROVED),
+            'remedialQuestions as remedial_rejected_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_REJECTED),
+        ]);
+
+        $questions = $bank->assessmentQuestions()
+            ->with([
+                'topic:id,subject,name',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
+            ->withCount([
+                'remedialVariants as remedial_variant_count',
+            ])
+            ->orderBy('item_number')
+            ->get();
+
+        $remedialQuestions = $bank->remedialQuestions()
+            ->with([
+                'topic:id,subject,name',
+                'sourceQuestion:id,item_number,question_text,answer_label,answer_text',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
+            ->orderByRaw(
+                "CASE status
+                    WHEN '" . QuestionBankQuestion::STATUS_PENDING_REVIEW . "' THEN 0
+                    WHEN '" . QuestionBankQuestion::STATUS_APPROVED . "' THEN 1
+                    ELSE 2
+                END"
+            )
+            ->orderBy('source_question_id')
+            ->orderBy('item_number')
+            ->get();
+
+        $recordAudit(
+            $user,
+            'library.bank.view_questions',
+            'question_bank',
+            $bank->id,
+            'Viewed question bank questions',
+            [
+                'assessment_questions_count' => $questions->count(),
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'bank' => $bank,
+            'questions' => $questions,
+            'assessment_questions' => $questions,
+            'remedial_questions' => $remedialQuestions,
+        ]);
+    });
+
+    Route::post('/library/import/preview', function (Request $request) use ($canManageQuestionLibrary, $ensureActive, $recordAudit) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1299,14 +1438,14 @@ Route::middleware('auth:sanctum')->group(function () use (
         ]);
     });
 
-    Route::post('/library/banks', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+    Route::post('/library/banks', function (Request $request) use ($canManageQuestionLibrary, $ensureActive, $recordAudit, $remedialQuestionService) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
 
         $user = $request->user();
 
-        if (!$isStaffMasterExaminer($user)) {
+        if (!$canManageQuestionLibrary($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1317,6 +1456,7 @@ Route::middleware('auth:sanctum')->group(function () use (
             'questions' => ['required', 'array', 'min:1', 'max:1000'],
             'questions.*.text' => ['required', 'string'],
             'questions.*.question_type' => ['nullable', Rule::in(['multiple_choice', 'true_false', 'open_ended'])],
+            'questions.*.topic_name' => ['nullable', 'string', 'max:255'],
             'questions.*.answer_label' => ['nullable', 'string', 'max:2'],
             'questions.*.answer_text' => ['nullable', 'string'],
             'questions.*.options' => ['nullable', 'array', 'max:8'],
@@ -1371,6 +1511,9 @@ Route::middleware('auth:sanctum')->group(function () use (
                 return [
                     'item_number' => $index + 1,
                     'text' => trim((string) ($question['text'] ?? '')),
+                    'topic_name' => filled($question['topic_name'] ?? null)
+                        ? trim((string) $question['topic_name'])
+                        : null,
                     'question_type' => $type,
                     'answer_label' => $answerLabel,
                     'answer_text' => $answerText,
@@ -1386,7 +1529,7 @@ Route::middleware('auth:sanctum')->group(function () use (
             ], 422);
         }
 
-        $bank = DB::transaction(function () use ($validated, $questions, $user) {
+        $result = DB::transaction(function () use ($validated, $questions, $user, $remedialQuestionService) {
             $createdBank = QuestionBank::create([
                 'title' => trim((string) $validated['title']),
                 'subject' => filled($validated['subject'] ?? null)
@@ -1399,14 +1542,32 @@ Route::middleware('auth:sanctum')->group(function () use (
                 'created_by' => $user->id,
             ]);
 
+            $createdQuestions = collect();
+
             foreach ($questions as $question) {
+                $topic = $remedialQuestionService->resolveTopic(
+                    $createdBank->subject,
+                    $question['topic_name'] ?? null,
+                    (int) $user->id,
+                );
+
                 $createdQuestion = $createdBank->questions()->create([
+                    'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
+                    'subject' => $createdBank->subject,
+                    'topic_id' => $topic?->id,
+                    'difficulty' => null,
+                    'source' => QuestionBankQuestion::SOURCE_FACULTY,
+                    'status' => QuestionBankQuestion::STATUS_APPROVED,
+                    'ai_generated' => false,
+                    'source_question_id' => null,
                     'item_number' => $question['item_number'],
                     'question_text' => $question['text'],
                     'question_type' => $question['question_type'],
                     'answer_label' => $question['answer_label'],
                     'answer_text' => $question['answer_text'],
                 ]);
+
+                $createdQuestions->push($createdQuestion);
 
                 foreach ($question['options'] as $option) {
                     $createdQuestion->options()->create([
@@ -1418,10 +1579,38 @@ Route::middleware('auth:sanctum')->group(function () use (
                 }
             }
 
-            return $createdBank;
+            return [
+                'bank' => $createdBank,
+                'assessment_questions' => $createdQuestions,
+            ];
         });
 
-        $bank->load('creator:id,name')->loadCount('questions');
+        /** @var QuestionBank $bank */
+        $bank = $result['bank'];
+        $assessmentQuestions = QuestionBankQuestion::query()
+            ->with([
+                'questionBank:id,subject',
+                'topic:id,subject,name',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
+            ->whereIn(
+                'id',
+                collect($result['assessment_questions'])
+                    ->pluck('id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->all()
+            )
+            ->orderBy('item_number')
+            ->get();
+
+        $generation = $remedialQuestionService->queueBankGeneration($bank, $assessmentQuestions);
+
+        $bank->load('creator:id,name')->loadCount([
+            'assessmentQuestions',
+            'remedialQuestions as remedial_pending_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_PENDING_REVIEW),
+            'remedialQuestions as remedial_approved_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_APPROVED),
+            'remedialQuestions as remedial_rejected_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_REJECTED),
+        ]);
 
         $recordAudit(
             $user,
@@ -1433,31 +1622,34 @@ Route::middleware('auth:sanctum')->group(function () use (
                 'title' => $bank->title,
                 'subject' => $bank->subject,
                 'total_items' => $bank->total_items,
+                'remedial_generation_status' => $generation['status'] ?? QuestionBank::REMEDIAL_GENERATION_STATUS_IDLE,
+                'queued_remedial_source_count' => (int) ($generation['queued'] ?? 0),
             ],
             $request,
         );
 
         return response()->json([
-            'message' => 'Question bank created successfully.',
+            'message' => 'Question bank saved. ' . ($generation['message'] ?? 'AI remedial generation status was updated.'),
             'bank' => $bank,
+            'remedial_generation' => $generation,
         ], 201);
     });
 
     Route::delete('/library/banks/{bank}', function (
         Request $request,
         QuestionBank $bank
-    ) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+    ) use ($canManageQuestionLibrary, $ensureActive, $recordAudit, $isAdmin) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
 
         $user = $request->user();
 
-        if (!$isStaffMasterExaminer($user)) {
+        if (!$canManageQuestionLibrary($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        if ((int) $bank->created_by !== (int) $user->id) {
+        if (!$isAdmin($user) && (int) $bank->created_by !== (int) $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -1477,9 +1669,25 @@ Route::middleware('auth:sanctum')->group(function () use (
             })
             ->exists();
 
-        if ($hasAttemptQuestionUsage || $hasAttemptAnswerUsage) {
+        $hasPracticeQuestionUsage = DB::table('practice_attempt_questions')
+            ->whereIn('question_bank_question_id', function ($query) use ($bank) {
+                $query->select('id')
+                    ->from('question_bank_questions')
+                    ->where('question_bank_id', $bank->id);
+            })
+            ->exists();
+
+        $hasPracticeAnswerUsage = DB::table('practice_attempt_answers')
+            ->whereIn('question_bank_question_id', function ($query) use ($bank) {
+                $query->select('id')
+                    ->from('question_bank_questions')
+                    ->where('question_bank_id', $bank->id);
+            })
+            ->exists();
+
+        if ($hasAttemptQuestionUsage || $hasAttemptAnswerUsage || $hasPracticeQuestionUsage || $hasPracticeAnswerUsage) {
             return response()->json([
-                'message' => 'Cannot delete this question bank because it already has exam attempt records.',
+                'message' => 'Cannot delete this question bank because it already has practice or exam attempt records.',
             ], 422);
         }
 
@@ -1506,7 +1714,461 @@ Route::middleware('auth:sanctum')->group(function () use (
         ]);
     });
 
-    Route::get('/student/review-bot/subjects', function (Request $request) use ($ensureActive, $reviewBotService) {
+    Route::post('/library/banks/{bank}/queue-remedial-generation', function (
+        Request $request,
+        QuestionBank $bank
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $remedialQuestionService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if (!$isAdmin($user) && (int) $bank->created_by !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $assessmentQuestions = $bank->assessmentQuestions()->get();
+
+        if ($assessmentQuestions->isEmpty()) {
+            return response()->json([
+                'message' => 'This question bank does not contain any assessment questions to generate from.',
+            ], 422);
+        }
+
+        QuestionBankQuestion::query()
+            ->where('question_bank_id', $bank->id)
+            ->where('usage_type', QuestionBankQuestion::USAGE_REMEDIAL)
+            ->where('status', QuestionBankQuestion::STATUS_REJECTED)
+            ->delete();
+
+        $generation = $remedialQuestionService->queueBankGeneration($bank, $assessmentQuestions);
+
+        $bank->load('creator:id,name')->loadCount([
+            'assessmentQuestions',
+            'remedialQuestions as remedial_pending_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_PENDING_REVIEW),
+            'remedialQuestions as remedial_approved_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_APPROVED),
+            'remedialQuestions as remedial_rejected_count' => fn ($query) => $query->where('status', QuestionBankQuestion::STATUS_REJECTED),
+        ]);
+
+        $recordAudit(
+            $user,
+            'library.remedial.queue',
+            'question_bank',
+            $bank->id,
+            'Queued remedial question generation for a bank',
+            [
+                'status' => $generation['status'] ?? QuestionBank::REMEDIAL_GENERATION_STATUS_IDLE,
+                'queued_source_questions' => (int) ($generation['queued'] ?? 0),
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => $generation['message'] ?? 'AI remedial generation status was updated.',
+            'bank' => $bank,
+            'remedial_generation' => $generation,
+        ]);
+    });
+
+    Route::get('/library/remedial-queue', function (
+        Request $request
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'bank_id' => ['nullable', 'integer', 'exists:question_banks,id'],
+            'status' => ['nullable', Rule::in(QuestionBankQuestion::STATUSES)],
+        ]);
+
+        $query = QuestionBankQuestion::query()
+            ->with([
+                'questionBank:id,title,subject,created_by,remedial_generation_status',
+                'topic:id,subject,name',
+                'sourceQuestion:id,item_number,question_text,answer_label,answer_text',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
+            ->where('usage_type', QuestionBankQuestion::USAGE_REMEDIAL)
+            ->when(
+                !$isAdmin($user),
+                fn ($query) => $query->whereHas('questionBank', fn ($bankQuery) => $bankQuery->where('created_by', $user->id))
+            )
+            ->when(
+                filled($validated['bank_id'] ?? null),
+                fn ($query) => $query->where('question_bank_id', (int) $validated['bank_id'])
+            )
+            ->when(
+                filled($validated['status'] ?? null),
+                fn ($query) => $query->where('status', (string) $validated['status'])
+            )
+            ->when(
+                !filled($validated['status'] ?? null),
+                fn ($query) => $query->where('status', '!=', QuestionBankQuestion::STATUS_REJECTED)
+            )
+            ->orderByRaw(
+                "CASE status
+                    WHEN '" . QuestionBankQuestion::STATUS_PENDING_REVIEW . "' THEN 0
+                    WHEN '" . QuestionBankQuestion::STATUS_APPROVED . "' THEN 1
+                    ELSE 2
+                END"
+            )
+            ->orderByDesc('updated_at');
+
+        return response()->json([
+            'questions' => $query->get(),
+        ]);
+    });
+
+    Route::patch('/library/banks/{bank}/remedial-questions/status', function (
+        Request $request,
+        QuestionBank $bank
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $remedialQuestionService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if (
+            !$isAdmin($user)
+            && (int) ($bank->created_by ?? 0) !== (int) $user->id
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(QuestionBankQuestion::STATUSES)],
+            'current_status' => ['nullable', Rule::in(QuestionBankQuestion::STATUSES)],
+        ]);
+
+        $targetStatus = (string) $validated['status'];
+        $currentStatus = (string) ($validated['current_status'] ?? QuestionBankQuestion::STATUS_PENDING_REVIEW);
+
+        $questions = QuestionBankQuestion::query()
+            ->where('question_bank_id', $bank->id)
+            ->where('usage_type', QuestionBankQuestion::USAGE_REMEDIAL)
+            ->where('status', $currentStatus)
+            ->get();
+
+        $updatedCount = 0;
+        $skippedCount = 0;
+
+        foreach ($questions as $question) {
+            try {
+                $remedialQuestionService->updateQuestionStatus($question, $targetStatus);
+                $updatedCount++;
+            } catch (\RuntimeException) {
+                $skippedCount++;
+            }
+        }
+
+        $recordAudit(
+            $user,
+            'library.remedial.bulk_review',
+            'question_bank',
+            $bank->id,
+            'Bulk reviewed AI remedial questions',
+            [
+                'status' => $targetStatus,
+                'current_status' => $currentStatus,
+                'updated_count' => $updatedCount,
+                'skipped_count' => $skippedCount,
+            ],
+            $request,
+        );
+
+        $message = $updatedCount > 0
+            ? sprintf(
+                'Updated %d remedial question(s) in this set.',
+                $updatedCount
+            )
+            : (
+                'No remedial questions matched this set review action.'
+            );
+
+        return response()->json([
+            'message' => $message,
+            'updated_count' => $updatedCount,
+            'skipped_count' => $skippedCount,
+        ]);
+    });
+
+    Route::patch('/library/remedial-questions/{question}/status', function (
+        Request $request,
+        QuestionBankQuestion $question
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $remedialQuestionService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $question->loadMissing('questionBank:id,created_by,title');
+
+        if ($question->usage_type !== QuestionBankQuestion::USAGE_REMEDIAL) {
+            return response()->json(['message' => 'Only remedial questions can be reviewed.'], 422);
+        }
+
+        if (
+            !$isAdmin($user)
+            && (int) ($question->questionBank?->created_by ?? 0) !== (int) $user->id
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in(QuestionBankQuestion::STATUSES)],
+        ]);
+
+        try {
+            $question = $remedialQuestionService->updateQuestionStatus(
+                $question,
+                (string) $validated['status']
+            );
+        } catch (\RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        $recordAudit(
+            $user,
+            'library.remedial.review',
+            'question_bank_question',
+            $question->id,
+            'Reviewed an AI remedial question',
+            [
+                'question_bank_id' => $question->question_bank_id,
+                'status' => $question->status,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Remedial question status updated.',
+            'question' => $question->load([
+                'questionBank:id,title,subject,created_by',
+                'topic:id,subject,name',
+                'sourceQuestion:id,item_number,question_text,answer_label,answer_text',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ]),
+        ]);
+    });
+
+    Route::patch('/library/remedial-questions/{question}', function (
+        Request $request,
+        QuestionBankQuestion $question
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $remedialQuestionService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $question->loadMissing([
+            'questionBank:id,title,subject,created_by',
+            'topic:id,subject,name',
+            'sourceQuestion:id,item_number,question_text,answer_label,answer_text',
+            'options:id,question_bank_question_id,option_label,option_text,is_correct',
+        ]);
+
+        if ($question->usage_type !== QuestionBankQuestion::USAGE_REMEDIAL) {
+            return response()->json(['message' => 'Only remedial questions can be edited here.'], 422);
+        }
+
+        if (
+            !$isAdmin($user)
+            && (int) ($question->questionBank?->created_by ?? 0) !== (int) $user->id
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'question_text' => ['required', 'string', 'max:4000'],
+            'item_style' => ['required', Rule::in(QuestionBankQuestion::ITEM_STYLES)],
+            'difficulty' => ['required', Rule::in(QuestionBankQuestion::DIFFICULTIES)],
+            'cognitive_level' => ['nullable', 'string', 'max:48'],
+            'tested_concept' => ['nullable', 'string', 'max:255'],
+            'difference_from_source' => ['nullable', 'string', 'max:5000'],
+            'explanation' => ['nullable', 'string', 'max:5000'],
+            'correct_answer' => ['required', 'string', Rule::in(['A', 'B', 'C', 'D'])],
+            'options' => ['required', 'array', 'size:4'],
+            'options.A' => ['required', 'string', 'max:1000'],
+            'options.B' => ['required', 'string', 'max:1000'],
+            'options.C' => ['required', 'string', 'max:1000'],
+            'options.D' => ['required', 'string', 'max:1000'],
+        ]);
+
+        DB::transaction(function () use ($question, $validated): void {
+            $question->forceFill([
+                'question_text' => trim((string) $validated['question_text']),
+                'item_style' => trim((string) $validated['item_style']),
+                'difficulty' => trim((string) $validated['difficulty']),
+                'cognitive_level' => trim((string) ($validated['cognitive_level'] ?? '')) ?: null,
+                'tested_concept' => trim((string) ($validated['tested_concept'] ?? '')) ?: null,
+                'difference_from_source' => trim((string) ($validated['difference_from_source'] ?? '')) ?: null,
+                'explanation' => null,
+                'answer_label' => trim((string) $validated['correct_answer']),
+                'answer_text' => trim((string) $validated['options'][$validated['correct_answer']]),
+            ])->save();
+
+            $question->options()->delete();
+
+            foreach (['A', 'B', 'C', 'D'] as $index => $label) {
+                $question->options()->create([
+                    'sort_order' => $index + 1,
+                    'option_label' => $label,
+                    'option_text' => trim((string) $validated['options'][$label]),
+                    'is_correct' => $label === $validated['correct_answer'],
+                ]);
+            }
+        });
+
+        $recordAudit(
+            $user,
+            'library.remedial.edit',
+            'question_bank_question',
+            $question->id,
+            'Edited an AI remedial question',
+            [
+                'question_bank_id' => $question->question_bank_id,
+                'source_question_id' => $question->source_question_id,
+                'item_style' => $question->item_style,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Remedial question updated.',
+            'question' => $question->refresh()->load([
+                'questionBank:id,title,subject,created_by',
+                'topic:id,subject,name',
+                'sourceQuestion:id,item_number,question_text,answer_label,answer_text',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ]),
+        ]);
+    });
+
+    Route::post('/library/questions/{question}/remedial-refresh', function (
+        Request $request,
+        QuestionBankQuestion $question
+    ) use (
+        $canManageQuestionLibrary,
+        $ensureActive,
+        $isAdmin,
+        $recordAudit,
+        $remedialQuestionService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if (!$canManageQuestionLibrary($user)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $question->loadMissing([
+            'questionBank:id,created_by,title,subject',
+            'topic:id,subject,name',
+            'sourceQuestion:id,question_bank_id,item_number,question_text,subject,topic_id,difficulty,question_type,answer_text,answer_label',
+            'sourceQuestion.topic:id,subject,name',
+            'sourceQuestion.options:id,question_bank_question_id,option_label,option_text,is_correct',
+            'options:id,question_bank_question_id,option_label,option_text,is_correct',
+        ]);
+
+        $bankOwnerId = (int) ($question->questionBank?->created_by ?? 0);
+
+        if (!$isAdmin($user) && $bankOwnerId !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        try {
+            $replacement = $remedialQuestionService->refreshVariant($question);
+        } catch (\RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+
+        $recordAudit(
+            $user,
+            'library.remedial.refresh',
+            'question_bank_question',
+            $replacement->id,
+            'Regenerated an AI remedial question',
+            [
+                'question_bank_id' => $replacement->question_bank_id,
+                'source_question_id' => $replacement->source_question_id,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'AI remedial question refreshed and moved back to pending review.',
+            'question' => $replacement,
+        ]);
+    });
+
+    Route::get('/student/review-bot/overview', function (
+        Request $request
+    ) use (
+        $ensureActive,
+        $practiceAttemptService
+    ) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
@@ -1517,16 +2179,14 @@ Route::middleware('auth:sanctum')->group(function () use (
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        return response()->json([
-            'subjects' => $reviewBotService->listSubjects(),
-        ]);
+        return response()->json($practiceAttemptService->buildOverview($user));
     });
 
-    Route::post('/student/review-bot/generate', function (
+    Route::post('/student/review-bot/start', function (
         Request $request
     ) use (
         $ensureActive,
-        $reviewBotService,
+        $practiceAttemptService,
         $recordAudit
     ) {
         if ($inactiveResponse = $ensureActive($request)) {
@@ -1541,15 +2201,10 @@ Route::middleware('auth:sanctum')->group(function () use (
 
         $validated = $request->validate([
             'question_count' => ['required', 'integer', 'min:3', 'max:30'],
-            'subjects' => ['required', 'array', 'min:1', 'max:8'],
-            'subjects.*' => ['required', 'string', 'max:255'],
         ]);
 
         try {
-            $reviewSet = $reviewBotService->generateQuiz(
-                $validated['subjects'],
-                (int) $validated['question_count'],
-            );
+            $attempt = $practiceAttemptService->startAttempt($user, (int) $validated['question_count']);
         } catch (\RuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
@@ -1558,25 +2213,220 @@ Route::middleware('auth:sanctum')->group(function () use (
 
         $recordAudit(
             $user,
-            'review-bot.generate',
-            'review_bot',
-            null,
-            'Generated a Review Bot practice set',
+            'practice.attempt.start',
+            'practice_attempt',
+            $attempt->id,
+            'Student started a weak-area practice attempt',
             [
-                'question_count' => (int) $validated['question_count'],
-                'subjects' => $reviewSet['subjects'],
-                'generator' => $reviewSet['generator'],
+                'target_type' => $attempt->target_type,
+                'subject' => $attempt->subject,
+                'topic_id' => $attempt->topic_id,
+                'total_items' => $attempt->total_items,
             ],
             $request,
         );
 
         return response()->json([
-            'message' => $reviewSet['generator'] === 'ai'
-                ? 'AI review set generated successfully.'
-                : 'Review set generated from the teacher library.',
-            'generator' => $reviewSet['generator'],
-            'subjects' => $reviewSet['subjects'],
-            'questions' => $reviewSet['questions'],
+            'message' => 'Practice attempt started.',
+            ...$practiceAttemptService->buildAttemptPayload($attempt),
+        ], 201);
+    });
+
+    Route::get('/student/review-bot/attempts/{attempt}', function (
+        Request $request,
+        PracticeAttempt $attempt
+    ) use (
+        $ensureActive,
+        $practiceAttemptService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if ($user->role !== User::ROLE_STUDENT || (int) $attempt->user_id !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json($practiceAttemptService->buildAttemptPayload($attempt));
+    });
+
+    Route::patch('/student/review-bot/attempts/{attempt}/answers', function (
+        Request $request,
+        PracticeAttempt $attempt
+    ) use (
+        $ensureActive,
+        $normalizeAnswerText,
+        $practiceAttemptService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if ($user->role !== User::ROLE_STUDENT || (int) $attempt->user_id !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if ($attempt->status !== PracticeAttempt::STATUS_IN_PROGRESS) {
+            return response()->json([
+                'message' => 'This practice attempt is already submitted.',
+                ...$practiceAttemptService->buildAttemptPayload($attempt),
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'question_id' => ['required', 'integer', 'exists:question_bank_questions,id'],
+            'selected_option_id' => ['nullable', 'integer', 'exists:question_bank_options,id'],
+            'answer_text' => ['nullable', 'string'],
+        ]);
+
+        $questionId = (int) $validated['question_id'];
+
+        $attemptQuestion = $attempt->attemptQuestions()
+            ->where('question_bank_question_id', $questionId)
+            ->first();
+
+        if (!$attemptQuestion) {
+            return response()->json([
+                'message' => 'The selected question is not part of this practice attempt.',
+            ], 422);
+        }
+
+        $question = $attemptQuestion->question()
+            ->with('options:id,question_bank_question_id,option_label,option_text,is_correct')
+            ->first();
+
+        if (!$question) {
+            return response()->json([
+                'message' => 'Question not found.',
+            ], 422);
+        }
+
+        $selectedOptionId = is_null($validated['selected_option_id'] ?? null)
+            ? null
+            : (int) $validated['selected_option_id'];
+        $answerText = array_key_exists('answer_text', $validated)
+            ? trim((string) $validated['answer_text'])
+            : null;
+        $answerText = $answerText === '' ? null : $answerText;
+
+        if ($question->question_type === QuestionBankQuestion::TYPE_OPEN_ENDED) {
+            if (is_null($answerText)) {
+                PracticeAttemptAnswer::query()
+                    ->where('practice_attempt_id', $attempt->id)
+                    ->where('question_bank_question_id', $questionId)
+                    ->delete();
+            } else {
+                $normalizedSubmitted = $normalizeAnswerText($answerText);
+                $normalizedExpected = $normalizeAnswerText($question->answer_text);
+                $normalizedAnswerLabel = $normalizeAnswerText($question->answer_label);
+                $isCorrect = false;
+
+                if ($normalizedExpected !== '' && $normalizedSubmitted === $normalizedExpected) {
+                    $isCorrect = true;
+                } elseif ($normalizedAnswerLabel !== '' && $normalizedSubmitted === $normalizedAnswerLabel) {
+                    $isCorrect = true;
+                }
+
+                PracticeAttemptAnswer::updateOrCreate(
+                    [
+                        'practice_attempt_id' => $attempt->id,
+                        'question_bank_question_id' => $questionId,
+                    ],
+                    [
+                        'question_bank_option_id' => null,
+                        'answer_text' => $answerText,
+                        'is_correct' => $isCorrect,
+                        'answered_at' => now(),
+                    ],
+                );
+            }
+        } else {
+            if (is_null($selectedOptionId)) {
+                PracticeAttemptAnswer::query()
+                    ->where('practice_attempt_id', $attempt->id)
+                    ->where('question_bank_question_id', $questionId)
+                    ->delete();
+            } else {
+                $selectedOption = $question->options->firstWhere('id', $selectedOptionId);
+
+                if (!$selectedOption) {
+                    return response()->json([
+                        'message' => 'Selected option is not valid for this question.',
+                    ], 422);
+                }
+
+                PracticeAttemptAnswer::updateOrCreate(
+                    [
+                        'practice_attempt_id' => $attempt->id,
+                        'question_bank_question_id' => $questionId,
+                    ],
+                    [
+                        'question_bank_option_id' => $selectedOption->id,
+                        'answer_text' => $selectedOption->option_text,
+                        'is_correct' => (bool) $selectedOption->is_correct,
+                        'answered_at' => now(),
+                    ],
+                );
+            }
+        }
+
+        $attempt = $practiceAttemptService->refreshMetrics($attempt->refresh(), false);
+
+        return response()->json([
+            'message' => 'Practice answer saved.',
+            ...$practiceAttemptService->buildAttemptPayload($attempt),
+        ]);
+    });
+
+    Route::post('/student/review-bot/attempts/{attempt}/submit', function (
+        Request $request,
+        PracticeAttempt $attempt
+    ) use (
+        $ensureActive,
+        $recordAudit,
+        $practiceAttemptService
+    ) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        $user = $request->user();
+
+        if ($user->role !== User::ROLE_STUDENT || (int) $attempt->user_id !== (int) $user->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if ($attempt->status !== PracticeAttempt::STATUS_IN_PROGRESS) {
+            return response()->json([
+                'message' => 'This practice attempt is already submitted.',
+                ...$practiceAttemptService->buildAttemptPayload($attempt),
+            ], 422);
+        }
+
+        $attempt = $practiceAttemptService->refreshMetrics($attempt->refresh(), true);
+
+        $recordAudit(
+            $user,
+            'practice.attempt.submit',
+            'practice_attempt',
+            $attempt->id,
+            'Student submitted a weak-area practice attempt',
+            [
+                'target_type' => $attempt->target_type,
+                'subject' => $attempt->subject,
+                'topic_id' => $attempt->topic_id,
+                'score_percent' => $attempt->score_percent,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => 'Practice attempt submitted.',
+            ...$practiceAttemptService->buildAttemptPayload($attempt),
         ]);
     });
 
@@ -1697,7 +2547,7 @@ Route::middleware('auth:sanctum')->group(function () use (
             ], 422);
         }
 
-        if ($selectedQuestionBanks->isNotEmpty() && $selectedQuestionBanks->sum('questions_count') < (int) $validated['total_items']) {
+        if ($selectedQuestionBanks->isNotEmpty() && $selectedQuestionBanks->sum('assessment_questions_count') < (int) $validated['total_items']) {
             return response()->json([
                 'message' => 'Selected question sets do not have enough questions for the item count.',
             ], 422);
@@ -1853,7 +2703,7 @@ Route::middleware('auth:sanctum')->group(function () use (
             ], 422);
         }
 
-        if ($resolvedQuestionBanks->isNotEmpty() && $resolvedQuestionBanks->sum('questions_count') < $resolvedTotalItems) {
+        if ($resolvedQuestionBanks->isNotEmpty() && $resolvedQuestionBanks->sum('assessment_questions_count') < $resolvedTotalItems) {
             return response()->json([
                 'message' => 'Selected question sets do not have enough questions for the item count.',
             ], 422);
@@ -2345,7 +3195,7 @@ Route::middleware('auth:sanctum')->group(function () use (
 
         $questionBankOrder = array_flip($questionBankIds);
         $questionBanks = QuestionBank::query()
-            ->withCount('questions')
+            ->withCount('assessmentQuestions')
             ->whereIn('id', $questionBankIds)
             ->get()
             ->sortBy(fn (QuestionBank $bank) => $questionBankOrder[(int) $bank->id] ?? PHP_INT_MAX)
@@ -2357,7 +3207,7 @@ Route::middleware('auth:sanctum')->group(function () use (
             ], 422);
         }
 
-        $availableQuestionCount = (int) $questionBanks->sum('questions_count');
+        $availableQuestionCount = (int) $questionBanks->sum('assessment_questions_count');
         $targetItems = min((int) $exam->total_items, $availableQuestionCount);
 
         if ($targetItems < 1) {
@@ -2383,7 +3233,8 @@ Route::middleware('auth:sanctum')->group(function () use (
         }
 
         $questionQuery = DB::table('question_bank_questions')
-            ->whereIn('question_bank_id', $questionBankIds);
+            ->whereIn('question_bank_id', $questionBankIds)
+            ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT);
 
         if ((bool) $exam->shuffle_questions) {
             $questionQuery->inRandomOrder();
@@ -2783,7 +3634,7 @@ Route::middleware('auth:sanctum')->group(function () use (
 
         $user = $request->user();
 
-        if (!$isAdmin($user)) {
+        if (!$canManageRooms($user)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 

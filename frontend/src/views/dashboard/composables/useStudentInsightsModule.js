@@ -55,7 +55,9 @@ export function useStudentInsightsModule() {
   const insights = ref({
     summary: {},
     subjects: [],
+    topic_performance: [],
     focus_subjects: [],
+    weak_area: null,
     score_history: [],
     recent_activity: [],
   })
@@ -74,7 +76,9 @@ export function useStudentInsightsModule() {
       insights.value = {
         summary: data?.summary ?? {},
         subjects: Array.isArray(data?.subjects) ? data.subjects : [],
+        topic_performance: Array.isArray(data?.topic_performance) ? data.topic_performance : [],
         focus_subjects: Array.isArray(data?.focus_subjects) ? data.focus_subjects : [],
+        weak_area: data?.weak_area ?? null,
         score_history: Array.isArray(data?.score_history) ? data.score_history : [],
         recent_activity: Array.isArray(data?.recent_activity) ? data.recent_activity : [],
       }
@@ -94,7 +98,9 @@ export function useStudentInsightsModule() {
       insights.value = {
         summary: {},
         subjects: [],
+        topic_performance: [],
         focus_subjects: [],
+        weak_area: null,
         score_history: [],
         recent_activity: [],
       }
@@ -177,6 +183,19 @@ export function useStudentInsightsModule() {
 
     return [...subjects.value]
       .sort((left, right) => left.score - right.score)[0] ?? null
+  })
+
+  const weakArea = computed(() => {
+    const raw = insights.value.weak_area
+    if (!raw || typeof raw !== 'object') return null
+
+    return {
+      basis: String(raw.basis ?? 'subject'),
+      subject: String(raw.subject ?? '').trim(),
+      topic: String(raw.topic ?? '').trim(),
+      subjectScore: numericValue(raw.subject_score),
+      topicScore: numericValue(raw.topic_score),
+    }
   })
 
   const scoreHistory = computed(() => (
@@ -379,6 +398,7 @@ export function useStudentInsightsModule() {
     subjects,
     showInitialLoading,
     summary,
+    weakArea,
     weakestSubject,
   }
 }
