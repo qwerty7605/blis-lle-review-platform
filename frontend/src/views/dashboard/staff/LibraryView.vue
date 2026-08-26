@@ -30,7 +30,7 @@
       <div v-else-if="libraryQuestionBanks.length === 0" class="room-empty-state">
         <BookOpen :size="42" />
         <h4>No Question Banks Yet</h4>
-        <p>Upload a DOCX to convert assessment questions and queue AI remedial generation in the background.</p>
+        <p>Upload a DOCX to convert assessment questions and queue AI item mapping in the background.</p>
       </div>
 
       <div v-else class="management-list">
@@ -52,25 +52,17 @@
                 <strong>{{ formatDateTime(bank.updated_at) }}</strong>
               </div>
               <div>
-                <small>AI Pending</small>
-                <strong>{{ bank.remedial_pending_count ?? 0 }}</strong>
-              </div>
-              <div>
-                <small>AI Approved</small>
-                <strong>{{ bank.remedial_approved_count ?? 0 }}</strong>
-              </div>
-              <div>
-                <small>AI Status</small>
+                <small>Item Mapping</small>
                 <strong>
-                  <span class="pill" :class="resolveGenerationStatusClass(bank.remedial_generation_status)">
-                    {{ formatGenerationStatus(bank.remedial_generation_status) }}
+                  <span class="pill" :class="resolveGenerationStatusClass(bank.mapping_status)">
+                    {{ formatGenerationStatus(bank.mapping_status) }}
                   </span>
                 </strong>
               </div>
             </div>
 
-            <p v-if="bank.remedial_generation_message" class="muted">
-              {{ bank.remedial_generation_message }}
+            <p v-if="bank.mapping_message" class="muted">
+              {{ bank.mapping_message }}
             </p>
           </div>
 
@@ -87,16 +79,16 @@
             <button
               type="button"
               class="ghost-btn"
-              :disabled="libraryGenerationSaving || ['queued', 'processing'].includes(bank.remedial_generation_status)"
-              @click="queueBankRemedialGeneration(bank.id)"
+              :disabled="libraryMappingSaving || ['queued', 'processing'].includes(bank.mapping_status)"
+              @click="queueBankMapping(bank.id)"
             >
-              <RefreshCw :size="15" />
-              Generate New AI Questions
+              <Sparkles :size="15" />
+              Map Items with AI
             </button>
             <button
               type="button"
               class="danger-btn"
-              :disabled="libraryDeleting || libraryGenerationSaving"
+              :disabled="libraryDeleting"
               @click="openDeleteLibraryBankModal(bank)"
             >
               <Trash2 :size="15" />
@@ -107,221 +99,13 @@
       </div>
     </article>
 
-    <article class="surface-card room-shell-card">
-      <header class="room-page-head">
-        <div class="room-page-title">
-          <Sparkles :size="18" />
-          <h3>AI Remedial Review Queue</h3>
-        </div>
-        <button type="button" class="ghost-btn" :disabled="libraryReviewLoading || libraryReviewSaving" @click="loadRemedialQueue">
-          <RefreshCw :size="15" :class="{ 'spin-soft': libraryReviewLoading }" />
-          Refresh Queue
-        </button>
-      </header>
-
-      <div v-if="libraryReviewLoading && remedialQueueGroups.length === 0" class="room-empty-state compact">
-        <RefreshCw :size="30" class="spin-soft" />
-        <p>Loading generated remedial questions...</p>
-      </div>
-
-      <div v-else-if="remedialQueueGroups.length === 0" class="room-empty-state compact">
-        <Sparkles :size="28" />
-        <p>No AI remedial questions are waiting for review yet. Check each bank's AI status above for queued, failed, or skipped generation.</p>
-      </div>
-
-      <div v-else class="library-queue-bank-list">
-        <section
-          v-for="bankGroup in remedialQueueGroups"
-          :key="bankGroup.bank.id || `queue-bank-${bankGroup.bank.title}`"
-          class="library-queue-bank-card"
-        >
-          <header class="library-queue-bank-head">
-            <div class="library-queue-bank-copy">
-              <span class="library-remedial-group-kicker">Question Set</span>
-              <strong>{{ bankGroup.bank.title }}</strong>
-              <p>{{ bankGroup.bank.subject || 'General subject' }}</p>
-            </div>
-
-            <div class="library-queue-bank-actions">
-              <div class="library-remedial-group-meta">
-                <span class="pill" :class="resolveGenerationStatusClass(bankGroup.bank.remedial_generation_status)">
-                  {{ formatGenerationStatus(bankGroup.bank.remedial_generation_status) }}
-                </span>
-                <span class="pill neutral">{{ bankGroup.statusSummary.all }} AI question(s)</span>
-                <span
-                  v-for="statusPill in remedialGroupStatusPills(bankGroup)"
-                  :key="`${bankGroup.bank.id || bankGroup.bank.title}-${statusPill.status}`"
-                  class="pill"
-                  :class="statusPill.className"
-                >
-                  {{ statusPill.count }} {{ statusPill.label }}
-                </span>
-              </div>
-
-              <div class="management-actions compact">
-                <button
-                  type="button"
-                  class="ghost-btn"
-                  :disabled="libraryReviewSaving || (bankGroup.statusSummary.pending_review ?? 0) === 0"
-                  @click="updateRemedialSetStatus(bankGroup.bank.id, 'approved', 'pending_review')"
-                >
-                  Approve Pending Set
-                </button>
-                <button
-                  type="button"
-                  class="ghost-btn"
-                  :disabled="libraryReviewSaving || (bankGroup.statusSummary.pending_review ?? 0) === 0"
-                  @click="updateRemedialSetStatus(bankGroup.bank.id, 'rejected', 'pending_review')"
-                >
-                  Reject Pending Set
-                </button>
-                <button
-                  type="button"
-                  class="ghost-btn"
-                  :disabled="libraryBankQuestionsLoading"
-                  @click="openLibraryBankQuestionsModal(bankGroup.bank)"
-                >
-                  <Eye :size="15" />
-                  View Set
-                </button>
-              </div>
-            </div>
-          </header>
-
-          <div class="library-remedial-group-list queue-group-list">
-            <section
-              v-for="group in bankGroup.sourceGroups"
-              :key="group.source_question?.id || `queue-source-${group.variants[0]?.id}`"
-              class="library-remedial-group"
-            >
-              <div class="library-remedial-group-summary">
-                <div class="library-remedial-group-copy">
-                  <span class="library-remedial-group-kicker">
-                    Assessment Q{{ group.source_question?.item_number || 'N/A' }}
-                  </span>
-                  <strong>{{ group.source_question?.question_text || 'No source question preview available.' }}</strong>
-                  <small v-if="group.source_question?.answer_text" class="remedial-source-answer">
-                    Source answer:
-                    <span v-if="group.source_question?.answer_label">{{ group.source_question.answer_label }}.</span>
-                    {{ group.source_question.answer_text }}
-                  </small>
-                </div>
-
-                <div class="library-remedial-group-meta">
-                  <span class="pill neutral">{{ group.variants.length }} variant(s)</span>
-                  <span
-                    v-for="statusPill in remedialGroupStatusPills(group)"
-                    :key="`${group.source_question?.id || 'queue-group'}-${statusPill.status}`"
-                    class="pill"
-                    :class="statusPill.className"
-                  >
-                    {{ statusPill.count }} {{ statusPill.label }}
-                  </span>
-                </div>
-              </div>
-
-              <div class="library-remedial-variant-list">
-                <article
-                  v-for="question in group.variants"
-                  :key="question.id"
-                  class="library-bank-question-card remedial-variant-card"
-                >
-                  <div class="library-bank-question-head">
-                    <strong>{{ question.question_text }}</strong>
-                    <div class="library-bank-question-pills">
-                      <span class="pill" :class="resolveReviewStatusClass(question.status)">
-                        {{ formatGenerationStatus(question.status) }}
-                      </span>
-                      <span class="pill neutral">{{ itemStyleLabel(question.item_style) }}</span>
-                      <span class="pill success">{{ question.difficulty || 'medium' }}</span>
-                      <span v-if="question.cognitive_level" class="pill neutral">{{ cognitiveLevelLabel(question.cognitive_level) }}</span>
-                      <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
-                    </div>
-                  </div>
-
-                  <div v-if="Array.isArray(question.options) && question.options.length > 0" class="library-bank-option-list">
-                    <div
-                      v-for="option in question.options"
-                      :key="option.id"
-                      class="library-bank-option-row"
-                      :class="{ correct: option.is_correct }"
-                    >
-                      <span class="library-bank-option-label">{{ option.option_label }}.</span>
-                      <span>{{ option.option_text }}</span>
-                    </div>
-                  </div>
-
-                  <p v-else class="digitalized-open-ended">Open-ended response</p>
-
-                  <p class="digitalized-answer">
-                    Answer:
-                    <span v-if="question.answer_label">{{ question.answer_label }}</span>
-                    <span v-if="question.answer_text">. {{ question.answer_text }}</span>
-                    <span v-if="!question.answer_label && !question.answer_text">No answer key stored.</span>
-                  </p>
-
-                  <div
-                    v-if="question.tested_concept || question.difference_from_source"
-                    class="remedial-detail-grid"
-                  >
-                    <div class="remedial-detail-block full-width">
-                      <small>AI Notes</small>
-                      <p v-if="question.tested_concept"><strong>Tested concept:</strong> {{ question.tested_concept }}</p>
-                      <p v-if="question.difference_from_source"><strong>How it differs:</strong> {{ question.difference_from_source }}</p>
-                    </div>
-                  </div>
-
-                  <div class="management-actions compact">
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="libraryReviewSaving || libraryRemedialEditSaving"
-                      @click="openRemedialEditModal(question)"
-                    >
-                      <Pencil :size="15" />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="libraryReviewSaving"
-                      @click="refreshRemedialQuestion(question.id)"
-                    >
-                      <RefreshCw :size="15" />
-                      Refresh
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="libraryReviewSaving || question.status === 'rejected'"
-                      @click="updateRemedialStatus(question.id, 'rejected')"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      class="primary-btn"
-                      :disabled="libraryReviewSaving || question.status === 'approved'"
-                      @click="updateRemedialStatus(question.id, 'approved')"
-                    >
-                      Approve
-                    </button>
-                  </div>
-                </article>
-              </div>
-            </section>
-          </div>
-        </section>
-      </div>
-    </article>
-
     <teleport to="body">
       <div v-if="showLibraryQuestionModal" class="modal-backdrop" @click.self="closeLibraryQuestionModal">
         <div class="modal-card library-modal-card">
           <header class="modal-head library-modal-head">
             <div class="library-modal-title-wrap">
               <h4>Add Assessment Questions</h4>
-              <p>Upload your DOCX, tag optional topics, and the system will queue pending AI remedial variants after save.</p>
+              <p>Upload your DOCX, tag optional topics, and the system will queue AI item mapping after save.</p>
             </div>
             <button type="button" class="modal-close" @click="closeLibraryQuestionModal">
               <X :size="16" />
@@ -349,6 +133,18 @@
                     {{ subject }}
                   </option>
                 </select>
+              </label>
+
+              <label class="field-stack">
+                <span class="field-label">AI Item Mapping</span>
+                <select v-model="libraryForm.aiTaggingMode" class="text-input">
+                  <option value="review">Suggest topics for my review (recommended)</option>
+                  <option value="auto">Auto-label — apply immediately</option>
+                </select>
+                <p class="library-upload-note">
+                  Every item gets an AI-suggested topic, difficulty, and cognitive level so exam results can show a deeper
+                  breakdown. Choose whether suggestions apply right away or wait for you to confirm them.
+                </p>
               </label>
 
               <label class="field-stack">
@@ -453,7 +249,7 @@
             >
               <RefreshCw v-if="librarySaving" :size="16" class="spin-soft" />
               <Plus v-else :size="16" />
-              {{ librarySaving ? 'Saving...' : 'Save And Queue Remedial Variants' }}
+              {{ librarySaving ? 'Saving...' : 'Save Question Bank' }}
             </button>
           </div>
         </div>
@@ -503,7 +299,9 @@
                   <div class="library-bank-question-pills">
                     <span class="pill neutral">{{ (question.question_type || 'multiple_choice').replace('_', ' ') }}</span>
                     <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
-                    <span class="pill neutral">{{ question.remedial_variant_count ?? 0 }} AI variant(s)</span>
+                    <span v-if="question.difficulty" class="pill success">{{ question.difficulty }}</span>
+                    <span v-if="question.cognitive_level" class="pill neutral">{{ cognitiveLevelLabel(question.cognitive_level) }}</span>
+                    <span v-if="question.tag_status === 'pending_review'" class="pill neutral">Tag pending review</span>
                   </div>
                 </div>
 
@@ -532,103 +330,17 @@
           </div>
 
           <div class="modal-actions">
-            <button type="button" class="ghost-btn" @click="closeLibraryBankQuestionsModal">Close</button>
-          </div>
-        </div>
-      </div>
-    </teleport>
-
-    <teleport to="body">
-      <div v-if="showRemedialEditModal" class="modal-backdrop" @click.self="closeRemedialEditModal">
-        <div class="modal-card library-remedial-edit-modal">
-          <header class="modal-head library-modal-head">
-            <div class="library-modal-title-wrap">
-              <h4>Edit AI Remedial Question</h4>
-              <p>
-                {{ selectedRemedialQuestion?.question_bank?.title || selectedLibraryQuestionBank?.title || 'Question Set' }}
-                <span v-if="selectedRemedialQuestion?.source_question?.item_number">
-                  • Source Q{{ selectedRemedialQuestion.source_question.item_number }}
-                </span>
-              </p>
-            </div>
-            <button type="button" class="modal-close" @click="closeRemedialEditModal">
-              <X :size="16" />
-            </button>
-          </header>
-
-          <div class="library-bank-view-body">
-            <div v-if="selectedRemedialQuestion?.source_question" class="remedial-edit-source-card">
-              <small>Source Question</small>
-              <strong>{{ selectedRemedialQuestion.source_question.question_text }}</strong>
-              <p v-if="selectedRemedialQuestion.source_question.answer_text">
-                Source answer:
-                <span v-if="selectedRemedialQuestion.source_question.answer_label">{{ selectedRemedialQuestion.source_question.answer_label }}.</span>
-                {{ selectedRemedialQuestion.source_question.answer_text }}
-              </p>
-            </div>
-
-            <label class="field-stack">
-              <span class="field-label">Generated Question</span>
-              <textarea v-model.trim="remedialEditForm.questionText" class="text-input remedial-textarea" rows="3" />
-            </label>
-
-            <div class="library-edit-grid">
-              <label class="field-stack">
-                <span class="field-label">Item Style</span>
-                <select v-model="remedialEditForm.itemStyle" class="text-input">
-                  <option v-for="style in remedialItemStyleOptions" :key="style" :value="style">
-                    {{ itemStyleLabel(style) }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="field-stack">
-                <span class="field-label">Difficulty</span>
-                <select v-model="remedialEditForm.difficulty" class="text-input">
-                  <option v-for="difficulty in remedialDifficultyOptions" :key="difficulty" :value="difficulty">
-                    {{ questionTypeLabel(difficulty) }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="field-stack">
-                <span class="field-label">Correct Answer</span>
-                <select v-model="remedialEditForm.correctAnswer" class="text-input">
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                </select>
-              </label>
-            </div>
-
-            <div v-if="remedialEditForm.cognitiveLevel || remedialEditForm.testedConcept || remedialEditForm.differenceFromSource" class="remedial-edit-source-card">
-              <small>AI Notes</small>
-              <p v-if="remedialEditForm.cognitiveLevel"><strong>Cognitive level:</strong> {{ remedialEditForm.cognitiveLevel }}</p>
-              <p v-if="remedialEditForm.testedConcept"><strong>Tested concept:</strong> {{ remedialEditForm.testedConcept }}</p>
-              <p v-if="remedialEditForm.differenceFromSource"><strong>How it differs:</strong> {{ remedialEditForm.differenceFromSource }}</p>
-            </div>
-
-            <div class="library-edit-grid four-up">
-              <label v-for="label in ['A', 'B', 'C', 'D']" :key="`option-${label}`" class="field-stack">
-                <span class="field-label">Option {{ label }}</span>
-                <input v-model.trim="remedialEditForm.options[label]" type="text" class="text-input" />
-              </label>
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" class="ghost-btn" :disabled="libraryRemedialEditSaving" @click="closeRemedialEditModal">Cancel</button>
             <button
+              v-if="libraryBankQuestions.some((question) => question.tag_status === 'pending_review')"
               type="button"
-              class="primary-btn"
-              :disabled="!canSaveRemedialEdit"
-              @click="saveRemedialQuestionEdits"
+              class="ghost-btn"
+              :disabled="libraryMappingSaving"
+              @click="confirmBankTags(selectedLibraryQuestionBank?.id)"
             >
-              <RefreshCw v-if="libraryRemedialEditSaving" :size="16" class="spin-soft" />
-              <Pencil v-else :size="16" />
-              {{ libraryRemedialEditSaving ? 'Saving...' : 'Save Changes' }}
+              <CheckCircle2 :size="15" />
+              Confirm All Suggested Tags
             </button>
+            <button type="button" class="ghost-btn" @click="closeLibraryBankQuestionsModal">Close</button>
           </div>
         </div>
       </div>
@@ -645,10 +357,10 @@
           </header>
 
           <p class="muted">
-            Delete <strong>{{ selectedLibraryBank?.title }}</strong>? This removes both assessment and remedial questions linked to the bank.
+            Delete <strong>{{ selectedLibraryBank?.title }}</strong>? This removes all assessment questions linked to the bank.
           </p>
           <p class="muted">
-            This action is blocked if the set already has official exam or practice attempt records.
+            This action is blocked if the set already has official exam attempt records.
           </p>
 
           <div class="modal-actions">
@@ -668,7 +380,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, Eye, FileText, Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, CheckCircle2, Eye, FileText, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-vue-next'
 import { formatDateTime } from '../composables/useDashboardFormatters'
 import { useLibraryModule } from '../composables/useLibraryModule'
 
@@ -704,52 +416,19 @@ function questionTypeLabel(type) {
     .replace(/\b\w/g, (character) => character.toUpperCase())
 }
 
-function itemStyleLabel(style) {
-  return questionTypeLabel(style || 'reverse_association')
-}
-
 function cognitiveLevelLabel(level) {
   return questionTypeLabel(level || 'comprehension')
-}
-
-function resolveReviewStatusClass(status) {
-  const normalized = String(status ?? 'pending_review').toLowerCase()
-
-  if (normalized === 'approved') return 'success'
-  if (normalized === 'rejected') return 'danger'
-  return 'neutral'
-}
-
-function remedialGroupStatusPills(group) {
-  const variants = Array.isArray(group?.variants)
-    ? group.variants
-    : (Array.isArray(group?.questions) ? group.questions : [])
-  const counts = variants.reduce((summary, variant) => {
-    const status = String(variant?.status ?? 'pending_review').toLowerCase()
-    summary[status] = (summary[status] ?? 0) + 1
-    return summary
-  }, {})
-
-  return [
-    { status: 'pending_review', label: 'pending', className: 'neutral', count: counts.pending_review ?? 0 },
-    { status: 'approved', label: 'approved', className: 'success', count: counts.approved ?? 0 },
-    { status: 'rejected', label: 'rejected', className: 'danger', count: counts.rejected ?? 0 },
-  ].filter((pill) => pill.count > 0)
 }
 
 const {
   showLibraryQuestionModal,
   showLibraryBankQuestionsModal,
   showDeleteLibraryBankModal,
-  showRemedialEditModal,
   libraryLoading,
-  libraryReviewLoading,
   libraryBankQuestionsLoading,
   librarySaving,
   libraryDeleting,
-  libraryReviewSaving,
-  libraryGenerationSaving,
-  libraryRemedialEditSaving,
+  libraryMappingSaving,
   libraryError,
   libraryMessage,
   libraryParsing,
@@ -759,42 +438,23 @@ const {
   libraryQuestionBanks,
   selectedLibraryBank,
   selectedLibraryQuestionBank,
-  selectedRemedialQuestion,
   groupedLibraryPreviewWarnings,
   digitalizedQuestions,
   libraryBankQuestions,
-  libraryBankRemedialQuestions,
-  libraryBankQuestionViewTab,
-  libraryBankRemedialStatusFilter,
-  libraryBankRemedialStatusSummary,
-  libraryBankRemedialGroups,
-  remedialQueueGroups,
   libraryForm,
-  remedialEditForm,
   librarySubjectCategories,
-  remedialItemStyleOptions,
-  remedialDifficultyOptions,
   canSaveLibraryQuestionBank,
-  canSaveRemedialEdit,
   openLibraryQuestionModal,
   closeLibraryQuestionModal,
   openLibraryBankQuestionsModal,
   closeLibraryBankQuestionsModal,
-  openRemedialEditModal,
-  closeRemedialEditModal,
-  setLibraryBankQuestionViewTab,
-  setLibraryBankRemedialStatusFilter,
   openDeleteLibraryBankModal,
   closeDeleteLibraryBankModal,
   handleLibraryDocxChange,
-  loadRemedialQueue,
   handleSaveLibraryQuestionBank,
   handleDeleteLibraryBank,
-  queueBankRemedialGeneration,
-  updateRemedialStatus,
-  updateRemedialSetStatus,
-  refreshRemedialQuestion,
-  saveRemedialQuestionEdits,
+  queueBankMapping,
+  confirmBankTags,
 } = useLibraryModule()
 </script>
 
@@ -802,10 +462,6 @@ const {
 <style scoped>
 .library-bank-view-modal {
   width: min(1120px, calc(100vw - 32px));
-}
-
-.library-remedial-edit-modal {
-  width: min(920px, calc(100vw - 32px));
 }
 
 .library-bank-view-body {
@@ -819,73 +475,12 @@ const {
   gap: 8px;
 }
 
-.library-bank-tab-row,
-.library-remedial-filter-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.library-bank-tab-row .ghost-btn.active,
-.library-remedial-filter-row .ghost-btn.active {
-  border-color: rgba(13, 21, 71, 0.28);
-  background: rgba(13, 21, 71, 0.08);
-  color: var(--lnu-navy-deep);
-}
-
 .library-bank-question-list {
   display: grid;
   gap: 14px;
   max-height: min(70vh, 760px);
   overflow-y: auto;
   padding-right: 4px;
-}
-
-.library-queue-bank-list {
-  display: grid;
-  gap: 16px;
-}
-
-.library-queue-bank-card {
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, rgba(248, 250, 255, 0.96) 100%);
-  padding: 18px;
-  display: grid;
-  gap: 14px;
-}
-
-.library-queue-bank-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.library-queue-bank-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.text-danger {
-  color: #b91c1c;
-}
-
-.library-queue-bank-copy strong {
-  color: var(--lnu-navy-deep);
-  font-size: 18px;
-  line-height: 1.35;
-}
-
-.library-queue-bank-copy p {
-  margin: 0;
-  color: var(--lnu-text-muted);
-}
-
-.library-queue-bank-actions {
-  display: grid;
-  gap: 10px;
-  justify-items: flex-end;
 }
 
 .library-bank-question-card {
@@ -913,11 +508,6 @@ const {
   gap: 8px;
 }
 
-.remedial-source-answer {
-  color: var(--lnu-text-muted);
-  line-height: 1.45;
-}
-
 .library-bank-option-list {
   display: grid;
   gap: 8px;
@@ -942,152 +532,5 @@ const {
   min-width: 20px;
   font-weight: 700;
   color: var(--lnu-navy-deep);
-}
-
-.library-remedial-group-list {
-  display: grid;
-  gap: 12px;
-  max-height: min(70vh, 760px);
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.library-remedial-group {
-  border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98);
-}
-
-.library-remedial-group-summary {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 16px;
-}
-
-.library-remedial-group-copy {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.library-remedial-group-copy strong {
-  color: var(--lnu-navy-deep);
-  line-height: 1.45;
-}
-
-.library-remedial-group-kicker {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lnu-text-muted);
-}
-
-.library-remedial-group-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.library-remedial-variant-list {
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
-  padding: 0 16px 16px;
-  display: grid;
-  gap: 12px;
-}
-
-.remedial-variant-card {
-  background: linear-gradient(180deg, rgba(250, 251, 255, 0.98), rgba(245, 247, 252, 0.94));
-}
-
-.remedial-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.remedial-detail-block {
-  border-radius: 12px;
-  background: rgba(13, 21, 71, 0.04);
-  padding: 12px;
-  display: grid;
-  gap: 6px;
-}
-
-.remedial-detail-block.full-width {
-  grid-column: 1 / -1;
-}
-
-.remedial-detail-block small,
-.remedial-edit-source-card small {
-  color: var(--lnu-text-muted);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.remedial-detail-block p,
-.remedial-edit-source-card p {
-  margin: 0;
-  color: var(--lnu-text);
-  line-height: 1.5;
-}
-
-.remedial-edit-source-card {
-  border-radius: 14px;
-  background: rgba(13, 21, 71, 0.04);
-  padding: 14px;
-  display: grid;
-  gap: 8px;
-}
-
-.remedial-edit-source-card strong {
-  color: var(--lnu-navy-deep);
-  line-height: 1.45;
-}
-
-.library-edit-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.library-edit-grid.four-up {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.remedial-textarea {
-  min-height: 104px;
-  resize: vertical;
-}
-
-.queue-group-list {
-  max-height: none;
-  overflow: visible;
-  padding-right: 0;
-}
-
-@media (max-width: 900px) {
-  .library-queue-bank-head,
-  .library-remedial-group-summary {
-    flex-direction: column;
-  }
-
-  .library-queue-bank-actions {
-    justify-items: flex-start;
-  }
-
-  .library-remedial-group-meta {
-    justify-content: flex-start;
-  }
-
-  .remedial-detail-grid,
-  .library-edit-grid,
-  .library-edit-grid.four-up {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

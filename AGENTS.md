@@ -81,7 +81,7 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - Service ports:
   - App (nginx): `http://localhost:8080`
   - phpMyAdmin: `http://localhost:8081`
-- The `queue` service runs Laravel background jobs, including AI remedial generation. Bank save/import now queues generation instead of waiting on OpenAI inline.
+- The `queue` service runs Laravel background jobs, including AI item mapping. Bank save/import now queues classification instead of waiting on OpenAI inline.
 - MySQL container is intentionally named `lnu_lle_db`.
 - MySQL volume name is `blis_system_mysql_data`.
 

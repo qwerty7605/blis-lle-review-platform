@@ -403,7 +403,7 @@
                 </div>
 
                 <div
-                  v-if="studentExamResultSummary.primaryFocus || studentExamResultSummary.strength || studentExamResultSummary.readinessLevel || studentExamResultSummary.recommendedPracticeArea"
+                  v-if="studentExamResultSummary.primaryFocus || studentExamResultSummary.strength || studentExamResultSummary.readinessLevel"
                   class="exam-result-insights"
                 >
                   <article
@@ -442,21 +442,6 @@
                     <span class="exam-feedback-kicker">Readiness Level</span>
                     <strong>{{ studentExamResultSummary.readinessLevel.label }}</strong>
                     <p>{{ studentExamResultSummary.readinessLevel.message }}</p>
-                  </article>
-
-                  <article
-                    v-if="studentExamResultSummary.recommendedPracticeArea"
-                    class="exam-feedback-card"
-                  >
-                    <span class="exam-feedback-kicker">Recommended Practice</span>
-                    <strong>{{ studentExamResultSummary.recommendedPracticeArea.label }}</strong>
-                    <p>
-                      {{
-                        studentExamResultSummary.recommendedPracticeArea.can_start
-                          ? `${studentExamResultSummary.recommendedPracticeArea.available_questions} approved remedial question(s) available.`
-                          : 'No approved remedial set is ready yet, so review your notes and subject materials first.'
-                      }}
-                    </p>
                   </article>
                 </div>
 
@@ -514,16 +499,8 @@
                     {{ studentExamReviewActionLabel }}
                   </button>
                   <button
-                    v-if="studentExamResultSummary.practice?.can_start"
                     type="button"
                     class="primary-btn"
-                    @click="openWeakAreaPractice"
-                  >
-                    Start Recommended Practice
-                  </button>
-                  <button
-                    type="button"
-                    :class="studentExamResultSummary.practice?.can_start ? 'ghost-btn' : 'primary-btn'"
                     @click="handleExamAttemptCloseClick"
                   >
                     Done
@@ -840,7 +817,6 @@ const {
   goToStudentExamQuestion,
   handleExamAttemptCloseClick,
   showStudentExamResultSummary,
-  openWeakAreaPractice,
   closeStudentExamExitConfirm,
   confirmStudentExamExit,
   openStudentExamSubmitConfirm,

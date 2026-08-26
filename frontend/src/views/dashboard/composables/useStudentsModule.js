@@ -46,7 +46,9 @@ export function useStudentsModule() {
   const services = useDashboardDataServices()
 
   const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLowerCase())
-  const isStaffDirectoryRole = computed(() => ['admin'].includes(normalizedRole.value))
+  const isStaffDirectoryRole = computed(() => (
+    ['admin', 'staff_master_examiner', 'faculty'].includes(normalizedRole.value)
+  ))
 
   const directoryLoading = ref(false)
   const directoryError = ref('')

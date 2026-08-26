@@ -22,7 +22,6 @@ export function useLibraryModule() {
 
   onMounted(() => {
     libraryModule.loadLibraryBanks()
-    libraryModule.loadRemedialQueue()
   })
 
   return libraryModule

@@ -46,7 +46,7 @@ const routes = [
       {
         path: 'home',
         name: 'dashboard-home',
-        component: AnalyticsView,
+        component: DashboardHomeView,
         meta: dashboardRouteMeta('dashboard'),
       },
       {

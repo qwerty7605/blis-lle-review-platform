@@ -428,14 +428,7 @@ onBeforeUnmount(() => {
 }
 
 .layout-content.is-student-dashboard-home {
-  overflow: hidden;
-  display: flex;
-  align-items: stretch;
-}
-
-.layout-content.is-student-dashboard-home > * {
-  flex: 1;
-  min-height: 0;
+  overflow-y: auto;
 }
 
 @media (max-width: 900px) {

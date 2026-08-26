@@ -2,12 +2,16 @@
 
 namespace App\Services;
 
+use App\Models\ExamAttempt;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
+use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class ReviewBotService
 {
@@ -33,17 +37,39 @@ class ReviewBotService
     }
 
     /**
-     * Generate a review quiz from the built-in BLIS core reviewer.
+     * Generate a review quiz. Tries, in order: an AI-generated set grounded in
+     * real teacher library questions (weighted toward the student's weak
+     * subjects when a $user is supplied), a non-AI remix of that same library
+     * material, and finally the built-in BLIS core reviewer blueprints — so
+     * the feature always returns something even without an OpenAI key or
+     * without any matching library content.
+     *
+     * When $autoDetectWeakAreas is true, $subjects is ignored entirely and the
+     * subject list is instead derived from the student's own weak areas (see
+     * resolveAutoDetectedSubjects()) — this is the "I don't know what to pick,
+     * just quiz me on what I'm weak in" mode.
      *
      * @return array{
      *   generator: string,
      *   subjects: array<int, string>,
-     *   questions: array<int, array<string, mixed>>
+     *   questions: array<int, array<string, mixed>>,
+     *   weak_subjects: array<int, string>,
+     *   auto_detected: bool
      * }
      */
-    public function generateQuiz(array $subjects, int $questionCount): array
+    public function generateQuiz(array $subjects, int $questionCount, ?User $user = null, bool $autoDetectWeakAreas = false): array
     {
         $profiles = $this->coreSubjectProfiles();
+
+        $weakAreaContext = $user ? $this->resolveWeakAreaContext($user) : ['weak_subjects' => [], 'strong_subjects' => []];
+
+        if ($autoDetectWeakAreas) {
+            if (!$user) {
+                throw new RuntimeException('Unable to detect weak areas without a signed-in student.');
+            }
+
+            $subjects = $this->resolveAutoDetectedSubjects($weakAreaContext);
+        }
 
         $normalizedSubjects = collect($subjects)
             ->map(fn ($subject) => $this->normalizeSubjectLabel($subject))
@@ -53,14 +79,33 @@ class ReviewBotService
             ->values();
 
         if ($normalizedSubjects->isEmpty()) {
-            throw new RuntimeException('Pick at least one BLIS core subject to review.');
+            throw new RuntimeException($autoDetectWeakAreas
+                ? 'Unable to detect a subject to review yet — this needs at least a couple of graded exams first.'
+                : 'Pick at least one BLIS core subject to review.');
         }
 
-        $generatedQuestions = $this->generateFromCoreBlueprints(
-            $normalizedSubjects->all(),
-            $questionCount
-        );
-        $generator = 'core_blueprint';
+        $generatedQuestions = [];
+        $generator = null;
+
+        $sourceQuestions = $this->resolveSourceQuestions($normalizedSubjects->all(), $questionCount, $weakAreaContext);
+
+        if ($sourceQuestions->isNotEmpty()) {
+            $generatedQuestions = $this->generateWithAi($sourceQuestions, $normalizedSubjects->all(), $questionCount, $weakAreaContext);
+            $generator = 'ai';
+
+            if ($generatedQuestions === null || $generatedQuestions === []) {
+                $generatedQuestions = $this->generateFallback($sourceQuestions, $questionCount);
+                $generator = 'library_remix';
+            }
+        }
+
+        if ($generatedQuestions === [] || $generatedQuestions === null) {
+            $generatedQuestions = $this->generateFromCoreBlueprints(
+                $normalizedSubjects->all(),
+                $questionCount
+            );
+            $generator = 'core_blueprint';
+        }
 
         if ($generatedQuestions === []) {
             throw new RuntimeException('Unable to build a BLIS review set right now. Please try another subject mix.');
@@ -70,201 +115,198 @@ class ReviewBotService
             'generator' => $generator,
             'subjects' => $normalizedSubjects->all(),
             'questions' => array_slice($generatedQuestions, 0, $questionCount),
+            'weak_subjects' => array_keys($weakAreaContext['weak_subjects']),
+            'auto_detected' => $autoDetectWeakAreas,
         ];
     }
 
     /**
-     * @param  array<int, string>  $subjects
-     * @return array<int, array<string, mixed>>
+     * Decide which subjects to quiz on when the student didn't pick any
+     * themselves. Prefers subjects the student is actually weak in
+     * (weakest first); if none are weak, prefers whichever attempted
+     * subjects they're relatively least strong in; if they have no exam
+     * history at all yet, falls back to the full 6-subject core review so
+     * auto-detect mode always has something to generate.
+     *
+     * @param  array{weak_subjects: array<string, float>, strong_subjects: array<string, float>}  $weakAreaContext
+     * @return array<int, string>
      */
-    protected function generateFromCoreBlueprints(array $subjects, int $questionCount): array
+    protected function resolveAutoDetectedSubjects(array $weakAreaContext): array
     {
-        $profiles = $this->coreSubjectProfiles();
-        $subjectRotation = collect($subjects)->shuffle()->values()->all();
+        $maxAutoSubjects = 4;
 
-        if ($subjectRotation === []) {
-            return [];
+        $weakSubjects = array_keys($weakAreaContext['weak_subjects']);
+        if ($weakSubjects !== []) {
+            return array_slice($weakSubjects, 0, $maxAutoSubjects);
         }
 
-        $blueprintsBySubject = [];
-        $subjectCounters = [];
+        $strongSubjects = $weakAreaContext['strong_subjects'];
+        if ($strongSubjects !== []) {
+            asort($strongSubjects);
 
-        foreach ($subjectRotation as $subject) {
-            $blueprintsBySubject[$subject] = collect($profiles[$subject]['topic_blueprints'] ?? [])
-                ->shuffle()
-                ->values()
-                ->all();
-            $subjectCounters[$subject] = 0;
+            return array_slice(array_keys($strongSubjects), 0, $maxAutoSubjects);
         }
 
-        $questions = [];
-
-        for ($index = 0; $index < $questionCount; $index++) {
-            $subject = $subjectRotation[$index % count($subjectRotation)];
-            $subjectBlueprints = $blueprintsBySubject[$subject] ?? [];
-
-            if ($subjectBlueprints === []) {
-                continue;
-            }
-
-            $subjectPointer = (int) ($subjectCounters[$subject] ?? 0);
-            $blueprint = $subjectBlueprints[$subjectPointer % count($subjectBlueprints)];
-
-            $questions[] = $this->buildBlueprintQuestion(
-                $blueprint,
-                $subject,
-                $subjectPointer,
-                $index
-            );
-
-            $subjectCounters[$subject] = $subjectPointer + 1;
-        }
-
-        return $questions;
+        return array_keys($this->coreSubjectProfiles());
     }
 
     /**
-     * @param  array<string, mixed>  $blueprint
-     * @return array<string, mixed>
+     * Summarize a student's own submitted exam performance by BLIS subject,
+     * so quiz generation can be weighted toward what they actually need to
+     * study. Subjects averaging below WEAK_SUBJECT_THRESHOLD are "weak".
+     *
+     * @return array{
+     *   weak_subjects: array<string, float>,
+     *   strong_subjects: array<string, float>
+     * } weak_subjects/strong_subjects are subject => average score percent,
+     *   weak_subjects sorted weakest first.
      */
-    protected function buildBlueprintQuestion(array $blueprint, string $subject, int $variantIndex, int $questionIndex): array
+    protected function resolveWeakAreaContext(User $user): array
     {
-        [$correctOptionId, $options] = $this->buildBlueprintOptions($blueprint);
+        $weakThreshold = 75.0;
+
+        $averagesBySubject = ExamAttempt::query()
+            ->where('user_id', $user->id)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->whereNotNull('score_percent')
+            ->with('exam:id,subject')
+            ->get()
+            ->groupBy(fn (ExamAttempt $attempt) => $this->normalizeSubjectLabel($attempt->exam?->subject))
+            ->map(fn (Collection $attempts) => round((float) $attempts->avg('score_percent'), 1));
+
+        $weakSubjects = $averagesBySubject
+            ->filter(fn (float $average) => $average < $weakThreshold)
+            ->sort()
+            ->all();
+
+        $strongSubjects = $averagesBySubject
+            ->filter(fn (float $average) => $average >= $weakThreshold)
+            ->all();
 
         return [
-            'id' => 'review-' . ($questionIndex + 1),
-            'subject' => $subject,
-            'type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
-            'prompt' => $this->buildBlueprintPrompt((string) ($blueprint['prompt'] ?? ''), $subject, $variantIndex),
-            'options' => $options,
-            'correct_option_id' => $correctOptionId,
-            'explanation' => trim((string) ($blueprint['explanation'] ?? '')) !== ''
-                ? trim((string) $blueprint['explanation'])
-                : 'Review the key concept behind the correct answer before moving to the next item.',
+            'weak_subjects' => $weakSubjects,
+            'strong_subjects' => $strongSubjects,
         ];
     }
 
     /**
-     * @param  array<string, mixed>  $blueprint
-     * @return array{0: string, 1: array<int, array{id: string, text: string}>}
-     */
-    protected function buildBlueprintOptions(array $blueprint): array
-    {
-        $correctAnswer = trim((string) ($blueprint['answer'] ?? ''));
-        $rawDistractors = is_array($blueprint['distractors'] ?? null) ? $blueprint['distractors'] : [];
-
-        $options = collect(array_merge([$correctAnswer], $rawDistractors))
-            ->map(fn ($value) => trim((string) $value))
-            ->filter()
-            ->unique(fn (string $value): string => Str::lower($value))
-            ->values();
-
-        if ($options->count() < 4) {
-            $options = $options
-                ->concat(collect([
-                    'A different library process',
-                    'A related but incorrect practice',
-                    'A term from another subject area',
-                ]))
-                ->unique(fn (string $value): string => Str::lower($value))
-                ->take(4)
-                ->values();
-        }
-
-        $shuffled = $options->shuffle()->take(4)->values();
-
-        if (!$shuffled->contains(fn (string $value): bool => Str::lower($value) === Str::lower($correctAnswer))) {
-            $shuffled = $shuffled
-                ->slice(0, max($shuffled->count() - 1, 0))
-                ->push($correctAnswer)
-                ->shuffle()
-                ->values();
-        }
-
-        $letterIds = ['a', 'b', 'c', 'd'];
-        $correctId = 'a';
-
-        $formattedOptions = $shuffled
-            ->map(function (string $text, int $optionIndex) use ($letterIds, $correctAnswer, &$correctId): array {
-                $id = $letterIds[$optionIndex] ?? 'opt-' . ($optionIndex + 1);
-
-                if (Str::lower($text) === Str::lower($correctAnswer)) {
-                    $correctId = $id;
-                }
-
-                return [
-                    'id' => $id,
-                    'text' => $text,
-                ];
-            })
-            ->all();
-
-        return [$correctId, $formattedOptions];
-    }
-
-    protected function buildBlueprintPrompt(string $prompt, string $subject, int $variantIndex): string
-    {
-        return $this->ensureQuestionPrompt($prompt);
-    }
-
-    protected function ensureQuestionPrompt(string $prompt): string
-    {
-        $normalized = preg_replace('/\s+/', ' ', trim($prompt));
-        $normalized = (string) $normalized;
-
-        if ($normalized === '') {
-            return 'Which answer best matches the BLIS concept being reviewed?';
-        }
-
-        return rtrim($normalized, " \t\n\r\0\x0B.?!") . '?';
-    }
-
-    /**
+     * Pull real teacher-authored assessment questions for the selected
+     * subjects, to ground AI generation and the local remix fallback in
+     * actual course content. When weak subjects are known, the pool is
+     * weighted toward them.
+     *
      * @param  array<int, string>  $subjects
-     * @return array<int, array<string, mixed>>
+     * @param  array{weak_subjects: array<string, float>, strong_subjects: array<string, float>}  $weakAreaContext
+     * @return Collection<int, QuestionBankQuestion>
      */
-    protected function subjectProfilePayload(array $subjects): array
+    protected function resolveSourceQuestions(array $subjects, int $questionCount, array $weakAreaContext = []): Collection
     {
-        $profiles = $this->coreSubjectProfiles();
-
-        return collect($subjects)
-            ->map(function (string $subject) use ($profiles): array {
-                $profile = $profiles[$subject] ?? [
-                    'description' => '',
-                    'focus_areas' => [],
-                    'topic_blueprints' => [],
-                ];
-
-                return [
-                    'subject' => $subject,
-                    'description' => $profile['description'],
-                    'focus_areas' => $profile['focus_areas'],
-                    'bot_topics' => collect($profile['topic_blueprints'] ?? [])
-                        ->take(6)
-                        ->map(fn (array $topic): array => [
-                            'prompt' => $topic['prompt'] ?? '',
-                            'answer' => $topic['answer'] ?? '',
-                        ])
-                        ->values()
-                        ->all(),
-                ];
-            })
-            ->values()
+        $matchingBankIds = QuestionBank::query()
+            ->select(['id', 'subject'])
+            ->get()
+            ->filter(fn (QuestionBank $bank): bool => in_array($this->normalizeSubjectLabel($bank->subject), $subjects, true))
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
             ->all();
+
+        if ($matchingBankIds === []) {
+            return collect();
+        }
+
+        $poolLimit = min(max($questionCount * 2, $questionCount + 4), 24);
+
+        $baseQuery = fn () => QuestionBankQuestion::query()
+            ->with([
+                'questionBank:id,title,subject',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
+            ->whereIn('question_bank_id', $matchingBankIds)
+            ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT);
+
+        $weakSubjects = array_keys($weakAreaContext['weak_subjects'] ?? []);
+        $weakBankIds = $weakSubjects === []
+            ? []
+            : QuestionBank::query()
+                ->select(['id', 'subject'])
+                ->whereIn('id', $matchingBankIds)
+                ->get()
+                ->filter(fn (QuestionBank $bank): bool => in_array($this->normalizeSubjectLabel($bank->subject), $weakSubjects, true))
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+        if ($weakBankIds === []) {
+            return $baseQuery()->inRandomOrder()->limit($poolLimit)->get()->values();
+        }
+
+        // Weight the pool toward the student's weak subjects (roughly 70% of
+        // the pool), then top up with the rest of the selected subjects.
+        $weakLimit = (int) ceil($poolLimit * 0.7);
+
+        $weakPool = $baseQuery()
+            ->whereIn('question_bank_id', $weakBankIds)
+            ->inRandomOrder()
+            ->limit($weakLimit)
+            ->get();
+
+        $remainingLimit = $poolLimit - $weakPool->count();
+
+        $restPool = $remainingLimit > 0
+            ? $baseQuery()
+                ->whereNotIn('id', $weakPool->pluck('id')->all())
+                ->inRandomOrder()
+                ->limit($remainingLimit)
+                ->get()
+            : collect();
+
+        return $weakPool->concat($restPool)->shuffle()->values();
     }
 
     /**
      * @param  Collection<int, QuestionBankQuestion>  $sourceQuestions
-     * @return array<int, array<string, mixed>>
+     * @param  array<int, string>  $subjects
+     * @param  array{weak_subjects: array<string, float>, strong_subjects: array<string, float>}  $weakAreaContext
+     * @return array<int, array<string, mixed>>|null
      */
-    protected function sourceQuestionPayload(Collection $sourceQuestions): array
+    protected function generateWithAi(Collection $sourceQuestions, array $subjects, int $questionCount, array $weakAreaContext = []): ?array
     {
-        return $sourceQuestions
-            ->take(12)
-            ->map(function (QuestionBankQuestion $question): array {
+        $apiKey = (string) config('services.openai.api_key', '');
+        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
+        $model = (string) config('services.openai.model', 'gpt-4o-mini');
+
+        if ($apiKey === '') {
+            return null;
+        }
+
+        $systemPrompt = <<<'PROMPT'
+You create student practice quizzes from teacher-authored source material.
+
+Generate fresh review questions that test the same concept but DO NOT copy the original wording, sentence structure, or answer choices verbatim.
+
+Rules:
+- Return valid JSON only.
+- Return exactly the requested number of questions.
+- Keep all output classroom-safe and factually consistent with the source concepts.
+- Each question must be either "multiple_choice" or "true_false".
+- For "multiple_choice", provide exactly 4 options and exactly one correct option id.
+- For "true_false", provide exactly 2 options: True and False, and identify the correct option id.
+- Include a short explanation for the correct answer.
+- Never mention source question ids, item numbers, or teacher bank titles.
+- If "weak_subjects" is non-empty, this student is struggling in those subjects specifically
+  (value is their current average score percent). Weight the question mix toward those weak
+  subjects, and for those subjects favor clear, foundational/diagnostic questions that reveal
+  and reinforce the core concept rather than obscure edge cases.
+PROMPT;
+
+        $userPrompt = [
+            'question_count' => $questionCount,
+            'subjects' => $subjects,
+            'weak_subjects' => $weakAreaContext['weak_subjects'] ?? [],
+            'sources' => $sourceQuestions->map(function (QuestionBankQuestion $question): array {
                 $correctOption = $question->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
 
                 return [
+                    'source_id' => (int) $question->id,
                     'subject' => $this->normalizeSubjectLabel($question->questionBank?->subject),
                     'question_type' => (string) ($question->question_type ?? QuestionBankQuestion::TYPE_MULTIPLE_CHOICE),
                     'question_text' => trim((string) ($question->question_text ?? '')),
@@ -279,12 +321,65 @@ class ReviewBotService
                         ->values()
                         ->all(),
                 ];
-            })
-            ->values()
-            ->all();
+            })->all(),
+            'response_schema' => [
+                'questions' => [
+                    [
+                        'prompt' => 'string',
+                        'subject' => 'string',
+                        'type' => 'multiple_choice | true_false',
+                        'options' => [
+                            ['id' => 'a', 'text' => 'option text'],
+                        ],
+                        'correct_option_id' => 'a',
+                        'explanation' => 'string',
+                    ],
+                ],
+            ],
+        ];
+
+        try {
+            $response = Http::withToken($apiKey)
+                ->acceptJson()
+                ->timeout(75)
+                ->post($baseUrl . '/chat/completions', [
+                    'model' => $model,
+                    'temperature' => 0.8,
+                    'response_format' => ['type' => 'json_object'],
+                    'messages' => [
+                        ['role' => 'system', 'content' => $systemPrompt],
+                        ['role' => 'user', 'content' => json_encode($userPrompt, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)],
+                    ],
+                ])
+                ->throw()
+                ->json();
+        } catch (Throwable) {
+            return null;
+        }
+
+        $content = data_get($response, 'choices.0.message.content');
+
+        if (!is_string($content) || trim($content) === '') {
+            return null;
+        }
+
+        try {
+            /** @var array<string, mixed> $decoded */
+            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return null;
+        }
+
+        $questions = $this->normalizeGeneratedQuestions($decoded['questions'] ?? [], $subjects);
+
+        return $questions === [] ? null : $questions;
     }
 
     /**
+     * Non-AI fallback: reshuffles real library questions into review-bot
+     * shape (rewritten prompt framing, options padded/shuffled) without
+     * calling OpenAI. Used when there's no API key or the AI call fails.
+     *
      * @param  Collection<int, QuestionBankQuestion>  $sourceQuestions
      * @return array<int, array<string, mixed>>
      */
@@ -602,6 +697,152 @@ class ReviewBotService
         $normalized = rtrim($normalized, " \t\n\r\0\x0B.?!");
 
         return $normalized . '?';
+    }
+
+    /**
+     * @param  array<int, string>  $subjects
+     * @return array<int, array<string, mixed>>
+     */
+    protected function generateFromCoreBlueprints(array $subjects, int $questionCount): array
+    {
+        $profiles = $this->coreSubjectProfiles();
+        $subjectRotation = collect($subjects)->shuffle()->values()->all();
+
+        if ($subjectRotation === []) {
+            return [];
+        }
+
+        $blueprintsBySubject = [];
+        $subjectCounters = [];
+
+        foreach ($subjectRotation as $subject) {
+            $blueprintsBySubject[$subject] = collect($profiles[$subject]['topic_blueprints'] ?? [])
+                ->shuffle()
+                ->values()
+                ->all();
+            $subjectCounters[$subject] = 0;
+        }
+
+        $questions = [];
+
+        for ($index = 0; $index < $questionCount; $index++) {
+            $subject = $subjectRotation[$index % count($subjectRotation)];
+            $subjectBlueprints = $blueprintsBySubject[$subject] ?? [];
+
+            if ($subjectBlueprints === []) {
+                continue;
+            }
+
+            $subjectPointer = (int) ($subjectCounters[$subject] ?? 0);
+            $blueprint = $subjectBlueprints[$subjectPointer % count($subjectBlueprints)];
+
+            $questions[] = $this->buildBlueprintQuestion(
+                $blueprint,
+                $subject,
+                $subjectPointer,
+                $index
+            );
+
+            $subjectCounters[$subject] = $subjectPointer + 1;
+        }
+
+        return $questions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $blueprint
+     * @return array<string, mixed>
+     */
+    protected function buildBlueprintQuestion(array $blueprint, string $subject, int $variantIndex, int $questionIndex): array
+    {
+        [$correctOptionId, $options] = $this->buildBlueprintOptions($blueprint);
+
+        return [
+            'id' => 'review-' . ($questionIndex + 1),
+            'subject' => $subject,
+            'type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
+            'prompt' => $this->buildBlueprintPrompt((string) ($blueprint['prompt'] ?? ''), $subject, $variantIndex),
+            'options' => $options,
+            'correct_option_id' => $correctOptionId,
+            'explanation' => trim((string) ($blueprint['explanation'] ?? '')) !== ''
+                ? trim((string) $blueprint['explanation'])
+                : 'Review the key concept behind the correct answer before moving to the next item.',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $blueprint
+     * @return array{0: string, 1: array<int, array{id: string, text: string}>}
+     */
+    protected function buildBlueprintOptions(array $blueprint): array
+    {
+        $correctAnswer = trim((string) ($blueprint['answer'] ?? ''));
+        $rawDistractors = is_array($blueprint['distractors'] ?? null) ? $blueprint['distractors'] : [];
+
+        $options = collect(array_merge([$correctAnswer], $rawDistractors))
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->unique(fn (string $value): string => Str::lower($value))
+            ->values();
+
+        if ($options->count() < 4) {
+            $options = $options
+                ->concat(collect([
+                    'A different library process',
+                    'A related but incorrect practice',
+                    'A term from another subject area',
+                ]))
+                ->unique(fn (string $value): string => Str::lower($value))
+                ->take(4)
+                ->values();
+        }
+
+        $shuffled = $options->shuffle()->take(4)->values();
+
+        if (!$shuffled->contains(fn (string $value): bool => Str::lower($value) === Str::lower($correctAnswer))) {
+            $shuffled = $shuffled
+                ->slice(0, max($shuffled->count() - 1, 0))
+                ->push($correctAnswer)
+                ->shuffle()
+                ->values();
+        }
+
+        $letterIds = ['a', 'b', 'c', 'd'];
+        $correctId = 'a';
+
+        $formattedOptions = $shuffled
+            ->map(function (string $text, int $optionIndex) use ($letterIds, $correctAnswer, &$correctId): array {
+                $id = $letterIds[$optionIndex] ?? 'opt-' . ($optionIndex + 1);
+
+                if (Str::lower($text) === Str::lower($correctAnswer)) {
+                    $correctId = $id;
+                }
+
+                return [
+                    'id' => $id,
+                    'text' => $text,
+                ];
+            })
+            ->all();
+
+        return [$correctId, $formattedOptions];
+    }
+
+    protected function buildBlueprintPrompt(string $prompt, string $subject, int $variantIndex): string
+    {
+        return $this->ensureQuestionPrompt($prompt);
+    }
+
+    protected function ensureQuestionPrompt(string $prompt): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim($prompt));
+        $normalized = (string) $normalized;
+
+        if ($normalized === '') {
+            return 'Which answer best matches the BLIS concept being reviewed?';
+        }
+
+        return rtrim($normalized, " \t\n\r\0\x0B.?!") . '?';
     }
 
     /**

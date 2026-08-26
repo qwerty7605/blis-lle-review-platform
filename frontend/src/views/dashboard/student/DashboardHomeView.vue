@@ -1,214 +1,124 @@
 <template>
-  <section class="dashboard-view student-dashboard-home">
+  <section class="dashboard-view student-home">
     <div v-if="dashboardError" class="feedback danger">
       <AlertCircle :size="15" />
       <span>{{ dashboardError }}</span>
     </div>
 
-    <article class="surface-card student-home-topbar">
-      <div class="student-home-intro">
-        <p class="student-home-kicker">Student workspace</p>
-        <h3>{{ studentFirstName }}, this is your command center.</h3>
-        <p class="student-home-summary">{{ dashboardSummary }}</p>
+    <header class="home-header">
+      <div class="home-greeting">
+        <p class="home-kicker">Home</p>
+        <h2>{{ studentFirstName }}, here's your overview.</h2>
+        <p class="home-context">{{ contextLine }}</p>
+      </div>
+      <button
+        class="ghost-btn home-refresh-btn"
+        :disabled="dashboardLoading"
+        @click="loadDashboard"
+      >
+        <RefreshCw :size="14" :class="{ 'spin-soft': dashboardLoading }" />
+        Refresh
+      </button>
+    </header>
 
-        <div class="student-home-signals">
-          <span v-if="primaryNotice" class="signal-pill" :class="`is-${primaryNotice.tone}`">
-            {{ primaryNotice.badge }}: {{ primaryNotice.title }}
-          </span>
-          <span v-else class="signal-pill is-neutral">No urgent exam notices right now</span>
+    <div class="home-stat-row">
+      <div
+        v-for="stat in quickStats"
+        :key="stat.label"
+        class="home-stat"
+        :class="`tone-${stat.tone}`"
+      >
+        <RadialScore v-if="stat.isScoreRadial" :value="stat.radialValue" :size="58" />
+        <component :is="stat.icon" v-else :size="17" class="home-stat-icon" />
+        <div>
+          <strong class="home-stat-value">{{ stat.value }}</strong>
+          <p class="home-stat-label">{{ stat.label }}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-content-grid">
+      <article class="surface-card home-block">
+        <div class="home-block-head">
+          <div class="home-block-title">
+            <BookOpen :size="16" />
+            <h3>What to Review Next</h3>
+          </div>
+          <p class="home-block-sub">Subjects ranked by lowest average score — focus here first.</p>
         </div>
 
-      <div class="student-home-actions">
-        <button type="button" class="ghost-btn student-refresh-btn" :disabled="dashboardLoading" @click="loadDashboard">
-          <RefreshCw :size="15" :class="{ 'spin-soft': dashboardLoading }" />
-          Refresh
-        </button>
-      </div>
-      </div>
-
-      <div class="student-metric-grid">
-        <article
-          v-for="stat in decoratedStats"
-          :key="stat.label"
-          class="student-metric-card"
-          :class="`is-${stat.tone}`"
-        >
-          <div class="student-metric-icon" :class="`tone-${stat.tone}`">
-            <component :is="stat.icon" :size="17" />
-          </div>
-          <div>
-            <p class="student-metric-label">{{ stat.label }}</p>
-            <strong class="student-metric-value">{{ stat.value }}</strong>
-            <p class="student-metric-hint">{{ stat.hint }}</p>
-          </div>
-        </article>
-      </div>
-    </article>
-
-    <div class="student-home-shell">
-      <article class="surface-card student-panel activity-panel">
-        <header class="surface-head student-panel-head">
-          <div>
-            <h3>Notification Center</h3>
-            <p>Everything that needs attention, plus your latest completed exams.</p>
-          </div>
-          <span class="pill navy">{{ notifications.length + recentExamCards.length }} items</span>
-        </header>
-
-        <div v-if="isInitialLoading" class="room-empty-state compact student-empty-state">
-          <RefreshCw :size="28" class="spin-soft" />
-          <h4>Loading activity</h4>
-          <p>Pulling your latest notices and submitted exam results.</p>
+        <div v-if="isInitialLoading" class="home-state-box">
+          <RefreshCw :size="20" class="spin-soft" />
+          <p>Loading suggestions...</p>
         </div>
 
-        <div v-else class="panel-scroll activity-feed-scroll">
-          <section class="activity-group notices-group">
-            <div class="activity-group-head">
-              <div>
-                <h4>Exam Notices</h4>
-                <p>Available, resumable, retake-ready, or upcoming exams.</p>
+        <div v-else-if="reviewSuggestions.length === 0" class="home-state-box">
+          <BookOpen :size="26" />
+          <strong>Nothing to suggest yet</strong>
+          <p>Take an exam and your focus areas will appear here.</p>
+        </div>
+
+        <ul v-else class="review-list">
+          <li
+            v-for="(item, i) in reviewSuggestions"
+            :key="item.label"
+            class="review-item"
+          >
+            <span class="review-rank">{{ i + 1 }}</span>
+            <div class="review-item-main">
+              <div class="review-item-top">
+                <strong class="review-item-label">{{ item.label }}</strong>
+                <span class="review-item-score" :class="`text-${item.tone}`">{{ item.scoreDisplay }}</span>
               </div>
-              <span class="pill success">{{ notifications.length }}</span>
-            </div>
-
-            <div v-if="notifications.length === 0" class="panel-empty">
-              <BellRing :size="24" />
-              <strong>No active exam notices</strong>
-              <p>When a room opens a new exam or you can resume one, it will appear here.</p>
-            </div>
-
-            <div v-else class="activity-card-list">
-              <article
-                v-for="notice in notifications"
-                :key="notice.id"
-                class="activity-card notice-card"
-                :class="`is-${notice.tone}`"
-              >
-                <div class="activity-card-icon" :class="`tone-${iconTone(notice.tone)}`">
-                  <component :is="notificationIcon(notice.state)" :size="17" />
-                </div>
-
-                <div class="activity-card-body">
-                  <div class="activity-card-head">
-                    <div>
-                      <strong>{{ notice.title }}</strong>
-                      <p>{{ notice.roomName }} / {{ notice.roomCode }}</p>
-                    </div>
-                    <span class="pill" :class="pillClass(notice.tone)">{{ notice.badge }}</span>
-                  </div>
-
-                  <p class="activity-card-message">{{ notice.message }}</p>
-
-                  <div class="activity-card-meta">
-                    <span>{{ notice.totalItems }} items</span>
-                    <span>{{ notice.durationMinutes }} mins</span>
-                    <span v-if="notice.subject">{{ notice.subject }}</span>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="activity-group results-group">
-            <div class="activity-group-head">
-              <div>
-                <h4>Recent Exams Taken</h4>
-                <p>Your most recent submitted attempts and scores.</p>
+              <div class="review-bar-track">
+                <div
+                  class="review-bar-fill"
+                  :class="`fill-${item.tone}`"
+                  :style="{ width: `${item.pct}%` }"
+                />
               </div>
-              <span class="pill neutral">{{ recentExamCards.length }}</span>
+              <p class="review-item-hint">{{ item.hint }}</p>
             </div>
-
-            <div v-if="recentExamCards.length === 0" class="panel-empty">
-              <ClipboardCheck :size="24" />
-              <strong>No submitted exams yet</strong>
-              <p>Once you finish an exam, the result summary will show up here.</p>
-            </div>
-
-            <div v-else class="activity-card-list">
-              <article v-for="attempt in recentExamCards" :key="attempt.attempt_id" class="activity-card result-card">
-                <div class="activity-card-icon" :class="`tone-${resultIconTone(attempt.scoreTone)}`">
-                  <ClipboardCheck :size="17" />
-                </div>
-
-                <div class="activity-card-body">
-                  <div class="activity-card-head">
-                    <div>
-                      <strong>{{ attempt.title }}</strong>
-                      <p>
-                        {{ attempt.room?.name || 'Room unavailable' }}
-                        <span v-if="attempt.room?.code"> / {{ attempt.room.code }}</span>
-                      </p>
-                    </div>
-                    <span class="pill" :class="scorePillClass(attempt.scoreTone)">{{ attempt.scoreDisplay }}</span>
-                  </div>
-
-                  <div class="activity-card-meta">
-                    <span>{{ attempt.correct_answers }}/{{ attempt.total_items }} correct</span>
-                    <span v-if="attempt.duration_minutes">{{ attempt.duration_minutes }} mins</span>
-                    <span v-if="attempt.subject">{{ attempt.subject }}</span>
-                  </div>
-
-                  <p class="activity-card-message">{{ attempt.submittedAtText }}</p>
-                </div>
-              </article>
-            </div>
-          </section>
-        </div>
+          </li>
+        </ul>
       </article>
 
-      <article class="surface-card student-panel rooms-panel">
-        <header class="surface-head student-panel-head">
-          <div>
-            <h3>Your Rooms</h3>
+      <article class="surface-card home-block notices-block">
+        <div class="home-block-head">
+          <div class="home-block-title">
+            <Bell :size="16" />
+            <h3>Exam Notices</h3>
+            <span v-if="notifications.length > 0" class="notices-badge">{{ notifications.length }}</span>
           </div>
-          <span class="pill gold">{{ roomSnapshots.length }}</span>
-        </header>
-
-        <div v-if="isInitialLoading" class="room-empty-state compact student-empty-state">
-          <RefreshCw :size="28" class="spin-soft" />
-          <h4>Loading rooms</h4>
-          <p>Fetching your room list and exam status snapshots.</p>
+          <p class="home-block-sub">Open, resumable, and upcoming exams assigned to you.</p>
         </div>
 
-        <div v-else-if="roomSnapshots.length === 0" class="room-empty-state compact student-empty-state">
-          <DoorOpen :size="24" />
-          <h4>No rooms joined yet</h4>
-          <p>Join a room from the Rooms page to receive exams and activity here.</p>
+        <div v-if="isInitialLoading" class="home-state-box">
+          <RefreshCw :size="20" class="spin-soft" />
+          <p>Checking notices...</p>
         </div>
 
-        <div v-else class="panel-scroll rooms-scroll">
-          <article v-for="room in roomSnapshots" :key="room.id" class="room-card">
-            <div class="room-card-head">
-              <div>
-                <strong>{{ room.name }}</strong>
-                <p>Code: {{ room.code }}</p>
-              </div>
-              <span class="pill neutral">{{ room.members_count }} members</span>
-            </div>
-
-            <div class="room-chip-row">
-              <span class="room-chip">{{ room.openCount }} open</span>
-              <span class="room-chip">{{ room.upcomingCount }} upcoming</span>
-              <span class="room-chip">{{ room.exams_count }} assigned</span>
-            </div>
-
-            <p class="room-card-meta">
-              Joined {{ room.joinedAtText }}
-              <span v-if="room.creator?.name"> / {{ room.creator.name }}</span>
-            </p>
-
-            <div v-if="room.nextExam" class="room-card-highlight" :class="`is-${room.nextExam.tone}`">
-              <span class="pill" :class="pillClass(room.nextExam.tone)">{{ room.nextExam.badge }}</span>
-              <strong>{{ room.nextExam.title }}</strong>
-              <p>{{ room.nextExam.message }}</p>
-            </div>
-
-            <div v-else class="room-card-highlight is-neutral">
-              <strong>No active notices right now</strong>
-              <p>This room is currently quiet.</p>
-            </div>
-          </article>
+        <div v-else-if="notifications.length === 0" class="home-state-box">
+          <BellRing :size="26" />
+          <strong>No exam notices</strong>
+          <p>Available or upcoming exams will show here.</p>
         </div>
+
+        <ul v-else class="notice-list">
+          <li
+            v-for="notice in notifications"
+            :key="notice.id"
+            class="notice-item"
+            :class="`is-${notice.tone}`"
+          >
+            <span class="notice-dot" :class="`dot-${notice.tone}`" />
+            <div class="notice-item-body">
+              <strong>{{ notice.title }}</strong>
+              <p>{{ notice.roomName }}</p>
+            </div>
+            <span class="notice-tag" :class="`tag-${notice.tone}`">{{ notice.badge }}</span>
+          </li>
+        </ul>
       </article>
     </div>
   </section>
@@ -219,14 +129,16 @@ import { computed } from 'vue'
 import {
   AlertCircle,
   BarChart3,
+  Bell,
   BellRing,
+  BookOpen,
   ClipboardCheck,
   Clock3,
-  DoorOpen,
+  Play,
   RefreshCw,
-  RotateCcw,
 } from 'lucide-vue-next'
 import { useStudentDashboardModule } from '../composables/useStudentDashboardModule'
+import RadialScore from '@/components/charts/RadialScore.vue'
 
 const {
   studentFirstName,
@@ -234,577 +146,481 @@ const {
   dashboardLoaded,
   dashboardError,
   statsCards,
+  averageScore,
   notifications,
-  roomSnapshots,
   recentExamCards,
   loadDashboard,
 } = useStudentDashboardModule()
 
-const statIcons = [ClipboardCheck, BellRing, BarChart3]
-const statTones = ['navy', 'gold', 'success']
-
-const decoratedStats = computed(() => (
-  statsCards.value.map((stat, index) => ({
-    ...stat,
-    icon: statIcons[index] ?? BellRing,
-    tone: statTones[index] ?? 'navy',
-  }))
-))
-
 const isInitialLoading = computed(() => dashboardLoading.value && !dashboardLoaded.value)
 
-const primaryNotice = computed(() => notifications.value[0] ?? null)
+const examsAvailable = computed(() =>
+  notifications.value.filter(n => ['in_progress', 'available', 'retake'].includes(n.state)).length
+)
 
-const dashboardSummary = computed(() => {
-  if (notifications.value.length > 0) {
-    return `${notifications.value.length} exam notice${notifications.value.length === 1 ? '' : 's'} waiting in your feed.`
+const examsUpcoming = computed(() =>
+  notifications.value.filter(n => n.state === 'upcoming').length
+)
+
+const quickStats = computed(() => [
+  {
+    label: 'Exams Taken',
+    value: statsCards.value[0]?.value ?? '0',
+    icon: ClipboardCheck,
+    tone: 'navy',
+  },
+  {
+    label: 'Available Now',
+    value: examsAvailable.value,
+    icon: Play,
+    tone: examsAvailable.value > 0 ? 'success' : 'neutral',
+  },
+  {
+    label: 'Upcoming',
+    value: examsUpcoming.value,
+    icon: Clock3,
+    tone: examsUpcoming.value > 0 ? 'gold' : 'neutral',
+  },
+  {
+    label: 'Avg Score',
+    value: statsCards.value[2]?.value ?? 'N/A',
+    icon: BarChart3,
+    tone: 'navy',
+    isScoreRadial: averageScore.value !== null,
+    radialValue: averageScore.value,
+  },
+])
+
+const contextLine = computed(() => {
+  if (examsAvailable.value > 0) {
+    return `You have ${examsAvailable.value} exam${examsAvailable.value === 1 ? '' : 's'} ready to take.`
   }
-
+  if (examsUpcoming.value > 0) {
+    return `${examsUpcoming.value} exam${examsUpcoming.value === 1 ? ' is' : 's are'} coming up soon.`
+  }
   if (recentExamCards.value.length > 0) {
-    return 'No urgent notices right now. Your latest exam results are still visible below.'
+    return 'Review your focus areas below and keep improving before the LET.'
   }
-
-  if (roomSnapshots.value.length > 0) {
-    return 'Your rooms are ready. New exam activity will surface here as soon as it is assigned.'
-  }
-
-  return 'Join a room to start receiving assigned exams and activity updates.'
+  return 'Join a room and take exams to start tracking your LET readiness.'
 })
 
-function notificationIcon(state) {
-  if (state === 'in_progress') return RefreshCw
-  if (state === 'retake') return RotateCcw
-  if (state === 'upcoming') return Clock3
-  return BellRing
-}
+const reviewSuggestions = computed(() => {
+  const cards = recentExamCards.value
+  if (cards.length === 0) return []
 
-function pillClass(tone) {
-  if (tone === 'success') return 'success'
-  if (tone === 'navy') return 'navy'
-  if (tone === 'gold') return 'gold'
-  if (tone === 'danger') return 'danger'
-  return 'neutral'
-}
+  const groups = {}
+  for (const card of cards) {
+    const key = card.subject || card.title || 'General'
+    if (!groups[key]) groups[key] = { scores: [], label: key }
+    groups[key].scores.push(Number(card.score_percent ?? 0))
+  }
 
-function iconTone(tone) {
-  if (tone === 'gold' || tone === 'danger') return 'gold'
-  return tone
-}
-
-function resultIconTone(tone) {
-  if (tone === 'danger') return 'danger'
-  if (tone === 'gold') return 'gold'
-  return 'success'
-}
-
-function scorePillClass(tone) {
-  return pillClass(tone)
-}
+  return Object.values(groups)
+    .map(({ label, scores }) => {
+      const avg = scores.reduce((s, n) => s + n, 0) / scores.length
+      const pct = Math.min(100, Math.max(0, Math.round(avg)))
+      const tone = avg >= 75 ? 'success' : avg >= 50 ? 'gold' : 'danger'
+      return {
+        label,
+        pct,
+        scoreDisplay: `${avg.toFixed(1)}%`,
+        hint: scores.length === 1 ? '1 attempt' : `${scores.length} attempts averaged`,
+        tone,
+      }
+    })
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 5)
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
 
 <style scoped>
-.student-dashboard-home {
+.student-home {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 0;
-}
-
-.student-home-topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(420px, 0.9fr);
   gap: 16px;
-  padding: 18px;
-  border-color: rgba(31, 63, 136, 0.34);
-  background: #1f418f;
-  box-shadow: 0 18px 32px rgba(20, 39, 88, 0.18);
 }
 
-.student-home-intro {
-  display: grid;
-  gap: 10px;
-  align-content: start;
+/* Header */
+.home-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  background: linear-gradient(135deg, #1a3a8c 0%, #2651b8 100%);
+  border-radius: 18px;
+  padding: 20px 24px;
 }
 
-.student-home-kicker {
-  margin: 0;
-  font-size: 12px;
+.home-kicker {
+  margin: 0 0 4px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: #f2d27a;
 }
 
-.student-home-intro h3 {
+.home-header h2 {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
   color: #ffffff;
 }
 
-.student-home-summary {
-  margin: 0;
-  color: rgba(241, 245, 255, 0.88);
-  line-height: 1.55;
-  max-width: 640px;
+.home-context {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
 }
 
-.student-home-signals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.signal-pill {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  padding: 7px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  background: #dbe6ff;
-  color: #183b89;
-}
-
-.signal-pill.is-success {
-  background: #ddf3e5;
-  color: #22683e;
-}
-
-.signal-pill.is-navy {
-  background: #dbe6ff;
-  color: #183b89;
-}
-
-.signal-pill.is-gold,
-.signal-pill.is-neutral {
-  background: #ffe8b0;
-  color: #7a5312;
-}
-
-.student-home-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.student-home-topbar .ghost-btn {
-  border-color: rgba(255, 232, 177, 0.36);
-  background: rgba(255, 255, 255, 0.12);
+.home-refresh-btn {
+  flex-shrink: 0;
+  margin-top: 2px;
+  border-color: rgba(255, 232, 177, 0.38);
+  background: rgba(255, 255, 255, 0.1);
   color: #fff4d6;
 }
 
-.student-home-topbar .ghost-btn:hover:not(:disabled) {
-  border-color: rgba(255, 232, 177, 0.54);
-  background: rgba(255, 255, 255, 0.18);
+.home-refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
 }
 
-.student-metric-grid {
+/* Stat row */
+.home-stat-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  align-content: stretch;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.student-metric-card {
-  border: 1px solid rgba(26, 35, 126, 0.1);
-  border-radius: 16px;
-  background: #ffffff;
-  padding: 14px;
+.home-stat {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  box-shadow: 0 10px 18px rgba(17, 33, 73, 0.1);
-}
-
-.student-metric-card.is-navy {
-  background: #dfe9ff;
-  border-color: rgba(58, 101, 198, 0.28);
-}
-
-.student-metric-card.is-gold {
-  background: #ffefc4;
-  border-color: rgba(205, 151, 43, 0.3);
-}
-
-.student-metric-card.is-success {
-  background: #ddf3e5;
-  border-color: rgba(63, 146, 94, 0.28);
-}
-
-.student-metric-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  border-radius: 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(26, 35, 126, 0.1);
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(20, 39, 88, 0.06);
+}
+
+.home-stat.tone-navy { background: #edf2ff; border-color: rgba(58, 101, 198, 0.2); }
+.home-stat.tone-success { background: #eaf6ef; border-color: rgba(46, 125, 50, 0.2); }
+.home-stat.tone-gold { background: #fff8e6; border-color: rgba(201, 168, 76, 0.22); }
+.home-stat.tone-neutral { background: #f4f6fa; border-color: rgba(26, 35, 126, 0.08); }
+.home-stat.tone-danger { background: #fff0f0; border-color: rgba(180, 40, 40, 0.18); }
+
+.home-stat-icon {
   flex-shrink: 0;
+  opacity: 0.65;
+  color: var(--lnu-navy);
 }
 
-.student-metric-label {
-  margin: 0;
-  font-size: 12px;
-  color: var(--lnu-text-muted);
-}
+.home-stat.tone-success .home-stat-icon { color: #2e7d32; }
+.home-stat.tone-gold .home-stat-icon { color: #b87e12; }
+.home-stat.tone-danger .home-stat-icon { color: #a13232; }
 
-.student-metric-value {
+.home-stat-value {
   display: block;
-  margin-top: 4px;
   font-size: 22px;
+  line-height: 1.1;
   color: var(--lnu-text);
 }
 
-.student-metric-hint {
-  margin: 6px 0 0;
+.home-stat-label {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--lnu-text-muted);
+}
+
+/* Content grid */
+.home-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: 14px;
+}
+
+.home-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.home-block-head {
+  display: grid;
+  gap: 4px;
+}
+
+.home-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-block-title h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--lnu-text);
+}
+
+.home-block-sub {
+  margin: 0;
   font-size: 12px;
   color: var(--lnu-text-muted);
   line-height: 1.45;
 }
 
-.student-home-shell {
-  flex: 1;
-  min-height: 0;
+.notices-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Loading / empty */
+.home-state-box {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.88fr);
-  gap: 14px;
-}
-
-.student-panel {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.activity-panel {
-  background: #eef4ff;
-  border-color: rgba(57, 102, 199, 0.2);
-}
-
-.rooms-panel {
-  background: #fff3d8;
-  border-color: rgba(212, 162, 55, 0.22);
-}
-
-.student-panel-head {
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.student-panel-head h3 {
-  margin-bottom: 4px;
-}
-
-.student-panel-head p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--lnu-text-muted);
-}
-
-.activity-panel .student-panel-head h3 {
-  color: #1e4699;
-}
-
-.rooms-panel .student-panel-head h3 {
-  color: #8b5c10;
-}
-
-.panel-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.activity-feed-scroll {
-  display: grid;
-  gap: 16px;
-}
-
-.activity-group {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(26, 35, 126, 0.1);
-}
-
-.activity-group.notices-group {
-  background: #ffffff;
-  border-color: rgba(57, 102, 199, 0.18);
-}
-
-.activity-group.results-group {
-  background: #fff8ec;
-  border-color: rgba(212, 162, 55, 0.18);
-}
-
-.activity-group-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.activity-group-head h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  color: var(--lnu-text);
-}
-
-.activity-group-head p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--lnu-text-muted);
-}
-
-.activity-card-list {
-  display: grid;
-  gap: 10px;
-}
-
-.activity-card,
-.room-card {
-  border: 1px solid rgba(26, 35, 126, 0.12);
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: var(--shadow-sm);
-}
-
-.activity-card {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  padding: 14px;
-}
-
-.activity-card-icon {
-  width: 38px;
-  height: 38px;
+  place-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 1px dashed rgba(26, 35, 126, 0.14);
   border-radius: 12px;
+  background: rgba(248, 249, 252, 0.8);
+  color: var(--lnu-text-muted);
+}
+
+.home-state-box strong {
+  color: var(--lnu-text);
+  font-size: 14px;
+}
+
+.home-state-box p {
+  margin: 0;
+  max-width: 240px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Review list */
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.review-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8f9fc;
+  border: 1px solid rgba(26, 35, 126, 0.07);
+}
+
+.review-rank {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(26, 35, 126, 0.1);
+  color: var(--lnu-navy);
+  font-size: 12px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.activity-card-body {
-  display: grid;
-  gap: 9px;
+.review-item-main {
+  flex: 1;
   min-width: 0;
+  display: grid;
+  gap: 6px;
 }
 
-.activity-card-head,
-.room-card-head {
+.review-item-top {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-}
-
-.activity-card-head strong,
-.room-card-head strong {
-  display: block;
-  font-size: 15px;
-  color: var(--lnu-text);
-}
-
-.activity-card-head p,
-.room-card-head p {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--lnu-text-muted);
-}
-
-.activity-card-message,
-.room-card-meta {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--lnu-text-muted);
-}
-
-.activity-card-meta,
-.room-chip-row {
-  display: flex;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
-.activity-card-meta span,
-.room-chip {
-  border-radius: 999px;
-  background: #e2ebff;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: #284892;
-}
-
-.notice-card.is-success {
-  border-color: rgba(46, 125, 50, 0.22);
-  background: #effaf2;
-}
-
-.notice-card.is-navy {
-  border-color: rgba(26, 35, 126, 0.22);
-  background: #eff4ff;
-}
-
-.notice-card.is-gold {
-  border-color: rgba(201, 168, 76, 0.26);
-  background: #fff5de;
-}
-
-.result-card {
-  border-color: rgba(205, 151, 43, 0.2);
-  background: #fffdf8;
-}
-
-.panel-empty,
-.student-empty-state {
-  min-height: 0;
-}
-
-.student-empty-state h4 {
-  font-size: 22px;
-}
-
-.panel-empty {
-  border: 1px dashed rgba(26, 35, 126, 0.18);
-  border-radius: 14px;
-  padding: 18px;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: var(--lnu-text-muted);
-  background: rgba(255, 255, 255, 0.74);
-}
-
-.panel-empty strong {
-  display: block;
-  margin-top: 8px;
+.review-item-label {
+  font-size: 14px;
   color: var(--lnu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.panel-empty p {
-  margin: 6px 0 0;
-  max-width: 300px;
-  line-height: 1.5;
+.review-item-score {
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.rooms-scroll {
-  display: grid;
-  gap: 10px;
+.text-success { color: #2e7d32; }
+.text-gold { color: #b87e12; }
+.text-danger { color: #c0392b; }
+
+.review-bar-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(26, 35, 126, 0.3) 0,
+    rgba(26, 35, 126, 0.3) 2px,
+    transparent 2px,
+    transparent 25%
+  );
+  overflow: visible;
 }
 
-.room-card {
-  padding: 14px;
-  display: grid;
-  gap: 12px;
-  border-color: rgba(212, 162, 55, 0.18);
-  background: #fffdf7;
+.review-bar-track::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: 75%;
+  width: 3px;
+  background: #c9961e;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
-.room-card-highlight {
-  border-radius: 14px;
-  padding: 12px;
-  display: grid;
-  gap: 6px;
-  border: 1px solid transparent;
+.review-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
 }
 
-.room-card-highlight strong,
-.room-card-highlight p {
+.fill-success { background: #43a255; }
+.fill-gold { background: #c9961e; }
+.fill-danger { background: #c0392b; }
+
+.review-item-hint {
   margin: 0;
+  font-size: 11px;
+  color: var(--lnu-text-muted);
 }
 
-.room-card-highlight.is-success {
-  background: #e8f6ec;
-  border-color: rgba(46, 125, 50, 0.16);
+/* Notice list */
+.notices-block {
+  background: #fcfcff;
+  border-color: rgba(57, 102, 199, 0.12);
 }
 
-.room-card-highlight.is-navy {
-  background: #ebf2ff;
-  border-color: rgba(57, 102, 199, 0.16);
+.notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
 
-.room-card-highlight.is-gold,
-.room-card-highlight.is-neutral {
-  background: #fff2d3;
-  border-color: rgba(212, 162, 55, 0.18);
+.notice-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: #f4f6fa;
 }
 
-.pill.success {
-  background: #ddf3e5;
-  color: #22683e;
+.notice-item.is-success { background: #f0faf3; border-color: rgba(46, 125, 50, 0.18); }
+.notice-item.is-navy { background: #eff4ff; border-color: rgba(57, 102, 199, 0.18); }
+.notice-item.is-gold { background: #fffbf0; border-color: rgba(201, 168, 76, 0.22); }
+.notice-item.is-neutral { background: #f4f6fa; border-color: rgba(26, 35, 126, 0.08); }
+.notice-item.is-danger { background: #fff5f5; border-color: rgba(192, 57, 43, 0.18); }
+
+.notice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.pill.navy {
-  background: #dbe6ff;
-  color: #183b89;
+.dot-success { background: #2e7d32; }
+.dot-navy { background: #1e4699; }
+.dot-gold { background: #b87e12; }
+.dot-neutral { background: #8896aa; }
+.dot-danger { background: #c0392b; }
+
+.notice-item-body {
+  flex: 1;
+  min-width: 0;
 }
 
-.pill.neutral {
-  background: #e6eefc;
-  color: #385496;
+.notice-item-body strong {
+  display: block;
+  font-size: 13px;
+  color: var(--lnu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pill.gold {
-  background: #ffe8b0;
-  color: #7a5312;
+.notice-item-body p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--lnu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pill.danger {
-  background: #fde0e0;
-  color: #a13232;
+.notice-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
-@media (min-width: 901px) {
-  .student-dashboard-home {
-    height: 100%;
-    overflow: hidden;
-  }
-}
+.tag-success { background: #ddf3e5; color: #22683e; }
+.tag-navy { background: #dbe6ff; color: #183b89; }
+.tag-gold { background: #ffe8b0; color: #7a5312; }
+.tag-neutral { background: #e6eefc; color: #385496; }
+.tag-danger { background: #fde0e0; color: #a13232; }
 
-@media (max-width: 1280px) {
-  .student-home-topbar {
+/* Responsive */
+@media (max-width: 1100px) {
+  .home-content-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 1200px) {
-  .student-home-shell {
-    grid-template-columns: 1fr;
+@media (max-width: 860px) {
+  .home-stat-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 900px) {
-  .student-dashboard-home {
-    height: auto;
-    overflow: visible;
+@media (max-width: 600px) {
+  .home-stat-row {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .student-metric-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .student-home-actions {
+  .home-header {
     flex-direction: column;
-  }
-
-  .student-link-btn,
-  .student-refresh-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .activity-card {
-    grid-template-columns: 1fr;
+    gap: 10px;
   }
 }
 </style>

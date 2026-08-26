@@ -80,6 +80,9 @@ export function useReviewBotModule() {
   const reviewError = ref('')
   const reviewMessage = ref('')
   const generatorMode = ref('core_blueprint')
+  const weakSubjects = ref([])
+  const usedSubjects = ref([])
+  const autoDetected = ref(false)
   const quizSubmitted = ref(false)
   const generatedQuestions = ref([])
   const answers = reactive({})
@@ -87,6 +90,7 @@ export function useReviewBotModule() {
   const form = reactive({
     questionCount: 10,
     subjects: [],
+    autoDetectWeakAreas: false,
   })
 
   const questionCountOptions = [5, 10, 15, 20, 30]
@@ -116,14 +120,21 @@ export function useReviewBotModule() {
   ))
 
   const hasQuiz = computed(() => generatedQuestions.value.length > 0)
+  const activeSubjectCount = computed(() => (
+    hasQuiz.value ? usedSubjects.value.length : selectedSubjects.value.length
+  ))
   const canGenerate = computed(() => (
-    form.subjects.length > 0
+    (form.autoDetectWeakAreas || form.subjects.length > 0)
     && Number(form.questionCount) >= 3
     && Number(form.questionCount) <= 30
   ))
 
   const answeredCount = computed(() => (
     generatedQuestions.value.filter((question) => Boolean(answers[question.id])).length
+  ))
+
+  const allAnswered = computed(() => (
+    hasQuiz.value && answeredCount.value === generatedQuestions.value.length
   ))
 
   const correctCount = computed(() => {
@@ -140,11 +151,31 @@ export function useReviewBotModule() {
   })
 
   const generatorLabel = computed(() => {
+    if (generatorMode.value === 'ai') return 'AI-Generated Bot'
+    if (generatorMode.value === 'library_remix') return 'Library Remix Bot'
     if (generatorMode.value === 'core_blueprint') return 'BLIS Core Bot'
     return 'BLIS Review Bot'
   })
 
   const generatorDescription = computed(() => {
+    const weakList = weakSubjects.value.join(', ')
+
+    if (autoDetected.value) {
+      return weakList
+        ? `Auto-detected your weak subjects and built this set to target: ${weakList}.`
+        : 'You\'re not weak in any subject yet, so this set gives you a broad review.'
+    }
+
+    if (generatorMode.value === 'ai') {
+      return weakList
+        ? `AI-generated using your teachers' question banks, focused on your weaker subjects: ${weakList}.`
+        : 'AI-generated using your teachers\' question banks for the subjects you picked.'
+    }
+
+    if (generatorMode.value === 'library_remix') {
+      return 'Built from your teachers\' question banks (AI generation wasn\'t available for this set).'
+    }
+
     if (generatorMode.value === 'core_blueprint') {
       return 'The bot built this set from its built-in BLIS core subject reviewer.'
     }
@@ -169,6 +200,9 @@ export function useReviewBotModule() {
     generatedQuestions.value = []
     quizSubmitted.value = false
     generatorMode.value = 'core_blueprint'
+    weakSubjects.value = []
+    usedSubjects.value = []
+    autoDetected.value = false
     clearAnswers()
   }
 
@@ -176,7 +210,13 @@ export function useReviewBotModule() {
     form.questionCount = Number(count)
   }
 
+  function setAutoDetectMode(enabled) {
+    form.autoDetectWeakAreas = Boolean(enabled)
+  }
+
   function toggleSubject(subject) {
+    if (form.autoDetectWeakAreas) return
+
     if (form.subjects.includes(subject)) {
       form.subjects = form.subjects.filter((item) => item !== subject)
       return
@@ -207,6 +247,11 @@ export function useReviewBotModule() {
       return
     }
 
+    if (!allAnswered.value) {
+      reviewError.value = 'Answer every question before submitting this review set.'
+      return
+    }
+
     quizSubmitted.value = true
     reviewMessage.value = `Score: ${correctCount.value}/${generatedQuestions.value.length}`
   }
@@ -233,7 +278,9 @@ export function useReviewBotModule() {
 
   async function generateQuiz() {
     if (!canGenerate.value) {
-      reviewError.value = 'Choose at least one BLIS core subject and a valid question count first.'
+      reviewError.value = form.autoDetectWeakAreas
+        ? 'Choose a valid question count first.'
+        : 'Choose at least one BLIS core subject and a valid question count first.'
       return
     }
 
@@ -244,10 +291,15 @@ export function useReviewBotModule() {
     clearAnswers()
 
     try {
-      const payload = {
-        question_count: Number(form.questionCount),
-        subjects: [...form.subjects],
-      }
+      const payload = form.autoDetectWeakAreas
+        ? {
+          question_count: Number(form.questionCount),
+          auto_detect_weak_areas: true,
+        }
+        : {
+          question_count: Number(form.questionCount),
+          subjects: [...form.subjects],
+        }
 
       const { data } = await reviewBotApi.generateQuiz(payload)
       const questions = asList(data?.questions)
@@ -256,6 +308,9 @@ export function useReviewBotModule() {
 
       generatedQuestions.value = questions
       generatorMode.value = String(data?.generator ?? 'core_blueprint')
+      weakSubjects.value = asList(data?.weak_subjects)
+      usedSubjects.value = asList(data?.subjects)
+      autoDetected.value = Boolean(data?.auto_detected)
       reviewMessage.value = String(data?.message ?? 'Quiz ready.')
 
       if (questions.length === 0) {
@@ -282,22 +337,28 @@ export function useReviewBotModule() {
     generatorMode,
     generatorLabel,
     generatorDescription,
+    weakSubjects,
+    usedSubjects,
+    autoDetected,
     quizSubmitted,
     generatedQuestions,
     answers,
     form,
     questionCountOptions,
     selectedSubjects,
+    activeSubjectCount,
     selectedFocusAreas,
     availableBotTopicCount,
     hasFullCoverage,
     hasQuiz,
     canGenerate,
     answeredCount,
+    allAnswered,
     correctCount,
     scorePercent,
     scoreMessage,
     setQuestionCount,
+    setAutoDetectMode,
     toggleSubject,
     selectAllSubjects,
     clearSelectedSubjects,

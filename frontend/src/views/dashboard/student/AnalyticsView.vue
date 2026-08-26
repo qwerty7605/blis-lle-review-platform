@@ -33,8 +33,15 @@
         </div>
 
         <p class="stat-label analytics-stat-label">{{ stat.label }}</p>
-        <p class="stat-value analytics-stat-value">{{ stat.displayValue }}</p>
-        <p class="analytics-stat-note">{{ stat.hint }}</p>
+
+        <div v-if="stat.showRadial" class="analytics-stat-radial-row">
+          <RadialScore :value="averageScore" :size="92" />
+          <p class="analytics-stat-note">{{ stat.hint }}</p>
+        </div>
+        <template v-else>
+          <p class="stat-value analytics-stat-value">{{ stat.displayValue }}</p>
+          <p class="analytics-stat-note">{{ stat.hint }}</p>
+        </template>
       </article>
     </div>
 
@@ -132,44 +139,79 @@
             <p>Finish an exam first.</p>
           </div>
 
-          <div v-else class="history-chart analytics-history-chart">
-            <div v-for="item in scoreHistory" :key="item.attempt_id" class="history-item analytics-history-item">
-              <span>{{ item.score.toFixed(0) }}%</span>
-              <div class="history-bar-track analytics-history-bar-track">
-                <div
-                  class="history-bar-fill"
-                  :class="historyBarClass(item.scoreTone)"
-                  :style="{ height: `${Math.max(8, item.score)}%` }"
-                />
-              </div>
-              <small>{{ item.label }}</small>
-            </div>
-          </div>
+          <ScoreTrendChart v-else :points="trendPoints" />
         </article>
 
         <article class="surface-card analytics-card predictive-card analytics-prediction-card">
           <header class="analytics-card-head">
             <div>
-              <h3>Passing Prediction</h3>
-              <p>This part will be connected later.</p>
+              <h3>LET Readiness Overview</h3>
+              <p>{{ predictivePanel.description }}</p>
             </div>
-            <span class="pill gold">{{ predictivePanel.statusLabel }}</span>
+            <span class="pill" :class="predictivePanel.isConnected ? predictivePanel.predictionTone : 'gold'">
+              {{ predictivePanel.statusLabel }}
+            </span>
           </header>
 
-          <div class="predictive-placeholder">
+          <div v-if="predictivePanel.isConnected" class="predictive-connected">
+            <div class="predictive-status-row">
+              <div class="predictive-icon-wrap" :class="`tone-${predictivePanel.predictionTone}`">
+                <ShieldCheck v-if="predictivePanel.prediction === 'PASS'" :size="20" />
+                <AlertCircle v-else :size="20" />
+              </div>
+
+              <div>
+                <strong>
+                  {{ predictivePanel.prediction === 'PASS' ? 'Likely to pass the LET' : 'At risk of not passing the LET' }}
+                </strong>
+                <p>Estimated confidence: {{ predictivePanel.probability_percent }}% (based on {{ predictivePanel.support }} similar past cases)</p>
+              </div>
+            </div>
+
+            <details class="predictive-reasoning">
+              <summary>Why this estimate?</summary>
+              <ul class="predictive-rule-list">
+                <li v-for="(rule, index) in predictivePanel.decision_rules" :key="index">{{ rule }}</li>
+              </ul>
+            </details>
+
+            <p class="predictive-note">
+              This model was trained on a very small sample of past students, so treat it as a rough signal —
+              not a certainty. Use your subject scores and recent results above to decide what to focus on.
+            </p>
+          </div>
+
+          <div v-else-if="predictivePanel.isInsufficientHistory" class="predictive-placeholder">
             <div class="predictive-status-row">
               <div class="predictive-icon-wrap">
                 <Sparkles :size="20" />
               </div>
 
               <div>
-                <strong>Prediction feature is not connected yet</strong>
-                <p>Later, this can show your possible passing chance based on your mock exam results.</p>
+                <strong>Not enough exam history yet</strong>
+                <p>{{ predictivePanel.description }}</p>
               </div>
             </div>
 
             <p class="predictive-note">
-              For now, use your subject scores, recent results, and the review tips above to guide your study plan.
+              For now, use your subject scores and recent results above to identify what to focus on and improve before the LET.
+            </p>
+          </div>
+
+          <div v-else class="predictive-placeholder">
+            <div class="predictive-status-row">
+              <div class="predictive-icon-wrap">
+                <Sparkles :size="20" />
+              </div>
+
+              <div>
+                <strong>Skill gap analysis is not connected yet</strong>
+                <p>Once connected, this will highlight the subject areas you need to strengthen before your LET exam.</p>
+              </div>
+            </div>
+
+            <p class="predictive-note">
+              For now, use your subject scores and recent results above to identify what to focus on and improve before the LET.
             </p>
           </div>
         </article>
@@ -226,6 +268,8 @@ import {
   Sparkles,
 } from 'lucide-vue-next'
 import { useStudentInsightsModule } from '../composables/useStudentInsightsModule'
+import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
+import RadialScore from '@/components/charts/RadialScore.vue'
 
 const {
   analyticsLoading,
@@ -234,6 +278,7 @@ const {
   hasAttemptData,
   statCards,
   subjects,
+  averageScore,
   guidanceItems,
   scoreHistory,
   recentAttempts,
@@ -243,7 +288,7 @@ const {
 
 const statMeta = [
   { icon: ClipboardList, tag: 'Progress' },
-  { icon: Gauge, tag: 'Average' },
+  { icon: Gauge, tag: 'Average', showRadial: true },
   { icon: BarChart3, tag: 'Latest' },
   { icon: ShieldCheck, tag: 'Review' },
 ]
@@ -254,6 +299,17 @@ const decoratedStats = computed(() => (
     icon: statMeta[index]?.icon ?? BarChart3,
     tag: statMeta[index]?.tag ?? 'Summary',
     displayValue: stat.value === 'N/A' ? '--' : stat.value,
+    showRadial: Boolean(statMeta[index]?.showRadial) && averageScore.value !== null,
+  }))
+))
+
+const trendPoints = computed(() => (
+  scoreHistory.value.map((item) => ({
+    id: item.attempt_id,
+    label: item.title || item.subject || item.label,
+    value: item.score,
+    sublabel: item.label,
+    tone: item.scoreTone,
   }))
 ))
 
@@ -278,13 +334,6 @@ function pillClass(tone) {
 }
 
 function barClass(tone) {
-  if (tone === 'success') return 'ok'
-  if (tone === 'danger') return 'danger'
-  if (tone === 'gold') return 'gold'
-  return 'navy'
-}
-
-function historyBarClass(tone) {
   if (tone === 'success') return 'ok'
   if (tone === 'danger') return 'danger'
   if (tone === 'gold') return 'gold'
@@ -587,8 +636,29 @@ function guidanceBadge(tone) {
 }
 
 .analytics-bar-track {
-  height: 10px;
+  position: relative;
+  overflow: visible;
+  height: 12px;
   background: rgba(31, 65, 143, 0.12);
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(13, 21, 71, 0.28) 0,
+    rgba(13, 21, 71, 0.28) 2px,
+    transparent 2px,
+    transparent 25%
+  );
+}
+
+.analytics-bar-track::after {
+  content: '';
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  left: 75%;
+  width: 3px;
+  background: #cd972b;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
 
 .bar-fill.navy {
@@ -676,33 +746,14 @@ function guidanceBadge(tone) {
   line-height: 1.5;
 }
 
-.analytics-history-chart {
-  height: 220px;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+.analytics-stat-radial-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.analytics-history-item span {
-  font-size: 12px;
-}
-
-.analytics-history-bar-track {
-  height: 150px;
-}
-
-.history-bar-fill.navy {
-  background: linear-gradient(180deg, #16779b, #72c8e2);
-}
-
-.history-bar-fill.ok {
-  background: linear-gradient(180deg, #2c7e4a, #73c08e);
-}
-
-.history-bar-fill.gold {
-  background: linear-gradient(180deg, #cf8a1f, #f3c96b);
-}
-
-.history-bar-fill.danger {
-  background: linear-gradient(180deg, #b74646, #f0a0a0);
+.analytics-stat-radial-row .analytics-stat-note {
+  margin: 0;
 }
 
 .result-row {
@@ -782,16 +833,6 @@ function guidanceBadge(tone) {
 
   .subject-row-score {
     justify-items: start;
-  }
-
-  .analytics-history-chart {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    height: auto;
-    gap: 12px;
-  }
-
-  .analytics-history-bar-track {
-    height: 120px;
   }
 }
 </style>
