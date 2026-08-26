@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\ExamAttempt;
-use App\Models\QuestionBankQuestion;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -43,7 +42,6 @@ class ExamResultFeedbackService
         $historicalReference = $attempt->student instanceof User
             ? $this->buildHistoricalReference($attempt->student, $primaryFocus)
             : null;
-        $practice = $this->buildPracticeRecommendation($primaryFocus);
         $subjectBreakdown = $this->sortWeakAreas($subjectPerformance);
 
         return [
@@ -58,12 +56,9 @@ class ExamResultFeedbackService
             'recommended_actions' => $this->buildRecommendedActions(
                 $attempt,
                 $primaryFocus,
-                $practice,
                 $strength,
                 $historicalReference,
             ),
-            'recommended_practice_area' => $this->buildRecommendedPracticeArea($primaryFocus, $practice),
-            'practice' => $practice,
         ];
     }
 
@@ -253,61 +248,6 @@ class ExamResultFeedbackService
     }
 
     /**
-     * @param  array<string, mixed>|null  $primaryFocus
-     * @return array<string, mixed>
-     */
-    protected function buildPracticeRecommendation(?array $primaryFocus): array
-    {
-        $subject = trim((string) ($primaryFocus['subject'] ?? ''));
-        $topicId = isset($primaryFocus['topic_id']) ? (int) $primaryFocus['topic_id'] : 0;
-        $topicCount = 0;
-        $subjectCount = 0;
-        $matchedBasis = null;
-        $availableQuestions = 0;
-
-        if ($topicId > 0) {
-            $topicCount = (int) QuestionBankQuestion::query()
-                ->where('usage_type', QuestionBankQuestion::USAGE_REMEDIAL)
-                ->where('status', QuestionBankQuestion::STATUS_APPROVED)
-                ->where('ai_generated', true)
-                ->whereIn('item_style', QuestionBankQuestion::ITEM_STYLES)
-                ->where('topic_id', $topicId)
-                ->count();
-
-            if ($topicCount > 0) {
-                $matchedBasis = 'topic';
-                $availableQuestions = $topicCount;
-            }
-        }
-
-        if ($availableQuestions === 0 && $subject !== '') {
-            $subjectCount = (int) QuestionBankQuestion::query()
-                ->where('usage_type', QuestionBankQuestion::USAGE_REMEDIAL)
-                ->where('status', QuestionBankQuestion::STATUS_APPROVED)
-                ->where('ai_generated', true)
-                ->whereIn('item_style', QuestionBankQuestion::ITEM_STYLES)
-                ->where('subject', $subject)
-                ->count();
-
-            if ($subjectCount > 0) {
-                $matchedBasis = 'subject';
-                $availableQuestions = $subjectCount;
-            }
-        }
-
-        return [
-            'can_start' => $availableQuestions > 0,
-            'available_questions' => $availableQuestions,
-            'matched_basis' => $matchedBasis,
-            'target_label' => $matchedBasis === 'subject'
-                ? ($subject !== '' ? $subject : ($primaryFocus['label'] ?? null))
-                : ($primaryFocus['label'] ?? null),
-            'recommended_question_count' => min(10, max(1, $availableQuestions)),
-            'route_name' => 'dashboard-review-bot',
-        ];
-    }
-
-    /**
      * @return array<string, mixed>
      */
     protected function buildReadinessLevel(ExamAttempt $attempt): array
@@ -342,36 +282,6 @@ class ExamResultFeedbackService
             'level' => 'needs_reinforcement',
             'label' => 'Needs Reinforcement',
             'message' => 'Focus on the weakest concepts first before your next official assessment.',
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $primaryFocus
-     * @param  array<string, mixed>  $practice
-     * @return array<string, mixed>|null
-     */
-    protected function buildRecommendedPracticeArea(?array $primaryFocus, array $practice): ?array
-    {
-        $label = trim((string) ($practice['target_label'] ?? ($primaryFocus['label'] ?? '')));
-
-        if ($label === '') {
-            return null;
-        }
-
-        $basis = (string) ($practice['matched_basis'] ?? ($primaryFocus['basis'] ?? 'subject'));
-
-        return [
-            'basis' => $basis === 'topic' ? 'topic' : 'subject',
-            'label' => $label,
-            'subject' => trim((string) ($primaryFocus['subject'] ?? '')) ?: null,
-            'topic' => $basis === 'topic'
-                ? (trim((string) ($primaryFocus['topic'] ?? '')) ?: null)
-                : null,
-            'topic_id' => $basis === 'topic'
-                ? (isset($primaryFocus['topic_id']) ? (int) $primaryFocus['topic_id'] : null)
-                : null,
-            'available_questions' => (int) ($practice['available_questions'] ?? 0),
-            'can_start' => (bool) ($practice['can_start'] ?? false),
         ];
     }
 
@@ -429,7 +339,6 @@ class ExamResultFeedbackService
 
     /**
      * @param  array<string, mixed>|null  $primaryFocus
-     * @param  array<string, mixed>  $practice
      * @param  array<string, mixed>|null  $strength
      * @param  array<string, mixed>|null  $historicalReference
      * @return array<int, string>
@@ -437,7 +346,6 @@ class ExamResultFeedbackService
     protected function buildRecommendedActions(
         ExamAttempt $attempt,
         ?array $primaryFocus,
-        array $practice,
         ?array $strength,
         ?array $historicalReference,
     ): array {
@@ -470,13 +378,7 @@ class ExamResultFeedbackService
                 );
         }
 
-        if ((bool) ($practice['can_start'] ?? false)) {
-            $actions[] = sprintf(
-                'Start %d approved remedial practice question(s) for %s.',
-                (int) ($practice['recommended_question_count'] ?? 0),
-                (string) ($practice['target_label'] ?? ($primaryFocus['label'] ?? 'this area'))
-            );
-        } elseif ($primaryFocus) {
+        if ($primaryFocus) {
             $actions[] = sprintf(
                 'Review your notes, handouts, or reference materials for %s before the next exam.',
                 (string) ($primaryFocus['subject'] ?? 'this subject')

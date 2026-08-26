@@ -229,11 +229,25 @@ export function useStudentInsightsModule() {
     return items
   })
 
-  const predictivePanel = computed(() => ({
-    ...predictiveModel.value,
-    statusLabel: predictiveModel.value.status === 'awaiting_ml_api' ? 'Coming Soon' : 'Connected',
-    featureLabels: asList(predictiveModel.value.expected_inputs).map(humanizeFeatureKey),
-  }))
+  const predictivePanel = computed(() => {
+    const status = predictiveModel.value.status
+
+    const statusLabel = status === 'connected'
+      ? 'Connected'
+      : status === 'insufficient_history'
+        ? 'Needs More Data'
+        : 'Coming Soon'
+
+    return {
+      ...predictiveModel.value,
+      status,
+      statusLabel,
+      isConnected: status === 'connected',
+      isInsufficientHistory: status === 'insufficient_history',
+      featureLabels: asList(predictiveModel.value.expected_inputs).map(humanizeFeatureKey),
+      predictionTone: predictiveModel.value.prediction === 'PASS' ? 'success' : 'danger',
+    }
+  })
 
   const hasAttemptData = computed(() => (stats.value.completed_attempts ?? 0) > 0)
 

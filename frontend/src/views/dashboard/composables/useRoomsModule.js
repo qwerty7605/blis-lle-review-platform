@@ -23,11 +23,136 @@ function firstApiError(error, fallbackMessage) {
   return error?.response?.data?.message ?? fallbackMessage
 }
 
+function extractDownloadFilename(contentDisposition, fallbackName) {
+  if (typeof contentDisposition !== 'string' || contentDisposition.trim() === '') {
+    return fallbackName
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]).replace(/"/g, '').trim()
+    } catch (error) {
+      // Fall back to plain filename parsing below.
+    }
+  }
+
+  const plainMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  if (plainMatch?.[1]) {
+    return plainMatch[1].trim()
+  }
+
+  return fallbackName
+}
+
+function saveDownloadedBlob(response, fallbackName) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+  const blob = response?.data instanceof Blob
+    ? response.data
+    : new Blob([response?.data ?? ''])
+
+  const contentDisposition = response?.headers?.['content-disposition']
+  const filename = extractDownloadFilename(contentDisposition, fallbackName)
+
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+async function resolveBlobApiError(error, fallbackMessage) {
+  const blobPayload = error?.response?.data
+  if (blobPayload instanceof Blob) {
+    try {
+      const text = await blobPayload.text()
+      const parsed = JSON.parse(text)
+      const message = String(parsed?.message ?? '').trim()
+      if (message) return message
+    } catch (parseError) {
+      // Ignore and fall back.
+    }
+  }
+
+  return firstApiError(error, fallbackMessage)
+}
+
 function displayMemberRole(role) {
   const normalized = String(role ?? '').toLowerCase()
   if (normalized === 'admin') return 'Administrator'
   if (normalized === 'staff_master_examiner') return 'Staff / Master Examiner'
   return 'Student'
+}
+
+function yearLevelLabel(value) {
+  const numeric = Number(value)
+  if (numeric === 1) return '1st Year'
+  if (numeric === 2) return '2nd Year'
+  if (numeric === 3) return '3rd Year'
+  if (numeric === 4) return '4th Year'
+  return 'Unassigned Year'
+}
+
+function compareRoomMembers(left, right) {
+  const nameCompare = String(left?.name ?? '').localeCompare(String(right?.name ?? ''), undefined, {
+    sensitivity: 'base',
+  })
+
+  if (nameCompare !== 0) {
+    return nameCompare
+  }
+
+  const studentIdCompare = String(left?.student_id ?? '').localeCompare(String(right?.student_id ?? ''), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
+
+  if (studentIdCompare !== 0) {
+    return studentIdCompare
+  }
+
+  return Number(left?.id ?? 0) - Number(right?.id ?? 0)
+}
+
+function sortRoomMembers(members) {
+  return [...members].sort(compareRoomMembers)
+}
+
+function buildRoomYearSummary(members) {
+  const normalizedYearLevels = Array.from(new Set(
+    members
+      .map((member) => Number(member?.year_level))
+      .filter((yearLevel) => Number.isFinite(yearLevel) && yearLevel > 0),
+  )).sort((left, right) => left - right)
+
+  if (normalizedYearLevels.length === 0) {
+    return {
+      count: 0,
+      primary_year_level: null,
+      label: 'Year level not set',
+      is_mixed: false,
+    }
+  }
+
+  if (normalizedYearLevels.length === 1) {
+    return {
+      count: 1,
+      primary_year_level: normalizedYearLevels[0],
+      label: yearLevelLabel(normalizedYearLevels[0]),
+      is_mixed: false,
+    }
+  }
+
+  return {
+    count: normalizedYearLevels.length,
+    primary_year_level: normalizedYearLevels[0],
+    label: 'Mixed Year Levels',
+    is_mixed: true,
+  }
 }
 
 function splitQuestionStemAndNumberedItems(questionText) {
@@ -91,12 +216,22 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const showJoinRoomModal = ref(false)
   const showEditRoomModal = ref(false)
   const showDeleteRoomModal = ref(false)
+  const showRoomExportModal = ref(false)
   const showLeaveRoomModal = ref(false)
   const editRoomName = ref('')
   const roomLoading = ref(false)
   const roomDetailsLoading = ref(false)
+  const roomExporting = ref(false)
   const roomError = ref('')
   const roomMessage = ref('')
+  const roomExportFormats = [
+    { value: 'xlsx', label: 'XLSX' },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'csv', label: 'CSV' },
+  ]
+  const roomExportForm = reactive({
+    format: 'xlsx',
+  })
 
   const roomLiveBoardActive = ref(false)
   const liveBoardExam = ref(null)
@@ -157,6 +292,40 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     if (isAdminRole.value) return 'All rooms in the platform'
     if (isManagementRole.value) return "Rooms you've added"
     return 'Rooms joined'
+  })
+
+  const selectedRoomActiveExams = computed(() => (
+    Array.isArray(selectedRoom.value?.assigned_exams) ? selectedRoom.value.assigned_exams : []
+  ))
+
+  const selectedRoomArchivedExams = computed(() => (
+    Array.isArray(selectedRoom.value?.archived_exams) ? selectedRoom.value.archived_exams : []
+  ))
+
+  const selectedRoomCurrentMembers = computed(() => (
+    sortRoomMembers(Array.isArray(selectedRoom.value?.members) ? selectedRoom.value.members : [])
+  ))
+
+  const selectedRoomYearSummary = computed(() => (
+    buildRoomYearSummary(selectedRoomCurrentMembers.value)
+  ))
+
+  const selectedRoomRosterCopy = computed(() => {
+    if (!selectedRoom.value) return ''
+
+    if (selectedRoomCurrentMembers.value.length === 0) {
+      return 'No current students are enrolled in this room yet.'
+    }
+
+    if (selectedRoomYearSummary.value.is_mixed) {
+      return 'This roster currently includes more than one year level.'
+    }
+
+    if (selectedRoomYearSummary.value.primary_year_level) {
+      return `This room is currently organized as a ${selectedRoomYearSummary.value.label} section.`
+    }
+
+    return 'Year level tags are not set for this room yet.'
   })
 
   const currentStudentExamQuestion = computed(() => (
@@ -239,6 +408,12 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       message,
     }
   })
+
+  const studentExamReviewActionLabel = computed(() => (
+    String(selectedStudentExam.value?.results_visibility_mode ?? 'hidden') === 'visible'
+      ? 'Review Answers'
+      : 'Review Responses'
+  ))
 
   const liveBoardRoom = computed(() => {
     const roomId = Number(liveBoardRoomId.value)
@@ -917,6 +1092,18 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showDeleteRoomModal.value = false
   }
 
+  function openRoomExportModal() {
+    if (!selectedRoom.value) return
+    roomExportForm.format = 'xlsx'
+    showRoomExportModal.value = true
+  }
+
+  function closeRoomExportModal() {
+    if (roomExporting.value) return
+    showRoomExportModal.value = false
+    roomExportForm.format = 'xlsx'
+  }
+
   function openLeaveRoomModal() {
     if (!selectedRoom.value) return
     showLeaveRoomModal.value = true
@@ -936,16 +1123,19 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       const { data } = await services.getRoom(roomId)
       const room = data.room ?? null
 
+      const normalizeRoomExam = (exam) => ({
+        ...exam,
+        schedule_start_at: exam.schedule_start_at ?? exam.scheduled_at ?? null,
+        schedule_end_at: exam.schedule_end_at ?? null,
+        delivery_mode: normalizeExamDeliveryMode(exam.delivery_mode),
+      })
+
       selectedRoom.value = room
         ? {
             ...room,
             members: room.members ?? [],
-            assigned_exams: (room.assigned_exams ?? []).map((exam) => ({
-              ...exam,
-              schedule_start_at: exam.schedule_start_at ?? exam.scheduled_at ?? null,
-              schedule_end_at: exam.schedule_end_at ?? null,
-              delivery_mode: normalizeExamDeliveryMode(exam.delivery_mode),
-            })),
+            assigned_exams: (room.assigned_exams ?? []).map(normalizeRoomExam),
+            archived_exams: (room.archived_exams ?? []).map(normalizeRoomExam),
           }
         : null
 
@@ -1127,6 +1317,82 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       await fetchRooms(selectedRoomId.value)
     } catch (error) {
       roomError.value = firstApiError(error, 'Unable to remove student from this room right now.')
+    } finally {
+      roomLoading.value = false
+    }
+  }
+
+  async function exportRoomGrades() {
+    if (!selectedRoom.value) return
+    roomExporting.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    const format = ['xlsx', 'pdf', 'csv'].includes(String(roomExportForm.format))
+      ? String(roomExportForm.format)
+      : 'xlsx'
+    const code = String(selectedRoom.value.code || '').trim()
+    const fallbackName = `room-${code || selectedRoom.value.id}-grades.${format}`
+
+    try {
+      const response = await services.exportRoomGrades(selectedRoom.value.id, { format })
+      saveDownloadedBlob(response, fallbackName)
+      roomMessage.value = 'Room grade export generated successfully.'
+      showRoomExportModal.value = false
+    } catch (e) {
+      roomError.value = await resolveBlobApiError(e, 'Failed to export room grades.')
+    } finally {
+      roomExporting.value = false
+    }
+  }
+
+  async function handleArchiveRoomExam(exam) {
+    if (!selectedRoomId.value || !isManagementRole.value) return
+
+    const examId = Number(exam?.id ?? 0)
+    if (!Number.isFinite(examId) || examId < 1) return
+
+    const examTitle = String(exam?.title ?? 'this exam').trim() || 'this exam'
+    const roomNameLabel = String(selectedRoom.value?.name ?? 'this room').trim() || 'this room'
+
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm(`Archive ${examTitle} from ${roomNameLabel}?`)
+      if (!confirmed) return
+    }
+
+    roomLoading.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    try {
+      const { data } = await services.archiveRoomExam(selectedRoomId.value, examId)
+      roomMessage.value = data?.message ?? `${examTitle} archived from the room.`
+      await fetchRooms(selectedRoomId.value)
+    } catch (error) {
+      roomError.value = firstApiError(error, 'Unable to archive this room exam right now.')
+    } finally {
+      roomLoading.value = false
+    }
+  }
+
+  async function handleRestoreRoomExam(exam) {
+    if (!selectedRoomId.value || !isManagementRole.value) return
+
+    const examId = Number(exam?.id ?? 0)
+    if (!Number.isFinite(examId) || examId < 1) return
+
+    const examTitle = String(exam?.title ?? 'this exam').trim() || 'this exam'
+
+    roomLoading.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    try {
+      const { data } = await services.restoreRoomExam(selectedRoomId.value, examId)
+      roomMessage.value = data?.message ?? `${examTitle} restored to the current room view.`
+      await fetchRooms(selectedRoomId.value)
+    } catch (error) {
+      roomError.value = firstApiError(error, 'Unable to restore this room exam right now.')
     } finally {
       roomLoading.value = false
     }
@@ -1328,12 +1594,16 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showJoinRoomModal,
     showEditRoomModal,
     showDeleteRoomModal,
+    showRoomExportModal,
     showLeaveRoomModal,
     editRoomName,
     roomLoading,
     roomDetailsLoading,
+    roomExporting,
     roomError,
     roomMessage,
+    roomExportFormats,
+    roomExportForm,
     roomLiveBoardActive,
     liveBoardExam,
     liveBoardRoom,
@@ -1362,6 +1632,11 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentExamRemainingSeconds,
     studentAnswerDraft,
     roomCollectionLabel,
+    selectedRoomActiveExams,
+    selectedRoomArchivedExams,
+    selectedRoomCurrentMembers,
+    selectedRoomYearSummary,
+    selectedRoomRosterCopy,
     currentStudentExamQuestion,
     currentQuestionStem,
     isStudentExamSubmitted,
@@ -1370,7 +1645,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isCurrentQuestionInputLocked,
     studentExamUnansweredCount,
     studentExamResultSummary,
+    studentExamReviewActionLabel,
     displayMemberRole,
+    yearLevelLabel,
     canRemoveRoomMember,
     canStudentOpenExam,
     isStudentExamInProgress,
@@ -1407,6 +1684,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     closeEditRoomModal,
     openDeleteRoomModal,
     closeDeleteRoomModal,
+    openRoomExportModal,
+    closeRoomExportModal,
     openLeaveRoomModal,
     closeLeaveRoomModal,
     selectRoom,
@@ -1416,6 +1695,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     handleJoinRoom,
     handleLeaveRoom,
     handleKickRoomMember,
+    handleArchiveRoomExam,
+    handleRestoreRoomExam,
     openRoomLiveBoard,
     closeRoomLiveBoard,
     loadLiveBoard,
@@ -1424,5 +1705,6 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     liveBoardCellText,
     liveBoardCellClass,
     liveBoardItemSummaryText,
+    exportRoomGrades,
   }
 }

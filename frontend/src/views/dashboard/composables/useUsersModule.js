@@ -55,6 +55,7 @@ export function useUsersModule() {
   const isAdminRole = computed(() => normalizedRole.value === 'admin')
 
   const adminUsers = ref([])
+  const archivedStudentsTotal = ref(0)
   const usersLoading = ref(false)
   const usersSaving = ref(false)
   const usersRecovering = ref(false)
@@ -205,7 +206,10 @@ export function useUsersModule() {
     {
       key: 'archived-students',
       label: 'Archived Records',
-      value: archivedStudentUsers.value.length,
+      // Independent of the current list filter (userFilters.archive_state defaults to
+      // 'current', which excludes archived students from adminUsers entirely) — see
+      // refreshArchivedStudentsTotal().
+      value: archivedStudentsTotal.value,
       tone: 'neutral',
     },
     {
@@ -283,12 +287,33 @@ export function useUsersModule() {
     resetRecoverForm()
   }
 
+  async function refreshArchivedStudentsTotal() {
+    if (!isAdminRole.value) return
+
+    try {
+      const { data } = await services.getUsers({
+        archive_state: 'archived',
+        role: 'student',
+        per_page: 1,
+        page: 1,
+      })
+
+      archivedStudentsTotal.value = Number(data?.meta?.total ?? 0)
+    } catch (error) {
+      // Non-critical background count — leave the previous value rather than surfacing an error.
+    }
+  }
+
   async function loadAdminUsers(options = {}) {
     if (!isAdminRole.value) return
 
     usersLoading.value = true
     usersError.value = ''
     usersMessage.value = ''
+
+    // Runs independently of the main (filtered) list fetch below so the summary tile stays
+    // accurate no matter which archive_state filter is currently applied.
+    refreshArchivedStudentsTotal()
 
     try {
       const requestedPage = Number(options.page ?? usersPagination.current_page ?? 1)

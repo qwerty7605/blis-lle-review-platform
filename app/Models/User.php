@@ -129,14 +129,6 @@ class User extends Authenticatable
     }
 
     /**
-     * Remedial practice attempts taken by this user.
-     */
-    public function practiceAttempts(): HasMany
-    {
-        return $this->hasMany(PracticeAttempt::class, 'user_id');
-    }
-
-    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

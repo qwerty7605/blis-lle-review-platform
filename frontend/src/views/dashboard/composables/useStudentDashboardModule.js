@@ -220,6 +220,10 @@ export function useStudentDashboardModule() {
     })
   ))
 
+  const averageScore = computed(() => (
+    stats.value.average_score_percent === null ? null : Number(stats.value.average_score_percent)
+  ))
+
   const statsCards = computed(() => {
     const averageScore = stats.value.average_score_percent
     return [
@@ -288,6 +292,7 @@ export function useStudentDashboardModule() {
     dashboardLoaded,
     dashboardError,
     hasDashboardData,
+    averageScore,
     statsCards,
     notifications,
     roomSnapshots,

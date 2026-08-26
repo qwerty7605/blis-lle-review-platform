@@ -20,7 +20,7 @@ class ExamResultFeedbackTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_hidden_results_still_return_targeted_feedback_and_practice_recommendation(): void
+    public function test_hidden_results_still_return_targeted_feedback(): void
     {
         [$staff, $student, $room, $bank, $exam] = $this->makeExamContext('hidden');
         $topic = Topic::create([
@@ -34,9 +34,6 @@ class ExamResultFeedbackTest extends TestCase
             $this->makeAssessmentQuestion($bank, 'Cataloging', $topic, 2, 'Question 2'),
             $this->makeAssessmentQuestion($bank, 'Cataloging', $topic, 3, 'Question 3'),
         ];
-
-        $remedial = $this->makeRemedialQuestion($bank, 'Cataloging', $topic, 4, 'Remedial Topic Question');
-        $this->assertNotNull($remedial);
 
         $attempt = $this->makeSubmittedAttempt($exam, $room, $student, $questions, [true, false, false]);
 
@@ -54,10 +51,7 @@ class ExamResultFeedbackTest extends TestCase
             ->assertJsonPath('feedback.readiness_level.label', 'Needs Reinforcement')
             ->assertJsonPath('feedback.primary_focus.basis', 'topic')
             ->assertJsonPath('feedback.primary_focus.topic', 'Dewey Decimal Classification')
-            ->assertJsonPath('feedback.primary_focus.subject', 'Cataloging')
-            ->assertJsonPath('feedback.recommended_practice_area.label', 'Cataloging • Dewey Decimal Classification')
-            ->assertJsonPath('feedback.practice.can_start', true)
-            ->assertJsonPath('feedback.practice.available_questions', 1);
+            ->assertJsonPath('feedback.primary_focus.subject', 'Cataloging');
 
         $this->assertArrayNotHasKey('explanation', $response->json('questions.0'));
         $this->assertNotEmpty($response->json('feedback.recommended_actions'));
@@ -193,10 +187,6 @@ class ExamResultFeedbackTest extends TestCase
             'subject' => $subject,
             'topic_id' => $topic?->id,
             'difficulty' => QuestionBankQuestion::DIFFICULTY_MEDIUM,
-            'source' => QuestionBankQuestion::SOURCE_FACULTY,
-            'status' => QuestionBankQuestion::STATUS_APPROVED,
-            'ai_generated' => false,
-            'source_question_id' => null,
             'item_number' => $itemNumber,
             'question_text' => $questionText,
             'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
@@ -220,32 +210,6 @@ class ExamResultFeedbackTest extends TestCase
         ]);
 
         return $question->load('options');
-    }
-
-    private function makeRemedialQuestion(
-        QuestionBank $bank,
-        string $subject,
-        ?Topic $topic,
-        int $itemNumber,
-        string $questionText,
-    ): QuestionBankQuestion {
-        return QuestionBankQuestion::create([
-            'question_bank_id' => $bank->id,
-            'usage_type' => QuestionBankQuestion::USAGE_REMEDIAL,
-            'subject' => $subject,
-            'topic_id' => $topic?->id,
-            'difficulty' => QuestionBankQuestion::DIFFICULTY_MEDIUM,
-            'source' => QuestionBankQuestion::SOURCE_AI,
-            'status' => QuestionBankQuestion::STATUS_APPROVED,
-            'ai_generated' => true,
-            'item_style' => QuestionBankQuestion::ITEM_STYLE_REVERSE_ASSOCIATION,
-            'source_question_id' => null,
-            'item_number' => $itemNumber,
-            'question_text' => $questionText,
-            'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
-            'answer_label' => 'A',
-            'answer_text' => 'Practice answer',
-        ]);
     }
 
     private function makeUser(string $email, string $role, ?string $studentId = null): User

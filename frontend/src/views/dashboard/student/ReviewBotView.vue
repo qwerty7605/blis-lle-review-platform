@@ -25,16 +25,51 @@
 
         <section class="review-field">
           <div class="review-field-head">
+            <strong>Mode</strong>
+          </div>
+
+          <div class="review-count-chips">
+            <button
+              type="button"
+              class="review-count-chip"
+              :class="{ active: !form.autoDetectWeakAreas }"
+              @click="setAutoDetectMode(false)"
+            >
+              Choose Subjects
+            </button>
+            <button
+              type="button"
+              class="review-count-chip"
+              :class="{ active: form.autoDetectWeakAreas }"
+              @click="setAutoDetectMode(true)"
+            >
+              <Target :size="13" /> Auto-Detect Weak Areas
+            </button>
+          </div>
+
+          <p v-if="form.autoDetectWeakAreas" class="review-muted">
+            The bot will look at your past results and build a set around whatever you're weakest in —
+            no need to pick a subject.
+          </p>
+        </section>
+
+        <section class="review-field" :class="{ 'is-disabled-field': form.autoDetectWeakAreas }">
+          <div class="review-field-head">
             <strong>Subjects</strong>
 
             <div class="review-field-actions">
-              <button type="button" class="ghost-btn review-small-btn" :disabled="reviewLoading" @click="selectAllSubjects">
+              <button
+                type="button"
+                class="ghost-btn review-small-btn"
+                :disabled="reviewLoading || form.autoDetectWeakAreas"
+                @click="selectAllSubjects"
+              >
                 All
               </button>
               <button
                 type="button"
                 class="ghost-btn review-small-btn"
-                :disabled="reviewLoading || form.subjects.length === 0"
+                :disabled="reviewLoading || form.autoDetectWeakAreas || form.subjects.length === 0"
                 @click="clearSelectedSubjects"
               >
                 Clear
@@ -62,6 +97,7 @@
                 `tone-${subjectToneKey(subject.subject)}`,
                 { 'is-selected': form.subjects.includes(subject.subject) },
               ]"
+              :disabled="form.autoDetectWeakAreas"
               @click="toggleSubject(subject.subject)"
             >
               {{ shortSubjectLabel(subject.subject) }}
@@ -100,7 +136,11 @@
             <strong>Selected</strong>
           </div>
 
-          <div v-if="selectedSubjects.length > 0" class="review-selected-list">
+          <p v-if="form.autoDetectWeakAreas" class="review-muted">
+            <Target :size="13" /> Auto-detecting your weak subjects when you generate.
+          </p>
+
+          <div v-else-if="selectedSubjects.length > 0" class="review-selected-list">
             <span
               v-for="subject in selectedSubjects"
               :key="subject.subject"
@@ -136,7 +176,10 @@
           <h3>Quiz</h3>
 
           <div class="review-session-pills">
-            <span class="pill neutral">{{ selectedSubjects.length }} subjects</span>
+            <span v-if="autoDetected" class="pill success">
+              <Target :size="12" /> Auto-detected
+            </span>
+            <span class="pill neutral">{{ activeSubjectCount }} subjects</span>
             <span class="pill gold">{{ form.questionCount }} items</span>
             <span v-if="hasQuiz" class="pill navy">{{ answeredCount }}/{{ generatedQuestions.length }} answered</span>
           </div>
@@ -231,7 +274,8 @@
                 v-if="!quizSubmitted"
                 type="button"
                 class="primary-btn"
-                :disabled="quizLoading"
+                :disabled="quizLoading || !allAnswered"
+                :title="allAnswered ? '' : 'Answer every question before submitting'"
                 @click="submitQuiz"
               >
                 Submit Quiz
@@ -249,7 +293,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, RefreshCw, Sparkles } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, CheckCircle2, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
 
 const {
@@ -258,18 +302,22 @@ const {
   quizLoading,
   reviewError,
   reviewMessage,
+  autoDetected,
   quizSubmitted,
   generatedQuestions,
   answers,
   form,
   questionCountOptions,
   selectedSubjects,
+  activeSubjectCount,
   hasQuiz,
   canGenerate,
   answeredCount,
+  allAnswered,
   correctCount,
   scorePercent,
   setQuestionCount,
+  setAutoDetectMode,
   toggleSubject,
   selectAllSubjects,
   clearSelectedSubjects,
@@ -446,6 +494,21 @@ function questionResultClass(question) {
 
 .review-subject-chip:hover {
   transform: translateY(-1px);
+}
+
+.review-subject-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.is-disabled-field {
+  opacity: 0.6;
+}
+
+.review-count-chip svg,
+.pill svg {
+  vertical-align: -2px;
 }
 
 .review-subject-chip.is-selected {

@@ -8,6 +8,7 @@ import {
   Settings,
   Sparkles,
   UserRound,
+  Users,
 } from 'lucide-vue-next'
 
 export const dashboardModules = {
@@ -59,6 +60,14 @@ export const dashboardModules = {
     sub: 'Manage exam content and question pools',
     icon: BookOpen,
   },
+  students: {
+    key: 'students',
+    routeName: 'dashboard-students',
+    label: 'Students',
+    title: 'Students',
+    sub: 'Browse enrolled students and their performance history',
+    icon: Users,
+  },
   exams: {
     key: 'exams',
     routeName: 'dashboard-exams',
@@ -103,9 +112,9 @@ export const dashboardModules = {
 
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics'],
-  staff_master_examiner: ['library', 'room', 'exams', 'reports', 'settings'],
-  faculty: ['library', 'room', 'exams', 'reports', 'settings'],
-  admin: ['users', 'room', 'settings', 'audit'],
+  staff_master_examiner: ['library', 'room', 'students', 'exams', 'reports', 'settings'],
+  faculty: ['library', 'room', 'students', 'exams', 'reports', 'settings'],
+  admin: ['users', 'room', 'students', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {
