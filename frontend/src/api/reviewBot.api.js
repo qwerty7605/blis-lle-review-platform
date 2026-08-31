@@ -1,12 +1,20 @@
 import http from './http'
 
 class ReviewBotApi {
-  listSubjects() {
-    return http.get('/student/review-bot/subjects')
+  catalog() {
+    return http.get('/student/review-bot/catalog')
   }
 
-  generateQuiz(payload) {
-    return http.post('/student/review-bot/generate', payload)
+  startSession(payload) {
+    return http.post('/student/review-bot/sessions', payload)
+  }
+
+  submitSession(attemptId, payload) {
+    return http.post(`/student/review-bot/sessions/${attemptId}/submit`, payload)
+  }
+
+  getSession(attemptId) {
+    return http.get(`/student/review-bot/sessions/${attemptId}`)
   }
 }
 

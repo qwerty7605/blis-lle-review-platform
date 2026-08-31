@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
 import {
   formatClockTime,
@@ -203,6 +204,8 @@ function splitQuestionStemAndNumberedItems(questionText) {
 export function useRoomsModule({ mode = 'student' } = {}) {
   const auth = useAuthStore()
   const services = useDashboardDataServices()
+  const route = useRoute()
+  const router = useRouter()
 
   const modeKey = String(mode ?? 'student').toLowerCase()
   const isManagementView = computed(() => modeKey === 'management')
@@ -258,6 +261,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const showStudentExitConfirmModal = ref(false)
   const selectedStudentExam = ref(null)
   const studentExamAttempt = ref(null)
+  const studentExamFeedback = ref(null)
   const studentExamReviewVisible = ref(false)
   const studentExamQuestions = ref([])
   const studentExamCurrentIndex = ref(0)
@@ -393,6 +397,13 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       message = 'You answered a fair share correctly, but there are still several items to revisit before the next attempt.'
     }
 
+    // The backend already computes a much richer breakdown
+    // (ExamResultFeedbackService::buildForAttempt) and ships it as
+    // `feedback` alongside the attempt — merge it in here so the result
+    // page can show subject/topic breakdowns and recommendations instead
+    // of just the score.
+    const feedback = studentExamFeedback.value ?? {}
+
     return {
       total,
       answered,
@@ -406,8 +417,45 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       label,
       headline,
       message,
+      passStatus: feedback.pass_status ?? null,
+      subjectBreakdown: feedback.subject_breakdown ?? [],
+      topicBreakdown: feedback.topic_breakdown ?? [],
+      primaryFocus: feedback.primary_focus ?? null,
+      secondaryFocuses: feedback.secondary_focuses ?? [],
+      strength: feedback.strength ?? null,
+      readinessLevel: feedback.readiness_level ?? null,
+      recommendedActions: feedback.recommended_actions ?? [],
+      historicalReference: feedback.historical_reference ?? null,
     }
   })
+
+  const topicLevelLabels = {
+    strong: 'Strong',
+    average: 'Average',
+    weak: 'Weak',
+    needs_review: 'Needs Review',
+  }
+
+  function studentExamTopicLevelLabel(level) {
+    return topicLevelLabels[level] ?? 'Average'
+  }
+
+  // "Review Your Weak Areas" — deep-links into the Review Bot with the
+  // attempt's weakest topic/subtopic (falling back to the weakest subject),
+  // completing the exam -> result -> review-bot loop.
+  function goToReviewWeakArea() {
+    const focus = studentExamResultSummary.value.primaryFocus
+    if (!focus) return
+
+    router.push({
+      name: 'dashboard-review-bot',
+      query: {
+        subject: focus.subject,
+        ...(focus.basis === 'topic' && focus.topic_id ? { topic_id: focus.topic_id } : {}),
+        ...(focus.basis === 'topic' && focus.subtopic_id ? { subtopic_id: focus.subtopic_id } : {}),
+      },
+    })
+  }
 
   const studentExamReviewActionLabel = computed(() => (
     String(selectedStudentExam.value?.results_visibility_mode ?? 'hidden') === 'visible'
@@ -471,7 +519,10 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       }
     }
 
-    fetchRooms()
+    // Deep link from the home dashboard's "Resume/Take/Retake/Upcoming"
+    // action — preselect that room instead of defaulting to the first one.
+    const requestedRoomId = Number(route.query?.room)
+    fetchRooms(Number.isFinite(requestedRoomId) && requestedRoomId > 0 ? requestedRoomId : null)
   })
 
   onBeforeUnmount(() => {
@@ -717,6 +768,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       : null
 
     studentExamAttempt.value = payload?.attempt ?? null
+    studentExamFeedback.value = payload?.feedback ?? null
     selectedStudentExam.value = examPayload ?? selectedStudentExam.value
     studentExamQuestions.value = payload?.questions ?? []
     studentExamReviewVisible.value = nextAttemptStatus === 'submitted' ? false : studentExamReviewVisible.value
@@ -845,6 +897,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showStudentExitConfirmModal.value = false
     selectedStudentExam.value = null
     studentExamAttempt.value = null
+    studentExamFeedback.value = null
     studentExamReviewVisible.value = false
     studentExamQuestions.value = []
     studentExamCurrentIndex.value = 0
@@ -1645,6 +1698,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isCurrentQuestionInputLocked,
     studentExamUnansweredCount,
     studentExamResultSummary,
+    studentExamTopicLevelLabel,
+    goToReviewWeakArea,
     studentExamReviewActionLabel,
     displayMemberRole,
     yearLevelLabel,

@@ -1,19 +1,19 @@
 <template>
   <section class="review-bot-view">
-    <div v-if="reviewMessage" class="feedback success">
-      <CheckCircle2 :size="15" />
-      <span>{{ reviewMessage }}</span>
+    <div v-if="sessionError" class="feedback danger">
+      <AlertCircle :size="15" />
+      <span>{{ sessionError }}</span>
     </div>
 
-    <div v-if="reviewError" class="feedback danger">
+    <div v-if="catalogError" class="feedback danger">
       <AlertCircle :size="15" />
-      <span>{{ reviewError }}</span>
+      <span>{{ catalogError }}</span>
     </div>
 
     <article class="surface-card review-bot-head">
       <p class="review-bot-kicker">Review Bot</p>
-      <h3>BLIS Core Review Bot</h3>
-      <p>Choose subjects and number of items, then generate your quiz.</p>
+      <h3>BLIS Review Bot</h3>
+      <p>Practice questions your teachers have already generated and published — no waiting on AI.</p>
     </article>
 
     <div class="review-bot-layout">
@@ -32,78 +32,129 @@
             <button
               type="button"
               class="review-count-chip"
-              :class="{ active: !form.autoDetectWeakAreas }"
-              @click="setAutoDetectMode(false)"
+              :class="{ active: mode === 'manual' }"
+              @click="setMode('manual')"
             >
-              Choose Subjects
+              Choose Subject/Topic
             </button>
             <button
               type="button"
               class="review-count-chip"
-              :class="{ active: form.autoDetectWeakAreas }"
-              @click="setAutoDetectMode(true)"
+              :class="{ active: mode === 'weak_area' }"
+              :disabled="!weakArea"
+              @click="setMode('weak_area')"
             >
-              <Target :size="13" /> Auto-Detect Weak Areas
+              <Target :size="13" /> Review My Weak Areas
             </button>
           </div>
 
-          <p v-if="form.autoDetectWeakAreas" class="review-muted">
-            The bot will look at your past results and build a set around whatever you're weakest in —
-            no need to pick a subject.
-          </p>
+          <div v-if="mode === 'weak_area'" class="review-weak-area-box">
+            <template v-if="weakArea">
+              <p class="review-muted">We detected that you need more practice in:</p>
+              <strong class="review-weak-area-label">{{ weakAreaLabel }}</strong>
+              <p v-if="weakAreaScoreText" class="review-muted">Your previous performance: {{ weakAreaScoreText }}</p>
+            </template>
+            <p v-else class="review-muted">
+              Take and submit a few more exams first — we need some history to detect a weak area.
+            </p>
+          </div>
         </section>
 
-        <section class="review-field" :class="{ 'is-disabled-field': form.autoDetectWeakAreas }">
-          <div class="review-field-head">
-            <strong>Subjects</strong>
+        <template v-if="mode === 'manual'">
+          <section class="review-field">
+            <div class="review-field-head">
+              <strong>Subject</strong>
+            </div>
 
-            <div class="review-field-actions">
+            <div v-if="catalogLoading" class="review-bot-empty compact">
+              <RefreshCw :size="18" class="spin-soft" />
+              <p>Loading subjects...</p>
+            </div>
+
+            <div v-else-if="readySubjects.length === 0" class="review-bot-empty compact">
+              <BookOpen :size="20" />
+              <p>No published Review Bot questions yet. Check back after your teacher publishes some.</p>
+            </div>
+
+            <div v-else class="review-subject-grid">
               <button
+                v-for="subject in readySubjects"
+                :key="subject.subject"
                 type="button"
-                class="ghost-btn review-small-btn"
-                :disabled="reviewLoading || form.autoDetectWeakAreas"
-                @click="selectAllSubjects"
+                class="review-subject-chip"
+                :class="[`tone-${subjectToneKey(subject.subject)}`, { 'is-selected': form.subject === subject.subject }]"
+                @click="selectSubject(subject.subject)"
               >
-                All
-              </button>
-              <button
-                type="button"
-                class="ghost-btn review-small-btn"
-                :disabled="reviewLoading || form.autoDetectWeakAreas || form.subjects.length === 0"
-                @click="clearSelectedSubjects"
-              >
-                Clear
+                {{ shortSubjectLabel(subject.subject) }}
               </button>
             </div>
-          </div>
+          </section>
 
-          <div v-if="reviewLoading" class="review-bot-empty compact">
-            <RefreshCw :size="18" class="spin-soft" />
-            <p>Loading subjects...</p>
-          </div>
+          <section v-if="availableTopics.length > 0" class="review-field">
+            <div class="review-field-head">
+              <strong>Topic</strong>
+            </div>
 
-          <div v-else-if="subjectOptions.length === 0" class="review-bot-empty compact">
-            <BookOpen :size="20" />
-            <p>No subjects available.</p>
-          </div>
+            <div class="review-subject-grid">
+              <button
+                v-for="topic in availableTopics"
+                :key="topic.id"
+                type="button"
+                class="review-subject-chip"
+                :class="{ 'is-selected': form.topicId === topic.id }"
+                @click="selectTopic(form.topicId === topic.id ? null : topic.id)"
+              >
+                {{ topic.name }}
+              </button>
+            </div>
+          </section>
 
-          <div v-else class="review-subject-grid">
-            <button
-              v-for="subject in subjectOptions"
-              :key="subject.subject"
-              type="button"
-              class="review-subject-chip"
-              :class="[
-                `tone-${subjectToneKey(subject.subject)}`,
-                { 'is-selected': form.subjects.includes(subject.subject) },
-              ]"
-              :disabled="form.autoDetectWeakAreas"
-              @click="toggleSubject(subject.subject)"
-            >
-              {{ shortSubjectLabel(subject.subject) }}
-            </button>
-          </div>
-        </section>
+          <section v-if="availableSubtopics.length > 0" class="review-field">
+            <div class="review-field-head">
+              <strong>Subtopic</strong>
+            </div>
+
+            <div class="review-subject-grid">
+              <button
+                v-for="subtopic in availableSubtopics"
+                :key="subtopic.id"
+                type="button"
+                class="review-subject-chip"
+                :class="{ 'is-selected': form.subtopicId === subtopic.id }"
+                @click="selectSubtopic(form.subtopicId === subtopic.id ? null : subtopic.id)"
+              >
+                {{ subtopic.name }}
+              </button>
+            </div>
+          </section>
+
+          <section v-if="availableDifficulties.length > 0" class="review-field">
+            <div class="review-field-head">
+              <strong>Difficulty</strong>
+            </div>
+
+            <div class="review-count-chips">
+              <button
+                type="button"
+                class="review-count-chip"
+                :class="{ active: !form.difficulty }"
+                @click="setDifficulty('')"
+              >
+                Any
+              </button>
+              <button
+                v-for="difficulty in availableDifficulties"
+                :key="difficulty"
+                type="button"
+                class="review-count-chip"
+                :class="{ active: form.difficulty === difficulty }"
+                @click="setDifficulty(difficulty)"
+              >
+                {{ difficulty }}
+              </button>
+            </div>
+          </section>
+        </template>
 
         <section class="review-field">
           <div class="review-field-head">
@@ -123,166 +174,146 @@
                 {{ count }}
               </button>
             </div>
-
-            <label class="field-stack review-count-field">
-              <span class="field-label">Custom</span>
-              <input v-model.number="form.questionCount" type="number" min="3" max="30" class="text-input" />
-            </label>
           </div>
-        </section>
-
-        <section class="review-field">
-          <div class="review-field-head">
-            <strong>Selected</strong>
-          </div>
-
-          <p v-if="form.autoDetectWeakAreas" class="review-muted">
-            <Target :size="13" /> Auto-detecting your weak subjects when you generate.
-          </p>
-
-          <div v-else-if="selectedSubjects.length > 0" class="review-selected-list">
-            <span
-              v-for="subject in selectedSubjects"
-              :key="subject.subject"
-              class="review-selected-chip"
-              :class="`tone-${subjectToneKey(subject.subject)}`"
-            >
-              {{ shortSubjectLabel(subject.subject) }}
-            </span>
-          </div>
-
-          <p v-else class="review-muted">No subjects selected yet.</p>
         </section>
 
         <div class="review-bot-actions">
           <button
             type="button"
             class="primary-btn"
-            :disabled="quizLoading || reviewLoading || !canGenerate"
-            @click="generateQuiz"
+            :disabled="sessionStarting || !canStart"
+            @click="startSession"
           >
             <Sparkles :size="16" />
-            {{ quizLoading ? 'Generating...' : 'Generate Quiz' }}
+            {{ sessionStarting ? 'Starting...' : 'Start Review' }}
           </button>
 
-          <button v-if="hasQuiz" type="button" class="ghost-btn" :disabled="quizLoading" @click="resetQuizState">
-            Clear Quiz
+          <button v-if="hasSession" type="button" class="ghost-btn" :disabled="sessionStarting" @click="startAnother">
+            Clear
           </button>
         </div>
       </article>
 
       <article class="surface-card review-bot-session">
         <header class="review-section-head">
-          <h3>Quiz</h3>
+          <h3>Review</h3>
 
-          <div class="review-session-pills">
-            <span v-if="autoDetected" class="pill success">
-              <Target :size="12" /> Auto-detected
-            </span>
-            <span class="pill neutral">{{ activeSubjectCount }} subjects</span>
-            <span class="pill gold">{{ form.questionCount }} items</span>
-            <span v-if="hasQuiz" class="pill navy">{{ answeredCount }}/{{ generatedQuestions.length }} answered</span>
+          <div v-if="hasSession" class="review-session-pills">
+            <span class="pill neutral">{{ session.subject }}</span>
+            <span v-if="!result" class="pill navy">{{ answeredCount }}/{{ session.questions.length }} answered</span>
           </div>
         </header>
 
         <div class="review-session-body">
-          <div v-if="quizLoading" class="review-bot-empty">
+          <div v-if="sessionStarting" class="review-bot-empty">
             <RefreshCw :size="22" class="spin-soft" />
-            <h4>Generating quiz</h4>
+            <h4>Preparing your set</h4>
             <p>Please wait.</p>
           </div>
 
-          <div v-else-if="!hasQuiz" class="review-bot-empty">
+          <div v-else-if="!hasSession" class="review-bot-empty">
             <Sparkles :size="24" />
-            <h4>No quiz yet</h4>
-            <p>Generate a set to start.</p>
+            <h4>No review session yet</h4>
+            <p>Choose a subject (or use your weak areas) and start a review.</p>
           </div>
 
           <template v-else>
-            <div class="review-session-top">
-              <div class="review-session-status">
-                <span class="review-session-label">Progress</span>
-                <strong>{{ answeredCount }} of {{ generatedQuestions.length }}</strong>
-                <span>{{ quizSubmitted ? 'Checked' : 'Submit anytime' }}</span>
-              </div>
-
-              <div v-if="quizSubmitted" class="review-bot-results">
-                <div class="review-bot-score" :class="scoreToneClass(scorePercent)">
+            <div v-if="result" class="review-session-top">
+              <div class="review-bot-results">
+                <div class="review-bot-score" :class="scoreToneClass(result.scorePercent)">
                   <span class="review-score-kicker">Score</span>
-                  <strong>{{ scorePercent }}%</strong>
-                  <span>{{ correctCount }} / {{ generatedQuestions.length }} correct</span>
+                  <strong>{{ result.scorePercent }}%</strong>
+                  <span>{{ result.correctAnswers }} / {{ result.totalItems }} correct</span>
+                  <span v-if="result.improved !== null" class="review-improved" :class="{ down: result.improved === false }">
+                    {{ result.improved ? '▲ Improved from last time' : '▼ Lower than last time' }}
+                  </span>
                 </div>
 
-                <button type="button" class="ghost-btn" :disabled="quizLoading" @click="generateQuiz">
-                  <RefreshCw :size="15" />
-                  New Quiz
-                </button>
+                <div class="review-recommendation" v-if="result.recommendation">
+                  <strong>{{ recommendationHeading(result.recommendation.action) }}</strong>
+                  <p>{{ result.recommendation.message }}</p>
+                  <div class="review-recommendation-actions">
+                    <button
+                      v-if="result.recommendation.action === 'repeat_topic'"
+                      type="button"
+                      class="primary-btn"
+                      @click="repeatSameTopic"
+                    >
+                      Review This Topic Again
+                    </button>
+                    <button
+                      v-else-if="result.recommendation.action === 'next_topic'"
+                      type="button"
+                      class="primary-btn"
+                      @click="reviewNextTopic"
+                    >
+                      Review Next Weak Topic
+                    </button>
+                    <button type="button" class="ghost-btn" @click="startAnother">
+                      Start a New Review
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else class="review-session-top">
+              <div class="review-session-status">
+                <span class="review-session-label">Progress</span>
+                <strong>{{ answeredCount }} of {{ session.questions.length }}</strong>
+                <span>Submit anytime</span>
               </div>
             </div>
 
             <div class="review-question-scroll">
               <div class="review-question-list">
-                <article v-for="(question, index) in generatedQuestions" :key="question.id" class="review-question-card">
+                <article v-for="question in session.questions" :key="question.questionId" class="review-question-card">
                   <div class="review-question-head">
-                    <div>
-                      <span class="review-question-number">Question {{ index + 1 }}</span>
-                      <span class="review-question-subject" :class="`tone-${subjectToneKey(question.subject)}`">
-                        {{ shortSubjectLabel(question.subject) }}
-                      </span>
-                    </div>
+                    <span class="review-question-number">Question {{ question.itemNumber }}</span>
 
-                    <span v-if="quizSubmitted" class="pill" :class="questionResultClass(question)">
+                    <span v-if="result" class="pill" :class="questionResultClass(question)">
                       {{ questionResultLabel(question) }}
                     </span>
                   </div>
 
-                  <p class="review-question-text">{{ question.prompt }}</p>
+                  <p class="review-question-text">{{ question.questionText }}</p>
 
                   <div class="review-option-list">
                     <label
                       v-for="option in question.options"
                       :key="option.id"
                       class="review-option"
-                      :class="{
-                        'is-selected': answers[question.id] === option.id,
-                        'is-correct': quizSubmitted && option.id === question.correct_option_id,
-                        'is-incorrect': quizSubmitted && answers[question.id] === option.id && option.id !== question.correct_option_id,
-                      }"
+                      :class="{ 'is-selected': answers[question.questionId] === option.id }"
                     >
                       <input
-                        :checked="answers[question.id] === option.id"
+                        :checked="answers[question.questionId] === option.id"
                         type="radio"
-                        :name="`review-question-${question.id}`"
+                        :name="`review-question-${question.questionId}`"
                         :value="option.id"
-                        :disabled="quizSubmitted"
-                        @change="answerQuestion(question.id, option.id)"
+                        :disabled="Boolean(result)"
+                        @change="answerQuestion(question.questionId, option.id)"
                       />
                       <span>{{ option.text }}</span>
                     </label>
                   </div>
 
-                  <div v-if="quizSubmitted" class="review-explanation">
-                    <strong>{{ questionResultLabel(question) }}</strong>
-                    <p>{{ question.explanation }}</p>
+                  <div v-if="result && missedItemFor(question)" class="review-explanation">
+                    <strong>Correct answer: {{ missedItemFor(question).correct_answer }}</strong>
+                    <p v-if="missedItemFor(question).explanation">{{ missedItemFor(question).explanation }}</p>
                   </div>
                 </article>
               </div>
             </div>
 
-            <footer class="review-bot-footer">
+            <footer v-if="!result" class="review-bot-footer">
               <button
-                v-if="!quizSubmitted"
                 type="button"
                 class="primary-btn"
-                :disabled="quizLoading || !allAnswered"
+                :disabled="submitting || !allAnswered"
                 :title="allAnswered ? '' : 'Answer every question before submitting'"
-                @click="submitQuiz"
+                @click="submitSession"
               >
-                Submit Quiz
-              </button>
-
-              <button v-else type="button" class="ghost-btn" @click="resetQuizState">
-                Start Again
+                {{ submitting ? 'Submitting...' : 'Submit Review' }}
               </button>
             </footer>
           </template>
@@ -293,38 +324,44 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
 
 const {
-  subjectOptions,
-  reviewLoading,
-  quizLoading,
-  reviewError,
-  reviewMessage,
-  autoDetected,
-  quizSubmitted,
-  generatedQuestions,
-  answers,
+  catalogLoading,
+  catalogError,
+  readySubjects,
+  weakArea,
+  weakAreaLabel,
+  weakAreaScoreText,
+  mode,
   form,
   questionCountOptions,
-  selectedSubjects,
-  activeSubjectCount,
-  hasQuiz,
-  canGenerate,
+  availableTopics,
+  availableSubtopics,
+  availableDifficulties,
+  canStart,
+  sessionStarting,
+  sessionError,
+  session,
+  hasSession,
+  answers,
   answeredCount,
   allAnswered,
-  correctCount,
-  scorePercent,
+  submitting,
+  result,
+  selectSubject,
+  selectTopic,
+  selectSubtopic,
+  setDifficulty,
   setQuestionCount,
-  setAutoDetectMode,
-  toggleSubject,
-  selectAllSubjects,
-  clearSelectedSubjects,
+  setMode,
+  startSession,
   answerQuestion,
-  submitQuiz,
-  generateQuiz,
-  resetQuizState,
+  submitSession,
+  startAnother,
+  reviewNextTopic,
+  repeatSameTopic,
 } = useReviewBotModule()
 
 const subjectToneLookup = {
@@ -359,12 +396,24 @@ function scoreToneClass(score) {
   return 'focus'
 }
 
+function missedItemFor(question) {
+  if (!result.value) return null
+  return result.value.missedItems.find((item) => item.item_number === question.itemNumber) ?? null
+}
+
 function questionResultLabel(question) {
-  return answers[question.id] === question.correct_option_id ? 'Correct' : 'Review'
+  return missedItemFor(question) ? 'Review' : 'Correct'
 }
 
 function questionResultClass(question) {
-  return answers[question.id] === question.correct_option_id ? 'success' : 'gold'
+  return missedItemFor(question) ? 'gold' : 'success'
+}
+
+function recommendationHeading(action) {
+  if (action === 'repeat_topic') return 'Keep practicing this topic'
+  if (action === 'next_topic') return 'Ready for the next one'
+  if (action === 'keep_going') return 'Nice work'
+  return 'Keep it up'
 }
 </script>
 
@@ -462,14 +511,18 @@ function questionResultClass(question) {
   font-size: 15px;
 }
 
-.review-field-actions {
-  display: flex;
-  gap: 8px;
+.review-weak-area-box {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #eef3ff;
+  border: 1px solid rgba(31, 65, 143, 0.14);
 }
 
-.review-small-btn {
-  height: 34px;
-  padding: 0 12px;
+.review-weak-area-label {
+  color: var(--lnu-navy-deep);
+  font-size: 15px;
 }
 
 .review-subject-grid {
@@ -478,16 +531,12 @@ function questionResultClass(question) {
   gap: 10px;
 }
 
-.review-subject-chip,
-.review-selected-chip {
+.review-subject-chip {
   border-radius: 14px;
   padding: 12px;
   font-size: 13px;
   font-weight: 700;
   text-align: center;
-}
-
-.review-subject-chip {
   border: 1px solid rgba(13, 21, 71, 0.12);
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
@@ -496,24 +545,14 @@ function questionResultClass(question) {
   transform: translateY(-1px);
 }
 
-.review-subject-chip:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-  transform: none;
-}
-
-.is-disabled-field {
-  opacity: 0.6;
+.review-subject-chip.is-selected {
+  border-color: rgba(31, 65, 143, 0.28);
+  box-shadow: 0 10px 18px rgba(16, 32, 73, 0.08);
 }
 
 .review-count-chip svg,
 .pill svg {
   vertical-align: -2px;
-}
-
-.review-subject-chip.is-selected {
-  border-color: rgba(31, 65, 143, 0.28);
-  box-shadow: 0 10px 18px rgba(16, 32, 73, 0.08);
 }
 
 .review-count-row {
@@ -522,7 +561,6 @@ function questionResultClass(question) {
 }
 
 .review-count-chips,
-.review-selected-list,
 .review-session-pills {
   display: flex;
   flex-wrap: wrap;
@@ -537,6 +575,7 @@ function questionResultClass(question) {
   padding: 8px 12px;
   font-size: 13px;
   font-weight: 700;
+  text-transform: capitalize;
 }
 
 .review-count-chip.active,
@@ -546,8 +585,9 @@ function questionResultClass(question) {
   color: #20428f;
 }
 
-.review-count-field {
-  width: 110px;
+.review-count-chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .review-muted {
@@ -558,7 +598,8 @@ function questionResultClass(question) {
 
 .review-bot-actions,
 .review-bot-results,
-.review-bot-footer {
+.review-bot-footer,
+.review-recommendation-actions {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -566,7 +607,8 @@ function questionResultClass(question) {
 }
 
 .review-bot-results {
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .review-bot-footer {
@@ -684,6 +726,34 @@ function questionResultClass(question) {
   font-size: 13px;
 }
 
+.review-improved {
+  font-weight: 700;
+  color: #267242;
+}
+
+.review-improved.down {
+  color: #ad5340;
+}
+
+.review-recommendation {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #f6f8fd;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+}
+
+.review-recommendation strong {
+  color: var(--lnu-navy-deep);
+}
+
+.review-recommendation p {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 14px;
+}
+
 .review-question-scroll {
   min-height: 0;
   overflow-y: auto;
@@ -721,15 +791,6 @@ function questionResultClass(question) {
   text-transform: uppercase;
 }
 
-.review-question-subject {
-  display: inline-flex;
-  margin-top: 8px;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .review-question-text {
   margin: 0;
   color: var(--lnu-text);
@@ -756,16 +817,6 @@ function questionResultClass(question) {
 .review-option.is-selected {
   border-color: rgba(31, 65, 143, 0.24);
   background: #ebf1ff;
-}
-
-.review-option.is-correct {
-  border-color: rgba(63, 146, 94, 0.24);
-  background: #eef9f1;
-}
-
-.review-option.is-incorrect {
-  border-color: rgba(227, 105, 105, 0.24);
-  background: #fff0f0;
 }
 
 .review-option input {

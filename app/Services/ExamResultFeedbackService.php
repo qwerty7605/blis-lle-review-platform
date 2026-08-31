@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ExamAttempt;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ExamResultFeedbackService
@@ -43,10 +44,16 @@ class ExamResultFeedbackService
             ? $this->buildHistoricalReference($attempt->student, $primaryFocus)
             : null;
         $subjectBreakdown = $this->sortWeakAreas($subjectPerformance);
+        $repeatedWeakKeys = $attempt->student instanceof User
+            ? $this->repeatedWeakKeys($attempt->student, $topicPerformance)
+            : [];
+        $topicBreakdown = $this->buildTopicBreakdown($subjectPerformance, $topicPerformance, $repeatedWeakKeys);
 
         return [
             'summary' => $this->buildSummary($attempt, $primaryFocus),
+            'pass_status' => $this->buildPassStatus($attempt),
             'subject_breakdown' => $subjectBreakdown,
+            'topic_breakdown' => $topicBreakdown,
             'topic_weakness' => $topicWeakness,
             'readiness_level' => $this->buildReadinessLevel($attempt),
             'primary_focus' => $primaryFocus,
@@ -60,6 +67,147 @@ class ExamResultFeedbackService
                 $historicalReference,
             ),
         ];
+    }
+
+    /**
+     * @return array{is_passing: bool, passing_score: float, delta: float}
+     */
+    protected function buildPassStatus(ExamAttempt $attempt): array
+    {
+        $score = round((float) ($attempt->score_percent ?? 0), 2);
+
+        return [
+            'is_passing' => $score >= self::PASSING_SCORE,
+            'passing_score' => self::PASSING_SCORE,
+            'delta' => round($score - self::PASSING_SCORE, 2),
+        ];
+    }
+
+    /**
+     * A topic/subtopic counts as "repeated incorrect" when it's also weak
+     * across the student's broader history (DashboardAnalyticsService
+     * already aggregates every submitted attempt), not just in this one
+     * attempt — reused rather than tracked separately. Checked at
+     * subtopic granularity when a row has one, falling back to topic
+     * granularity otherwise.
+     *
+     * @param  array<int, array<string, mixed>>  $topicPerformance
+     * @return array<int, string> areaKey() values (see areaKey())
+     */
+    protected function repeatedWeakKeys(User $student, array $topicPerformance): array
+    {
+        if ($topicPerformance === []) {
+            return [];
+        }
+
+        $weakThreshold = 60.0;
+
+        $weakTopicIds = collect($this->dashboardAnalyticsService->buildTopicWeaknessPerformance($student))
+            ->filter(fn (array $topic): bool => (float) ($topic['score'] ?? 100.0) < $weakThreshold
+                && (int) ($topic['attempted_count'] ?? 0) >= self::TOPIC_MIN_ITEMS)
+            ->pluck('topic_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique();
+
+        $weakSubtopicIds = collect($this->dashboardAnalyticsService->buildSubtopicWeaknessPerformance($student))
+            ->filter(fn (array $subtopic): bool => (float) ($subtopic['score'] ?? 100.0) < $weakThreshold
+                && (int) ($subtopic['attempted_count'] ?? 0) >= self::TOPIC_MIN_ITEMS)
+            ->pluck('subtopic_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique();
+
+        return collect($topicPerformance)
+            ->filter(function (array $row) use ($weakTopicIds, $weakSubtopicIds): bool {
+                $subtopicId = (int) ($row['subtopic_id'] ?? 0);
+
+                if ($subtopicId > 0) {
+                    return $weakSubtopicIds->contains($subtopicId);
+                }
+
+                return $weakTopicIds->contains((int) ($row['topic_id'] ?? 0));
+            })
+            ->map(fn (array $row): string => $this->areaKey($row))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Composite identity for a topic/subtopic row -- two rows under the
+     * same topic but different subtopics must never collapse into one.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    protected function areaKey(array $row): string
+    {
+        return sprintf('%d:%d', (int) ($row['topic_id'] ?? 0), (int) ($row['subtopic_id'] ?? 0));
+    }
+
+    /**
+     * Every topic touched by this attempt, grouped by subject, with a
+     * Strong/Average/Weak/Needs Review level label — the spec's worked
+     * example needs every topic listed, not just the single weakest pick
+     * that primary_focus/secondary_focuses surface.
+     *
+     * @param  array<int, array<string, mixed>>  $subjectPerformance
+     * @param  array<int, array<string, mixed>>  $topicPerformance
+     * @param  array<int, string>  $repeatedWeakKeys
+     * @return array<int, array{subject: string, topics: array<int, array<string, mixed>>}>
+     */
+    protected function buildTopicBreakdown(array $subjectPerformance, array $topicPerformance, array $repeatedWeakKeys): array
+    {
+        $eligibleTopics = collect($topicPerformance)
+            ->filter(fn (array $topic): bool => (int) ($topic['total_items'] ?? 0) >= self::TOPIC_MIN_ITEMS);
+
+        if ($eligibleTopics->isEmpty()) {
+            return [];
+        }
+
+        $subjectOrder = collect($subjectPerformance)
+            ->pluck('subject')
+            ->unique()
+            ->values()
+            ->all();
+
+        return $eligibleTopics
+            ->groupBy('subject')
+            ->sortBy(fn ($topics, $subject) => array_search($subject, $subjectOrder, true) ?: PHP_INT_MAX)
+            ->map(function (Collection $topics, string $subject) use ($repeatedWeakKeys): array {
+                $sortedTopics = collect($this->sortWeakAreas($topics->all()))
+                    ->map(function (array $topic) use ($repeatedWeakKeys): array {
+                        return array_merge($topic, [
+                            'level' => $this->topicLevel((float) ($topic['score_percent'] ?? 0.0)),
+                            'repeated_weak' => in_array($this->areaKey($topic), $repeatedWeakKeys, true),
+                        ]);
+                    })
+                    ->values()
+                    ->all();
+
+                return [
+                    'subject' => $subject,
+                    'topics' => $sortedTopics,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    protected function topicLevel(float $scorePercent): string
+    {
+        if ($scorePercent >= 80.0) {
+            return 'strong';
+        }
+
+        if ($scorePercent >= 60.0) {
+            return 'average';
+        }
+
+        if ($scorePercent >= 40.0) {
+            return 'weak';
+        }
+
+        return 'needs_review';
     }
 
     /**
@@ -107,6 +255,7 @@ class ExamResultFeedbackService
         $rows = DB::table('exam_attempt_questions')
             ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_questions.question_bank_question_id')
             ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
+            ->leftJoin('subtopics', 'subtopics.id', '=', 'question_bank_questions.subtopic_id')
             ->leftJoin('exam_attempt_answers', function ($join) use ($attempt) {
                 $join->on('exam_attempt_answers.question_bank_question_id', '=', 'exam_attempt_questions.question_bank_question_id')
                     ->where('exam_attempt_answers.exam_attempt_id', '=', $attempt->id);
@@ -115,12 +264,14 @@ class ExamResultFeedbackService
             ->selectRaw("
                 topics.id as topic_id,
                 topics.name as topic,
+                subtopics.id as subtopic_id,
+                subtopics.name as subtopic,
                 COALESCE(NULLIF(question_bank_questions.subject, ''), topics.subject) as subject,
                 COUNT(*) as total_items,
                 SUM(CASE WHEN exam_attempt_answers.id IS NOT NULL THEN 1 ELSE 0 END) as answered_count,
                 SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count
             ")
-            ->groupBy('topics.id', 'topics.name', 'topics.subject', 'question_bank_questions.subject')
+            ->groupBy('topics.id', 'topics.name', 'subtopics.id', 'subtopics.name', 'topics.subject', 'question_bank_questions.subject')
             ->get();
 
         return collect($rows)
@@ -133,6 +284,8 @@ class ExamResultFeedbackService
                     (int) ($row->total_items ?? 0),
                     (int) ($row->answered_count ?? 0),
                     (int) ($row->correct_count ?? 0),
+                    $row->subtopic_id !== null ? (int) $row->subtopic_id : null,
+                    $row->subtopic !== null ? (string) $row->subtopic : null,
                 );
             })
             ->values()
@@ -233,15 +386,19 @@ class ExamResultFeedbackService
         $subject = trim((string) ($weakArea['subject'] ?? ''));
         $topic = trim((string) ($weakArea['topic'] ?? ''));
         $topicId = isset($weakArea['topic_id']) ? (int) $weakArea['topic_id'] : null;
-        $label = $basis === 'topic' && $topic !== ''
-            ? ($subject !== '' ? $subject . ' • ' . $topic : $topic)
-            : ($subject !== '' ? $subject : 'Uncategorized');
+        $subtopic = trim((string) ($weakArea['subtopic'] ?? ''));
+        $subtopicId = isset($weakArea['subtopic_id']) ? (int) $weakArea['subtopic_id'] : null;
+
+        $labelParts = array_filter([$subject, $topic, $subtopic], fn (string $part): bool => $part !== '');
+        $label = $labelParts !== [] ? implode(' • ', $labelParts) : 'Uncategorized';
 
         return [
             'basis' => $basis,
             'subject' => $subject,
             'topic_id' => $topicId,
             'topic' => $topic !== '' ? $topic : null,
+            'subtopic_id' => $subtopicId,
+            'subtopic' => $subtopic !== '' ? $subtopic : null,
             'label' => $label,
             'matches_primary_focus' => $this->matchesWeakArea($primaryFocus, $weakArea),
         ];
@@ -367,10 +524,10 @@ class ExamResultFeedbackService
                 $missedCount
             );
         } elseif ($primaryFocus && (int) ($primaryFocus['incorrect_count'] ?? 0) > 0) {
-            $actions[] = ($primaryFocus['basis'] ?? null) === 'topic' && !empty($primaryFocus['topic'])
+            $actions[] = ($primaryFocus['basis'] ?? null) === 'topic' && !empty($primaryFocus['leaf_label'])
                 ? sprintf(
                     'Revisit the core ideas behind %s and compare why your selected answers missed the key concept.',
-                    (string) $primaryFocus['topic']
+                    (string) $primaryFocus['leaf_label']
                 )
                 : sprintf(
                     'Revisit the core ideas in %s and compare why your selected answers missed the key concept.',
@@ -413,20 +570,31 @@ class ExamResultFeedbackService
         int $totalItems,
         int $answeredCount,
         int $correctCount,
+        ?int $subtopicId = null,
+        ?string $subtopic = null,
     ): array {
         $normalizedSubject = trim($subject) !== '' ? trim($subject) : 'Uncategorized';
         $normalizedTopic = trim((string) ($topic ?? ''));
+        $normalizedSubtopic = trim((string) ($subtopic ?? ''));
         $incorrectCount = max($answeredCount - $correctCount, 0);
         $missedCount = max($totalItems - $answeredCount, 0);
+        // Topic then subtopic -- never the subtopic alone, the topic stays
+        // visible as the parent of the subtopic it's under.
+        $leafLabel = $normalizedSubtopic !== ''
+            ? ($normalizedTopic !== '' ? $normalizedTopic . ' → ' . $normalizedSubtopic : $normalizedSubtopic)
+            : $normalizedTopic;
 
         return [
             'basis' => $basis,
-            'label' => $basis === 'topic' && $normalizedTopic !== ''
-                ? $normalizedSubject . ' • ' . $normalizedTopic
+            'label' => $basis === 'topic' && $leafLabel !== ''
+                ? $normalizedSubject . ' • ' . $leafLabel
                 : $normalizedSubject,
             'subject' => $normalizedSubject,
             'topic_id' => $basis === 'topic' && $topicId ? $topicId : null,
             'topic' => $basis === 'topic' && $normalizedTopic !== '' ? $normalizedTopic : null,
+            'subtopic_id' => $basis === 'topic' && $subtopicId ? $subtopicId : null,
+            'subtopic' => $basis === 'topic' && $normalizedSubtopic !== '' ? $normalizedSubtopic : null,
+            'leaf_label' => $basis === 'topic' ? $leafLabel : null,
             'total_items' => $totalItems,
             'answered_count' => $answeredCount,
             'correct_count' => $correctCount,
@@ -517,8 +685,13 @@ class ExamResultFeedbackService
         }
 
         if ($leftBasis === 'topic') {
-            return (int) ($left['topic_id'] ?? 0) > 0
+            $sameTopic = (int) ($left['topic_id'] ?? 0) > 0
                 && (int) ($left['topic_id'] ?? 0) === (int) ($right['topic_id'] ?? 0);
+
+            // Two rows under the same topic but different subtopics are
+            // different focuses -- only collapse them when the subtopic
+            // (or absence of one) also matches.
+            return $sameTopic && (int) ($left['subtopic_id'] ?? 0) === (int) ($right['subtopic_id'] ?? 0);
         }
 
         return (string) ($left['subject'] ?? '') === (string) ($right['subject'] ?? '');
@@ -534,14 +707,20 @@ class ExamResultFeedbackService
             return false;
         }
 
+        $primaryBasis = (string) ($primaryFocus['basis'] ?? 'subject');
         $weakBasis = (string) ($weakArea['basis'] ?? 'subject');
-        if ((string) ($primaryFocus['basis'] ?? 'subject') !== $weakBasis) {
-            return false;
-        }
 
-        if ($weakBasis === 'topic') {
+        // A subtopic-level weak area is still "the same focus" as a
+        // topic-level primary focus when they share a topic_id — the
+        // result page only breaks down to topic granularity, so match on
+        // whichever level both sides actually have in common.
+        if ($primaryBasis === 'topic' && in_array($weakBasis, ['topic', 'subtopic'], true)) {
             return (int) ($primaryFocus['topic_id'] ?? 0) > 0
                 && (int) ($primaryFocus['topic_id'] ?? 0) === (int) ($weakArea['topic_id'] ?? 0);
+        }
+
+        if ($primaryBasis !== $weakBasis) {
+            return false;
         }
 
         return (string) ($primaryFocus['subject'] ?? '') === trim((string) ($weakArea['subject'] ?? ''));

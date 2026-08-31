@@ -6,6 +6,7 @@ use App\Jobs\ClassifyQuestionBankQuestionsJob;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
+use App\Models\Subtopic;
 use App\Models\Topic;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -14,7 +15,7 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Classifies faculty-authored assessment items into a topic/subtopic,
+ * Classifies faculty-authored assessment items into a topic + subtopic,
  * a difficulty tier, and a cognitive (Bloom's-style) level, so exam
  * results can be broken down more deeply than "subject" alone. Runs once
  * per uploaded set, in the background, and never touches AI again for
@@ -25,57 +26,185 @@ class QuestionMappingService
     private const CLASSIFICATION_BATCH_SIZE = 15;
 
     /**
-     * Curated subtopic list per BLIS core subject. The AI is only ever
-     * allowed to choose from this list (never invent a topic name), so
-     * results stay comparable across every teacher's uploads instead of
-     * fragmenting into near-duplicate topic names.
+     * Curated topic -> subtopic list per BLIS core subject. The AI is only
+     * ever allowed to choose from this list (never invent a topic or
+     * subtopic name), so results stay comparable across every teacher's
+     * uploads instead of fragmenting into near-duplicate names.
      *
-     * @var array<string, array<int, string>>
+     * @var array<string, array<string, array<int, string>>>
      */
     private const CURATED_TOPICS = [
         'Cataloging and Classification' => [
-            'RDA and Descriptive Cataloging',
-            'Classification Systems and Call Numbers',
-            'Subject Headings and Authority Control',
-            'Cutter Numbers and Shelf Arrangement',
-            'MARC Format and Bibliographic Records',
-            'Edition and Physical Description',
+            'RDA and Descriptive Cataloging' => [
+                'Core Elements of Description',
+                'FRBR/LRM Concepts',
+                'Content, Media, and Carrier Types',
+            ],
+            'Classification Systems and Call Numbers' => [
+                'Dewey Decimal Classification (DDC)',
+                'Library of Congress Classification (LCC)',
+                'Universal Decimal Classification (UDC)',
+            ],
+            'Subject Headings and Authority Control' => [
+                'Library of Congress Subject Headings (LCSH)',
+                'Authority Records and Cross-References',
+                'Name Authority Control',
+            ],
+            'Cutter Numbers and Shelf Arrangement' => [
+                'Cutter-Sanborn Tables',
+                'Shelflisting Practices',
+                'Alternate Shelving Schemes',
+            ],
+            'MARC Format and Bibliographic Records' => [
+                'MARC 21 Field Structure',
+                'Fixed and Variable Fields',
+                'Bibliographic vs Authority Records',
+            ],
+            'Edition and Physical Description' => [
+                'Edition Statements',
+                'Physical Description Area',
+                'Series Statements',
+            ],
         ],
         'Indexing and Abstracting' => [
-            'Controlled Vocabulary and Thesauri',
-            'Abstract Types and Functions',
-            'Precision, Recall, and Retrieval Quality',
-            'Citation Indexing',
-            'Exhaustivity and Specificity',
+            'Controlled Vocabulary and Thesauri' => [
+                'Preferred and Non-Preferred Terms',
+                'Broader/Narrower/Related Terms',
+                'Thesaurus Construction',
+            ],
+            'Abstract Types and Functions' => [
+                'Informative Abstracts',
+                'Indicative Abstracts',
+                'Critical/Evaluative Abstracts',
+            ],
+            'Precision, Recall, and Retrieval Quality' => [
+                'Precision vs Recall Tradeoff',
+                'Relevance Ranking',
+                'Search Result Evaluation',
+            ],
+            'Citation Indexing' => [
+                'Citation Analysis',
+                'Bibliographic Coupling',
+                'Co-Citation',
+            ],
+            'Exhaustivity and Specificity' => [
+                'Depth of Indexing',
+                'Term Specificity',
+                'Indexing Consistency',
+            ],
         ],
         'Information Technology' => [
-            'OPAC and Discovery Systems',
-            'Boolean Search and Query Strategy',
-            'Metadata and Interoperability Standards',
-            'Integrated Library Systems',
-            'Digital Security and Data Protection',
-            'RFID, Barcodes, and Automation',
+            'OPAC and Discovery Systems' => [
+                'OPAC Search Features',
+                'Discovery Layer Tools',
+                'Federated Search',
+            ],
+            'Boolean Search and Query Strategy' => [
+                'AND/OR/NOT Operators',
+                'Truncation and Wildcards',
+                'Nested Queries',
+            ],
+            'Metadata and Interoperability Standards' => [
+                'Dublin Core',
+                'MARC-to-Dublin Core Mapping',
+                'Z39.50/SRU Protocols',
+            ],
+            'Integrated Library Systems' => [
+                'ILS Modules',
+                'Circulation and Cataloging Integration',
+                'Vendor ILS Platforms',
+            ],
+            'Digital Security and Data Protection' => [
+                'Authentication and Access Control',
+                'Phishing and Social Engineering',
+                'Data Backup Practices',
+            ],
+            'RFID, Barcodes, and Automation' => [
+                'RFID Tagging',
+                'Self-Check Kiosks',
+                'Inventory Automation',
+            ],
         ],
         'Reference Services' => [
-            'Reference Interview and User Needs',
-            'Ready Reference and Referral',
-            'Source Evaluation and Information Literacy',
-            'Current Awareness Services',
-            "Reader's Advisory",
+            'Reference Interview and User Needs' => [
+                'Open vs Closed Questions',
+                'Negotiating the Query',
+                'Nonverbal Cues',
+            ],
+            'Ready Reference and Referral' => [
+                'Quick-Fact Sources',
+                'Interlibrary Referral',
+                'Escalation to Specialists',
+            ],
+            'Source Evaluation and Information Literacy' => [
+                'Authority and Currency Evaluation',
+                'Teaching Search Strategies',
+                'Citation Guidance',
+            ],
+            'Current Awareness Services' => [
+                'Selective Dissemination of Information (SDI)',
+                'New Acquisitions Alerts',
+                'RSS/Table-of-Contents Alerts',
+            ],
+            "Reader's Advisory" => [
+                'Genre and Appeal Factors',
+                'Read-Alike Recommendations',
+                'Book Talks',
+            ],
         ],
         'Library Management' => [
-            'Planning and Policy Development',
-            'Budgeting and Resource Allocation',
-            'Staff Development and Supervision',
-            'Assessment and Performance Indicators',
-            'Disaster and Risk Management',
+            'Planning and Policy Development' => [
+                'Strategic Planning',
+                'Collection Development Policy',
+                'Mission and Vision Statements',
+            ],
+            'Budgeting and Resource Allocation' => [
+                'Line-Item Budgeting',
+                'Cost-Benefit Analysis',
+                'Grant and Fund Sourcing',
+            ],
+            'Staff Development and Supervision' => [
+                'Training Programs',
+                'Performance Appraisal',
+                'Delegation and Motivation',
+            ],
+            'Assessment and Performance Indicators' => [
+                'Library Performance Metrics',
+                'SWOT Analysis',
+                'User Satisfaction Surveys',
+            ],
+            'Disaster and Risk Management' => [
+                'Disaster Preparedness Plans',
+                'Collection Salvage Procedures',
+                'Business Continuity Planning',
+            ],
         ],
         'Selection and Acquisition' => [
-            'Selection Criteria and Collection Policy',
-            'Acquisition Methods and Ordering Workflow',
-            'Vendor Evaluation and Bibliographic Verification',
-            'Gifts and Donations Management',
-            'Budgeting for Acquisitions',
+            'Selection Criteria and Collection Policy' => [
+                'Community/User Needs Assessment',
+                'Selection Aids and Reviews',
+                'Weeding Criteria',
+            ],
+            'Acquisition Methods and Ordering Workflow' => [
+                'Purchase, Gift, and Exchange',
+                'Standing and Blanket Orders',
+                'Approval Plans',
+            ],
+            'Vendor Evaluation and Bibliographic Verification' => [
+                'Vendor Reliability Assessment',
+                'Pre-Order Bibliographic Verification',
+                'Price Comparison',
+            ],
+            'Gifts and Donations Management' => [
+                'Gift Evaluation Criteria',
+                'Deed of Gift Agreements',
+                'Disposal of Unwanted Gifts',
+            ],
+            'Budgeting for Acquisitions' => [
+                'Encumbrance Tracking',
+                'Fund Allocation by Subject',
+                'Approval and Purchase Orders',
+            ],
         ],
     ];
 
@@ -94,11 +223,21 @@ class QuestionMappingService
      */
     public function curatedTopicsForSubject(?string $subject): array
     {
-        return self::CURATED_TOPICS[$this->normalizeSubjectLabel($subject)] ?? [];
+        return array_keys(self::CURATED_TOPICS[$this->normalizeSubjectLabel($subject)] ?? []);
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<int, string>
+     */
+    public function curatedSubtopicsForTopic(?string $subject, ?string $topic): array
+    {
+        $normalizedTopic = trim((string) $topic);
+
+        return self::CURATED_TOPICS[$this->normalizeSubjectLabel($subject)][$normalizedTopic] ?? [];
+    }
+
+    /**
+     * @return array<string, array<string, array<int, string>>>
      */
     public function curatedTopics(): array
     {
@@ -219,7 +358,7 @@ class QuestionMappingService
         $errors = [];
 
         foreach ($sourceQuestions->groupBy(fn (QuestionBankQuestion $question) => $this->normalizeSubjectLabel($question->subject)) as $subject => $subjectQuestions) {
-            $allowedTopics = $this->curatedTopicsForSubject($subject);
+            $allowedTopics = self::CURATED_TOPICS[$subject] ?? [];
 
             if ($allowedTopics === []) {
                 $errors[] = sprintf('No curated topic list is defined for subject "%s", so those items were skipped.', $subject);
@@ -266,9 +405,9 @@ class QuestionMappingService
     }
 
     /**
-     * Manually set/confirm a question's topic, difficulty, and cognitive
-     * level (used by the teacher review UI to edit an AI suggestion or
-     * tag an item by hand).
+     * Manually set/confirm a question's topic, subtopic, difficulty, and
+     * cognitive level (used by the teacher review UI to edit an AI
+     * suggestion or tag an item by hand).
      */
     public function applyManualTags(
         QuestionBankQuestion $question,
@@ -276,10 +415,20 @@ class QuestionMappingService
         ?string $difficulty,
         ?string $cognitiveLevel,
         ?int $actorId = null,
+        ?string $subtopicName = null,
     ): QuestionBankQuestion {
         if (filled($topicName)) {
             $topic = $this->resolveTopic($question->subject, $topicName, $actorId);
             $question->topic_id = $topic?->id;
+
+            $question->subtopic_id = filled($subtopicName) && $topic
+                ? $this->resolveSubtopic($topic, $subtopicName, $actorId)?->id
+                : null;
+        } elseif (filled($subtopicName) && $question->topic_id) {
+            $topic = Topic::query()->find($question->topic_id);
+            $question->subtopic_id = $topic
+                ? $this->resolveSubtopic($topic, $subtopicName, $actorId)?->id
+                : null;
         }
 
         if (filled($difficulty) && in_array($difficulty, QuestionBankQuestion::DIFFICULTIES, true)) {
@@ -312,19 +461,36 @@ class QuestionMappingService
         );
     }
 
+    public function resolveSubtopic(Topic $topic, ?string $subtopicName, ?int $actorId = null): ?Subtopic
+    {
+        $normalizedSubtopic = trim((string) ($subtopicName ?? ''));
+
+        if ($normalizedSubtopic === '') {
+            return null;
+        }
+
+        return Subtopic::query()->firstOrCreate(
+            ['topic_id' => $topic->id, 'name' => $normalizedSubtopic],
+            ['created_by' => $actorId],
+        );
+    }
+
     /**
      * @param  array<string, mixed>  $result
      */
     protected function applyClassification(QuestionBankQuestion $question, array $result, string $mode): void
     {
         $topicName = trim((string) ($result['topic'] ?? ''));
+        $subtopicName = trim((string) ($result['subtopic'] ?? ''));
         $difficulty = trim((string) ($result['difficulty'] ?? ''));
         $cognitiveLevel = trim((string) ($result['cognitive_level'] ?? ''));
 
         $topic = $topicName !== '' ? $this->resolveTopic($question->subject, $topicName) : null;
+        $subtopic = $topic && $subtopicName !== '' ? $this->resolveSubtopic($topic, $subtopicName) : null;
 
         $question->forceFill([
             'topic_id' => $topic?->id,
+            'subtopic_id' => $subtopic?->id,
             'difficulty' => in_array($difficulty, QuestionBankQuestion::DIFFICULTIES, true) ? $difficulty : $question->difficulty,
             'cognitive_level' => in_array($cognitiveLevel, QuestionBankQuestion::COGNITIVE_LEVELS, true) ? $cognitiveLevel : null,
             'tag_status' => $mode === QuestionBank::MAPPING_MODE_AUTO
@@ -336,7 +502,7 @@ class QuestionMappingService
 
     /**
      * @param  Collection<int, QuestionBankQuestion>  $questions
-     * @param  array<int, string>  $allowedTopics
+     * @param  array<string, array<int, string>>  $allowedTopics topic name => subtopic names
      * @return array<int, array<string, mixed>>
      */
     protected function requestClassificationBatch(Collection $questions, string $subject, array $allowedTopics): array
@@ -355,7 +521,9 @@ You classify faculty-authored library science exam questions for a review dashbo
 Rules:
 - Return valid JSON only.
 - Classify every item listed in "questions".
-- "topic" MUST be copied exactly (character for character) from the "allowed_topics" list. Never invent a new topic name.
+- "allowed_topics" is a map of topic name -> list of allowed subtopic names for that topic.
+- "topic" MUST be copied exactly (character for character) from the keys of "allowed_topics". Never invent a new topic name.
+- "subtopic" MUST be copied exactly from the subtopic list for the "topic" you chose. Never invent a new subtopic name, and never mix subtopics from a different topic.
 - "difficulty" must be exactly one of: easy, medium, hard.
 - "cognitive_level" must be exactly one of: recall, comprehension, application, analysis — using Bloom's-style meaning:
   recall = restates a fact or definition; comprehension = explains why/what something means; application = applies a rule to a new situation; analysis = compares, evaluates, or judges between options.
@@ -383,7 +551,8 @@ PROMPT;
                 'questions' => [
                     [
                         'source_question_id' => 1,
-                        'topic' => 'one of allowed_topics, copied exactly',
+                        'topic' => 'one of the keys of allowed_topics, copied exactly',
+                        'subtopic' => 'one of the subtopics under the chosen topic, copied exactly',
                         'difficulty' => 'easy | medium | hard',
                         'cognitive_level' => 'recall | comprehension | application | analysis',
                     ],
@@ -428,7 +597,7 @@ PROMPT;
 
     /**
      * @param  mixed  $rawResults
-     * @param  array<int, string>  $allowedTopics
+     * @param  array<string, array<int, string>>  $allowedTopics topic name => subtopic names
      * @return array<int, array<string, mixed>>
      */
     protected function normalizeClassificationResults(mixed $rawResults, array $allowedTopics): array
@@ -438,6 +607,7 @@ PROMPT;
         }
 
         $allowedTopicLookup = collect($allowedTopics)
+            ->keys()
             ->mapWithKeys(fn (string $topic): array => [Str::lower(trim($topic)) => $topic])
             ->all();
 
@@ -463,9 +633,17 @@ PROMPT;
                 continue;
             }
 
+            $allowedSubtopics = $allowedTopics[$topic] ?? [];
+            $subtopicLookup = collect($allowedSubtopics)
+                ->mapWithKeys(fn (string $subtopic): array => [Str::lower(trim($subtopic)) => $subtopic])
+                ->all();
+            $subtopicKey = Str::lower(trim((string) ($result['subtopic'] ?? '')));
+            $subtopic = $subtopicLookup[$subtopicKey] ?? null;
+
             $normalized[] = [
                 'source_question_id' => $sourceQuestionId,
                 'topic' => $topic,
+                'subtopic' => $subtopic,
                 'difficulty' => $difficulty,
                 'cognitive_level' => $cognitiveLevel,
             ];
