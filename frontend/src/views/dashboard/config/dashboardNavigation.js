@@ -9,6 +9,7 @@ import {
   Sparkles,
   UserRound,
   Users,
+  Wand2,
 } from 'lucide-vue-next'
 
 export const dashboardModules = {
@@ -59,6 +60,14 @@ export const dashboardModules = {
     title: 'Library',
     sub: 'Manage exam content and question pools',
     icon: BookOpen,
+  },
+  reviewBotGenerator: {
+    key: 'reviewBotGenerator',
+    routeName: 'dashboard-review-bot-generator',
+    label: 'Review Bot',
+    title: 'Review Bot Question Generator',
+    sub: 'Generate, review, and publish questions for the student Review Bot',
+    icon: Wand2,
   },
   students: {
     key: 'students',
@@ -112,8 +121,8 @@ export const dashboardModules = {
 
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics'],
-  staff_master_examiner: ['library', 'room', 'students', 'exams', 'reports', 'settings'],
-  faculty: ['library', 'room', 'students', 'exams', 'reports', 'settings'],
+  staff_master_examiner: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
+  faculty: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
   admin: ['users', 'room', 'students', 'settings', 'audit'],
 }
 

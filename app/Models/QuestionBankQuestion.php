@@ -15,6 +15,7 @@ class QuestionBankQuestion extends Model
     public const TYPE_TRUE_FALSE = 'true_false';
     public const TYPE_OPEN_ENDED = 'open_ended';
     public const USAGE_ASSESSMENT = 'assessment';
+    public const USAGE_REVIEW_BOT = 'review_bot';
     public const DIFFICULTY_EASY = 'easy';
     public const DIFFICULTY_MEDIUM = 'medium';
     public const DIFFICULTY_HARD = 'hard';
@@ -22,6 +23,13 @@ class QuestionBankQuestion extends Model
     public const TAG_STATUS_CONFIRMED = 'confirmed';
     public const TAG_SOURCE_FACULTY = 'faculty';
     public const TAG_SOURCE_AI = 'ai';
+    public const STATUS_DRAFT = 'draft';
+    public const STATUS_PUBLISHED = 'published';
+
+    public const STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_PUBLISHED,
+    ];
 
     public const TAG_STATUSES = [
         self::TAG_STATUS_PENDING_REVIEW,
@@ -43,6 +51,7 @@ class QuestionBankQuestion extends Model
 
     public const USAGE_TYPES = [
         self::USAGE_ASSESSMENT,
+        self::USAGE_REVIEW_BOT,
     ];
 
     public const DIFFICULTIES = [
@@ -61,10 +70,14 @@ class QuestionBankQuestion extends Model
         'usage_type',
         'subject',
         'topic_id',
+        'subtopic_id',
         'difficulty',
         'cognitive_level',
         'tag_status',
         'tag_source',
+        'explanation',
+        'status',
+        'source_reference',
         'item_number',
         'question_text',
         'question_type',
@@ -86,6 +99,14 @@ class QuestionBankQuestion extends Model
     public function topic(): BelongsTo
     {
         return $this->belongsTo(Topic::class);
+    }
+
+    /**
+     * Subtopic tag assigned to the question.
+     */
+    public function subtopic(): BelongsTo
+    {
+        return $this->belongsTo(Subtopic::class);
     }
 
     /**

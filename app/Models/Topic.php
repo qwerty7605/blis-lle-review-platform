@@ -29,4 +29,9 @@ class Topic extends Model
     {
         return $this->hasMany(QuestionBankQuestion::class);
     }
+
+    public function subtopics(): HasMany
+    {
+        return $this->hasMany(Subtopic::class);
+    }
 }

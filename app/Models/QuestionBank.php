@@ -89,6 +89,17 @@ class QuestionBank extends Model
     }
 
     /**
+     * Review Bot bank questions (teacher-generated, served to students
+     * without a live AI call).
+     */
+    public function reviewBotQuestions(): HasMany
+    {
+        return $this->hasMany(QuestionBankQuestion::class)
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->orderBy('item_number');
+    }
+
+    /**
      * Exams that use this bank.
      */
     public function exams(): BelongsToMany

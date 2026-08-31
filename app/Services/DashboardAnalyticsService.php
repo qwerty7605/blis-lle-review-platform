@@ -631,6 +631,7 @@ class DashboardAnalyticsService
     {
         $subjectPerformance = $this->buildSubjectWeaknessPerformance($student);
         $topicPerformance = $this->buildTopicWeaknessPerformance($student);
+        $subtopicPerformance = $this->buildSubtopicWeaknessPerformance($student);
 
         $weakSubject = collect($subjectPerformance)
             ->sortBy(fn (array $subject): float => (float) ($subject['score'] ?? 100.0))
@@ -640,6 +641,25 @@ class DashboardAnalyticsService
             ->sortBy(fn (array $topic): float => (float) ($topic['score'] ?? 100.0))
             ->first();
 
+        $weakSubtopic = collect($subtopicPerformance)
+            ->sortBy(fn (array $subtopic): float => (float) ($subtopic['score'] ?? 100.0))
+            ->first();
+
+        if (is_array($weakSubtopic)) {
+            return [
+                'basis' => 'subtopic',
+                'subject' => (string) ($weakSubtopic['subject'] ?? ''),
+                'subject_score' => $this->findSubjectScore($subjectPerformance, (string) ($weakSubtopic['subject'] ?? '')),
+                'topic_id' => (int) ($weakSubtopic['topic_id'] ?? 0),
+                'topic' => (string) ($weakSubtopic['topic'] ?? ''),
+                'topic_score' => null,
+                'subtopic_id' => (int) ($weakSubtopic['subtopic_id'] ?? 0),
+                'subtopic' => (string) ($weakSubtopic['label'] ?? ''),
+                'subtopic_score' => isset($weakSubtopic['score']) ? (float) $weakSubtopic['score'] : null,
+                'fallback_subject' => is_array($weakSubject) ? (string) ($weakSubject['label'] ?? '') : null,
+            ];
+        }
+
         if (is_array($weakTopic)) {
             return [
                 'basis' => 'topic',
@@ -648,6 +668,9 @@ class DashboardAnalyticsService
                 'topic_id' => (int) ($weakTopic['topic_id'] ?? 0),
                 'topic' => (string) ($weakTopic['label'] ?? ''),
                 'topic_score' => isset($weakTopic['score']) ? (float) $weakTopic['score'] : null,
+                'subtopic_id' => null,
+                'subtopic' => null,
+                'subtopic_score' => null,
                 'fallback_subject' => is_array($weakSubject) ? (string) ($weakSubject['label'] ?? '') : null,
             ];
         }
@@ -660,6 +683,9 @@ class DashboardAnalyticsService
                 'topic_id' => null,
                 'topic' => null,
                 'topic_score' => null,
+                'subtopic_id' => null,
+                'subtopic' => null,
+                'subtopic_score' => null,
                 'fallback_subject' => null,
             ];
         }
@@ -746,6 +772,55 @@ class DashboardAnalyticsService
                 ];
             })
             ->sortBy(fn (array $topic): string => Str::lower((string) $topic['label']))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildSubtopicWeaknessPerformance(User $student): array
+    {
+        $rows = DB::table('exam_attempt_answers')
+            ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
+            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
+            ->join('subtopics', 'subtopics.id', '=', 'question_bank_questions.subtopic_id')
+            ->join('topics', 'topics.id', '=', 'subtopics.topic_id')
+            ->where('exam_attempts.user_id', $student->id)
+            ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
+            ->selectRaw("
+                subtopics.id as subtopic_id,
+                subtopics.name as label,
+                topics.id as topic_id,
+                topics.name as topic,
+                COALESCE(NULLIF(question_bank_questions.subject, ''), topics.subject, 'Uncategorized') as subject,
+                COUNT(*) as attempted_count,
+                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
+                MAX(exam_attempts.submitted_at) as last_submitted_at
+            ")
+            ->groupBy('subtopics.id', 'subtopics.name', 'topics.id', 'topics.name', 'topics.subject', 'question_bank_questions.subject')
+            ->get();
+
+        return collect($rows)
+            ->map(function ($row): array {
+                $attemptedCount = (int) ($row->attempted_count ?? 0);
+                $correctCount = (int) ($row->correct_count ?? 0);
+
+                return [
+                    'subtopic_id' => (int) ($row->subtopic_id ?? 0),
+                    'label' => (string) ($row->label ?? 'Untitled Subtopic'),
+                    'topic_id' => (int) ($row->topic_id ?? 0),
+                    'topic' => (string) ($row->topic ?? ''),
+                    'subject' => (string) ($row->subject ?? 'Uncategorized'),
+                    'attempted_count' => $attemptedCount,
+                    'correct_count' => $correctCount,
+                    'score' => $attemptedCount > 0
+                        ? round(($correctCount / $attemptedCount) * 100, 2)
+                        : null,
+                    'last_submitted_at' => $row->last_submitted_at,
+                ];
+            })
+            ->sortBy(fn (array $subtopic): string => Str::lower((string) $subtopic['label']))
             ->values()
             ->all();
     }

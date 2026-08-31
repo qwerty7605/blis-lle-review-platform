@@ -18,6 +18,7 @@ use App\Services\ExamDeliveryModeService;
 use App\Services\Library\DocxQuestionParser;
 use App\Services\QuestionMappingService;
 use App\Services\ReviewBotService;
+use App\Services\ReviewBotAdminService;
 use App\Services\ReportExportService;
 use App\Services\RoleService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -41,6 +42,7 @@ $examAttemptService = app(ExamAttemptService::class);
 $questionMappingService = app(QuestionMappingService::class);
 $reportExportService = app(ReportExportService::class);
 $reviewBotService = app(ReviewBotService::class);
+$reviewBotAdminService = app(ReviewBotAdminService::class);
 
 $canManageRooms = static function (User $user) use ($roleService): bool {
     return $roleService->canManageRooms($user);
@@ -377,12 +379,14 @@ Route::middleware('auth:sanctum')->group(function () use (
     $questionMappingService,
     $reportExportService,
     $reviewBotService,
+    $reviewBotAdminService,
 ) {
     require __DIR__ . '/api/auth.php';
     require __DIR__ . '/api/rooms.php';
     require __DIR__ . '/api/student.php';
     require __DIR__ . '/api/library.php';
     require __DIR__ . '/api/review-bot.php';
+    require __DIR__ . '/api/review-bot-admin.php';
     require __DIR__ . '/api/exams.php';
     require __DIR__ . '/api/reports.php';
     require __DIR__ . '/api/settings.php';
