@@ -294,7 +294,7 @@
 
               <article class="detail-card">
                 <header class="room-section-head">
-                  <h5>Students In Room</h5>
+                  <h5>Class List</h5>
                 </header>
 
                 <div class="management-inline">

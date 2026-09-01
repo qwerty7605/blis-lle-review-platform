@@ -160,7 +160,7 @@
 
               <article class="detail-card">
                 <header class="room-section-head">
-                  <h5>Class Roster</h5>
+                  <h5>Class List</h5>
                 </header>
 
                 <div class="management-inline">
