@@ -321,7 +321,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     }
 
     if (selectedRoomYearSummary.value.is_mixed) {
-      return 'This roster currently includes more than one year level.'
+      return 'This class list currently includes more than one year level.'
     }
 
     if (selectedRoomYearSummary.value.primary_year_level) {
