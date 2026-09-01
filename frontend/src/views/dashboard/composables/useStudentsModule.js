@@ -1,7 +1,11 @@
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
+
+const PASSING_SCORE = 75
+const STUDENTS_PAGE_SIZE_OPTIONS = [25, 50, 100]
+const STUDENTS_DEFAULT_PAGE_SIZE = STUDENTS_PAGE_SIZE_OPTIONS[0]
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -18,14 +22,34 @@ function yearLevelLabel(value) {
   return 'Year level not set'
 }
 
-function formatPercent(value, fallback = 'N/A') {
+function yearLevelShortLabel(value) {
   const numeric = Number(value)
-  if (!Number.isFinite(numeric)) return fallback
+  if ([1, 2, 3, 4].includes(numeric)) return yearLevelLabel(numeric).replace(' Year', '')
+  return 'Not set'
+}
+
+// Number(null) is 0, so blank values have to be rejected before coercion or
+// "no attempts yet" renders as a real 0% score.
+function numericOrNull(value) {
+  if (value === null || value === undefined || value === '') return null
+
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function formatPercent(value, fallback = 'N/A') {
+  const numeric = numericOrNull(value)
+  if (numeric === null) return fallback
 
   return `${new Intl.NumberFormat(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(numeric)}%`
+}
+
+function scoreTone(student) {
+  if (Number(student?.attempts_submitted ?? 0) < 1) return 'neutral'
+  return Number(student?.average_score_percent ?? 0) >= PASSING_SCORE ? 'success' : 'danger'
 }
 
 function compareStudents(left, right) {
@@ -36,6 +60,60 @@ function compareStudents(left, right) {
   if (nameCompare !== 0) return nameCompare
 
   return String(left?.student_id ?? '').localeCompare(String(right?.student_id ?? ''), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
+function timestampOrNull(value) {
+  if (!value) return null
+  const timestamp = new Date(value).getTime()
+  return Number.isFinite(timestamp) ? timestamp : null
+}
+
+// Every sortable column maps to the value the comparator should read.
+const SORT_ACCESSORS = {
+  name: (student) => String(student?.name ?? ''),
+  student_id: (student) => student?.student_id ?? null,
+  year_level: (student) => numericOrNull(student?.year_level),
+  room_count: (student) => Number(student?.room_count ?? 0),
+  attempts_submitted: (student) => Number(student?.attempts_submitted ?? 0),
+  average_score_percent: (student) => numericOrNull(student?.average_score_percent),
+  pass_rate_percent: (student) => numericOrNull(student?.pass_rate_percent),
+  latest_score_percent: (student) => numericOrNull(student?.latest_score_percent),
+  last_activity_at: (student) => timestampOrNull(student?.last_activity_at),
+  email: (student) => String(student?.email ?? ''),
+}
+
+// Numeric columns are most useful ranked high-to-low on the first click.
+const DESCENDING_FIRST_KEYS = new Set([
+  'room_count',
+  'attempts_submitted',
+  'average_score_percent',
+  'pass_rate_percent',
+  'latest_score_percent',
+  'last_activity_at',
+])
+
+function isEmptyValue(value) {
+  return value === null || value === undefined || value === ''
+}
+
+// Empty values always sink to the bottom, whichever direction is active.
+function compareEmptiness(left, right) {
+  const leftEmpty = isEmptyValue(left)
+  const rightEmpty = isEmptyValue(right)
+
+  if (leftEmpty && rightEmpty) return 0
+  if (leftEmpty) return 1
+  if (rightEmpty) return -1
+  return 0
+}
+
+function compareValues(left, right) {
+  if (typeof left === 'number' && typeof right === 'number') return left - right
+
+  return String(left).localeCompare(String(right), undefined, {
     numeric: true,
     sensitivity: 'base',
   })
@@ -59,6 +137,13 @@ export function useStudentsModule() {
     year_level: '',
     archive_state: 'current',
   })
+
+  const studentSort = reactive({
+    key: 'name',
+    direction: 'asc',
+  })
+  const studentsPage = ref(1)
+  const studentsPageSize = ref(STUDENTS_DEFAULT_PAGE_SIZE)
 
   const yearLevelOptions = [
     { value: '1', label: '1st Year' },
@@ -91,66 +176,123 @@ export function useStudentsModule() {
   const filteredStudents = computed(() => {
     const search = studentFilters.search.trim().toLowerCase()
 
-    return [...directoryStudents.value]
-      .filter((student) => {
-        if (studentFilters.archive_state === 'current' && isArchivedStudent(student)) return false
-        if (studentFilters.archive_state === 'archived' && !isArchivedStudent(student)) return false
-        if (studentFilters.year_level && String(student?.year_level ?? '') !== studentFilters.year_level) return false
+    return directoryStudents.value.filter((student) => {
+      if (studentFilters.archive_state === 'current' && isArchivedStudent(student)) return false
+      if (studentFilters.archive_state === 'archived' && !isArchivedStudent(student)) return false
+      if (studentFilters.year_level && String(student?.year_level ?? '') !== studentFilters.year_level) return false
 
-        if (!search) return true
+      if (!search) return true
 
-        const haystack = [
-          student?.name,
-          student?.email,
-          student?.student_id,
-          ...(Array.isArray(student?.room_names) ? student.room_names : []),
-          student?.latest_exam_title,
-          student?.strongest_subject,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
+      const haystack = [
+        student?.name,
+        student?.email,
+        student?.student_id,
+        ...(Array.isArray(student?.room_names) ? student.room_names : []),
+        student?.latest_exam_title,
+        student?.strongest_subject,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
 
-        return haystack.includes(search)
-      })
-      .sort(compareStudents)
+      return haystack.includes(search)
+    })
   })
 
-  function buildYearGroups(students) {
-    const groups = yearLevelOptions
-      .map((option) => {
-        const matchingStudents = students.filter((student) => String(student?.year_level ?? '') === option.value)
+  const sortedStudents = computed(() => {
+    const accessor = SORT_ACCESSORS[studentSort.key] ?? SORT_ACCESSORS.name
+    const factor = studentSort.direction === 'desc' ? -1 : 1
 
-        return {
-          key: `year-${option.value}`,
-          label: option.label,
-          count: matchingStudents.length,
-          students: matchingStudents,
-        }
-      })
-      .filter((group) => group.count > 0)
+    return [...filteredStudents.value].sort((left, right) => {
+      const leftValue = accessor(left)
+      const rightValue = accessor(right)
 
-    const unassignedStudents = students.filter((student) => !['1', '2', '3', '4'].includes(String(student?.year_level ?? '')))
+      const emptiness = compareEmptiness(leftValue, rightValue)
+      if (emptiness !== 0) return emptiness
 
-    if (unassignedStudents.length > 0) {
-      groups.push({
-        key: 'year-unassigned',
-        label: 'Year Level Not Set',
-        count: unassignedStudents.length,
-        students: unassignedStudents,
-      })
+      const result = compareValues(leftValue, rightValue)
+      if (result !== 0) return result * factor
+
+      return compareStudents(left, right)
+    })
+  })
+
+  const studentsLastPage = computed(() => (
+    Math.max(1, Math.ceil(sortedStudents.value.length / studentsPageSize.value))
+  ))
+
+  // Clamping here keeps the view valid when a filter shrinks the result set
+  // underneath the page the user is currently on.
+  const studentsCurrentPage = computed(() => Math.min(studentsPage.value, studentsLastPage.value))
+
+  const pagedStudents = computed(() => {
+    const start = (studentsCurrentPage.value - 1) * studentsPageSize.value
+    return sortedStudents.value.slice(start, start + studentsPageSize.value)
+  })
+
+  const studentsPagination = computed(() => {
+    const total = sortedStudents.value.length
+    const perPage = studentsPageSize.value
+    const currentPage = studentsCurrentPage.value
+
+    return {
+      current_page: currentPage,
+      last_page: studentsLastPage.value,
+      per_page: perPage,
+      total,
+      from: total === 0 ? 0 : ((currentPage - 1) * perPage) + 1,
+      to: Math.min(currentPage * perPage, total),
     }
+  })
 
-    return groups
+  const canGoToPreviousStudentsPage = computed(() => studentsPagination.value.current_page > 1)
+  const canGoToNextStudentsPage = computed(() => (
+    studentsPagination.value.current_page < studentsPagination.value.last_page
+  ))
+
+  const studentsRangeLabel = computed(() => {
+    const { from, to, total } = studentsPagination.value
+    if (total < 1) return 'No students found'
+
+    return `Showing ${from}-${to} of ${total} student${total === 1 ? '' : 's'}`
+  })
+
+  function goToStudentsPage(page) {
+    const target = Number(page)
+    if (!Number.isFinite(target)) return
+
+    studentsPage.value = Math.min(Math.max(1, Math.trunc(target)), studentsLastPage.value)
   }
 
-  const currentStudentGroups = computed(() => (
-    buildYearGroups(filteredStudents.value.filter((student) => !isArchivedStudent(student)))
-  ))
+  function toggleStudentSort(key) {
+    if (!SORT_ACCESSORS[key]) return
 
-  const archivedStudentGroups = computed(() => (
-    buildYearGroups(filteredStudents.value.filter((student) => isArchivedStudent(student)))
-  ))
+    if (studentSort.key === key) {
+      studentSort.direction = studentSort.direction === 'asc' ? 'desc' : 'asc'
+    } else {
+      studentSort.key = key
+      studentSort.direction = DESCENDING_FIRST_KEYS.has(key) ? 'desc' : 'asc'
+    }
+
+    studentsPage.value = 1
+  }
+
+  function sortIndicator(key) {
+    if (studentSort.key !== key) return ''
+    return studentSort.direction === 'asc' ? '▲' : '▼'
+  }
+
+  function sortAriaValue(key) {
+    if (studentSort.key !== key) return 'none'
+    return studentSort.direction === 'asc' ? 'ascending' : 'descending'
+  }
+
+  watch(
+    () => [studentFilters.search, studentFilters.year_level, studentFilters.archive_state, studentsPageSize.value],
+    () => {
+      studentsPage.value = 1
+    },
+  )
 
   const studentsWithResults = computed(() => (
     filteredStudents.value.filter((student) => Number(student?.attempts_submitted ?? 0) > 0)
@@ -196,26 +338,27 @@ export function useStudentsModule() {
     ]
   })
 
-  function latestPerformanceLabel(student) {
-    const latestExam = String(student?.latest_exam_title ?? '').trim()
-    const latestScore = formatPercent(student?.latest_score_percent, '')
-
-    if (latestExam && latestScore) {
-      return `${latestExam} • ${latestScore}`
-    }
-
-    if (latestExam) return latestExam
-    if (latestScore) return latestScore
-    return 'No graded result yet'
+  function roomNamesLabel(student) {
+    const roomNames = Array.isArray(student?.room_names) ? student.room_names : []
+    if (roomNames.length === 0) return 'No sections'
+    return roomNames.join(', ')
   }
 
-  function studentActivityLabel(student) {
-    const activityAt = student?.last_activity_at ? formatDateTime(student.last_activity_at) : 'No activity yet'
-    const strongestSubject = String(student?.strongest_subject ?? '').trim()
+  function latestExamLabel(student) {
+    return String(student?.latest_exam_title ?? '').trim()
+  }
 
-    if (!strongestSubject) return activityAt
+  function lastActivityLabel(student) {
+    return student?.last_activity_at ? formatDateTime(student.last_activity_at) : 'No activity yet'
+  }
 
-    return `${activityAt} • Best in ${strongestSubject}`
+  function strongestSubjectLabel(student) {
+    return String(student?.strongest_subject ?? '').trim()
+  }
+
+  function archivedDateLabel(student) {
+    if (!student?.archived_at) return ''
+    return new Date(student.archived_at).toLocaleDateString()
   }
 
   onMounted(async () => {
@@ -228,14 +371,29 @@ export function useStudentsModule() {
     studentFilters,
     yearLevelOptions,
     filteredStudents,
-    currentStudentGroups,
-    archivedStudentGroups,
+    pagedStudents,
+    studentSort,
+    studentsPagination,
+    studentsPageSize,
+    studentsPageSizeOptions: STUDENTS_PAGE_SIZE_OPTIONS,
+    studentsRangeLabel,
+    canGoToPreviousStudentsPage,
+    canGoToNextStudentsPage,
+    goToStudentsPage,
+    toggleStudentSort,
+    sortIndicator,
+    sortAriaValue,
     studentDirectoryCards,
     yearLevelLabel,
+    yearLevelShortLabel,
     formatPercent,
+    scoreTone,
     isArchivedStudent,
-    latestPerformanceLabel,
-    studentActivityLabel,
+    roomNamesLabel,
+    latestExamLabel,
+    lastActivityLabel,
+    strongestSubjectLabel,
+    archivedDateLabel,
     loadStudentsDirectory,
   }
 }

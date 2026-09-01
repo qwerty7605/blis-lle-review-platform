@@ -3812,30 +3812,129 @@
   word-break: break-word;
 }
 
-.directory-student-metric {
-  display: grid;
-  gap: 4px;
+.directory-table-wrap {
+  margin: 14px 18px;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 14px;
+  background: #ffffff;
+  max-height: min(62vh, 660px);
+  overflow: auto;
 }
 
-.directory-student-metric span {
-  color: var(--lnu-text-muted);
-  font-size: 12px;
-}
-
-.directory-student-metric strong {
-  color: var(--lnu-navy-deep);
-  font-size: 16px;
-}
-
-.directory-student-note {
-  margin: 0;
-  color: var(--lnu-text-muted);
+.directory-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 13px;
-  line-height: 1.45;
 }
 
-.directory-student-note strong {
+.directory-table th,
+.directory-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  white-space: nowrap;
+}
+
+.directory-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0;
+  background: linear-gradient(180deg, #e4e5f0, #fbfbfd);
   color: var(--lnu-navy-deep);
+}
+
+/* The identity column stays pinned so scrolling right never leaves a row anonymous. */
+.directory-table-name-cell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 220px;
+  background: #ffffff;
+  box-shadow: 1px 0 0 rgba(13, 21, 71, 0.1);
+}
+
+.directory-table thead .directory-table-name-cell {
+  z-index: 3;
+}
+
+.directory-table-name-cell strong {
+  display: block;
+  color: var(--lnu-navy-deep);
+  font-size: 14px;
+  white-space: normal;
+}
+
+.directory-table-name-cell .pill {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 10px;
+}
+
+.directory-sort-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.directory-sort-btn:hover {
+  background: rgba(26, 35, 126, 0.07);
+  color: var(--lnu-navy);
+}
+
+.directory-sort-arrow {
+  font-size: 10px;
+  color: var(--lnu-navy);
+}
+
+.directory-table th.numeric .directory-sort-btn {
+  justify-content: flex-end;
+}
+
+.directory-table td.numeric {
+  text-align: right;
+}
+
+.directory-table td small.muted {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.directory-table-sections {
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-table-email-cell {
+  color: var(--lnu-text-muted);
+}
+
+.directory-table tbody tr.is-archived td {
+  background: #f6f7fa;
+}
+
+.directory-table tbody tr.is-archived .directory-table-name-cell {
+  background: #f2f4f8;
+}
+
+.directory-table tbody tr:hover td,
+.directory-table tbody tr:hover .directory-table-name-cell {
+  background: #eef3fc;
 }
 
 .management-item {
@@ -4384,6 +4483,14 @@
     min-width: 680px;
   }
 
+  .directory-table {
+    min-width: 940px;
+  }
+
+  .directory-table-name-cell {
+    min-width: 180px;
+  }
+
   .exam-attempt-backdrop {
     padding: 0;
   }
@@ -4789,6 +4896,19 @@
 
   .live-board-table {
     min-width: 620px;
+  }
+
+  .directory-table-wrap {
+    margin: 12px;
+    max-height: none;
+  }
+
+  .directory-table {
+    min-width: 860px;
+  }
+
+  .directory-table-name-cell {
+    min-width: 160px;
   }
 
   .room-code-value {
