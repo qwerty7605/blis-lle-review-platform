@@ -420,8 +420,10 @@ function guidanceBadge(tone) {
 }
 
 .analytics-stats-grid {
+  /* Capped and left-stuck (no auto margin) left a large empty gap next to
+     the two remaining tiles on anything wider than a phone -- matches the
+     full-width rhythm every other section on this page already uses. */
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: 640px;
 }
 
 .analytics-stat-card {
