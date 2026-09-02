@@ -31,25 +31,41 @@
         <p>No files uploaded yet. Upload an exam question set in the Library first — the Review Bot generates from those, not from a separate upload here.</p>
       </div>
 
-      <div v-else class="rbg-bank-grid">
-        <button
-          v-for="bank in libraryBanks"
-          :key="bank.id"
-          type="button"
-          class="rbg-bank-card"
-          @click="selectBank(bank.id)"
-        >
-          <div class="rbg-bank-card-head">
-            <FileText :size="18" />
-            <span class="rbg-bank-title">{{ bank.title }}</span>
-          </div>
-          <div class="rbg-bank-meta">
-            <span class="pill neutral">{{ bank.subject || 'No subject' }}</span>
-            <span class="pill navy">{{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}</span>
-            <span class="pill" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus }}</span>
-          </div>
-          <p v-if="bank.sourceFilename" class="review-muted rbg-bank-filename">{{ bank.sourceFilename }}</p>
-        </button>
+      <div v-else class="rbg-bank-table-wrap">
+        <table class="rbg-bank-table">
+          <thead>
+            <tr>
+              <th>File</th>
+              <th>Subject</th>
+              <th>Items</th>
+              <th>Mapping</th>
+              <th>Source</th>
+              <th class="rbg-bank-table-action-head"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="bank in libraryBanks"
+              :key="bank.id"
+              class="rbg-bank-row"
+              tabindex="0"
+              role="button"
+              :aria-label="`Select ${bank.title}`"
+              @click="selectBank(bank.id)"
+              @keydown.enter="selectBank(bank.id)"
+              @keydown.space.prevent="selectBank(bank.id)"
+            >
+              <td>
+                <span class="rbg-bank-table-title"><FileText :size="15" />{{ bank.title }}</span>
+              </td>
+              <td><span class="pill neutral">{{ bank.subject || 'No subject' }}</span></td>
+              <td>{{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}</td>
+              <td><span class="pill" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus }}</span></td>
+              <td class="review-muted">{{ bank.sourceFilename || '—' }}</td>
+              <td class="rbg-bank-table-action"><ChevronRight :size="16" /></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </article>
 
@@ -271,7 +287,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, FileText, RefreshCw, Sparkles } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, RefreshCw, Sparkles } from 'lucide-vue-next'
 import { useReviewBotAdminModule } from '../composables/useReviewBotAdminModule'
 
 const {
@@ -350,52 +366,66 @@ const {
   line-height: 1.5;
 }
 
-.rbg-bank-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.rbg-bank-card {
-  display: grid;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 14px;
+.rbg-bank-table-wrap {
+  overflow-x: auto;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  background: #ffffff;
+  border-radius: 14px;
+}
+
+.rbg-bank-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.rbg-bank-table th,
+.rbg-bank-table td {
+  padding: 12px 14px;
   text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.08);
+}
+
+.rbg-bank-table thead th {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lnu-text-muted);
+  background: #f6f8fd;
+}
+
+.rbg-bank-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rbg-bank-row {
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  font: inherit;
+  transition: background-color 0.12s ease;
 }
 
-.rbg-bank-card:hover,
-.rbg-bank-card:focus-visible {
-  border-color: rgba(31, 65, 143, 0.4);
-  box-shadow: 0 4px 14px rgba(13, 21, 71, 0.08);
+.rbg-bank-row:hover,
+.rbg-bank-row:focus-visible {
+  background: rgba(31, 65, 143, 0.06);
+  outline: none;
 }
 
-.rbg-bank-card-head {
+.rbg-bank-table-title {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
   color: var(--lnu-navy-deep);
 }
 
-.rbg-bank-title {
-  font-weight: 700;
-  font-size: 14px;
+.rbg-bank-table-action-head {
+  width: 32px;
 }
 
-.rbg-bank-meta {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.rbg-bank-filename {
-  margin: 0;
-  font-size: 12px;
+.rbg-bank-table-action {
+  color: var(--lnu-text-muted);
 }
 
 .rbg-selected-file {
