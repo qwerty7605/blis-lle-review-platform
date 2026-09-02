@@ -27,7 +27,9 @@ Route::post('/library/review-bot/generate', function (
         'subject' => ['required', 'string', 'max:255'],
         'topic' => ['nullable', 'string', 'max:255'],
         'subtopic' => ['nullable', 'string', 'max:255'],
-        'question_count' => ['required', 'integer', 'min:1', 'max:20'],
+        // How many EXAM ITEMS to cover, not how many questions to produce --
+        // each item yields up to one question per cognitive level.
+        'source_limit' => ['required', 'integer', 'min:1', 'max:50'],
     ]);
 
     $result = $reviewBotAdminService->queueGeneration(
@@ -35,7 +37,7 @@ Route::post('/library/review-bot/generate', function (
         $validated['subject'],
         $validated['topic'] ?? null,
         $validated['subtopic'] ?? null,
-        (int) $validated['question_count'],
+        (int) $validated['source_limit'],
     );
 
     $recordAudit(

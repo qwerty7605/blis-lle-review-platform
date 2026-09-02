@@ -26,8 +26,16 @@ use Throwable;
  */
 class ReviewBotAdminService
 {
+    /**
+     * Source items per API call. Four items yields up to sixteen questions in
+     * one response -- large enough to be efficient, small enough that a
+     * malformed response costs only a handful of items.
+     */
+    public const GENERATION_BATCH_SIZE = 4;
+
     public function __construct(
         private readonly QuestionMappingService $questionMappingService,
+        private readonly ReviewBotQuestionScreeningService $screeningService,
     ) {
     }
 
@@ -62,7 +70,7 @@ class ReviewBotAdminService
      *
      * @return array{status: string, message: string, bank_id: int}
      */
-    public function queueGeneration(User $teacher, string $subject, ?string $topicName, ?string $subtopicName, int $questionCount): array
+    public function queueGeneration(User $teacher, string $subject, ?string $topicName, ?string $subtopicName, int $sourceLimit): array
     {
         $bank = $this->reviewBotBankFor($subject, (int) $teacher->id);
 
@@ -81,64 +89,123 @@ class ReviewBotAdminService
             $subject,
             $topic?->id,
             $subtopic?->id,
-            $questionCount,
+            $sourceLimit,
         )->afterCommit();
 
         return [
             'status' => 'queued',
-            'message' => sprintf('Generating %d review question(s) in the background. They will appear as drafts below shortly.', $questionCount),
+            'message' => sprintf(
+                'Covering up to %d exam item(s) in the background, one review question per cognitive level each. They will appear as drafts below shortly.',
+                $sourceLimit
+            ),
             'bank_id' => (int) $bank->id,
         ];
     }
 
     /**
-     * @return array{created: int, errors: array<int, string>}
+     * Generates one Review Bot question per cognitive level for each exam item
+     * in scope, linked back to that item through source_question_id.
+     *
+     * $sourceLimit caps how many *source items* a single run processes, not how
+     * many questions come out -- each item yields up to four.
+     *
+     * @return array{created: int, sources_processed: int, rejected: array<int, array<string, string>>, errors: array<int, string>}
      */
-    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $questionCount): array
+    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit): array
     {
         if (!$this->hasApiKey()) {
-            return ['created' => 0, 'errors' => [$this->missingConfigurationMessage()]];
+            return ['created' => 0, 'sources_processed' => 0, 'rejected' => [], 'errors' => [$this->missingConfigurationMessage()]];
         }
 
-        $topic = $topicId ? Topic::query()->find($topicId) : null;
-        $subtopic = $subtopicId ? Subtopic::query()->find($subtopicId) : null;
-
-        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $questionCount);
+        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit);
 
         if ($sourceQuestions->isEmpty()) {
-            return ['created' => 0, 'errors' => ['No teacher-authored assessment questions were found for this subject/topic to ground generation in. Upload library content for this subject first.']];
+            return [
+                'created' => 0,
+                'sources_processed' => 0,
+                'rejected' => [],
+                'errors' => ['Every exam item in this scope already has Review Bot questions, or no teacher-authored items exist for it yet.'],
+            ];
         }
 
-        $generated = $this->requestGeneration($sourceQuestions, $subject, $topic?->name, $subtopic?->name, $questionCount);
+        $created = 0;
+        $rejected = [];
+        $errors = [];
 
+        // Batched so one malformed response costs a handful of items rather than
+        // the whole run, and so a large upload does not become one giant request.
+        foreach ($sourceQuestions->chunk(self::GENERATION_BATCH_SIZE) as $chunk) {
+            $chunk = $chunk->values();
+            $generated = $this->requestGeneration($chunk, $subject);
+
+            if ($generated === []) {
+                $errors[] = sprintf('A batch of %d item(s) returned no usable questions.', $chunk->count());
+
+                continue;
+            }
+
+            $screened = $this->screeningService->screen($generated, $subject, $topicId);
+            $rejected = array_merge($rejected, $screened['rejected']);
+
+            $created += $this->persistGenerated($screened['accepted'], $chunk, $bank, $subject);
+        }
+
+        $bank->update(['total_items' => $bank->questions()->count()]);
+
+        return [
+            'created' => $created,
+            'sources_processed' => $sourceQuestions->count(),
+            'rejected' => $rejected,
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Writes one batch of generated questions, inheriting each question's
+     * subject tagging from the exam item it came from rather than from the
+     * generation request -- otherwise variants of a correctly tagged item would
+     * land under whatever scope the teacher happened to pick.
+     *
+     * @param  array<int, array<string, mixed>>  $generated
+     * @param  Collection<int, QuestionBankQuestion>  $sourceQuestions
+     */
+    protected function persistGenerated(array $generated, Collection $sourceQuestions, QuestionBank $bank, string $subject): int
+    {
         if ($generated === []) {
-            return ['created' => 0, 'errors' => ['AI generation returned no usable questions. Try again, or a smaller question count.']];
+            return 0;
         }
-
-        $sourceBankTitles = $sourceQuestions
-            ->pluck('questionBank.title')
-            ->filter()
-            ->unique()
-            ->implode(', ');
 
         $nextItemNumber = (int) $bank->reviewBotQuestions()->max('item_number') + 1;
         $created = 0;
 
-        DB::transaction(function () use ($generated, $bank, $subject, $topic, $subtopic, $sourceBankTitles, &$nextItemNumber, &$created): void {
+        DB::transaction(function () use ($generated, $sourceQuestions, $bank, $subject, &$nextItemNumber, &$created): void {
             foreach ($generated as $item) {
+                $source = $sourceQuestions->get((int) ($item['source_index'] ?? -1));
+
+                if (!$source) {
+                    continue;
+                }
+
                 $question = QuestionBankQuestion::create([
                     'question_bank_id' => $bank->id,
                     'usage_type' => QuestionBankQuestion::USAGE_REVIEW_BOT,
+                    'source_question_id' => $source->id,
                     'subject' => $subject,
-                    'topic_id' => $topic?->id,
-                    'subtopic_id' => $subtopic?->id,
+                    'topic_id' => $source->topic_id,
+                    'subtopic_id' => $source->subtopic_id,
                     'difficulty' => $item['difficulty'],
                     'cognitive_level' => $item['cognitive_level'],
                     'tag_status' => QuestionBankQuestion::TAG_STATUS_CONFIRMED,
                     'tag_source' => QuestionBankQuestion::TAG_SOURCE_AI,
                     'explanation' => $item['explanation'],
                     'status' => QuestionBankQuestion::STATUS_DRAFT,
-                    'source_reference' => $sourceBankTitles !== '' ? "Generated from: {$sourceBankTitles}" : null,
+                    'verification_status' => $item['verification_status'] ?? QuestionBankQuestion::VERIFICATION_UNCHECKED,
+                    'verifier_answer_label' => $item['verifier_answer_label'] ?? null,
+                    'validation_flags' => ($item['validation_flags'] ?? []) !== [] ? $item['validation_flags'] : null,
+                    'embedding' => $item['embedding'] ?? null,
+                    'source_reference' => $source->questionBank?->title !== null
+                        ? "Generated from: {$source->questionBank->title} (item {$source->item_number})"
+                        : null,
                     'item_number' => $nextItemNumber,
                     'question_text' => $item['prompt'],
                     'question_type' => $item['type'],
@@ -161,75 +228,81 @@ class ReviewBotAdminService
             }
         });
 
-        $bank->update(['total_items' => $bank->questions()->count()]);
-
-        return ['created' => $created, 'errors' => []];
+        return $created;
     }
 
     /**
+     * Exam items in scope that do not already have Review Bot questions.
+     *
+     * The whereDoesntHave clause is the duplicate guard that matters for this
+     * design: embedding similarity cannot tell four intended cognitive variants
+     * apart from a second round of four on the same item, but lineage can.
+     *
      * @return Collection<int, QuestionBankQuestion>
      */
-    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $questionCount): Collection
+    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $limit): Collection
     {
-        $baseQuery = fn () => QuestionBankQuestion::query()
-            ->with(['questionBank:id,title', 'options:id,question_bank_question_id,option_label,option_text,is_correct'])
+        return QuestionBankQuestion::query()
+            ->with([
+                'questionBank:id,title',
+                'options:id,question_bank_question_id,option_label,option_text,is_correct',
+            ])
             ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
-            ->where('subject', $subject);
-
-        $poolLimit = min(max($questionCount * 2, $questionCount + 4), 24);
-
-        if ($subtopicId) {
-            $scoped = $baseQuery()->where('subtopic_id', $subtopicId)->inRandomOrder()->limit($poolLimit)->get();
-            if ($scoped->isNotEmpty()) {
-                return $scoped;
-            }
-        }
-
-        if ($topicId) {
-            $scoped = $baseQuery()->where('topic_id', $topicId)->inRandomOrder()->limit($poolLimit)->get();
-            if ($scoped->isNotEmpty()) {
-                return $scoped;
-            }
-        }
-
-        return $baseQuery()->inRandomOrder()->limit($poolLimit)->get();
+            ->where('subject', $subject)
+            ->when($subtopicId, fn ($query) => $query->where('subtopic_id', $subtopicId))
+            ->when(!$subtopicId && $topicId, fn ($query) => $query->where('topic_id', $topicId))
+            ->whereDoesntHave('generatedVariants')
+            ->orderBy('item_number')
+            ->orderBy('id')
+            ->limit(max(1, $limit))
+            ->get();
     }
 
     /**
      * @param  Collection<int, QuestionBankQuestion>  $sourceQuestions
      * @return array<int, array<string, mixed>>
      */
-    protected function requestGeneration(Collection $sourceQuestions, string $subject, ?string $topic, ?string $subtopic, int $questionCount): array
+    protected function requestGeneration(Collection $sourceQuestions, string $subject): array
     {
         $apiKey = (string) config('services.openai.api_key', '');
         $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
         $model = (string) config('services.openai.model', 'gpt-4o-mini');
 
         $systemPrompt = <<<'PROMPT'
-You create student practice questions for a Review Bot question bank, grounded in the teacher-authored source material provided.
+You rewrite a teacher's exam items into review questions. A student who got the original item wrong will practise on your questions, so each one must test the SAME underlying concept as the item it came from -- never a different fact.
+
+For EACH source item, produce one question at each cognitive level: recall, comprehension, application, analysis.
+
+What the levels mean here:
+- recall: state the fact directly, in different words from the source.
+- comprehension: rephrase or reverse the relationship (give the definition, ask for the term).
+- application: a short, realistic library scenario that requires the concept to resolve.
+- analysis: compare, contrast, or distinguish the concept from a neighbouring one.
 
 Rules:
 - Return valid JSON only.
-- Return exactly the requested number of questions.
-- Base every question on the concepts in "sources" -- do not introduce unrelated content, and do not copy the source wording, sentence structure, or answer choices verbatim.
-- Avoid generating near-duplicate questions of each other.
+- Every question must carry "source_index": the index of the source item it came from, copied exactly.
+- Every question must carry "cognitive_level": one of recall, comprehension, application, analysis.
+- Do not copy the source wording, sentence structure, or answer choices verbatim.
 - Each question must be either "multiple_choice" or "true_false".
 - For "multiple_choice", provide exactly 4 options and exactly one correct option id.
 - For "true_false", provide exactly 2 options: True and False, and identify the correct option id.
+- Every distractor must be plausible to a student who half-knows the concept. Never pad with an obviously absurd option.
+- Do not make the correct option noticeably longer than the distractors.
 - Include a short explanation of why the correct answer is correct -- this is shown to the student after they answer.
-- Assign a "difficulty" (easy, medium, or hard) and a "cognitive_level" (recall, comprehension, application, or analysis) to every question.
-- Never mention source question ids, item numbers, or teacher bank titles in the question text.
+- Assign a "difficulty" (easy, medium, or hard).
+- If a source item genuinely cannot support one of the levels, omit that level for that item rather than inventing content to fill it.
+- Never mention source item ids, item numbers, or teacher bank titles in the question text.
 PROMPT;
 
         $userPrompt = [
             'subject' => $subject,
-            'topic' => $topic,
-            'subtopic' => $subtopic,
-            'question_count' => $questionCount,
-            'sources' => $sourceQuestions->map(function (QuestionBankQuestion $question): array {
+            'cognitive_levels' => QuestionBankQuestion::COGNITIVE_LEVELS,
+            'sources' => $sourceQuestions->map(function (QuestionBankQuestion $question, int $index): array {
                 $correctOption = $question->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
 
                 return [
+                    'index' => $index,
                     'question_text' => trim((string) ($question->question_text ?? '')),
                     'answer_text' => trim((string) ($question->answer_text ?? $correctOption?->option_text ?? '')),
                     'options' => $question->options
@@ -238,10 +311,11 @@ PROMPT;
                         ->values()
                         ->all(),
                 ];
-            })->all(),
+            })->values()->all(),
             'response_schema' => [
                 'questions' => [
                     [
+                        'source_index' => 0,
                         'prompt' => 'string',
                         'type' => 'multiple_choice | true_false',
                         'options' => [['id' => 'a', 'text' => 'option text']],
@@ -306,6 +380,13 @@ PROMPT;
                 continue;
             }
 
+            // Without a usable source_index the question cannot be linked back
+            // to an exam item, which is the whole point of the lineage.
+            if (!isset($question['source_index']) || !is_numeric($question['source_index'])) {
+                continue;
+            }
+
+            $sourceIndex = (int) $question['source_index'];
             $prompt = trim((string) ($question['prompt'] ?? ''));
             $type = trim((string) ($question['type'] ?? QuestionBankQuestion::TYPE_MULTIPLE_CHOICE));
             $correctOptionId = trim((string) ($question['correct_option_id'] ?? ''));
@@ -349,6 +430,7 @@ PROMPT;
             $correctFormatted = $formattedOptions->first(fn (array $option): bool => $option['is_correct']);
 
             $normalized[] = [
+                'source_index' => $sourceIndex,
                 'prompt' => $prompt,
                 'type' => $type,
                 'options' => $formattedOptions->all(),

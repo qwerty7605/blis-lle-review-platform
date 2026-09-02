@@ -205,6 +205,11 @@
         </header>
 
         <div class="review-session-body">
+          <div v-if="hasSession && session.scopeNote && !result" class="feedback info">
+            <Info :size="15" />
+            <span>{{ session.scopeNote }}</span>
+          </div>
+
           <div v-if="sessionStarting" class="review-bot-empty">
             <RefreshCw :size="22" class="spin-soft" />
             <h4>Preparing your set</h4>
@@ -324,7 +329,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
 
 const {
