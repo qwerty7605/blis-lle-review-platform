@@ -1,6 +1,5 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { questionsApi, reviewBotAdminApi } from '@/api'
-import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -10,6 +9,35 @@ function firstApiError(error, fallbackMessage) {
 
 function asList(value) {
   return Array.isArray(value) ? value : []
+}
+
+function normalizeBank(bank) {
+  return {
+    id: Number(bank.id),
+    title: bank.title ?? 'Untitled set',
+    subject: bank.subject ?? '',
+    sourceFilename: bank.source_filename ?? null,
+    questionsCount: Number(bank.questions_count ?? bank.total_items ?? 0),
+    mappingStatus: bank.mapping_status ?? 'idle',
+    createdAt: bank.created_at ?? null,
+  }
+}
+
+function normalizeSourceQuestion(question) {
+  return {
+    id: Number(question.id),
+    itemNumber: question.item_number ?? null,
+    questionText: question.question_text ?? '',
+    questionType: question.question_type ?? 'multiple_choice',
+    topic: question.topic?.name ?? null,
+    answerText: question.answer_text ?? '',
+    options: asList(question.options).map((option) => ({
+      id: Number(option.id),
+      label: option.option_label,
+      text: option.option_text,
+      isCorrect: Boolean(option.is_correct),
+    })),
+  }
 }
 
 function normalizeQuestion(question) {
@@ -24,6 +52,8 @@ function normalizeQuestion(question) {
     questionText: question.question_text ?? '',
     explanation: question.explanation ?? '',
     sourceReference: question.source_reference ?? null,
+    sourceItemNumber: question.source_question?.item_number ?? null,
+    sourceBankTitle: question.source_question?.question_bank?.title ?? null,
     createdAt: question.created_at ?? null,
     options: asList(question.options).map((option) => ({
       id: Number(option.id),
@@ -39,8 +69,20 @@ export function useReviewBotAdminModule() {
   const catalogLoading = ref(false)
   const catalogError = ref('')
 
+  // Step 1: Library — the teacher's uploaded exam-question files. This is the
+  // single source of truth for exam questions; nothing here is uploaded
+  // specifically for the Review Bot (see LibraryView.vue for actual uploads).
+  const libraryBanks = ref([])
+  const libraryBanksLoading = ref(false)
+  const libraryBanksError = ref('')
+  const selectedBankId = ref(null)
+
+  // Step 2: Preview — the selected file's original exam questions, read-only.
+  const sourceQuestions = ref([])
+  const sourceQuestionsLoading = ref(false)
+  const sourceQuestionsError = ref('')
+
   const form = reactive({
-    subject: LIBRARY_SUBJECT_CATEGORIES[0] ?? '',
     topic: '',
     subtopic: '',
     sourceLimit: 5,
@@ -50,6 +92,9 @@ export function useReviewBotAdminModule() {
   const generateError = ref('')
   const generateMessage = ref('')
 
+  // Step 3/4: Generate → Review/Edit → Map/Assign — the AI-generated review
+  // questions for the selected file, kept clearly separate from the original
+  // exam questions in `sourceQuestions` above.
   const questions = ref([])
   const questionsLoading = ref(false)
   const questionsError = ref('')
@@ -59,14 +104,12 @@ export function useReviewBotAdminModule() {
   const editing = reactive({})
   const savingQuestionId = ref(null)
 
-  const subjectOptions = computed(() => LIBRARY_SUBJECT_CATEGORIES.filter((subject) => (
-    Object.prototype.hasOwnProperty.call(curatedTopics.value, subject)
-  )))
+  const selectedBank = computed(() => libraryBanks.value.find((bank) => bank.id === selectedBankId.value) ?? null)
 
-  const topicOptions = computed(() => Object.keys(curatedTopics.value[form.subject] ?? {}))
+  const topicOptions = computed(() => Object.keys(curatedTopics.value[selectedBank.value?.subject] ?? {}))
 
   const subtopicOptions = computed(() => (
-    curatedTopics.value[form.subject]?.[form.topic] ?? []
+    curatedTopics.value[selectedBank.value?.subject]?.[form.topic] ?? []
   ))
 
   const filteredQuestions = computed(() => (
@@ -79,12 +122,6 @@ export function useReviewBotAdminModule() {
     filteredQuestions.value.length > 0
     && filteredQuestions.value.every((question) => selectedIds.value.includes(question.id))
   ))
-
-  function selectSubject(subject) {
-    form.subject = subject
-    form.topic = ''
-    form.subtopic = ''
-  }
 
   function selectTopic(topic) {
     form.topic = topic
@@ -105,12 +142,50 @@ export function useReviewBotAdminModule() {
     }
   }
 
+  async function loadLibraryBanks() {
+    libraryBanksLoading.value = true
+    libraryBanksError.value = ''
+
+    try {
+      const { data } = await questionsApi.listBanks()
+      libraryBanks.value = asList(data?.banks).map(normalizeBank)
+    } catch (error) {
+      libraryBanksError.value = firstApiError(error, 'Unable to load your Library files.')
+    } finally {
+      libraryBanksLoading.value = false
+    }
+  }
+
+  async function loadSourceQuestions() {
+    if (!selectedBankId.value) {
+      sourceQuestions.value = []
+      return
+    }
+
+    sourceQuestionsLoading.value = true
+    sourceQuestionsError.value = ''
+
+    try {
+      const { data } = await questionsApi.listBankQuestions(selectedBankId.value)
+      sourceQuestions.value = asList(data?.questions).map(normalizeSourceQuestion)
+    } catch (error) {
+      sourceQuestionsError.value = firstApiError(error, 'Unable to load this file\'s questions.')
+    } finally {
+      sourceQuestionsLoading.value = false
+    }
+  }
+
   async function loadQuestions() {
+    if (!selectedBankId.value) {
+      questions.value = []
+      return
+    }
+
     questionsLoading.value = true
     questionsError.value = ''
 
     try {
-      const { data } = await reviewBotAdminApi.listQuestions({ subject: form.subject || undefined })
+      const { data } = await reviewBotAdminApi.listQuestions({ source_bank_id: selectedBankId.value })
       questions.value = asList(data?.questions).map(normalizeQuestion)
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
     } catch (error) {
@@ -120,12 +195,37 @@ export function useReviewBotAdminModule() {
     }
   }
 
+  // Library → Select Exam File → Preview Questions: pick a file and load both
+  // its original questions and whatever review batch already exists for it.
+  async function selectBank(bankId) {
+    selectedBankId.value = Number(bankId)
+    form.topic = ''
+    form.subtopic = ''
+    generateError.value = ''
+    generateMessage.value = ''
+    selectedIds.value = []
+
+    await Promise.all([loadSourceQuestions(), loadQuestions()])
+  }
+
+  function changeFile() {
+    selectedBankId.value = null
+    sourceQuestions.value = []
+    questions.value = []
+    selectedIds.value = []
+    generateError.value = ''
+    generateMessage.value = ''
+  }
+
+  // Generate Review Exam: AI-generates new questions from the selected file's
+  // concepts (never reusing the original wording) — see class docblock on
+  // ReviewBotAdminService for why the original items are never exposed as-is.
   async function generate() {
     generateError.value = ''
     generateMessage.value = ''
 
-    if (!form.subject) {
-      generateError.value = 'Choose a subject first.'
+    if (!selectedBankId.value) {
+      generateError.value = 'Select a Library file first.'
       return
     }
 
@@ -133,7 +233,7 @@ export function useReviewBotAdminModule() {
 
     try {
       const { data } = await reviewBotAdminApi.generate({
-        subject: form.subject,
+        source_bank_id: selectedBankId.value,
         topic: form.topic || undefined,
         subtopic: form.subtopic || undefined,
         source_limit: Number(form.sourceLimit),
@@ -171,8 +271,19 @@ export function useReviewBotAdminModule() {
       questionText: question.questionText,
       explanation: question.explanation,
       difficulty: question.difficulty,
+      // Map/assign: pre-filled with what the question inherited from its
+      // source item, editable here before publishing.
+      topicName: question.topic ?? '',
+      subtopicName: question.subtopic ?? '',
       options: question.options.map((option) => ({ id: option.id, text: option.text, isCorrect: option.isCorrect })),
     }
+  }
+
+  function setEditingTopic(questionId, topic) {
+    const draft = editing[questionId]
+    if (!draft) return
+    draft.topicName = topic
+    draft.subtopicName = ''
   }
 
   function cancelEditing(questionId) {
@@ -197,6 +308,8 @@ export function useReviewBotAdminModule() {
         question_text: draft.questionText,
         explanation: draft.explanation,
         difficulty: draft.difficulty,
+        topic_name: draft.topicName || undefined,
+        subtopic_name: draft.topicName ? (draft.subtopicName || '') : undefined,
         options: draft.options.map((option) => ({ id: option.id, text: option.text, is_correct: option.isCorrect })),
       })
 
@@ -251,16 +364,22 @@ export function useReviewBotAdminModule() {
   }
 
   onMounted(async () => {
-    await loadCuratedTopics()
-    await loadQuestions()
+    await Promise.all([loadCuratedTopics(), loadLibraryBanks()])
   })
 
   return {
     curatedTopics,
     catalogLoading,
     catalogError,
+    libraryBanks,
+    libraryBanksLoading,
+    libraryBanksError,
+    selectedBankId,
+    selectedBank,
+    sourceQuestions,
+    sourceQuestionsLoading,
+    sourceQuestionsError,
     form,
-    subjectOptions,
     topicOptions,
     subtopicOptions,
     generating,
@@ -275,13 +394,16 @@ export function useReviewBotAdminModule() {
     allFilteredSelected,
     editing,
     savingQuestionId,
-    selectSubject,
+    loadLibraryBanks,
+    selectBank,
+    changeFile,
     selectTopic,
     loadQuestions,
     generate,
     toggleSelected,
     toggleSelectAllFiltered,
     startEditing,
+    setEditingTopic,
     cancelEditing,
     setEditingCorrectOption,
     saveEditing,

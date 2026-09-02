@@ -30,6 +30,8 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
         public ?int $subtopicId,
         /** How many exam items to cover, not how many questions to produce. */
         public int $sourceLimit,
+        /** The Library file to generate from, when the teacher picked one directly (see ReviewBotAdminService::queueGeneration()). Null for a system-triggered top-up, which draws from every file matching subject/topic/subtopic. */
+        public ?int $sourceBankId = null,
     ) {}
 
     public function handle(ReviewBotAdminService $reviewBotAdminService): void
@@ -47,6 +49,7 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
             $this->topicId,
             $this->subtopicId,
             $this->sourceLimit,
+            $this->sourceBankId,
         );
 
         if (($result['rejected'] ?? []) !== []) {
