@@ -27,12 +27,9 @@ Route::post('/library/review-bot/generate', function (
     $validated = $request->validate([
         // The Library file to generate from -- the single source of truth for
         // uploaded exam questions (see ReviewBotAdminService class docblock).
+        // That's the only input: no topic/subtopic/count picking. The service
+        // reads the whole file's own mapping and covers most of it automatically.
         'source_bank_id' => ['required', 'integer'],
-        'topic' => ['nullable', 'string', 'max:255'],
-        'subtopic' => ['nullable', 'string', 'max:255'],
-        // How many EXAM ITEMS to cover, not how many questions to produce --
-        // each item yields up to one question per cognitive level.
-        'source_limit' => ['required', 'integer', 'min:1', 'max:200'],
     ]);
 
     $sourceBank = QuestionBank::query()->find($validated['source_bank_id']);
@@ -41,13 +38,7 @@ Route::post('/library/review-bot/generate', function (
         return response()->json(['message' => 'That file was not found in your Library.'], 404);
     }
 
-    $result = $reviewBotAdminService->queueGeneration(
-        $user,
-        $sourceBank,
-        $validated['topic'] ?? null,
-        $validated['subtopic'] ?? null,
-        (int) $validated['source_limit'],
-    );
+    $result = $reviewBotAdminService->queueGeneration($user, $sourceBank);
 
     $recordAudit(
         $user,

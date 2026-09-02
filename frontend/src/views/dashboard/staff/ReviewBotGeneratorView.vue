@@ -4,19 +4,18 @@
       <p class="rbg-kicker">Review Bot Question Generator</p>
       <h3>Turn your Library files into Review Bot questions</h3>
       <p>
-        Library → Select Exam File → Preview Questions → Generate Review Exam → Review/Edit → Map/Assign.
-        Every review question is generated fresh from your uploaded exam items — students never see the
-        original wording, and generating never happens on their side.
+        Pick a file. The Review Bot reads it — subject, and each question's own topic/subtopic mapping —
+        and generates a fresh, original review set on its own. Review and publish when you're happy with it.
       </p>
     </article>
 
     <div v-if="catalogError" class="feedback danger"><AlertCircle :size="15" /><span>{{ catalogError }}</span></div>
     <div v-if="libraryBanksError" class="feedback danger"><AlertCircle :size="15" /><span>{{ libraryBanksError }}</span></div>
 
-    <!-- Step 1: Library — pick the exam file this review batch comes from. -->
+    <!-- Library — pick the exam file this review batch comes from. -->
     <article v-if="!selectedBankId" class="surface-card rbg-generate">
       <header class="review-section-head">
-        <h3>1. Select an exam file from your Library</h3>
+        <h3>Select an exam file from your Library</h3>
         <button type="button" class="ghost-btn" :disabled="libraryBanksLoading" @click="loadLibraryBanks">
           <RefreshCw :size="14" :class="{ 'spin-soft': libraryBanksLoading }" /> Refresh
         </button>
@@ -56,20 +55,32 @@
 
     <template v-else>
       <article class="surface-card rbg-selected-file">
-        <div class="rbg-selected-file-info">
-          <FileText :size="18" />
-          <div>
-            <p class="rbg-selected-file-title">{{ selectedBank?.title }}</p>
-            <p class="review-muted">{{ selectedBank?.subject || 'No subject' }} &middot; {{ selectedBank?.questionsCount }} original item{{ selectedBank?.questionsCount === 1 ? '' : 's' }}</p>
+        <div class="rbg-selected-file-top">
+          <div class="rbg-selected-file-info">
+            <FileText :size="18" />
+            <div>
+              <p class="rbg-selected-file-title">{{ selectedBank?.title }}</p>
+              <p class="review-muted">{{ selectedBank?.subject || 'No subject' }} &middot; {{ selectedBank?.questionsCount }} original item{{ selectedBank?.questionsCount === 1 ? '' : 's' }}</p>
+            </div>
+          </div>
+          <div class="rbg-selected-file-actions">
+            <button type="button" class="primary-btn" :disabled="generating" @click="generate">
+              <Sparkles :size="16" />
+              {{ generating ? 'Queuing...' : 'Generate Review Questions' }}
+            </button>
+            <button type="button" class="ghost-btn" @click="changeFile">Change file</button>
           </div>
         </div>
-        <button type="button" class="ghost-btn" @click="changeFile">Change file</button>
+
+        <div v-if="generateError" class="feedback danger"><AlertCircle :size="15" /><span>{{ generateError }}</span></div>
+        <div v-if="generateMessage" class="feedback success"><CheckCircle2 :size="15" /><span>{{ generateMessage }}</span></div>
       </article>
 
-      <!-- Step 2: Preview Questions — the original exam items, read-only. -->
-      <details class="surface-card rbg-preview" open>
+      <!-- Preview — the original exam items, read-only, kept clearly separate -->
+      <!-- from the AI-generated batch below. -->
+      <details class="surface-card rbg-preview">
         <summary class="review-section-head rbg-preview-summary">
-          <h3>2. Preview original exam questions</h3>
+          <h3>Original exam questions in this file</h3>
           <span class="pill neutral">{{ sourceQuestions.length }} item{{ sourceQuestions.length === 1 ? '' : 's' }}</span>
         </summary>
 
@@ -102,53 +113,11 @@
         </ol>
       </details>
 
-      <!-- Step 3: Generate Review Exam. -->
-      <article class="surface-card rbg-generate">
-        <header class="review-section-head">
-          <h3>3. Generate Review Exam</h3>
-        </header>
-
-        <div v-if="generateError" class="feedback danger"><AlertCircle :size="15" /><span>{{ generateError }}</span></div>
-        <div v-if="generateMessage" class="feedback success"><CheckCircle2 :size="15" /><span>{{ generateMessage }}</span></div>
-
-        <div class="rbg-generate-grid rbg-generate-grid-3">
-          <label class="field-stack">
-            <span class="field-label">Topic (optional)</span>
-            <select class="text-input" :value="form.topic" @change="selectTopic($event.target.value)">
-              <option value="">Any topic in this file</option>
-              <option v-for="topic in topicOptions" :key="topic" :value="topic">{{ topic }}</option>
-            </select>
-          </label>
-
-          <label class="field-stack">
-            <span class="field-label">Subtopic (optional)</span>
-            <select class="text-input" v-model="form.subtopic" :disabled="!form.topic">
-              <option value="">Any subtopic</option>
-              <option v-for="subtopic in subtopicOptions" :key="subtopic" :value="subtopic">{{ subtopic }}</option>
-            </select>
-          </label>
-
-          <label class="field-stack">
-            <span class="field-label">Source items to cover</span>
-            <input v-model.number="form.sourceLimit" type="number" min="1" max="200" class="text-input" />
-            <span class="field-hint">Each exam item can yield up to one review question per cognitive level, so this covers more questions than the number alone suggests.</span>
-          </label>
-        </div>
-
-        <div class="rbg-generate-actions">
-          <button type="button" class="primary-btn" :disabled="generating" @click="generate">
-            <Sparkles :size="16" />
-            {{ generating ? 'Queuing...' : 'Generate Review Exam' }}
-          </button>
-          <p class="review-muted">Runs in the background, grounded in this file's own questions — refresh the list below in a few seconds.</p>
-        </div>
-      </article>
-
-      <!-- Step 4: Review/Edit, then Map/Assign (publish) -- the AI-generated -->
-      <!-- batch, kept clearly separate from the original items above. -->
+      <!-- Review/Edit, then Map/Assign (publish) -- the AI-generated batch, -->
+      <!-- kept clearly separate from the original items above. -->
       <article class="surface-card rbg-list">
         <header class="review-section-head">
-          <h3>4. Review, edit &amp; map the generated review questions</h3>
+          <h3>Review, edit &amp; map the generated review questions</h3>
 
           <div class="rbg-list-actions">
             <div class="review-count-chips">
@@ -316,9 +285,7 @@ const {
   sourceQuestions,
   sourceQuestionsLoading,
   sourceQuestionsError,
-  form,
   topicOptions,
-  subtopicOptions,
   generating,
   generateError,
   generateMessage,
@@ -333,7 +300,6 @@ const {
   loadLibraryBanks,
   selectBank,
   changeFile,
-  selectTopic,
   loadQuestions,
   generate,
   toggleSelected,
@@ -433,11 +399,16 @@ const {
 }
 
 .rbg-selected-file {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+}
+
+.rbg-selected-file-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
   flex-wrap: wrap;
 }
 
@@ -451,6 +422,13 @@ const {
   margin: 0;
   font-weight: 700;
   color: var(--lnu-navy-deep);
+}
+
+.rbg-selected-file-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .rbg-preview {
@@ -498,23 +476,6 @@ const {
   display: grid;
   gap: 14px;
   padding: 18px;
-}
-
-.rbg-generate-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.rbg-generate-grid-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.rbg-generate-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
 }
 
 .rbg-list-actions {
@@ -646,18 +607,28 @@ const {
 }
 
 @media (max-width: 900px) {
-  .rbg-generate-grid,
-  .rbg-generate-grid-3,
   .rbg-edit-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 560px) {
-  .rbg-generate-grid,
-  .rbg-generate-grid-3,
   .rbg-edit-grid {
     grid-template-columns: 1fr;
+  }
+
+  .rbg-selected-file-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rbg-selected-file-actions {
+    width: 100%;
+  }
+
+  .rbg-selected-file-actions .primary-btn {
+    flex: 1;
+    justify-content: center;
   }
 }
 </style>
