@@ -55,6 +55,7 @@
                 <small>Item Mapping</small>
                 <strong>
                   <span class="pill" :class="resolveGenerationStatusClass(bank.mapping_status)">
+                    <RefreshCw v-if="['queued', 'processing'].includes(bank.mapping_status)" :size="11" class="spin-soft" />
                     {{ formatGenerationStatus(bank.mapping_status) }}
                   </span>
                 </strong>
@@ -460,6 +461,12 @@ const {
 
 <style scoped src="../dashboard.css"></style>
 <style scoped>
+.management-meta-grid .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .library-bank-view-modal {
   width: min(1120px, calc(100vw - 32px));
 }

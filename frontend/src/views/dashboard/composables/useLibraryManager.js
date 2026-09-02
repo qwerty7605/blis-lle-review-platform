@@ -1,6 +1,13 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref } from 'vue'
 import { questionsApi } from '@/api/questions.api'
 import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
+
+// AI item mapping runs in a background queue worker, so a bank's
+// mapping_status can flip from queued/processing to completed at any moment
+// with nothing the browser did. Polled at the same cadence the Review Bot
+// generator uses for its own "check back shortly" background jobs.
+const MAPPING_POLL_INTERVAL_MS = 4000
+const MAPPING_IN_FLIGHT_STATUSES = ['queued', 'processing']
 
 function asBooleanValue(source) {
   if (typeof source === 'boolean') return source
@@ -167,6 +174,39 @@ export function useLibraryManager({
         : Promise.resolve(),
     ])
   }
+
+  // Live-updates mapping_status without a manual refresh: self-reschedules
+  // (rather than setInterval) so a slow request never overlaps the next poll,
+  // and stops on its own once nothing is left queued/processing -- no polling
+  // forever in the background once a set finishes mapping.
+  const hasMappingInFlight = computed(() => (
+    libraryQuestionBanks.value.some((bank) => MAPPING_IN_FLIGHT_STATUSES.includes(bank?.mapping_status))
+  ))
+
+  let mappingPollTimeoutId = null
+
+  function stopMappingPoll() {
+    if (mappingPollTimeoutId !== null) {
+      clearTimeout(mappingPollTimeoutId)
+      mappingPollTimeoutId = null
+    }
+  }
+
+  function scheduleMappingPollIfNeeded() {
+    stopMappingPoll()
+
+    if (!hasMappingInFlight.value) return
+
+    // loadLibraryBanks() (always the first thing refreshLibraryViewsInBackground
+    // does) calls this same function again once fresh data is in, which is what
+    // actually re-arms the next tick -- this timeout only needs to kick that off.
+    mappingPollTimeoutId = setTimeout(() => {
+      mappingPollTimeoutId = null
+      void refreshLibraryViewsInBackground()
+    }, MAPPING_POLL_INTERVAL_MS)
+  }
+
+  onUnmounted(stopMappingPoll)
 
   const libraryForm = reactive({
     questionName: '',
@@ -360,6 +400,7 @@ export function useLibraryManager({
     try {
       const { data } = await questionsApi.listBanks()
       libraryQuestionBanks.value = data.banks ?? []
+      scheduleMappingPollIfNeeded()
     } catch (error) {
       libraryError.value = resolveApiError(error, 'Unable to load question banks right now.')
     } finally {
