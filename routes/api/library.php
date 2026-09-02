@@ -22,6 +22,7 @@ Route::get('/library/banks', function (Request $request) use ($isStaffMasterExam
     }
 
     $query = QuestionBank::query()
+        ->excludingReviewBotBanks()
         ->with('creator:id,name')
         ->withCount('questions')
         ->where('created_by', $user->id)
@@ -333,6 +334,16 @@ Route::delete('/library/banks/{bank}', function (
 
     if ((int) $bank->created_by !== (int) $user->id) {
         return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Defense in depth: the Library listing already excludes these (see
+    // scopeExcludingReviewBotBanks()), so the UI never surfaces a delete
+    // button for one, but a direct request against a known bank id must
+    // not be able to wipe out a subject's whole Review Bot bank through
+    // the Library's delete flow -- that goes through the dedicated
+    // per-question Review Bot admin delete instead.
+    if (Str::startsWith($bank->title, QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX)) {
+        return response()->json(['message' => 'This is a Review Bot bank, not a Library set -- it cannot be deleted here.'], 422);
     }
 
     $questionIdSubQuery = DB::table('question_bank_questions')

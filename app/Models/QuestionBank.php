@@ -37,6 +37,16 @@ class QuestionBank extends Model
     ];
 
     /**
+     * Title prefix for the auto-created per-subject container that holds
+     * AI-generated Review Bot questions (see
+     * ReviewBotAdminService::reviewBotBankFor()). These live in the same
+     * question_banks table as a teacher's own uploaded sets, purely for
+     * schema reuse, but are never a Library upload -- the Library listing
+     * must always exclude them (see scopeExcludingReviewBotBanks()).
+     */
+    public const REVIEW_BOT_BANK_TITLE_PREFIX = 'Review Bot Bank — ';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var list<string>
@@ -68,6 +78,19 @@ class QuestionBank extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Excludes the auto-created Review Bot bank containers -- those hold
+     * AI-generated review content, never a teacher's own uploaded exam
+     * questions, and must never surface in the Library listing.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<QuestionBank>  $query
+     * @return \Illuminate\Database\Eloquent\Builder<QuestionBank>
+     */
+    public function scopeExcludingReviewBotBanks($query)
+    {
+        return $query->where('title', 'not like', self::REVIEW_BOT_BANK_TITLE_PREFIX . '%');
     }
 
     /**

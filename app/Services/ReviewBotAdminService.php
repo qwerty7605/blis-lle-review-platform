@@ -84,7 +84,7 @@ class ReviewBotAdminService
     public function reviewBotBankFor(string $subject, int $teacherId): QuestionBank
     {
         return QuestionBank::query()->firstOrCreate(
-            ['title' => "Review Bot Bank — {$subject}", 'subject' => $subject],
+            ['title' => QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX . $subject, 'subject' => $subject],
             ['created_by' => $teacherId, 'total_items' => 0],
         );
     }
@@ -175,7 +175,7 @@ class ReviewBotAdminService
         }
 
         $bank = QuestionBank::query()
-            ->where('title', "Review Bot Bank — {$subject}")
+            ->where('title', QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX . $subject)
             ->where('subject', $subject)
             ->first();
 
