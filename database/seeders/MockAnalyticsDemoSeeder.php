@@ -10,6 +10,7 @@ use App\Models\QuestionBank;
 use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
+use App\Models\Topic;
 use App\Models\User;
 use App\Services\ExamAttemptService;
 use Carbon\CarbonImmutable;
@@ -278,6 +279,15 @@ class MockAnalyticsDemoSeeder extends Seeder
             $activeItemNumbers[] = $itemNumber;
             $correctIndex = ($index + strlen($key)) % count($labels);
 
+            // Real Library uploads get topic_id from the AI item-mapping
+            // pipeline (QuestionMappingService) -- this demo data needs the
+            // same field populated directly so "What To Review Next" can
+            // name an actual weak topic, not just fall back to "Uncategorized".
+            $topicRow = Topic::query()->firstOrCreate(
+                ['subject' => $blueprint['label'], 'name' => ucwords($topic)],
+                ['created_by' => $teacher->id],
+            );
+
             $optionTexts = [
                 'Skip the documented procedure and rely on memory alone.',
                 'Delay the review until after the output is already released.',
@@ -289,6 +299,8 @@ class MockAnalyticsDemoSeeder extends Seeder
                 'question_bank_id' => $bank->id,
                 'item_number' => $itemNumber,
             ], [
+                'subject' => $blueprint['label'],
+                'topic_id' => $topicRow->id,
                 'question_text' => "{$blueprint['label']} demo item {$itemNumber}: Which action best addresses {$topic}?",
                 'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
                 'answer_label' => $labels[$correctIndex],
@@ -422,6 +434,15 @@ class MockAnalyticsDemoSeeder extends Seeder
             $startedAt = $submittedAt->subMinutes(20);
             $questions = $bank->questions->sortBy('item_number')->values();
 
+            // Rotates which items land correct/wrong per exam+student instead
+            // of always "the first N items" -- otherwise the same trailing
+            // topic in every subject's list would show up as everyone's
+            // weakest topic regardless of score, which is a giveaway this is
+            // synthetic data rather than a real per-student pattern.
+            $rotationOffset = ($questions->count() > 0)
+                ? (crc32($examKey) + $student->id) % $questions->count()
+                : 0;
+
             $attempt = ExamAttempt::query()->create([
                 'exam_id' => $exam->id,
                 'room_id' => $room->id,
@@ -439,7 +460,7 @@ class MockAnalyticsDemoSeeder extends Seeder
 
             foreach ($questions as $index => $question) {
                 $itemNumber = $index + 1;
-                $isCorrect = $itemNumber <= $correctCount;
+                $isCorrect = (($index + $rotationOffset) % max(1, $questions->count())) < $correctCount;
 
                 ExamAttemptQuestion::query()->create([
                     'exam_attempt_id' => $attempt->id,

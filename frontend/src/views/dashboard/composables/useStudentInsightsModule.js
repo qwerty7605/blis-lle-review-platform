@@ -58,6 +58,7 @@ export function useStudentInsightsModule() {
   const subjectRows = ref([])
   const historyRows = ref([])
   const recentAttemptRows = ref([])
+  const weakAreaRaw = ref(null)
   const predictiveModel = ref({
     status: 'awaiting_ml_api',
     title: 'Predictive Readiness Model',
@@ -138,19 +139,10 @@ export function useStudentInsightsModule() {
       .slice(0, 3)
   ))
 
-  const latestScoreDeltaText = computed(() => {
-    const delta = Number(stats.value.latest_score_delta ?? 0)
-    if (!Number.isFinite(delta) || delta === 0) return 'Same as your last exam'
-    return delta > 0
-      ? `Up ${Math.abs(delta).toFixed(1)} points`
-      : `Down ${Math.abs(delta).toFixed(1)} points`
-  })
-
   // Latest Result and Review Areas used to also live here as stat cards --
   // removed on request (redundant with the Recent Scores trend chart and the
-  // Review Areas count already surfacing inside "What To Review Next" below).
-  // The underlying data (latest score, focus subject count) is still used by
-  // guidanceItems/latestScoreDeltaText, just no longer duplicated as its own tile.
+  // Review Areas count/trend now folded into the reviewNarrative paragraph
+  // below), just no longer duplicated as its own tile.
   const statCards = computed(() => ([
     {
       label: 'Exams Taken',
@@ -168,49 +160,96 @@ export function useStudentInsightsModule() {
     },
   ]))
 
-  const guidanceItems = computed(() => {
+  // Normalized view of the backend's subject -> topic -> subtopic weak-area
+  // resolution (DashboardAnalyticsService::buildWeakAreaRecommendation, the
+  // same one "Review Your Weak Areas" already uses) -- whichever level has
+  // real data wins: a weak subtopic beats its topic, which beats its subject.
+  const weakArea = computed(() => {
+    const raw = weakAreaRaw.value
+    if (!raw || !raw.basis) return null
+
+    return {
+      basis: raw.basis,
+      subject: raw.subject ?? null,
+      subjectScore: raw.subject_score === null || raw.subject_score === undefined ? null : Number(raw.subject_score),
+      topic: raw.topic ?? null,
+      topicScore: raw.topic_score === null || raw.topic_score === undefined ? null : Number(raw.topic_score),
+      subtopic: raw.subtopic ?? null,
+      subtopicScore: raw.subtopic_score === null || raw.subtopic_score === undefined ? null : Number(raw.subtopic_score),
+    }
+  })
+
+  function roundPercent(value) {
+    return value === null || value === undefined ? null : Math.round(Number(value))
+  }
+
+  // One in-depth paragraph replacing the old title/description guidance
+  // cards -- names the actual weakest subtopic or topic when the student's
+  // items carry that mapping, not just the subject it lives under.
+  const reviewNarrative = computed(() => {
     if ((stats.value.completed_attempts ?? 0) === 0) {
-      return [
-        {
-          title: 'Take your first exam',
-          description: 'Finish one exam to unlock your scores and subject feedback.',
-          tone: 'navy',
-        },
-      ]
+      return 'Take your first exam to unlock a personalized study plan based on your results.'
     }
 
-    const items = []
+    const sentences = []
+    const area = weakArea.value
+    const focusCount = focusSubjects.value.length
 
-    if (focusSubjects.value.length > 0) {
-      const subjectLabels = focusSubjects.value.slice(0, 2).map((subject) => subject.label).join(', ')
-      items.push({
-        title: 'Start with these subjects',
-        description: `${subjectLabels} are still below 75%.`,
-        tone: 'danger',
-      })
+    if (area && (area.basis === 'subtopic' || area.basis === 'topic')) {
+      const isSubtopic = area.basis === 'subtopic'
+      const place = isSubtopic
+        ? `"${area.subtopic}" (under ${area.topic}, in ${area.subject})`
+        : `"${area.topic}" in ${area.subject}`
+      const score = roundPercent(isSubtopic ? area.subtopicScore : area.topicScore)
+
+      sentences.push(
+        `Your biggest opportunity right now is ${place}${score !== null ? `, where you're only scoring ${score}%` : ''} — start your next study session there.`,
+      )
+    } else if (area && area.basis === 'subject') {
+      const score = roundPercent(area.subjectScore)
+      sentences.push(
+        `Your biggest opportunity right now is ${area.subject}${score !== null ? `, averaging ${score}% so far` : ''} — start your next study session there.`,
+      )
+    } else if (focusCount === 0) {
+      sentences.push('You are on track across every subject you have attempted so far — all of them are already at 75% or higher.')
+    }
+
+    if (focusCount > 1) {
+      const others = focusSubjects.value
+        .filter((subject) => subject.label !== area?.subject)
+        .slice(0, 2)
+        .map((subject) => subject.label)
+
+      if (others.length > 0) {
+        sentences.push(`${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} also still below the 75% passing mark.`)
+      }
+    }
+
+    const strongSubject = strengths.value[0] ?? strongestSubject.value
+    if (strongSubject && strongSubject.label !== area?.subject) {
+      const score = roundPercent(strongSubject.average_score_percent)
+      const scoreText = score !== null ? ` at ${score}%` : ''
+
+      // A merely-relatively-best subject that's still below passing shouldn't
+      // be called "your strongest subject" outright -- that reads as praise
+      // when the honest note is "still needs work, just less than the rest."
+      sentences.push(
+        strongSubject.performance_band === 'strong'
+          ? `On the other end, ${strongSubject.label} is your strongest subject${scoreText}.`
+          : `Relatively speaking, ${strongSubject.label} is your best subject so far${scoreText}, though it is still below the passing mark.`,
+      )
+    }
+
+    const delta = stats.value.latest_score_delta === null ? null : Number(stats.value.latest_score_delta)
+    if (delta === null) {
+      // Only one finished exam so far -- nothing to compare it to yet.
+    } else if (delta === 0) {
+      sentences.push('Your most recent exam scored about the same as the one before it.')
     } else {
-      items.push({
-        title: 'You are on track',
-        description: 'All attempted subjects are already at 75% or higher.',
-        tone: 'success',
-      })
+      sentences.push(`Your most recent exam was ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta).toFixed(1)} points compared to the one before it.`)
     }
 
-    if (strengths.value.length > 0) {
-      items.push({
-        title: 'Strongest subject',
-        description: strengths.value[0].label,
-        tone: 'navy',
-      })
-    }
-
-    items.push({
-      title: 'Latest trend',
-      description: latestScoreDeltaText.value,
-      tone: 'gold',
-    })
-
-    return items
+    return sentences.join(' ')
   })
 
   const predictivePanel = computed(() => {
@@ -259,6 +298,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = asList(data?.subjects)
       historyRows.value = asList(data?.history)
       recentAttemptRows.value = asList(data?.recent_attempts)
+      weakAreaRaw.value = data?.weak_area ?? null
       predictiveModel.value = {
         ...predictiveModel.value,
         ...(data?.predictive_model ?? {}),
@@ -276,6 +316,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = []
       historyRows.value = []
       recentAttemptRows.value = []
+      weakAreaRaw.value = null
     } finally {
       analyticsLoading.value = false
       analyticsLoaded.value = true
@@ -299,7 +340,8 @@ export function useStudentInsightsModule() {
     strengths,
     scoreHistory,
     recentAttempts,
-    guidanceItems,
+    weakArea,
+    reviewNarrative,
     predictivePanel,
     loadAnalytics,
   }
