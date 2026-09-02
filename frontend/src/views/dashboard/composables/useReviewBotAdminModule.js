@@ -82,12 +82,6 @@ export function useReviewBotAdminModule() {
   const sourceQuestionsLoading = ref(false)
   const sourceQuestionsError = ref('')
 
-  const form = reactive({
-    topic: '',
-    subtopic: '',
-    sourceLimit: 5,
-  })
-
   const generating = ref(false)
   const generateError = ref('')
   const generateMessage = ref('')
@@ -106,11 +100,10 @@ export function useReviewBotAdminModule() {
 
   const selectedBank = computed(() => libraryBanks.value.find((bank) => bank.id === selectedBankId.value) ?? null)
 
+  // Only used to populate each draft question's "map to topic/subtopic"
+  // dropdowns during Review/Edit -- generation itself takes no topic/subtopic
+  // input, see generate() below.
   const topicOptions = computed(() => Object.keys(curatedTopics.value[selectedBank.value?.subject] ?? {}))
-
-  const subtopicOptions = computed(() => (
-    curatedTopics.value[selectedBank.value?.subject]?.[form.topic] ?? []
-  ))
 
   const filteredQuestions = computed(() => (
     statusFilter.value === 'all'
@@ -122,11 +115,6 @@ export function useReviewBotAdminModule() {
     filteredQuestions.value.length > 0
     && filteredQuestions.value.every((question) => selectedIds.value.includes(question.id))
   ))
-
-  function selectTopic(topic) {
-    form.topic = topic
-    form.subtopic = ''
-  }
 
   async function loadCuratedTopics() {
     catalogLoading.value = true
@@ -195,12 +183,12 @@ export function useReviewBotAdminModule() {
     }
   }
 
-  // Library → Select Exam File → Preview Questions: pick a file and load both
-  // its original questions and whatever review batch already exists for it.
+  // Library → Select Exam File: pick a file and load both its original
+  // questions and whatever review batch already exists for it. That's the
+  // only choice a teacher makes -- no topic/subtopic/count picking beyond
+  // this, see generate() below.
   async function selectBank(bankId) {
     selectedBankId.value = Number(bankId)
-    form.topic = ''
-    form.subtopic = ''
     generateError.value = ''
     generateMessage.value = ''
     selectedIds.value = []
@@ -217,9 +205,11 @@ export function useReviewBotAdminModule() {
     generateMessage.value = ''
   }
 
-  // Generate Review Exam: AI-generates new questions from the selected file's
-  // concepts (never reusing the original wording) — see class docblock on
-  // ReviewBotAdminService for why the original items are never exposed as-is.
+  // Generate Review Exam: one click, no setup. The backend reads the whole
+  // file -- every question's subject/topic/subtopic it already knows from
+  // Library mapping -- and generates fresh, original review questions
+  // covering most of the file automatically (see ReviewBotAdminService for
+  // the exact coverage and why the source wording is never reused as-is).
   async function generate() {
     generateError.value = ''
     generateMessage.value = ''
@@ -234,9 +224,6 @@ export function useReviewBotAdminModule() {
     try {
       const { data } = await reviewBotAdminApi.generate({
         source_bank_id: selectedBankId.value,
-        topic: form.topic || undefined,
-        subtopic: form.subtopic || undefined,
-        source_limit: Number(form.sourceLimit),
       })
 
       generateMessage.value = data?.message ?? 'Generation queued.'
@@ -379,9 +366,7 @@ export function useReviewBotAdminModule() {
     sourceQuestions,
     sourceQuestionsLoading,
     sourceQuestionsError,
-    form,
     topicOptions,
-    subtopicOptions,
     generating,
     generateError,
     generateMessage,
@@ -397,7 +382,6 @@ export function useReviewBotAdminModule() {
     loadLibraryBanks,
     selectBank,
     changeFile,
-    selectTopic,
     loadQuestions,
     generate,
     toggleSelected,

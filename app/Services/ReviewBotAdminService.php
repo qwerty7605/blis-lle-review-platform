@@ -35,6 +35,15 @@ class ReviewBotAdminService
     public const GENERATION_BATCH_SIZE = 4;
 
     /**
+     * Teacher-initiated generation from a whole Library file (queueGeneration())
+     * deliberately takes no topic/subtopic/count input -- the teacher picks a
+     * file, that's it. This is how much of it gets covered in one run: enough
+     * to be a real review set without silently trying (and paying for) every
+     * item in a large file in one background job.
+     */
+    private const AUTO_GENERATION_COVERAGE_RATIO = 0.75;
+
+    /**
      * How many exam items an automatic top-up covers. Deliberately small --
      * this runs unattended, so a single thin session should not trigger a
      * large API bill. It only needs to make the *next* session for this area
@@ -81,10 +90,11 @@ class ReviewBotAdminService
     }
 
     /**
-     * Resolves the teacher's chosen topic/subtopic name (from the same
-     * curated list the item-mapping feature uses) into stable Topic/
-     * Subtopic rows before queuing the background job, so generation
-     * always attaches to a real topic_id/subtopic_id.
+     * The only input this takes is which file -- no topic/subtopic/count
+     * picking. Each source item already carries its own topic_id/subtopic_id
+     * from Library mapping, and persistGenerated() has every generated
+     * question inherit its own source item's mapping individually, so a
+     * teacher never has to re-tell the system what a file is about.
      *
      * The subject is taken from the source bank itself, never from client
      * input -- the Library file the teacher picked is the single source of
@@ -92,7 +102,7 @@ class ReviewBotAdminService
      *
      * @return array{status: string, message: string, bank_id: int}
      */
-    public function queueGeneration(User $teacher, QuestionBank $sourceBank, ?string $topicName, ?string $subtopicName, int $sourceLimit): array
+    public function queueGeneration(User $teacher, QuestionBank $sourceBank): array
     {
         $subject = trim((string) $sourceBank->subject);
 
@@ -110,17 +120,27 @@ class ReviewBotAdminService
             return ['status' => 'skipped', 'message' => $this->missingConfigurationMessage(), 'bank_id' => (int) $bank->id];
         }
 
-        $topic = filled($topicName) ? $this->questionMappingService->resolveTopic($subject, $topicName, $teacher->id) : null;
-        $subtopic = $topic && filled($subtopicName)
-            ? $this->questionMappingService->resolveSubtopic($topic, $subtopicName, $teacher->id)
-            : null;
+        $totalSourceItems = (int) $sourceBank->assessmentQuestions()->count();
+
+        if ($totalSourceItems === 0) {
+            return [
+                'status' => 'skipped',
+                'message' => 'This file has no exam questions to generate from.',
+                'bank_id' => (int) $bank->id,
+            ];
+        }
+
+        // 70-80% of the file per the requested behaviour -- the exact ratio
+        // doesn't need to be precise, it just needs to leave a real review set
+        // without treating "cover everything" as the default every time.
+        $sourceLimit = max(1, (int) ceil($totalSourceItems * self::AUTO_GENERATION_COVERAGE_RATIO));
 
         GenerateReviewBotQuestionsJob::dispatch(
             (int) $bank->id,
             (int) $teacher->id,
             $subject,
-            $topic?->id,
-            $subtopic?->id,
+            null,
+            null,
             $sourceLimit,
             (int) $sourceBank->id,
         )->afterCommit();
