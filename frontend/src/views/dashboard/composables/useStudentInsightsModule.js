@@ -183,17 +183,23 @@ export function useStudentInsightsModule() {
     return value === null || value === undefined ? null : Math.round(Number(value))
   }
 
-  // One in-depth paragraph replacing the old title/description guidance
-  // cards -- names the actual weakest subtopic or topic when the student's
-  // items carry that mapping, not just the subject it lives under.
+  // Structured in-depth read replacing the old title/description guidance
+  // cards -- a bolded headline naming the actual weakest subtopic or topic
+  // when the student's items carry that mapping (not just the subject it
+  // lives under), plus supporting bullet points. Kept as labeled parts
+  // rather than one prose string so the template can style the lead-in,
+  // labels, and body text differently without resorting to v-html.
   const reviewNarrative = computed(() => {
     if ((stats.value.completed_attempts ?? 0) === 0) {
-      return 'Take your first exam to unlock a personalized study plan based on your results.'
+      return {
+        empty: true,
+        emptyMessage: 'Take your first exam to unlock a personalized study plan based on your results.',
+      }
     }
 
-    const sentences = []
     const area = weakArea.value
     const focusCount = focusSubjects.value.length
+    let headline = null
 
     if (area && (area.basis === 'subtopic' || area.basis === 'topic')) {
       const isSubtopic = area.basis === 'subtopic'
@@ -202,17 +208,24 @@ export function useStudentInsightsModule() {
         : `"${area.topic}" in ${area.subject}`
       const score = roundPercent(isSubtopic ? area.subtopicScore : area.topicScore)
 
-      sentences.push(
-        `Your biggest opportunity right now is ${place}${score !== null ? `, where you're only scoring ${score}%` : ''} — start your next study session there.`,
-      )
+      headline = {
+        label: 'Biggest opportunity',
+        text: `${place}${score !== null ? ` — you're only scoring ${score}% there` : ''}. Start your next study session here.`,
+      }
     } else if (area && area.basis === 'subject') {
       const score = roundPercent(area.subjectScore)
-      sentences.push(
-        `Your biggest opportunity right now is ${area.subject}${score !== null ? `, averaging ${score}% so far` : ''} — start your next study session there.`,
-      )
+      headline = {
+        label: 'Biggest opportunity',
+        text: `${area.subject}${score !== null ? ` — averaging ${score}% so far` : ''}. Start your next study session here.`,
+      }
     } else if (focusCount === 0) {
-      sentences.push('You are on track across every subject you have attempted so far — all of them are already at 75% or higher.')
+      headline = {
+        label: 'You are on track',
+        text: 'Every subject you have attempted so far is already at 75% or higher.',
+      }
     }
+
+    const points = []
 
     if (focusCount > 1) {
       const others = focusSubjects.value
@@ -221,7 +234,10 @@ export function useStudentInsightsModule() {
         .map((subject) => subject.label)
 
       if (others.length > 0) {
-        sentences.push(`${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} also still below the 75% passing mark.`)
+        points.push({
+          label: 'Also review',
+          text: `${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} still below the 75% passing mark.`,
+        })
       }
     }
 
@@ -233,23 +249,24 @@ export function useStudentInsightsModule() {
       // A merely-relatively-best subject that's still below passing shouldn't
       // be called "your strongest subject" outright -- that reads as praise
       // when the honest note is "still needs work, just less than the rest."
-      sentences.push(
+      points.push(
         strongSubject.performance_band === 'strong'
-          ? `On the other end, ${strongSubject.label} is your strongest subject${scoreText}.`
-          : `Relatively speaking, ${strongSubject.label} is your best subject so far${scoreText}, though it is still below the passing mark.`,
+          ? { label: 'Strongest subject', text: `${strongSubject.label}${scoreText}.` }
+          : { label: 'Relative strength', text: `${strongSubject.label}${scoreText} — your best so far, though still below passing.` },
       )
     }
 
     const delta = stats.value.latest_score_delta === null ? null : Number(stats.value.latest_score_delta)
-    if (delta === null) {
-      // Only one finished exam so far -- nothing to compare it to yet.
-    } else if (delta === 0) {
-      sentences.push('Your most recent exam scored about the same as the one before it.')
-    } else {
-      sentences.push(`Your most recent exam was ${delta > 0 ? 'up' : 'down'} ${Math.abs(delta).toFixed(1)} points compared to the one before it.`)
+    if (delta !== null) {
+      points.push({
+        label: 'Latest trend',
+        text: delta === 0
+          ? 'About the same as your previous exam.'
+          : `${delta > 0 ? 'Up' : 'Down'} ${Math.abs(delta).toFixed(1)} points compared to your previous exam.`,
+      })
     }
 
-    return sentences.join(' ')
+    return { empty: false, headline, points }
   })
 
   const predictivePanel = computed(() => {
