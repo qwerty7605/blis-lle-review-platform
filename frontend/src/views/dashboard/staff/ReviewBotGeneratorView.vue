@@ -80,9 +80,9 @@
             </div>
           </div>
           <div class="rbg-selected-file-actions">
-            <button type="button" class="primary-btn" :disabled="generating" @click="generate">
+            <button type="button" class="primary-btn" :disabled="generating || generationPending" @click="generate">
               <Sparkles :size="16" />
-              {{ generating ? 'Queuing...' : 'Generate Review Questions' }}
+              {{ generating ? 'Queuing...' : (generationPending ? 'Generating...' : 'Generate Review Questions') }}
             </button>
             <button type="button" class="ghost-btn" @click="changeFile">Change file</button>
           </div>
@@ -166,7 +166,12 @@
           </div>
         </div>
 
-        <div v-if="questionsLoading" class="review-bot-empty compact">
+        <div v-if="generationPending && filteredQuestions.length === 0" class="review-bot-empty compact">
+          <RefreshCw :size="18" class="spin-soft" />
+          <p>Generating your review questions in the background — this can take a few minutes for a real AI call. This list updates on its own, no need to refresh.</p>
+        </div>
+
+        <div v-else-if="questionsLoading" class="review-bot-empty compact">
           <RefreshCw :size="18" class="spin-soft" />
           <p>Loading questions...</p>
         </div>
@@ -305,6 +310,7 @@ const {
   generating,
   generateError,
   generateMessage,
+  generationPending,
   filteredQuestions,
   questionsLoading,
   questionsError,
