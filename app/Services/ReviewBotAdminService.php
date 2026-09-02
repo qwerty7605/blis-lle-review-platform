@@ -10,6 +10,7 @@ use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -32,6 +33,23 @@ class ReviewBotAdminService
      * malformed response costs only a handful of items.
      */
     public const GENERATION_BATCH_SIZE = 4;
+
+    /**
+     * How many exam items an automatic top-up covers. Deliberately small --
+     * this runs unattended, so a single thin session should not trigger a
+     * large API bill. It only needs to make the *next* session for this area
+     * better, not fully restock the bank in one pass.
+     */
+    private const TOP_UP_SOURCE_LIMIT = 3;
+
+    /**
+     * Once an area triggers a top-up, further sessions coming up short in the
+     * same area are skipped for this long. The generation job itself already
+     * skips items that already have variants, so this exists purely to stop
+     * a burst of students hitting the same thin area from queuing redundant
+     * jobs (and redundant API spend) before the first one has even run.
+     */
+    private const TOP_UP_DEBOUNCE_MINUTES = 360;
 
     public function __construct(
         private readonly QuestionMappingService $questionMappingService,
@@ -100,6 +118,57 @@ class ReviewBotAdminService
             ),
             'bank_id' => (int) $bank->id,
         ];
+    }
+
+    /**
+     * System-triggered counterpart to queueGeneration(): called when a
+     * student's Review Bot session comes up short for a subject/topic/
+     * subtopic, so the bank has more to offer next time without making that
+     * student wait on a live call. Generated questions still land as drafts
+     * for a teacher to review and publish -- this only ever queues the same
+     * background job a teacher's own "Generate" click would.
+     *
+     * Deliberately quiet on every "can't do it right now" path (no bank set
+     * up yet, no API key, already queued recently) -- there is no student-
+     * facing error to surface, this is a best-effort background nicety.
+     */
+    public function queueTopUp(string $subject, ?int $topicId, ?int $subtopicId): void
+    {
+        if (!$this->hasApiKey()) {
+            return;
+        }
+
+        $bank = QuestionBank::query()
+            ->where('title', "Review Bot Bank — {$subject}")
+            ->where('subject', $subject)
+            ->first();
+
+        // No teacher has ever generated for this subject -- nothing to attach
+        // an automatic top-up to yet. A teacher's first manual generation
+        // creates the bank; auto top-ups only ever add to one that exists.
+        if (!$bank) {
+            return;
+        }
+
+        $lockKey = sprintf(
+            'review-bot-topup:%s:%s:%s',
+            Str::slug($subject),
+            $topicId ?? 'none',
+            $subtopicId ?? 'none'
+        );
+
+        if (!Cache::add($lockKey, true, now()->addMinutes(self::TOP_UP_DEBOUNCE_MINUTES))) {
+            return;
+        }
+
+        GenerateReviewBotQuestionsJob::dispatch(
+            (int) $bank->id,
+            (int) $bank->created_by,
+            $subject,
+            $topicId,
+            $subtopicId,
+            self::TOP_UP_SOURCE_LIMIT,
+        )->afterCommit();
     }
 
     /**
