@@ -111,6 +111,21 @@ class QuestionBankQuestion extends Model
     ];
 
     /**
+     * `embedding` is a packed float32 binary blob (see
+     * ReviewBotQuestionScreeningService::encodeVector()) used only for the
+     * server-side near-duplicate check during generation -- it is never
+     * valid UTF-8, so any JSON response built from a full model/collection
+     * (not a hand-picked array) fails outright with "Malformed UTF-8
+     * characters" the moment a row actually carries one. Hidden here rather
+     * than relying on every future query to remember to exclude the column.
+     *
+     * @var list<string>
+     */
+    protected $hidden = [
+        'embedding',
+    ];
+
+    /**
      * The exam item this Review Bot question was generated from.
      */
     public function sourceQuestion(): BelongsTo
