@@ -28,7 +28,8 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
         public string $subject,
         public ?int $topicId,
         public ?int $subtopicId,
-        public int $questionCount,
+        /** How many exam items to cover, not how many questions to produce. */
+        public int $sourceLimit,
     ) {}
 
     public function handle(ReviewBotAdminService $reviewBotAdminService): void
@@ -45,8 +46,15 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
             $this->subject,
             $this->topicId,
             $this->subtopicId,
-            $this->questionCount,
+            $this->sourceLimit,
         );
+
+        if (($result['rejected'] ?? []) !== []) {
+            Log::info('Review Bot generation discarded near-duplicate questions.', [
+                'bank_id' => $this->bankId,
+                'rejected' => $result['rejected'],
+            ]);
+        }
 
         if (($result['errors'] ?? []) !== []) {
             Log::warning('Review Bot question generation finished with errors.', [

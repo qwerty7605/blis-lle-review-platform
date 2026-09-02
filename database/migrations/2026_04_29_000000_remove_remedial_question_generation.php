@@ -39,50 +39,92 @@ return new class extends Migration
             }
         });
 
-        if (!Schema::hasColumn('question_bank_questions', 'status')) {
-            // Already torn down (e.g. this migration was applied manually
-            // while iterating on it) — nothing left to do.
-            return;
-        }
-
         // Each concern below is its own Schema::table() call (rather than one
         // shared closure) so the statements run in this exact order. That
         // matters on MySQL: topic_id carries a foreign key to `topics`, so a
         // replacement single-column index has to exist and commit *before*
         // the old composite index (which also covered the doomed `status`
         // column) can be dropped, or the FK is left without index coverage.
-        Schema::table('question_bank_questions', function (Blueprint $table) {
-            $table->index('topic_id', 'qb_questions_topic_id_idx');
-        });
+        //
+        // Every step is guarded so the migration can be re-run after a partial
+        // failure: MySQL DDL is not transactional, so a mid-migration error
+        // leaves the earlier statements committed but the migration unrecorded.
+        if (!$this->hasIndex('question_bank_questions', 'qb_questions_topic_id_idx')) {
+            Schema::table('question_bank_questions', function (Blueprint $table) {
+                $table->index('topic_id', 'qb_questions_topic_id_idx');
+            });
+        }
 
-        Schema::table('question_bank_questions', function (Blueprint $table) {
-            $table->dropIndex('qb_questions_usage_status_idx');
-            $table->dropIndex('qb_questions_subject_usage_status_idx');
-            $table->dropIndex('qb_questions_topic_usage_status_idx');
-        });
+        foreach ([
+            'qb_questions_usage_status_idx',
+            'qb_questions_subject_usage_status_idx',
+            'qb_questions_topic_usage_status_idx',
+        ] as $index) {
+            if (!$this->hasIndex('question_bank_questions', $index)) {
+                continue;
+            }
 
-        Schema::table('question_bank_questions', function (Blueprint $table) {
-            // Explicit named index from the original migration — separate
-            // from whatever index backs the FK constraint itself, so
-            // dropConstrainedForeignId() below doesn't know to drop it.
-            $table->dropIndex('qb_questions_source_question_idx');
-        });
+            Schema::table('question_bank_questions', function (Blueprint $table) use ($index) {
+                $table->dropIndex($index);
+            });
+        }
 
-        Schema::table('question_bank_questions', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('source_question_id');
-        });
+        // qb_questions_source_question_idx is the only index on
+        // source_question_id, and the two drivers disagree about it: MySQL uses
+        // it to satisfy the foreign key and refuses to drop it while the
+        // constraint stands, while SQLite keeps it alive after the column goes
+        // and then errors on the dangling reference. Dropping the constraint,
+        // then the index, then the column satisfies both.
+        if (Schema::hasColumn('question_bank_questions', 'source_question_id')) {
+            Schema::table('question_bank_questions', function (Blueprint $table) {
+                $table->dropForeign(['source_question_id']);
+            });
 
-        Schema::table('question_bank_questions', function (Blueprint $table) {
-            $table->dropColumn([
-                'status',
-                'source',
-                'ai_generated',
-                'item_style',
-                'tested_concept',
-                'difference_from_source',
-                'explanation',
-            ]);
-        });
+            if ($this->hasIndex('question_bank_questions', 'qb_questions_source_question_idx')) {
+                Schema::table('question_bank_questions', function (Blueprint $table) {
+                    $table->dropIndex('qb_questions_source_question_idx');
+                });
+            }
+
+            Schema::table('question_bank_questions', function (Blueprint $table) {
+                $table->dropColumn('source_question_id');
+            });
+        }
+
+        $droppableColumns = array_values(array_filter([
+            'status',
+            'source',
+            'ai_generated',
+            'item_style',
+            'tested_concept',
+            'difference_from_source',
+            'explanation',
+        ], fn (string $column) => Schema::hasColumn('question_bank_questions', $column)));
+
+        if ($droppableColumns !== []) {
+            Schema::table('question_bank_questions', function (Blueprint $table) use ($droppableColumns) {
+                $table->dropColumn($droppableColumns);
+            });
+        }
+    }
+
+    /**
+     * Driver-agnostic on purpose: the app runs on MySQL but the test suite runs
+     * on in-memory SQLite, so this cannot reach for information_schema.
+     */
+    private function hasIndex(string $table, string $index): bool
+    {
+        if (!Schema::hasTable($table)) {
+            return false;
+        }
+
+        foreach (Schema::getIndexes($table) as $existing) {
+            if (($existing['name'] ?? null) === $index) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

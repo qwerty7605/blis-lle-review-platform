@@ -6,8 +6,10 @@ use App\Models\QuestionBankQuestion;
 use App\Models\ReviewBotAttempt;
 use App\Models\ReviewBotAttemptAnswer;
 use App\Models\ReviewBotAttemptQuestion;
+use App\Models\ReviewBotItemState;
 use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -159,17 +161,16 @@ class ReviewBotService
             ? ReviewBotAttempt::SOURCE_AUTO_WEAK_AREA
             : ReviewBotAttempt::SOURCE_MANUAL;
 
-        $questions = QuestionBankQuestion::query()
-            ->with(['options:id,question_bank_question_id,option_label,option_text,is_correct'])
-            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
-            ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
-            ->where('subject', $subject)
-            ->when($topicId, fn ($query) => $query->where('topic_id', $topicId))
-            ->when($subtopicId, fn ($query) => $query->where('subtopic_id', $subtopicId))
-            ->when($difficulty, fn ($query) => $query->where('difficulty', $difficulty))
-            ->inRandomOrder()
-            ->limit($questionCount)
-            ->get();
+        $selection = $this->selectSessionQuestions(
+            $student,
+            $subject,
+            $topicId,
+            $subtopicId,
+            $difficulty,
+            $questionCount
+        );
+
+        $questions = $selection['questions'];
 
         if ($questions->isEmpty()) {
             throw new RuntimeException('No published Review Bot questions match this filter yet. Try a broader subject/topic, or check back after your teacher publishes more.');
@@ -197,6 +198,8 @@ class ReviewBotService
 
         return [
             'attempt' => $attempt,
+            'scope_used' => $selection['scope_used'],
+            'scope_note' => $selection['scope_note'],
             'questions' => $questions->values()->map(fn (QuestionBankQuestion $question, int $index): array => [
                 'item_number' => $index + 1,
                 'question_id' => (int) $question->id,
@@ -209,6 +212,354 @@ class ReviewBotService
                 ])->values(),
             ])->all(),
         ];
+    }
+
+    /**
+     * Build one session's worth of questions.
+     *
+     * Two things happen here. First the scope widens on demand: an empty or
+     * thin subtopic tops up from its parent topic, then from the subject, so a
+     * student never hits a dead end while the wider pool has content. Second,
+     * selection is weighted by the student's own history with each item --
+     * questions they keep missing come back, questions they have answered
+     * correctly twice in a row drop out of rotation.
+     *
+     * @return array{questions: Collection<int, QuestionBankQuestion>, scope_used: string, scope_note: string|null}
+     */
+    protected function selectSessionQuestions(
+        User $student,
+        string $subject,
+        ?int $topicId,
+        ?int $subtopicId,
+        ?string $difficulty,
+        int $questionCount
+    ): array {
+        $scopes = [];
+
+        // Most specific scope there is: questions generated from the exact exam
+        // items this student got wrong. Everything below is a widening fallback.
+        $missedSourceIds = $this->missedExamItemIds($student, $subject, $topicId, $subtopicId);
+
+        if ($missedSourceIds !== []) {
+            $scopes['missed'] = fn ($query) => $query->whereIn('question_bank_questions.source_question_id', $missedSourceIds);
+        }
+
+        if ($subtopicId) {
+            $scopes['subtopic'] = fn ($query) => $query->where('question_bank_questions.subtopic_id', $subtopicId);
+        }
+
+        if ($topicId) {
+            $scopes['topic'] = fn ($query) => $query->where('question_bank_questions.topic_id', $topicId);
+        }
+
+        $scopes['subject'] = fn ($query) => $query;
+
+        $requestedScope = array_key_first($scopes);
+        $picked = new Collection();
+        $scopeUsed = $requestedScope;
+        $difficultyRelaxed = false;
+
+        foreach ($scopes as $label => $scope) {
+            if ($picked->count() >= $questionCount) {
+                break;
+            }
+
+            $before = $picked->count();
+            $picked = $this->fillFromScope($student, $picked, $scope, $subject, $difficulty, $questionCount);
+
+            if ($picked->count() > $before) {
+                $scopeUsed = $label;
+            }
+        }
+
+        // Widening the scope is preferred over ignoring the student's chosen
+        // difficulty, so difficulty is only relaxed once every scope is spent.
+        if ($picked->count() < $questionCount && $difficulty !== null) {
+            foreach ($scopes as $label => $scope) {
+                if ($picked->count() >= $questionCount) {
+                    break;
+                }
+
+                $before = $picked->count();
+                $picked = $this->fillFromScope($student, $picked, $scope, $subject, null, $questionCount);
+
+                if ($picked->count() > $before) {
+                    $difficultyRelaxed = true;
+                    $scopeUsed = $label;
+                }
+            }
+        }
+
+        return [
+            'questions' => $this->interleaveBySubtopic($picked),
+            'scope_used' => $scopeUsed,
+            'scope_note' => $this->scopeNote($requestedScope, $scopeUsed, $difficultyRelaxed, $picked->count(), $questionCount),
+        ];
+    }
+
+    /**
+     * Take as many questions as the scope can still contribute, honouring the
+     * bucket mix first and then topping up by priority.
+     *
+     * @param  Collection<int, QuestionBankQuestion>  $picked
+     * @return Collection<int, QuestionBankQuestion>
+     */
+    protected function fillFromScope(
+        User $student,
+        Collection $picked,
+        callable $scope,
+        string $subject,
+        ?string $difficulty,
+        int $questionCount
+    ): Collection {
+        $need = $questionCount - $picked->count();
+
+        if ($need <= 0) {
+            return $picked;
+        }
+
+        $excludeIds = $picked->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // Pass one keeps a session from becoming all-revision or all-new.
+        foreach ($this->bucketQuotas($need) as $bucket => $quota) {
+            if ($quota <= 0) {
+                continue;
+            }
+
+            $taken = $this->bucketQuery($student, $bucket, $scope, $subject, $difficulty, $excludeIds)
+                ->limit($quota)
+                ->get();
+
+            $picked = $picked->concat($taken);
+            $excludeIds = array_merge($excludeIds, $taken->pluck('id')->map(fn ($id) => (int) $id)->all());
+        }
+
+        // Pass two fills whatever the quotas could not, weakest items first.
+        foreach ([
+            ReviewBotItemState::BUCKET_WEAK,
+            ReviewBotItemState::BUCKET_UNSEEN,
+            ReviewBotItemState::BUCKET_LEARNING,
+            ReviewBotItemState::BUCKET_MASTERED,
+        ] as $bucket) {
+            $need = $questionCount - $picked->count();
+
+            if ($need <= 0) {
+                break;
+            }
+
+            $taken = $this->bucketQuery($student, $bucket, $scope, $subject, $difficulty, $excludeIds)
+                ->limit($need)
+                ->get();
+
+            $picked = $picked->concat($taken);
+            $excludeIds = array_merge($excludeIds, $taken->pluck('id')->map(fn ($id) => (int) $id)->all());
+        }
+
+        return $picked;
+    }
+
+    /**
+     * Roughly half revision of missed items, and most of the rest new material.
+     *
+     * @return array<string, int>
+     */
+    protected function bucketQuotas(int $need): array
+    {
+        $weak = min((int) ceil($need * 0.5), $need);
+        $unseen = min((int) ceil($need * 0.4), $need - $weak);
+        $learning = max(0, $need - $weak - $unseen);
+
+        return [
+            ReviewBotItemState::BUCKET_WEAK => $weak,
+            ReviewBotItemState::BUCKET_UNSEEN => $unseen,
+            ReviewBotItemState::BUCKET_LEARNING => $learning,
+        ];
+    }
+
+    /**
+     * @param  array<int, int>  $excludeIds
+     * @return \Illuminate\Database\Eloquent\Builder<QuestionBankQuestion>
+     */
+    protected function bucketQuery(
+        User $student,
+        string $bucket,
+        callable $scope,
+        string $subject,
+        ?string $difficulty,
+        array $excludeIds
+    ) {
+        $query = QuestionBankQuestion::query()
+            ->with(['options:id,question_bank_question_id,option_label,option_text,is_correct'])
+            ->select('question_bank_questions.*')
+            ->leftJoin('review_bot_item_states', function ($join) use ($student): void {
+                $join->on('review_bot_item_states.question_bank_question_id', '=', 'question_bank_questions.id')
+                    ->where('review_bot_item_states.user_id', '=', $student->id);
+            })
+            ->where('question_bank_questions.usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->where('question_bank_questions.status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->where('question_bank_questions.subject', $subject)
+            ->when($difficulty, fn ($builder) => $builder->where('question_bank_questions.difficulty', $difficulty))
+            ->when($excludeIds !== [], fn ($builder) => $builder->whereNotIn('question_bank_questions.id', $excludeIds))
+            // Cognitive ladder: a student meets a concept at recall level first
+            // and only climbs once the easier variants have dropped out of
+            // rotation as mastered. Random order breaks ties within a level.
+            ->orderByRaw($this->cognitiveLevelOrdering())
+            ->inRandomOrder();
+
+        $scope($query);
+
+        return match ($bucket) {
+            ReviewBotItemState::BUCKET_UNSEEN => $query
+                ->whereNull('review_bot_item_states.id'),
+            ReviewBotItemState::BUCKET_WEAK => $query
+                ->whereNotNull('review_bot_item_states.id')
+                ->where('review_bot_item_states.consecutive_correct', '=', 0),
+            ReviewBotItemState::BUCKET_LEARNING => $query
+                ->where('review_bot_item_states.consecutive_correct', '=', 1),
+            ReviewBotItemState::BUCKET_MASTERED => $query
+                ->where('review_bot_item_states.consecutive_correct', '>=', ReviewBotItemState::MASTERY_THRESHOLD),
+            default => $query,
+        };
+    }
+
+    /**
+     * Orders cognitive levels easiest-first, portably across MySQL and the
+     * SQLite the test suite runs on (neither FIELD() nor an enum would work on
+     * both). Levels come from a fixed constant, never user input.
+     */
+    protected function cognitiveLevelOrdering(): string
+    {
+        $cases = [];
+
+        foreach (QuestionBankQuestion::COGNITIVE_LEVELS as $rank => $level) {
+            $cases[] = sprintf("WHEN '%s' THEN %d", $level, $rank + 1);
+        }
+
+        return sprintf(
+            'CASE question_bank_questions.cognitive_level %s ELSE %d END',
+            implode(' ', $cases),
+            count(QuestionBankQuestion::COGNITIVE_LEVELS) + 1
+        );
+    }
+
+    /**
+     * Exam items this student answered incorrectly, narrowed to the scope they
+     * asked for. These are the items whose generated variants should be served
+     * before anything else.
+     *
+     * @return array<int, int>
+     */
+    protected function missedExamItemIds(User $student, string $subject, ?int $topicId, ?int $subtopicId): array
+    {
+        return DB::table('exam_attempt_answers')
+            ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
+            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
+            ->where('exam_attempts.user_id', $student->id)
+            ->where('exam_attempt_answers.is_correct', false)
+            ->where('question_bank_questions.subject', $subject)
+            ->when($subtopicId, fn ($query) => $query->where('question_bank_questions.subtopic_id', $subtopicId))
+            ->when(!$subtopicId && $topicId, fn ($query) => $query->where('question_bank_questions.topic_id', $topicId))
+            ->distinct()
+            ->pluck('exam_attempt_answers.question_bank_question_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Alternate subtopics so a session does not run in blocks. Interleaved
+     * practice is consistently better for retention than blocked practice.
+     *
+     * @param  Collection<int, QuestionBankQuestion>  $questions
+     * @return Collection<int, QuestionBankQuestion>
+     */
+    protected function interleaveBySubtopic(Collection $questions): Collection
+    {
+        $groups = $questions
+            ->groupBy(fn (QuestionBankQuestion $question) => (int) ($question->subtopic_id ?? 0))
+            ->map(fn (Collection $group): array => $group->values()->all())
+            ->values()
+            ->all();
+
+        $interleaved = [];
+
+        while (true) {
+            $movedAny = false;
+
+            foreach (array_keys($groups) as $index) {
+                if ($groups[$index] === []) {
+                    continue;
+                }
+
+                $interleaved[] = array_shift($groups[$index]);
+                $movedAny = true;
+            }
+
+            if (!$movedAny) {
+                break;
+            }
+        }
+
+        return new Collection($interleaved);
+    }
+
+    /**
+     * Plain-language explanation when the session is not exactly what was asked
+     * for, so a short session never looks like a bug to the student.
+     */
+    protected function scopeNote(
+        string $requestedScope,
+        string $scopeUsed,
+        bool $difficultyRelaxed,
+        int $found,
+        int $requested
+    ): ?string {
+        $notes = [];
+
+        if ($requestedScope === 'missed' && $scopeUsed !== 'missed') {
+            $notes[] = 'You have already worked through the questions built from the items you missed, so this session widens to related material.';
+        } elseif ($scopeUsed !== $requestedScope) {
+            $notes[] = match ($scopeUsed) {
+                'topic' => 'There were not enough questions for that subtopic yet, so this session also draws from the wider topic.',
+                'subject' => 'There were not enough questions for that topic yet, so this session also draws from the wider subject.',
+                default => null,
+            };
+        }
+
+        if ($difficultyRelaxed) {
+            $notes[] = 'Some questions fall outside the difficulty you picked, because that level did not have enough published questions.';
+        }
+
+        if ($found < $requested) {
+            $notes[] = sprintf(
+                'This session has %d question%s instead of %d -- that is everything published for this area so far.',
+                $found,
+                $found === 1 ? '' : 's',
+                $requested
+            );
+        }
+
+        $notes = array_values(array_filter($notes));
+
+        return $notes === [] ? null : implode(' ', $notes);
+    }
+
+    /**
+     * Fold one answered item into the student's recall history. An unanswered
+     * item counts as a miss so it stays in rotation rather than being treated
+     * as learned.
+     */
+    protected function recordItemState(int $userId, int $questionId, bool $wasCorrect): void
+    {
+        $state = ReviewBotItemState::query()->firstOrNew([
+            'user_id' => $userId,
+            'question_bank_question_id' => $questionId,
+        ]);
+
+        $state->times_seen = (int) $state->times_seen + 1;
+        $state->times_correct = (int) $state->times_correct + ($wasCorrect ? 1 : 0);
+        $state->consecutive_correct = $wasCorrect ? (int) $state->consecutive_correct + 1 : 0;
+        $state->last_seen_at = now();
+        $state->save();
     }
 
     /**
@@ -269,6 +620,8 @@ class ReviewBotService
                     'answered_at' => now(),
                 ]
             );
+
+            $this->recordItemState((int) $attempt->user_id, (int) $question->id, $isCorrect);
 
             if ($hasAnswer && !$isCorrect) {
                 $correctOption = $question->options->first(fn ($option) => (bool) $option->is_correct);

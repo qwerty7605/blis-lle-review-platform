@@ -43,7 +43,7 @@ export function useReviewBotAdminModule() {
     subject: LIBRARY_SUBJECT_CATEGORIES[0] ?? '',
     topic: '',
     subtopic: '',
-    questionCount: 5,
+    sourceLimit: 5,
   })
 
   const generating = ref(false)
@@ -136,7 +136,7 @@ export function useReviewBotAdminModule() {
         subject: form.subject,
         topic: form.topic || undefined,
         subtopic: form.subtopic || undefined,
-        question_count: Number(form.questionCount),
+        source_limit: Number(form.sourceLimit),
       })
 
       generateMessage.value = data?.message ?? 'Generation queued.'

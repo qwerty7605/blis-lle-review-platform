@@ -26,6 +26,15 @@ class QuestionBankQuestion extends Model
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
 
+    /** Answer key not independently checked (no API key, or the check failed). */
+    public const VERIFICATION_UNCHECKED = 'unchecked';
+
+    /** An independent model, shown no answer key, picked the same option. */
+    public const VERIFICATION_AGREED = 'agreed';
+
+    /** Independent model disagreed -- likely a miskeyed item, review first. */
+    public const VERIFICATION_DISAGREED = 'disagreed';
+
     public const STATUSES = [
         self::STATUS_DRAFT,
         self::STATUS_PUBLISHED,
@@ -36,6 +45,10 @@ class QuestionBankQuestion extends Model
         self::TAG_STATUS_CONFIRMED,
     ];
 
+    /**
+     * Ordered easiest to hardest. Review Bot serves a source item's variants in
+     * this order, so a student proves recall before being asked to apply.
+     */
     public const COGNITIVE_LEVELS = [
         'recall',
         'comprehension',
@@ -68,6 +81,7 @@ class QuestionBankQuestion extends Model
     protected $fillable = [
         'question_bank_id',
         'usage_type',
+        'source_question_id',
         'subject',
         'topic_id',
         'subtopic_id',
@@ -77,6 +91,10 @@ class QuestionBankQuestion extends Model
         'tag_source',
         'explanation',
         'status',
+        'verification_status',
+        'verifier_answer_label',
+        'validation_flags',
+        'embedding',
         'source_reference',
         'item_number',
         'question_text',
@@ -84,6 +102,29 @@ class QuestionBankQuestion extends Model
         'answer_label',
         'answer_text',
     ];
+
+    /**
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'validation_flags' => 'array',
+    ];
+
+    /**
+     * The exam item this Review Bot question was generated from.
+     */
+    public function sourceQuestion(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_question_id');
+    }
+
+    /**
+     * Review Bot questions generated from this exam item.
+     */
+    public function generatedVariants(): HasMany
+    {
+        return $this->hasMany(self::class, 'source_question_id');
+    }
 
     /**
      * Parent question bank.

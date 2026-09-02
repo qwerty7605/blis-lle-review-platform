@@ -105,6 +105,10 @@ Route::post('/student/review-bot/sessions', function (
             'subtopic_id' => $session['attempt']->subtopic_id,
             'total_items' => $session['attempt']->total_items,
         ],
+        // Set when the session had to widen past the requested subtopic/topic,
+        // relax the difficulty, or return fewer questions than asked for.
+        'scope_used' => $session['scope_used'] ?? null,
+        'scope_note' => $session['scope_note'] ?? null,
         'questions' => $session['questions'],
     ], 201);
 });

@@ -220,6 +220,8 @@ export function useReviewBotModule() {
         topicId: data?.attempt?.topic_id ?? null,
         subtopicId: data?.attempt?.subtopic_id ?? null,
         questions: asList(data?.questions).map(normalizeQuestion),
+        scopeUsed: data?.scope_used ?? null,
+        scopeNote: data?.scope_note ?? null,
       }
     } catch (error) {
       sessionError.value = firstApiError(error, 'Unable to start a Review Bot session right now.')

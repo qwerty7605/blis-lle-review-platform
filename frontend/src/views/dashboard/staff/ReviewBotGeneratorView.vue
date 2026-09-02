@@ -45,8 +45,9 @@
         </label>
 
         <label class="field-stack">
-          <span class="field-label">How many</span>
-          <input v-model.number="form.questionCount" type="number" min="1" max="20" class="text-input" />
+          <span class="field-label">Source items to cover</span>
+          <input v-model.number="form.sourceLimit" type="number" min="1" max="50" class="text-input" />
+          <span class="field-hint">Each exam item can yield up to one review question per cognitive level, so this covers more questions than the number alone suggests.</span>
         </label>
       </div>
 
