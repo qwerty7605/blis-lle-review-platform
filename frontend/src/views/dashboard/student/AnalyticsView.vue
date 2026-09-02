@@ -133,7 +133,13 @@
         <article class="surface-card analytics-card analytics-history-card">
           <header class="analytics-card-head">
             <div>
-              <h3>Recent Scores</h3>
+              <div class="analytics-card-head-title">
+                <h3>Recent Scores</h3>
+                <span class="info-hint" tabindex="0" :aria-label="recentScoresDescription">
+                  <Info :size="13" />
+                  <span class="info-hint-bubble" role="tooltip">{{ recentScoresDescription }}</span>
+                </span>
+              </div>
               <p>See how your finished exam scores are moving over time.</p>
             </div>
             <span class="pill neutral">{{ scoreHistory.length }} exams</span>
@@ -302,6 +308,9 @@ const {
 const subjectsCardDescription = 'The big percentage is your average score across every finished exam in this subject. '
   + 'The bar plots it against the 75% passing mark (gold line). '
   + 'Last = your most recent score, Best = your highest score, trend = change vs. your previous attempt in this subject.'
+
+const recentScoresDescription = 'A1 through A8 are your last 8 finished exams in order, oldest (A1) to most recent (A8) -- '
+  + 'not tied to any one subject. Hover a point on the chart to see which exam it was and its exact score.'
 
 const statMeta = [
   {
