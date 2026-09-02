@@ -54,7 +54,13 @@
     <div class="analytics-main-grid">
       <article class="surface-card analytics-card analytics-subjects-card">
         <header class="analytics-card-head">
-          <h3>Subjects</h3>
+          <div class="analytics-card-head-title">
+            <h3>Subjects</h3>
+            <span class="info-hint" tabindex="0" :aria-label="subjectsCardDescription">
+              <Info :size="13" />
+              <span class="info-hint-bubble" role="tooltip">{{ subjectsCardDescription }}</span>
+            </span>
+          </div>
           <span class="pill neutral">{{ subjects.length }}</span>
         </header>
 
@@ -292,6 +298,10 @@ const {
   predictivePanel,
   loadAnalytics,
 } = useStudentInsightsModule()
+
+const subjectsCardDescription = 'The big percentage is your average score across every finished exam in this subject. '
+  + 'The bar plots it against the 75% passing mark (gold line). '
+  + 'Last = your most recent score, Best = your highest score, trend = change vs. your previous attempt in this subject.'
 
 const statMeta = [
   {
@@ -540,7 +550,7 @@ function guidanceBadge(tone) {
   left: 50%;
   transform: translateX(-50%) translateY(4px);
   width: max-content;
-  max-width: 220px;
+  max-width: 240px;
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--lnu-navy-deep, #102149);
@@ -633,6 +643,12 @@ function guidanceBadge(tone) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.analytics-card-head-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .analytics-card-head h3 {
