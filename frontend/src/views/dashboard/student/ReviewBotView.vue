@@ -620,22 +620,38 @@ function recommendationHeading(action) {
   justify-content: flex-end;
   padding-top: 8px;
   border-top: 1px solid rgba(13, 21, 71, 0.08);
+  flex-shrink: 0;
 }
 
 .review-session-body {
+  /* flex, not a fixed-row grid: the scope-note banner above
+     .review-session-top is conditional (v-if="session.scopeNote"), so a
+     grid-template-rows with a hardcoded track count put that banner's row
+     in the track meant for the question list whenever both were present --
+     the "0 of 10" box and the scrollable list overlapping the same slot in
+     the screenshot that prompted this fix. Flex has no such row-count
+     assumption: every fixed-height child (banner, progress box, footer)
+     just takes its natural height, and only the scroll area is asked to
+     grow/shrink into whatever space is left. */
   min-height: 0;
-  display: grid;
-  grid-template-rows: min-content minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
 .review-session-body > .review-bot-empty {
-  grid-row: 1 / -1;
+  flex: 1;
+  min-height: 0;
+}
+
+.review-session-body > .feedback {
+  flex-shrink: 0;
 }
 
 .review-session-top {
   display: grid;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .review-session-status {
@@ -760,6 +776,7 @@ function recommendationHeading(action) {
 }
 
 .review-question-scroll {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
@@ -888,11 +905,8 @@ function recommendationHeading(action) {
     height: auto;
   }
 
-  .review-session-body {
-    grid-template-rows: auto;
-  }
-
   .review-question-scroll {
+    flex: none;
     overflow: visible;
     padding-right: 0;
   }
