@@ -256,16 +256,6 @@ export function useStudentInsightsModule() {
       )
     }
 
-    const delta = stats.value.latest_score_delta === null ? null : Number(stats.value.latest_score_delta)
-    if (delta !== null) {
-      points.push({
-        label: 'Latest trend',
-        text: delta === 0
-          ? 'About the same as your previous exam.'
-          : `${delta > 0 ? 'Up' : 'Down'} ${Math.abs(delta).toFixed(1)} points compared to your previous exam.`,
-      })
-    }
-
     return { empty: false, headline, points }
   })
 
