@@ -118,9 +118,29 @@
             <p>Please wait.</p>
           </div>
 
-          <div v-else class="guidance-narrative">
+          <div v-else-if="reviewNarrative.empty" class="guidance-narrative">
             <Lightbulb :size="20" class="guidance-narrative-icon" />
-            <p>{{ reviewNarrative }}</p>
+            <p>{{ reviewNarrative.emptyMessage }}</p>
+          </div>
+
+          <div v-else class="guidance-narrative guidance-narrative-full">
+            <div v-if="reviewNarrative.headline" class="guidance-headline">
+              <span class="guidance-headline-icon"><Lightbulb :size="18" /></span>
+              <div>
+                <span class="guidance-kicker">{{ reviewNarrative.headline.label }}</span>
+                <p class="guidance-headline-text">{{ reviewNarrative.headline.text }}</p>
+              </div>
+            </div>
+
+            <ul v-if="reviewNarrative.points.length > 0" class="guidance-points">
+              <li v-for="point in reviewNarrative.points" :key="point.label">
+                <span class="guidance-point-dot" aria-hidden="true"></span>
+                <span>
+                  <strong class="guidance-point-label">{{ point.label }}:</strong>
+                  <span class="guidance-point-text">{{ point.text }}</span>
+                </span>
+              </li>
+            </ul>
           </div>
         </article>
 
@@ -785,16 +805,93 @@ function textToneClass(tone) {
   box-shadow: 0 10px 18px rgba(43, 124, 76, 0.08);
 }
 
+.guidance-narrative-full {
+  display: grid;
+  gap: 16px;
+}
+
 .guidance-narrative-icon {
   flex-shrink: 0;
   color: #2a7b4c;
 }
 
-.guidance-narrative p {
+.guidance-narrative > p {
   margin: 0;
   color: var(--lnu-text);
   font-size: 14px;
   line-height: 1.6;
+}
+
+.guidance-headline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.guidance-headline-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(42, 123, 76, 0.14);
+  color: #2a7b4c;
+}
+
+.guidance-kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2a7b4c;
+  margin-bottom: 4px;
+}
+
+.guidance-headline-text {
+  margin: 0;
+  color: var(--lnu-navy-deep);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.guidance-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.guidance-points li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.guidance-point-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: #2a7b4c;
+}
+
+.guidance-point-label {
+  color: var(--lnu-navy-deep);
+  font-size: 13px;
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.guidance-point-text {
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .predictive-card {
