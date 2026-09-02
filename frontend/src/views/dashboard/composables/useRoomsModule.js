@@ -3,7 +3,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
 import {
   formatClockTime,
-  formatDateTime,
   normalizeExamDeliveryMode,
 } from './useDashboardFormatters'
 import {
@@ -363,105 +362,27 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentExamQuestions.value.filter((question) => !questionHasAnswer(question)).length
   ))
 
-  const studentExamResultSummary = computed(() => {
-    const total = Math.max(0, Number(studentExamAttempt.value?.total_items ?? studentExamQuestions.value.length))
-    const answered = Math.max(0, Number(studentExamAttempt.value?.answered_count ?? 0))
-    const correct = Math.max(0, Number(studentExamAttempt.value?.correct_answers ?? 0))
-    const incorrect = Math.max(answered - correct, 0)
-    const missed = Math.max(total - answered, 0)
-    const rawScore = Number(studentExamAttempt.value?.score_percent ?? 0)
-    const score = Number.isFinite(rawScore) ? rawScore : 0
-    const submittedAtText = studentExamAttempt.value?.submitted_at
-      ? formatDateTime(studentExamAttempt.value.submitted_at)
-      : 'n/a'
+  // The aggregate result (score, subject/topic breakdown, recommendations,
+  // and the "Review Answers"/"Review Responses" action that used to live next
+  // to it) has its own standalone page now (StudentExamResultView.vue,
+  // fetched fresh from GET /student/exam-attempts/:id) instead of living
+  // inside this overlay — see the redirect watcher below.
 
-    let tone = 'needs-work'
-    let label = 'Needs more review'
-    let headline = 'Keep practicing and review the missed items.'
-    let message = 'Focus on the questions you missed, then review the correct answers before your next attempt.'
+  // Whenever the aggregate result becomes the thing to show -- a fresh
+  // submission, an auto-sync tick discovering the attempt got auto-submitted
+  // (e.g. time expired), or a start-exam call resolving to an already-
+  // submitted attempt -- hand off to the standalone result page instead of
+  // rendering it in this overlay. One watcher covers every path uniformly
+  // instead of threading a redirect through each call site individually.
+  watch(isStudentExamResultSummaryVisible, (visible) => {
+    if (!visible) return
 
-    if (score >= 90) {
-      tone = 'excellent'
-      label = 'Outstanding result'
-      headline = 'Strong finish.'
-      message = 'You cleared this exam with a high score. Review the full breakdown if you want to confirm every item.'
-    } else if (score >= 75) {
-      tone = 'passing'
-      label = 'Passing result'
-      headline = 'You passed this attempt.'
-      message = 'Your score is in a good range. Check the answer review for the few items that still need cleanup.'
-    } else if (score >= 60) {
-      tone = 'review'
-      label = 'Close, but needs review'
-      headline = 'You are within reach.'
-      message = 'You answered a fair share correctly, but there are still several items to revisit before the next attempt.'
-    }
+    const attemptId = studentExamAttempt.value?.id
+    if (!attemptId) return
 
-    // The backend already computes a much richer breakdown
-    // (ExamResultFeedbackService::buildForAttempt) and ships it as
-    // `feedback` alongside the attempt — merge it in here so the result
-    // page can show subject/topic breakdowns and recommendations instead
-    // of just the score.
-    const feedback = studentExamFeedback.value ?? {}
-
-    return {
-      total,
-      answered,
-      correct,
-      incorrect,
-      missed,
-      score,
-      scoreDisplay: score.toFixed(2),
-      submittedAtText,
-      tone,
-      label,
-      headline,
-      message,
-      passStatus: feedback.pass_status ?? null,
-      subjectBreakdown: feedback.subject_breakdown ?? [],
-      topicBreakdown: feedback.topic_breakdown ?? [],
-      primaryFocus: feedback.primary_focus ?? null,
-      secondaryFocuses: feedback.secondary_focuses ?? [],
-      strength: feedback.strength ?? null,
-      readinessLevel: feedback.readiness_level ?? null,
-      recommendedActions: feedback.recommended_actions ?? [],
-      historicalReference: feedback.historical_reference ?? null,
-    }
+    closeExamSimulationModal()
+    router.push({ name: 'dashboard-exam-result', params: { attemptId } })
   })
-
-  const topicLevelLabels = {
-    strong: 'Strong',
-    average: 'Average',
-    weak: 'Weak',
-    needs_review: 'Needs Review',
-  }
-
-  function studentExamTopicLevelLabel(level) {
-    return topicLevelLabels[level] ?? 'Average'
-  }
-
-  // "Review Your Weak Areas" — deep-links into the Review Bot with the
-  // attempt's weakest topic/subtopic (falling back to the weakest subject),
-  // completing the exam -> result -> review-bot loop.
-  function goToReviewWeakArea() {
-    const focus = studentExamResultSummary.value.primaryFocus
-    if (!focus) return
-
-    router.push({
-      name: 'dashboard-review-bot',
-      query: {
-        subject: focus.subject,
-        ...(focus.basis === 'topic' && focus.topic_id ? { topic_id: focus.topic_id } : {}),
-        ...(focus.basis === 'topic' && focus.subtopic_id ? { subtopic_id: focus.subtopic_id } : {}),
-      },
-    })
-  }
-
-  const studentExamReviewActionLabel = computed(() => (
-    String(selectedStudentExam.value?.results_visibility_mode ?? 'hidden') === 'visible'
-      ? 'Review Answers'
-      : 'Review Responses'
-  ))
 
   const liveBoardRoom = computed(() => {
     const roomId = Number(liveBoardRoomId.value)
@@ -507,7 +428,27 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     examAttemptSidebarCollapsed.value = !examAttemptSidebarCollapsed.value
   }
 
-  onMounted(() => {
+  // Deep link back from the exam result page's "Review Answers" button
+  // (?room=&exam=&review=1) -- opens straight into per-question review for
+  // that exam instead of leaving the student to find it in the room's list.
+  async function openReviewDeepLinkIfRequested() {
+    if (String(route.query?.review ?? '') !== '1') return
+
+    const targetExamId = Number(route.query?.exam)
+    if (!Number.isFinite(targetExamId) || targetExamId < 1) return
+
+    const targetExam = [
+      ...selectedRoomActiveExams.value,
+      ...selectedRoomArchivedExams.value,
+    ].find((exam) => Number(exam.id) === targetExamId)
+
+    if (!targetExam) return
+
+    await openExamSimulation(targetExam, { forceReviewOverlay: true })
+    openStudentExamReview()
+  }
+
+  onMounted(async () => {
     if (typeof window !== 'undefined') {
       examAttemptMobileMediaQuery = window.matchMedia('(max-width: 1200px)')
       syncExamAttemptSidebarForViewport(examAttemptMobileMediaQuery)
@@ -522,7 +463,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     // Deep link from the home dashboard's "Resume/Take/Retake/Upcoming"
     // action — preselect that room instead of defaulting to the first one.
     const requestedRoomId = Number(route.query?.room)
-    fetchRooms(Number.isFinite(requestedRoomId) && requestedRoomId > 0 ? requestedRoomId : null)
+    await fetchRooms(Number.isFinite(requestedRoomId) && requestedRoomId > 0 ? requestedRoomId : null)
+    await openReviewDeepLinkIfRequested()
   })
 
   onBeforeUnmount(() => {
@@ -757,7 +699,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     }
   }
 
-  function applyStudentAttemptPayload(payload, preferredQuestionId = null) {
+  function applyStudentAttemptPayload(payload, preferredQuestionId = null, options = {}) {
+    const { preserveReviewVisibility = false } = options
     const nextAttemptStatus = String(payload?.attempt?.status ?? '').toLowerCase()
     const previousVisitedQuestionIds = [...studentExamVisitedQuestionIds.value]
     const examPayload = payload?.exam
@@ -771,7 +714,13 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentExamFeedback.value = payload?.feedback ?? null
     selectedStudentExam.value = examPayload ?? selectedStudentExam.value
     studentExamQuestions.value = payload?.questions ?? []
-    studentExamReviewVisible.value = nextAttemptStatus === 'submitted' ? false : studentExamReviewVisible.value
+    // Defaults to jumping straight to the result page on submission (see the
+    // isStudentExamResultSummaryVisible watcher) -- preserveReviewVisibility
+    // lets a caller that already wants review mode (e.g. the "review a past
+    // attempt" deep link) keep it true without a transient false in between.
+    if (!preserveReviewVisibility) {
+      studentExamReviewVisible.value = nextAttemptStatus === 'submitted' ? false : studentExamReviewVisible.value
+    }
     syncSelectedRoomAssignedExam(examPayload, payload?.attempt ?? null)
 
     const answeredQuestionIds = studentExamQuestions.value
@@ -837,11 +786,25 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     }
   }
 
-  async function openExamSimulation(exam) {
+  // forceReviewOverlay skips the "hand off to the result page" behavior below
+  // and always opens the overlay straight into per-question review instead --
+  // used only by the deep link back from the result page's "Review Answers"
+  // button (see the onMounted query handling further down), since that's the
+  // one caller that already knows it wants the immersive review UI, not the
+  // aggregate result.
+  async function openExamSimulation(exam, { forceReviewOverlay = false } = {}) {
     if (!canStudentOpenExam(exam) || !selectedRoomId.value) return
 
     const reviewOnlyMode = isStudentExamRetakeLimitReached(exam)
     const submittedAttemptId = studentSubmittedAttemptId(exam)
+
+    // No retakes left, nothing to answer -- the only thing this exam entry
+    // can mean is "show me my result", so skip the overlay and go straight
+    // to its own page instead of opening/closing it just to redirect.
+    if (reviewOnlyMode && submittedAttemptId && !forceReviewOverlay) {
+      router.push({ name: 'dashboard-exam-result', params: { attemptId: submittedAttemptId } })
+      return
+    }
 
     selectedStudentExam.value = {
       ...exam,
@@ -853,8 +816,11 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
     try {
       if (reviewOnlyMode && submittedAttemptId) {
+        // Set before the payload lands so the result-redirect watcher never
+        // observes a (momentary) result-summary state for this attempt.
+        studentExamReviewVisible.value = true
         const { data } = await services.getAttempt(submittedAttemptId)
-        applyStudentAttemptPayload(data)
+        applyStudentAttemptPayload(data, null, { preserveReviewVisibility: true })
         roomMessage.value = 'Reviewing your submitted attempt.'
         return
       }
@@ -1697,10 +1663,6 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isStudentOpenNavigationMode,
     isCurrentQuestionInputLocked,
     studentExamUnansweredCount,
-    studentExamResultSummary,
-    studentExamTopicLevelLabel,
-    goToReviewWeakArea,
-    studentExamReviewActionLabel,
     displayMemberRole,
     yearLevelLabel,
     canRemoveRoomMember,

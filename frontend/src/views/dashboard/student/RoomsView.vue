@@ -351,229 +351,10 @@
             </aside>
 
             <section class="exam-attempt-main">
-              <article v-if="isStudentExamResultSummaryVisible" class="exam-result-card">
-                <section class="exam-result-hero" :class="`is-${studentExamResultSummary.tone}`">
-                  <div class="exam-result-copy">
-                    <div class="exam-result-badge">
-                      <CheckCircle2 v-if="studentExamResultSummary.score >= 75" :size="18" />
-                      <AlertCircle v-else :size="18" />
-                      <span>{{ studentExamResultSummary.label }}</span>
-                    </div>
-                    <h4>{{ studentExamResultSummary.headline }}</h4>
-                    <p>{{ studentExamResultSummary.message }}</p>
-
-                    <div class="exam-result-meta">
-                      <span>Submitted: {{ studentExamResultSummary.submittedAtText }}</span>
-                      <span v-if="selectedStudentExam?.duration_minutes">
-                        Time allowed: {{ selectedStudentExam.duration_minutes }} minutes
-                      </span>
-                    </div>
-                  </div>
-
-                  <div class="exam-result-score-panel">
-                    <span class="exam-result-score-caption">Final Score</span>
-                    <strong class="exam-result-score-value">{{ studentExamResultSummary.scoreDisplay }}%</strong>
-                    <span class="exam-result-score-subtitle">
-                      {{ studentExamResultSummary.correct }}/{{ studentExamResultSummary.total }} correct
-                    </span>
-                    <span
-                      v-if="studentExamResultSummary.passStatus"
-                      class="exam-result-pass-chip"
-                      :class="{ 'is-fail': !studentExamResultSummary.passStatus.is_passing }"
-                    >
-                      {{ studentExamResultSummary.passStatus.is_passing ? 'Passing' : 'Not Passing' }}
-                      · {{ studentExamResultSummary.passStatus.passing_score }}% required
-                    </span>
-                  </div>
-                </section>
-
-                <div class="exam-result-stats">
-                  <article class="exam-result-stat">
-                    <span>Answered</span>
-                    <strong>{{ studentExamResultSummary.answered }}/{{ studentExamResultSummary.total }}</strong>
-                    <small>Completed items</small>
-                  </article>
-                  <article class="exam-result-stat">
-                    <span>Correct</span>
-                    <strong>{{ studentExamResultSummary.correct }}</strong>
-                    <small>Right answers</small>
-                  </article>
-                  <article class="exam-result-stat">
-                    <span>Incorrect</span>
-                    <strong>{{ studentExamResultSummary.incorrect }}</strong>
-                    <small>Wrong answers</small>
-                  </article>
-                  <article class="exam-result-stat">
-                    <span>Missed</span>
-                    <strong>{{ studentExamResultSummary.missed }}</strong>
-                    <small>Unanswered items</small>
-                  </article>
-                </div>
-
-                <div
-                  v-if="studentExamResultSummary.primaryFocus || studentExamResultSummary.strength || studentExamResultSummary.readinessLevel"
-                  class="exam-result-insights"
-                >
-                  <article
-                    v-if="studentExamResultSummary.primaryFocus"
-                    class="exam-feedback-card is-focus"
-                  >
-                    <span class="exam-feedback-icon is-focus"><Target :size="16" /></span>
-                    <div class="exam-feedback-card-body">
-                      <span class="exam-feedback-kicker">
-                        {{ studentExamResultSummary.primaryFocus.basis === 'topic' ? 'Weak Area' : 'Weakest Subject' }}
-                      </span>
-                      <strong>{{ studentExamResultSummary.primaryFocus.label }}</strong>
-                      <p>
-                        {{ studentExamResultSummary.primaryFocus.correct_count }}/{{ studentExamResultSummary.primaryFocus.total_items }}
-                        correct
-                        <span v-if="studentExamResultSummary.primaryFocus.missed_count > 0">
-                          • {{ studentExamResultSummary.primaryFocus.missed_count }} missed
-                        </span>
-                      </p>
-                    </div>
-                  </article>
-
-                  <article
-                    v-if="studentExamResultSummary.strength"
-                    class="exam-feedback-card is-strength"
-                  >
-                    <span class="exam-feedback-icon is-strength"><TrendingUp :size="16" /></span>
-                    <div class="exam-feedback-card-body">
-                      <span class="exam-feedback-kicker">Strongest Area</span>
-                      <strong>{{ studentExamResultSummary.strength.label }}</strong>
-                      <p>
-                        {{ studentExamResultSummary.strength.correct_count }}/{{ studentExamResultSummary.strength.total_items }}
-                        correct
-                      </p>
-                    </div>
-                  </article>
-
-                  <article
-                    v-if="studentExamResultSummary.readinessLevel"
-                    class="exam-feedback-card"
-                  >
-                    <span class="exam-feedback-icon is-readiness"><ShieldCheck :size="16" /></span>
-                    <div class="exam-feedback-card-body">
-                      <span class="exam-feedback-kicker">Readiness Level</span>
-                      <strong>{{ studentExamResultSummary.readinessLevel.label }}</strong>
-                      <p>{{ studentExamResultSummary.readinessLevel.message }}</p>
-                    </div>
-                  </article>
-                </div>
-
-                <section
-                  v-if="subjectPerformancePanels.length > 0"
-                  class="exam-feedback-panel exam-breakdown-panel"
-                >
-                  <div class="exam-feedback-panel-head">
-                    <strong>Performance Breakdown</strong>
-                    <span class="exam-feedback-panel-sub">Weakest subjects and subtopics first</span>
-                  </div>
-
-                  <article
-                    v-for="subject in subjectPerformancePanels"
-                    :key="subject.subject"
-                    class="exam-breakdown-subject"
-                  >
-                    <div class="exam-breakdown-subject-head">
-                      <span class="exam-breakdown-subject-name">{{ subject.subject }}</span>
-                      <span class="exam-breakdown-subject-score">{{ Number(subject.score_percent ?? 0).toFixed(0) }}%</span>
-                    </div>
-
-                    <div class="exam-score-bar">
-                      <div
-                        class="exam-score-bar-fill"
-                        :class="scoreBarTone(subject.score_percent)"
-                        :style="{ width: `${Math.min(100, Math.max(0, subject.score_percent ?? 0))}%` }"
-                      ></div>
-                    </div>
-
-                    <p class="exam-breakdown-subject-meta">
-                      {{ subject.correct_count }}/{{ subject.total_items }} correct
-                      <span v-if="subject.missed_count > 0"> • {{ subject.missed_count }} missed</span>
-                    </p>
-
-                    <ul v-if="subject.topics.length > 0" class="exam-topic-breakdown-list">
-                      <li v-for="topic in subject.topics" :key="`${topic.topic_id}-${topic.subtopic_id || 0}`">
-                        <div class="exam-topic-row-head">
-                          <div class="exam-topic-row-name">
-                            <span>{{ topic.topic }}</span>
-                            <template v-if="topic.subtopic">
-                              <ChevronRight :size="12" class="exam-topic-row-arrow" />
-                              <span class="exam-topic-row-subtopic">{{ topic.subtopic }}</span>
-                            </template>
-                          </div>
-                          <span class="pill" :class="topicLevelPillTone(topic.level)">
-                            {{ studentExamTopicLevelLabel(topic.level) }}
-                            <template v-if="topic.repeated_weak"> • Repeated</template>
-                          </span>
-                        </div>
-                        <div class="exam-score-bar small">
-                          <div
-                            class="exam-score-bar-fill"
-                            :class="scoreBarTone(topic.score_percent)"
-                            :style="{ width: `${Math.min(100, Math.max(0, topic.score_percent ?? 0))}%` }"
-                          ></div>
-                        </div>
-                      </li>
-                    </ul>
-                  </article>
-                </section>
-
-                <div v-if="studentExamResultSummary.secondaryFocuses.length > 0" class="exam-feedback-tags">
-                  <span
-                    v-for="focus in studentExamResultSummary.secondaryFocuses"
-                    :key="`${focus.basis}-${focus.subtopic_id || focus.topic_id || focus.subject}`"
-                    class="pill neutral"
-                  >
-                    Also review {{ focus.label }}
-                  </span>
-                </div>
-
-                <section v-if="studentExamResultSummary.recommendedActions.length > 0" class="exam-feedback-panel">
-                  <div class="exam-feedback-panel-head">
-                    <Lightbulb :size="16" />
-                    <strong>How To Improve Next</strong>
-                  </div>
-                  <ol class="exam-feedback-list">
-                    <li
-                      v-for="(action, actionIndex) in studentExamResultSummary.recommendedActions"
-                      :key="`student-exam-feedback-${actionIndex}`"
-                    >
-                      <span class="exam-feedback-list-index">{{ actionIndex + 1 }}</span>
-                      <span>{{ action }}</span>
-                    </li>
-                  </ol>
-                  <p
-                    v-if="studentExamResultSummary.historicalReference?.matches_primary_focus"
-                    class="exam-feedback-trend"
-                  >
-                    This focus area also matches your recent performance trend.
-                  </p>
-                </section>
-
-                <div class="exam-result-actions">
-                  <button type="button" class="ghost-btn" @click="openStudentExamReview">
-                    {{ studentExamReviewActionLabel }}
-                  </button>
-                  <button
-                    v-if="studentExamResultSummary.primaryFocus"
-                    type="button"
-                    class="primary-btn"
-                    @click="goToReviewWeakArea"
-                  >
-                    Review Your Weak Areas
-                  </button>
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    @click="handleExamAttemptCloseClick"
-                  >
-                    Done
-                  </button>
-                </div>
-              </article>
+              <div v-if="isStudentExamResultSummaryVisible" class="room-detail-loading exam-attempt-loading">
+                <RefreshCw :size="16" class="spin-soft" />
+                <span>Taking you to your results...</span>
+              </div>
 
               <article v-else-if="currentStudentExamQuestion" class="exam-attempt-card immersive">
                 <header class="surface-head">
@@ -809,7 +590,6 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
 import {
   AlertCircle,
   Bookmark,
@@ -818,12 +598,8 @@ import {
   ChevronDown,
   ChevronRight,
   DoorOpen,
-  Lightbulb,
   LogOut,
   RefreshCw,
-  ShieldCheck,
-  Target,
-  TrendingUp,
   X,
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatRemainingDuration } from '../composables/useDashboardFormatters'
@@ -867,10 +643,6 @@ const {
   isStudentOpenNavigationMode,
   isCurrentQuestionInputLocked,
   studentExamUnansweredCount,
-  studentExamResultSummary,
-  studentExamTopicLevelLabel,
-  goToReviewWeakArea,
-  studentExamReviewActionLabel,
   yearLevelLabel,
   canStudentOpenExam,
   isStudentExamInProgress,
@@ -886,7 +658,6 @@ const {
   studentQuestionCorrectAnswerText,
   toggleExamAttemptSidebar,
   openExamSimulation,
-  openStudentExamReview,
   goToStudentExamQuestionIndex,
   goToStudentExamQuestion,
   handleExamAttemptCloseClick,
@@ -907,40 +678,6 @@ const {
   handleJoinRoom,
   handleLeaveRoom,
 } = useRoomsModule({ mode: 'student' })
-
-const topicLevelTones = {
-  strong: 'success',
-  average: 'neutral',
-  weak: 'gold',
-  needs_review: 'danger',
-}
-
-function topicLevelPillTone(level) {
-  return topicLevelTones[level] ?? 'neutral'
-}
-
-function scoreBarTone(scorePercent) {
-  const score = Number(scorePercent ?? 0)
-  if (score >= 80) return 'success'
-  if (score >= 60) return 'neutral'
-  if (score >= 40) return 'gold'
-  return 'danger'
-}
-
-// Subject Breakdown (flat) and Topic Breakdown (grouped by subject) come
-// from the backend as two separate lists that describe the same attempt —
-// merge them here so the result page can render one nested "subject, then
-// its topics/subtopics" panel instead of two disconnected sections.
-const subjectPerformancePanels = computed(() => {
-  const topicsBySubject = new Map(
-    studentExamResultSummary.value.topicBreakdown.map((group) => [group.subject, group.topics]),
-  )
-
-  return studentExamResultSummary.value.subjectBreakdown.map((subject) => ({
-    ...subject,
-    topics: topicsBySubject.get(subject.subject) ?? [],
-  }))
-})
 </script>
 
 <style scoped src="../dashboard.css"></style>
