@@ -1,5 +1,13 @@
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { questionsApi, reviewBotAdminApi } from '@/api'
+
+// Generation runs in a background queue job and can legitimately take several
+// minutes (it's a real OpenAI call per batch of source items) -- polled at
+// this cadence, self-rescheduling rather than setInterval so a slow request
+// never overlaps the next tick, and capped so a stuck/failed job doesn't
+// poll forever in the background.
+const GENERATION_POLL_INTERVAL_MS = 5000
+const GENERATION_POLL_MAX_MS = 10 * 60 * 1000
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -85,6 +93,11 @@ export function useReviewBotAdminModule() {
   const generating = ref(false)
   const generateError = ref('')
   const generateMessage = ref('')
+  // True from the moment generation is queued until new drafts actually show
+  // up (or the poll gives up) -- lets the template show "generating..."
+  // instead of a bare "no questions yet" empty state while the background
+  // job is still running, so the teacher never has to guess and hit Refresh.
+  const generationPending = ref(false)
 
   // Step 3/4: Generate → Review/Edit → Map/Assign — the AI-generated review
   // questions for the selected file, kept clearly separate from the original
@@ -176,6 +189,13 @@ export function useReviewBotAdminModule() {
       const { data } = await reviewBotAdminApi.listQuestions({ source_bank_id: selectedBankId.value })
       questions.value = asList(data?.questions).map(normalizeQuestion)
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
+
+      // New drafts actually landed -- the thing generationPending was
+      // waiting for. Stops the poll below on its own, whether this load was
+      // triggered by a poll tick or a manual Refresh click.
+      if (generationPending.value && questions.value.length > generationBaselineCount) {
+        generationPending.value = false
+      }
     } catch (error) {
       questionsError.value = firstApiError(error, 'Unable to load Review Bot questions.')
     } finally {
@@ -183,11 +203,47 @@ export function useReviewBotAdminModule() {
     }
   }
 
+  // Self-rescheduling poll (not setInterval, so a slow request never overlaps
+  // the next tick) that keeps checking for the generated batch while
+  // generationPending is true, and gives up after GENERATION_POLL_MAX_MS so a
+  // stuck/failed job doesn't poll forever in the background.
+  let generationBaselineCount = 0
+  let generationPollTimeoutId = null
+  let generationPollDeadline = 0
+
+  function stopGenerationPoll() {
+    if (generationPollTimeoutId !== null) {
+      clearTimeout(generationPollTimeoutId)
+      generationPollTimeoutId = null
+    }
+  }
+
+  function scheduleGenerationPollIfNeeded() {
+    stopGenerationPoll()
+
+    if (!generationPending.value) return
+
+    if (Date.now() >= generationPollDeadline) {
+      generationPending.value = false
+      return
+    }
+
+    generationPollTimeoutId = setTimeout(async () => {
+      generationPollTimeoutId = null
+      await loadQuestions()
+      scheduleGenerationPollIfNeeded()
+    }, GENERATION_POLL_INTERVAL_MS)
+  }
+
+  onUnmounted(stopGenerationPoll)
+
   // Library → Select Exam File: pick a file and load both its original
   // questions and whatever review batch already exists for it. That's the
   // only choice a teacher makes -- no topic/subtopic/count picking beyond
   // this, see generate() below.
   async function selectBank(bankId) {
+    stopGenerationPoll()
+    generationPending.value = false
     selectedBankId.value = Number(bankId)
     generateError.value = ''
     generateMessage.value = ''
@@ -197,6 +253,8 @@ export function useReviewBotAdminModule() {
   }
 
   function changeFile() {
+    stopGenerationPoll()
+    generationPending.value = false
     selectedBankId.value = null
     sourceQuestions.value = []
     questions.value = []
@@ -229,7 +287,13 @@ export function useReviewBotAdminModule() {
       generateMessage.value = data?.message ?? 'Generation queued.'
 
       if (data?.status === 'queued') {
-        setTimeout(loadQuestions, 4000)
+        // A real background OpenAI call, not a fixed few seconds -- keep
+        // checking until the drafts actually land instead of a single
+        // reload that's very likely to run before the job finishes.
+        generationBaselineCount = questions.value.length
+        generationPollDeadline = Date.now() + GENERATION_POLL_MAX_MS
+        generationPending.value = true
+        scheduleGenerationPollIfNeeded()
       }
     } catch (error) {
       generateError.value = firstApiError(error, 'Unable to queue Review Bot question generation.')
@@ -370,6 +434,7 @@ export function useReviewBotAdminModule() {
     generating,
     generateError,
     generateMessage,
+    generationPending,
     questions,
     filteredQuestions,
     questionsLoading,
