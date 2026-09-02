@@ -16,8 +16,10 @@ use RuntimeException;
 /**
  * Student-facing Review Bot: serves questions from the teacher-curated
  * Review Bot Question Bank (QuestionBankQuestion rows with
- * usage_type = review_bot and status = published). Never calls OpenAI --
- * that only happens on the teacher side, see ReviewBotAdminService.
+ * usage_type = review_bot and status = published). Never calls OpenAI
+ * itself -- when a session's scope comes up short it queues a background
+ * top-up job (see ReviewBotAdminService::queueTopUp()) so the bank fills
+ * in for next time, rather than making the student wait on a live call.
  */
 class ReviewBotService
 {
@@ -59,6 +61,7 @@ class ReviewBotService
 
     public function __construct(
         private readonly DashboardAnalyticsService $dashboardAnalyticsService,
+        private readonly ReviewBotAdminService $reviewBotAdminService,
     ) {
     }
 
@@ -288,6 +291,21 @@ class ReviewBotService
                     $scopeUsed = $label;
                 }
             }
+        }
+
+        // A thin bank should fix itself over time rather than staying thin
+        // forever. Widening past subtopic/topic, relaxing difficulty, or simply
+        // coming up short are all signs this exact area needs more content --
+        // queue a background top-up rather than making this student wait on a
+        // live call. The 'missed' scope widening on its own doesn't count: that
+        // just means the student has already worked through everything built
+        // from their wrong answers, which is success, not scarcity.
+        $isShort = $picked->count() < $questionCount
+            || $difficultyRelaxed
+            || ($requestedScope !== 'missed' && $scopeUsed !== $requestedScope);
+
+        if ($isShort) {
+            $this->reviewBotAdminService->queueTopUp($subject, $topicId, $subtopicId);
         }
 
         return [
