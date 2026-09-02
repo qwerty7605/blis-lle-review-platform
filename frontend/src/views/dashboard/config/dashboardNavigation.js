@@ -45,6 +45,18 @@ export const dashboardModules = {
     sub: 'Study with a BLIS tutor bot across the 6 core subjects',
     icon: Sparkles,
   },
+  examResult: {
+    key: 'examResult',
+    routeName: 'dashboard-exam-result',
+    label: 'Exam Result',
+    title: 'Exam Result',
+    sub: 'Your score, breakdown, and recommendations for this attempt',
+    icon: FileText,
+    // Reached only by navigating from a specific exam attempt, never a
+    // standing destination -- kept out of the sidebar, still an allowed
+    // route for the student role (see getDashboardNavItems/dashboardAllowedRouteNames below).
+    hidden: true,
+  },
   room: {
     key: 'room',
     routeName: 'dashboard-room-management',
@@ -120,7 +132,7 @@ export const dashboardModules = {
 }
 
 const dashboardNavKeysByRole = {
-  student: ['dashboard', 'rooms', 'reviewBot', 'analytics'],
+  student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult'],
   staff_master_examiner: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
   faculty: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
   admin: ['users', 'room', 'students', 'settings', 'audit'],
@@ -135,13 +147,20 @@ export function getDashboardModuleMeta(key) {
   return dashboardModules[key] ?? dashboardModules.dashboard
 }
 
+// Sidebar-visible items only -- a hidden module (e.g. examResult, reached by
+// navigating from a specific attempt rather than a standing destination)
+// is still a real, allowed route (see dashboardAllowedRouteNames), just
+// never rendered as a nav link.
 export function getDashboardNavItems(role) {
   const normalizedRole = normalizeDashboardRole(role)
-  return dashboardNavKeysByRole[normalizedRole].map((key) => getDashboardModuleMeta(key))
+  return dashboardNavKeysByRole[normalizedRole]
+    .map((key) => getDashboardModuleMeta(key))
+    .filter((item) => !item.hidden)
 }
 
 export function dashboardAllowedRouteNames(role) {
-  return getDashboardNavItems(role).map((item) => item.routeName)
+  const normalizedRole = normalizeDashboardRole(role)
+  return dashboardNavKeysByRole[normalizedRole].map((key) => getDashboardModuleMeta(key).routeName)
 }
 
 export function dashboardDefaultRouteName(role) {

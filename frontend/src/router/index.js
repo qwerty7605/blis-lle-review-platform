@@ -15,6 +15,7 @@ const DashboardHomeView = () => import('../views/dashboard/student/DashboardHome
 const RoomsView = () => import('../views/dashboard/student/RoomsView.vue')
 const AnalyticsView = () => import('../views/dashboard/student/AnalyticsView.vue')
 const ReviewBotView = () => import('../views/dashboard/student/ReviewBotView.vue')
+const StudentExamResultView = () => import('../views/dashboard/student/StudentExamResultView.vue')
 const RoomManagementView = () => import('../views/dashboard/shared/RoomManagementView.vue')
 const LibraryView = () => import('../views/dashboard/staff/LibraryView.vue')
 const ReviewBotGeneratorView = () => import('../views/dashboard/staff/ReviewBotGeneratorView.vue')
@@ -67,6 +68,12 @@ const routes = [
         name: 'dashboard-review-bot',
         component: ReviewBotView,
         meta: dashboardRouteMeta('reviewBot'),
+      },
+      {
+        path: 'exam-results/:attemptId',
+        name: 'dashboard-exam-result',
+        component: StudentExamResultView,
+        meta: dashboardRouteMeta('examResult'),
       },
       {
         path: 'room-management',
