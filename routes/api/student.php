@@ -217,7 +217,7 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
     ]);
 });
 
-Route::get('/student/analytics', function (Request $request) use ($canManageRooms, $ensureActive) {
+Route::get('/student/analytics', function (Request $request) use ($canManageRooms, $ensureActive, $dashboardAnalyticsService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
@@ -458,6 +458,11 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         'history' => $history,
         'recent_attempts' => $attempts->take(6)->values(),
         'predictive_model' => $predictiveModel,
+        // Same subject -> topic -> subtopic weak-area resolution "Review Your
+        // Weak Areas" already uses (see DashboardAnalyticsService), reused
+        // here so "What To Review Next" can name the actual weakest
+        // subtopic, not just the subject it lives under.
+        'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($user),
     ]);
 });
 

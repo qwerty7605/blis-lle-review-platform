@@ -108,7 +108,7 @@
           <header class="analytics-card-head">
             <div>
               <h3>What To Review Next</h3>
-              <p>Simple notes based on your current results.</p>
+              <p>An in-depth read on your results, down to the specific topic if we have one mapped.</p>
             </div>
           </header>
 
@@ -118,15 +118,9 @@
             <p>Please wait.</p>
           </div>
 
-          <div v-else class="guidance-list">
-            <article v-for="item in guidanceItems" :key="item.title" class="guidance-card">
-              <span class="pill" :class="pillClass(item.tone)">{{ guidanceBadge(item.tone) }}</span>
-
-              <div>
-                <strong>{{ item.title }}</strong>
-                <p>{{ item.description }}</p>
-              </div>
-            </article>
+          <div v-else class="guidance-narrative">
+            <Lightbulb :size="20" class="guidance-narrative-icon" />
+            <p>{{ reviewNarrative }}</p>
           </div>
         </article>
 
@@ -282,6 +276,7 @@ import {
   ClipboardList,
   Gauge,
   Info,
+  Lightbulb,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -298,7 +293,7 @@ const {
   statCards,
   subjects,
   averageScore,
-  guidanceItems,
+  reviewNarrative,
   scoreHistory,
   recentAttempts,
   predictivePanel,
@@ -382,12 +377,6 @@ function textToneClass(tone) {
   return 'muted-text'
 }
 
-function guidanceBadge(tone) {
-  if (tone === 'danger') return 'Review'
-  if (tone === 'success') return 'Good'
-  if (tone === 'gold') return 'Update'
-  return 'Info'
-}
 </script>
 
 <style scoped src="../dashboard.css"></style>
@@ -676,14 +665,12 @@ function guidanceBadge(tone) {
 }
 
 .subject-list,
-.guidance-list,
 .results-list {
   display: grid;
   gap: 12px;
 }
 
 .subject-row,
-.guidance-card,
 .result-row,
 .score-chip {
   border: 1px solid rgba(13, 21, 71, 0.1);
@@ -705,14 +692,12 @@ function guidanceBadge(tone) {
 }
 
 .subject-row-top strong,
-.guidance-card strong,
 .result-row-main strong {
   display: block;
   color: var(--lnu-text);
 }
 
 .subject-row-top p,
-.guidance-card p,
 .result-row-main p {
   margin: 4px 0 0;
   color: var(--lnu-text-muted);
@@ -789,17 +774,27 @@ function guidanceBadge(tone) {
   font-size: 12px;
 }
 
-.guidance-card {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-color: rgba(42, 123, 76, 0.24);
+.guidance-narrative {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(42, 123, 76, 0.24);
+  border-radius: 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(235, 248, 239, 0.98));
   box-shadow: 0 10px 18px rgba(43, 124, 76, 0.08);
 }
 
-.guidance-card .pill {
-  width: fit-content;
+.guidance-narrative-icon {
+  flex-shrink: 0;
+  color: #2a7b4c;
+}
+
+.guidance-narrative p {
+  margin: 0;
+  color: var(--lnu-text);
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .predictive-card {
