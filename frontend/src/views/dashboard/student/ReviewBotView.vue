@@ -480,7 +480,14 @@ function recommendationHeading(action) {
 .review-bot-session {
   background: #fcfdff;
   grid-template-rows: auto minmax(0, 1fr);
-  height: min(760px, calc(100vh - 220px));
+  /* A hard height clipped everything below it to whatever was left over once
+     the scope-note banner + progress box took their share -- on a shorter
+     viewport (or whenever that banner shows) there wasn't enough left for
+     .review-question-scroll to show a full question, just a sliver of
+     options with nothing above or below them. min-height instead: still
+     tall by default, but free to grow past that so the question always has
+     room, with the page scrolling rather than a barely-usable inner box. */
+  min-height: min(760px, calc(100vh - 220px));
 }
 
 .review-section-head {
@@ -777,7 +784,10 @@ function recommendationHeading(action) {
 
 .review-question-scroll {
   flex: 1;
-  min-height: 0;
+  /* Backstop so this never shrinks to a sliver no matter how much fixed
+     content (banner, progress box) sits above it -- enough to show one
+     full question's text and options before scrolling kicks in. */
+  min-height: 360px;
   overflow-y: auto;
   padding-right: 6px;
   scrollbar-gutter: stable;
