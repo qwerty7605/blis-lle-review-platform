@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -24,17 +25,25 @@ Route::post('/library/review-bot/generate', function (
     }
 
     $validated = $request->validate([
-        'subject' => ['required', 'string', 'max:255'],
+        // The Library file to generate from -- the single source of truth for
+        // uploaded exam questions (see ReviewBotAdminService class docblock).
+        'source_bank_id' => ['required', 'integer'],
         'topic' => ['nullable', 'string', 'max:255'],
         'subtopic' => ['nullable', 'string', 'max:255'],
         // How many EXAM ITEMS to cover, not how many questions to produce --
         // each item yields up to one question per cognitive level.
-        'source_limit' => ['required', 'integer', 'min:1', 'max:50'],
+        'source_limit' => ['required', 'integer', 'min:1', 'max:200'],
     ]);
+
+    $sourceBank = QuestionBank::query()->find($validated['source_bank_id']);
+
+    if (!$sourceBank || (int) $sourceBank->created_by !== (int) $user->id) {
+        return response()->json(['message' => 'That file was not found in your Library.'], 404);
+    }
 
     $result = $reviewBotAdminService->queueGeneration(
         $user,
-        $validated['subject'],
+        $sourceBank,
         $validated['topic'] ?? null,
         $validated['subtopic'] ?? null,
         (int) $validated['source_limit'],
@@ -72,6 +81,8 @@ Route::get('/library/review-bot/questions', function (
         'subject' => ['nullable', 'string', 'max:255'],
         'topic_id' => ['nullable', 'integer'],
         'status' => ['nullable', Rule::in(QuestionBankQuestion::STATUSES)],
+        // Scopes to one Library file's generation batch -- see listQuestions().
+        'source_bank_id' => ['nullable', 'integer'],
     ]);
 
     return response()->json([
@@ -94,6 +105,11 @@ Route::patch('/library/review-bot/questions/{question}', function (
 
     $user = $request->user();
 
+    // Review Bot banks are shared per subject across every master examiner who
+    // teaches it (see ReviewBotAdminService::reviewBotBankFor()), not owned by
+    // whichever teacher happened to create the bank first -- so this is
+    // deliberately just a usage_type check, unlike the Library's per-teacher
+    // ownership checks on their own uploaded banks.
     if (!$isStaffMasterExaminer($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
@@ -103,6 +119,10 @@ Route::patch('/library/review-bot/questions/{question}', function (
         'explanation' => ['nullable', 'string'],
         'difficulty' => ['nullable', Rule::in(QuestionBankQuestion::DIFFICULTIES)],
         'cognitive_level' => ['nullable', Rule::in(QuestionBankQuestion::COGNITIVE_LEVELS)],
+        // Re-mapping ("map/assign"): corrects or narrows the topic/subtopic
+        // this question inherited from its source item, before publishing.
+        'topic_name' => ['nullable', 'string', 'max:255'],
+        'subtopic_name' => ['nullable', 'string', 'max:255'],
         'options' => ['nullable', 'array'],
         'options.*.id' => ['required_with:options', 'integer'],
         'options.*.text' => ['required_with:options', 'string'],
@@ -191,6 +211,7 @@ Route::delete('/library/review-bot/questions/{question}', function (
 
     $user = $request->user();
 
+    // Shared per-subject bank -- see the matching note on the PATCH route above.
     if (!$isStaffMasterExaminer($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
         return response()->json(['message' => 'Forbidden'], 403);
     }

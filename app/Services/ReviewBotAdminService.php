@@ -86,10 +86,24 @@ class ReviewBotAdminService
      * Subtopic rows before queuing the background job, so generation
      * always attaches to a real topic_id/subtopic_id.
      *
+     * The subject is taken from the source bank itself, never from client
+     * input -- the Library file the teacher picked is the single source of
+     * truth for what it's generating from (see class docblock).
+     *
      * @return array{status: string, message: string, bank_id: int}
      */
-    public function queueGeneration(User $teacher, string $subject, ?string $topicName, ?string $subtopicName, int $sourceLimit): array
+    public function queueGeneration(User $teacher, QuestionBank $sourceBank, ?string $topicName, ?string $subtopicName, int $sourceLimit): array
     {
+        $subject = trim((string) $sourceBank->subject);
+
+        if ($subject === '') {
+            return [
+                'status' => 'skipped',
+                'message' => 'This file has no subject set yet. Assign it a subject in the Library before generating review questions from it.',
+                'bank_id' => 0,
+            ];
+        }
+
         $bank = $this->reviewBotBankFor($subject, (int) $teacher->id);
 
         if (!$this->hasApiKey()) {
@@ -108,13 +122,15 @@ class ReviewBotAdminService
             $topic?->id,
             $subtopic?->id,
             $sourceLimit,
+            (int) $sourceBank->id,
         )->afterCommit();
 
         return [
             'status' => 'queued',
             'message' => sprintf(
-                'Covering up to %d exam item(s) in the background, one review question per cognitive level each. They will appear as drafts below shortly.',
-                $sourceLimit
+                'Covering up to %d exam item(s) from "%s" in the background, one review question per cognitive level each. They will appear as drafts below shortly.',
+                $sourceLimit,
+                $sourceBank->title
             ),
             'bank_id' => (int) $bank->id,
         ];
@@ -180,13 +196,13 @@ class ReviewBotAdminService
      *
      * @return array{created: int, sources_processed: int, rejected: array<int, array<string, string>>, errors: array<int, string>}
      */
-    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit): array
+    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit, ?int $sourceBankId = null): array
     {
         if (!$this->hasApiKey()) {
             return ['created' => 0, 'sources_processed' => 0, 'rejected' => [], 'errors' => [$this->missingConfigurationMessage()]];
         }
 
-        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit);
+        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit, $sourceBankId);
 
         if ($sourceQuestions->isEmpty()) {
             return [
@@ -309,7 +325,7 @@ class ReviewBotAdminService
      *
      * @return Collection<int, QuestionBankQuestion>
      */
-    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $limit): Collection
+    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $limit, ?int $sourceBankId = null): Collection
     {
         return QuestionBankQuestion::query()
             ->with([
@@ -318,6 +334,10 @@ class ReviewBotAdminService
             ])
             ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
             ->where('subject', $subject)
+            // Narrows to one Library file when the teacher generated from a
+            // specific upload; the system-triggered top-up (see queueTopUp())
+            // leaves this null and draws from every matching file instead.
+            ->when($sourceBankId, fn ($query) => $query->where('question_bank_id', $sourceBankId))
             ->when($subtopicId, fn ($query) => $query->where('subtopic_id', $subtopicId))
             ->when(!$subtopicId && $topicId, fn ($query) => $query->where('topic_id', $topicId))
             ->whereDoesntHave('generatedVariants')
@@ -515,17 +535,31 @@ PROMPT;
     }
 
     /**
-     * @param  array{subject?: string, topic_id?: int, status?: string}  $filters
+     * @param  array{subject?: string, topic_id?: int, status?: string, source_bank_id?: int}  $filters
      * @return Collection<int, QuestionBankQuestion>
      */
     public function listQuestions(array $filters = []): Collection
     {
         return QuestionBankQuestion::query()
-            ->with(['topic:id,name', 'subtopic:id,name', 'options', 'questionBank:id,title,subject'])
+            ->with([
+                'topic:id,name',
+                'subtopic:id,name',
+                'options',
+                'questionBank:id,title,subject',
+                'sourceQuestion:id,question_bank_id,item_number',
+                'sourceQuestion.questionBank:id,title',
+            ])
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->when(filled($filters['subject'] ?? null), fn ($query) => $query->where('subject', $filters['subject']))
             ->when(filled($filters['topic_id'] ?? null), fn ($query) => $query->where('topic_id', (int) $filters['topic_id']))
             ->when(filled($filters['status'] ?? null), fn ($query) => $query->where('status', $filters['status']))
+            // Scopes the list to one generation batch's source file -- the
+            // "Review/Edit" step of the Library-file-first workflow shows just
+            // what came from the file the teacher is currently working on.
+            ->when(
+                filled($filters['source_bank_id'] ?? null),
+                fn ($query) => $query->whereHas('sourceQuestion', fn ($q) => $q->where('question_bank_id', (int) $filters['source_bank_id']))
+            )
             ->orderByDesc('created_at')
             ->get();
     }
@@ -541,6 +575,30 @@ PROMPT;
             'difficulty' => $data['difficulty'] ?? null,
             'cognitive_level' => $data['cognitive_level'] ?? null,
         ], fn ($value) => $value !== null));
+
+        // Re-mapping: a generated question inherits its source item's topic/
+        // subtopic, but that's a starting point, not final -- the teacher can
+        // correct or narrow it here before publishing ("map/assign"). Absent
+        // means "leave as-is"; an empty string clears the subtopic explicitly.
+        if (array_key_exists('topic_name', $data) && filled($data['topic_name'])) {
+            $topic = $this->questionMappingService->resolveTopic($question->subject, $data['topic_name'], null);
+            $question->topic_id = $topic?->id;
+
+            // A topic change invalidates whatever subtopic belonged to the old
+            // topic unless the same request also supplies a new one below.
+            if (!array_key_exists('subtopic_name', $data)) {
+                $question->subtopic_id = null;
+            }
+        }
+
+        if (array_key_exists('subtopic_name', $data)) {
+            $subtopicName = trim((string) $data['subtopic_name']);
+            $topic = $question->topic_id ? Topic::find($question->topic_id) : null;
+
+            $question->subtopic_id = ($topic && $subtopicName !== '')
+                ? $this->questionMappingService->resolveSubtopic($topic, $subtopicName, null)?->id
+                : null;
+        }
 
         $question->save();
 
