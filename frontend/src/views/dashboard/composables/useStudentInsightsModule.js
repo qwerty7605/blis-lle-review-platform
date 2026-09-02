@@ -146,43 +146,27 @@ export function useStudentInsightsModule() {
       : `Down ${Math.abs(delta).toFixed(1)} points`
   })
 
-  const statCards = computed(() => {
-    const latestScore = stats.value.latest_score_percent
-    const focusCount = Number(stats.value.focus_subjects_count ?? 0)
-
-    return [
-      {
-        label: 'Exams Taken',
-        value: String(stats.value.completed_attempts ?? 0),
-        hint: 'Finished exams',
-        tone: 'navy',
-      },
-      {
-        label: 'Overall Average',
-        value: averageScore.value === null ? 'N/A' : `${averageScore.value.toFixed(1)}%`,
-        hint: averageScore.value === null
-          ? 'Take one exam to see this'
-          : 'Based on finished exams',
-        tone: 'success',
-      },
-      {
-        label: 'Latest Result',
-        value: latestScore === null ? 'N/A' : `${Number(latestScore).toFixed(1)}%`,
-        hint: latestScore === null
-          ? 'Shows after your next exam'
-          : latestScoreDeltaText.value,
-        tone: 'gold',
-      },
-      {
-        label: 'Review Areas',
-        value: String(focusCount),
-        hint: focusCount === 0
-          ? 'All attempted subjects are 75%+'
-          : `${focusCount} subject${focusCount === 1 ? '' : 's'} below 75%`,
-        tone: focusCount === 0 ? 'success' : 'danger',
-      },
-    ]
-  })
+  // Latest Result and Review Areas used to also live here as stat cards --
+  // removed on request (redundant with the Recent Scores trend chart and the
+  // Review Areas count already surfacing inside "What To Review Next" below).
+  // The underlying data (latest score, focus subject count) is still used by
+  // guidanceItems/latestScoreDeltaText, just no longer duplicated as its own tile.
+  const statCards = computed(() => ([
+    {
+      label: 'Exams Taken',
+      value: String(stats.value.completed_attempts ?? 0),
+      hint: 'Finished exams',
+      tone: 'navy',
+    },
+    {
+      label: 'Overall Average',
+      value: averageScore.value === null ? 'N/A' : `${averageScore.value.toFixed(1)}%`,
+      hint: averageScore.value === null
+        ? 'Take one exam to see this'
+        : 'Based on finished exams',
+      tone: 'success',
+    },
+  ]))
 
   const guidanceItems = computed(() => {
     if ((stats.value.completed_attempts ?? 0) === 0) {

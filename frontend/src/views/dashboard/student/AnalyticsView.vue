@@ -32,7 +32,13 @@
           <span class="analytics-stat-tag" :class="`tone-${stat.tone}`">{{ stat.tag }}</span>
         </div>
 
-        <p class="stat-label analytics-stat-label">{{ stat.label }}</p>
+        <div class="analytics-stat-label-row">
+          <p class="stat-label analytics-stat-label">{{ stat.label }}</p>
+          <span class="info-hint" tabindex="0" :aria-label="stat.description">
+            <Info :size="13" />
+            <span class="info-hint-bubble" role="tooltip">{{ stat.description }}</span>
+          </span>
+        </div>
 
         <div v-if="stat.showRadial" class="analytics-stat-radial-row">
           <RadialScore :value="averageScore" :size="92" />
@@ -263,6 +269,7 @@ import {
   BarChart3,
   ClipboardList,
   Gauge,
+  Info,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -287,10 +294,17 @@ const {
 } = useStudentInsightsModule()
 
 const statMeta = [
-  { icon: ClipboardList, tag: 'Progress' },
-  { icon: Gauge, tag: 'Average', showRadial: true },
-  { icon: BarChart3, tag: 'Latest' },
-  { icon: ShieldCheck, tag: 'Review' },
+  {
+    icon: ClipboardList,
+    tag: 'Progress',
+    description: 'How many exams you have fully submitted. Exams you started but haven\'t finished yet aren\'t counted.',
+  },
+  {
+    icon: Gauge,
+    tag: 'Average',
+    showRadial: true,
+    description: 'Your average score across every exam you have completed so far.',
+  },
 ]
 
 const decoratedStats = computed(() => (
@@ -298,6 +312,7 @@ const decoratedStats = computed(() => (
     ...stat,
     icon: statMeta[index]?.icon ?? BarChart3,
     tag: statMeta[index]?.tag ?? 'Summary',
+    description: statMeta[index]?.description ?? '',
     displayValue: stat.value === 'N/A' ? '--' : stat.value,
     showRadial: Boolean(statMeta[index]?.showRadial) && averageScore.value !== null,
   }))
@@ -405,7 +420,8 @@ function guidanceBadge(tone) {
 }
 
 .analytics-stats-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 640px;
 }
 
 .analytics-stat-card {
@@ -486,11 +502,71 @@ function guidanceBadge(tone) {
   color: #9f3434;
 }
 
+.analytics-stat-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .analytics-stat-label {
   margin: 0;
   font-size: 14px;
   font-weight: 700;
   color: rgba(16, 33, 73, 0.72);
+}
+
+.info-hint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(16, 33, 73, 0.45);
+  cursor: help;
+  border-radius: 50%;
+}
+
+.info-hint:hover,
+.info-hint:focus-visible {
+  color: rgba(16, 33, 73, 0.75);
+  outline: none;
+}
+
+.info-hint-bubble {
+  position: absolute;
+  z-index: 5;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--lnu-navy-deep, #102149);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: 0 10px 20px rgba(13, 21, 71, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.info-hint-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: var(--lnu-navy-deep, #102149);
+}
+
+.info-hint:hover .info-hint-bubble,
+.info-hint:focus-visible .info-hint-bubble {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .analytics-stat-value {
@@ -810,12 +886,6 @@ function guidanceBadge(tone) {
 @media (max-width: 1200px) {
   .analytics-main-grid {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 900px) {
-  .analytics-stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
