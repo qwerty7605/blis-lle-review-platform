@@ -4,8 +4,9 @@ import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
 
 const PASSING_SCORE = 75
-const STUDENTS_PAGE_SIZE_OPTIONS = [25, 50, 100]
-const STUDENTS_DEFAULT_PAGE_SIZE = STUDENTS_PAGE_SIZE_OPTIONS[0]
+// Fixed page size -- deliberately not user-adjustable, so the table always
+// paginates the same way for every staff member looking at the directory.
+const STUDENTS_PAGE_SIZE = 30
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -143,7 +144,6 @@ export function useStudentsModule() {
     direction: 'asc',
   })
   const studentsPage = ref(1)
-  const studentsPageSize = ref(STUDENTS_DEFAULT_PAGE_SIZE)
 
   const yearLevelOptions = [
     { value: '1', label: '1st Year' },
@@ -218,7 +218,7 @@ export function useStudentsModule() {
   })
 
   const studentsLastPage = computed(() => (
-    Math.max(1, Math.ceil(sortedStudents.value.length / studentsPageSize.value))
+    Math.max(1, Math.ceil(sortedStudents.value.length / STUDENTS_PAGE_SIZE))
   ))
 
   // Clamping here keeps the view valid when a filter shrinks the result set
@@ -226,13 +226,13 @@ export function useStudentsModule() {
   const studentsCurrentPage = computed(() => Math.min(studentsPage.value, studentsLastPage.value))
 
   const pagedStudents = computed(() => {
-    const start = (studentsCurrentPage.value - 1) * studentsPageSize.value
-    return sortedStudents.value.slice(start, start + studentsPageSize.value)
+    const start = (studentsCurrentPage.value - 1) * STUDENTS_PAGE_SIZE
+    return sortedStudents.value.slice(start, start + STUDENTS_PAGE_SIZE)
   })
 
   const studentsPagination = computed(() => {
     const total = sortedStudents.value.length
-    const perPage = studentsPageSize.value
+    const perPage = STUDENTS_PAGE_SIZE
     const currentPage = studentsCurrentPage.value
 
     return {
@@ -288,7 +288,7 @@ export function useStudentsModule() {
   }
 
   watch(
-    () => [studentFilters.search, studentFilters.year_level, studentFilters.archive_state, studentsPageSize.value],
+    () => [studentFilters.search, studentFilters.year_level, studentFilters.archive_state],
     () => {
       studentsPage.value = 1
     },
@@ -374,8 +374,6 @@ export function useStudentsModule() {
     pagedStudents,
     studentSort,
     studentsPagination,
-    studentsPageSize,
-    studentsPageSizeOptions: STUDENTS_PAGE_SIZE_OPTIONS,
     studentsRangeLabel,
     canGoToPreviousStudentsPage,
     canGoToNextStudentsPage,
