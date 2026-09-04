@@ -175,11 +175,6 @@
         <div class="management-toolbar users-pagination">
           <p class="muted">{{ studentsRangeLabel }}</p>
           <div class="management-actions">
-            <select v-model.number="studentsPageSize" class="text-input narrow" aria-label="Students per page">
-              <option v-for="size in studentsPageSizeOptions" :key="size" :value="size">
-                {{ size }} per page
-              </option>
-            </select>
             <button
               type="button"
               class="ghost-btn"
@@ -218,8 +213,6 @@ const {
   filteredStudents,
   pagedStudents,
   studentsPagination,
-  studentsPageSize,
-  studentsPageSizeOptions,
   studentsRangeLabel,
   canGoToPreviousStudentsPage,
   canGoToNextStudentsPage,
