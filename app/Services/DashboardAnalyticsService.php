@@ -352,6 +352,8 @@ class DashboardAnalyticsService
         'name' => 'users.name',
         'student_id' => 'users.student_id',
         'year_level' => 'users.year_level',
+        'student_status' => 'users.student_status',
+        'admission_year' => 'users.admission_year',
         'email' => 'users.email',
         'room_count' => 'current_rooms_count',
         'attempts_submitted' => 'stats.attempts_submitted',
@@ -362,7 +364,7 @@ class DashboardAnalyticsService
     ];
 
     /** Sort keys where an empty string counts as blank, not just NULL. */
-    private const DIRECTORY_TEXT_SORTS = ['name', 'student_id', 'email'];
+    private const DIRECTORY_TEXT_SORTS = ['name', 'student_id', 'email', 'student_status'];
 
     /**
      * Sort keys backed by a plain `users` column, which is what makes the
@@ -371,7 +373,7 @@ class DashboardAnalyticsService
      * outside this list is a derived value that has to exist before rows can
      * be ordered, so those sorts pay for a full rollup.
      */
-    private const DIRECTORY_USER_SORTS = ['name', 'student_id', 'year_level', 'email'];
+    private const DIRECTORY_USER_SORTS = ['name', 'student_id', 'year_level', 'email', 'student_status', 'admission_year'];
 
     private const DIRECTORY_PAGE_SIZE = 30;
     private const DIRECTORY_MAX_PAGE_SIZE = 100;
@@ -460,6 +462,8 @@ class DashboardAnalyticsService
                 'users.email',
                 'users.student_id',
                 'users.year_level',
+                'users.student_status',
+                'users.admission_year',
                 'users.is_active',
                 'users.archived_at',
             ])
@@ -575,6 +579,14 @@ class DashboardAnalyticsService
             ->when(
                 filled($filters['year_level'] ?? null),
                 fn ($q) => $q->where('users.year_level', (int) $filters['year_level']),
+            )
+            ->when(
+                filled($filters['student_status'] ?? null),
+                fn ($q) => $q->where('users.student_status', $filters['student_status']),
+            )
+            ->when(
+                filled($filters['admission_year'] ?? null),
+                fn ($q) => $q->where('users.admission_year', (int) $filters['admission_year']),
             )
             // Defaulting to `current` is the change that bounds this endpoint:
             // graduates and their whole attempt history used to be loaded on
@@ -758,6 +770,8 @@ class DashboardAnalyticsService
             'email' => (string) $student->email,
             'student_id' => $student->student_id,
             'year_level' => $student->year_level,
+            'student_status' => $student->student_status,
+            'admission_year' => $student->admission_year,
             'is_active' => (bool) $student->is_active,
             'archived_at' => $student->archived_at,
             'room_count' => (int) ($student->current_rooms_count ?? 0),

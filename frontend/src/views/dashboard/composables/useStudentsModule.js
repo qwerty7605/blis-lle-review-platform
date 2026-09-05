@@ -21,6 +21,8 @@ const SORT_KEYS = new Set([
   'name',
   'student_id',
   'year_level',
+  'student_status',
+  'admission_year',
   'room_count',
   'attempts_submitted',
   'average_score_percent',
@@ -113,8 +115,23 @@ export function useStudentsModule() {
   const studentFilters = reactive({
     search: '',
     year_level: '',
+    student_status: '',
+    admission_year: '',
     archive_state: 'current',
   })
+
+  const studentStatusOptions = [
+    { value: 'enrolled', label: 'Enrolled' },
+    { value: 'graduated', label: 'Graduated' },
+    { value: 'dropped', label: 'Dropped out' },
+    { value: 'transferred', label: 'Transferred' },
+    { value: 'on_leave', label: 'On leave' },
+    { value: 'archived_unspecified', label: 'Reason not recorded' },
+  ]
+
+  function studentStatusLabel(value) {
+    return studentStatusOptions.find((option) => option.value === value)?.label ?? '--'
+  }
 
   const studentSort = reactive({
     key: 'name',
@@ -150,6 +167,8 @@ export function useStudentsModule() {
       const { data } = await services.getStudentsDirectory({
         search: studentFilters.search.trim() || undefined,
         year_level: studentFilters.year_level || undefined,
+        student_status: studentFilters.student_status || undefined,
+        admission_year: studentFilters.admission_year || undefined,
         archive_state: studentFilters.archive_state || undefined,
         sort: studentSort.key,
         direction: studentSort.direction,
@@ -234,7 +253,12 @@ export function useStudentsModule() {
     searchTimer = setTimeout(() => loadStudentsDirectory(), SEARCH_DEBOUNCE_MS)
   })
 
-  watch(() => [studentFilters.year_level, studentFilters.archive_state], () => {
+  watch(() => [
+    studentFilters.year_level,
+    studentFilters.student_status,
+    studentFilters.admission_year,
+    studentFilters.archive_state,
+  ], () => {
     studentsPage.value = 1
     loadStudentsDirectory()
   })
@@ -317,6 +341,8 @@ export function useStudentsModule() {
     directoryError,
     studentFilters,
     yearLevelOptions,
+    studentStatusOptions,
+    studentStatusLabel,
     students: directoryStudents,
     studentSort,
     studentsPagination,

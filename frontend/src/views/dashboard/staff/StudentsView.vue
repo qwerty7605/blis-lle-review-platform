@@ -43,6 +43,20 @@
             {{ option.label }}
           </option>
         </select>
+        <select v-model="studentFilters.student_status" class="text-input narrow">
+          <option value="">All statuses</option>
+          <option v-for="option in studentStatusOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+        <input
+          v-model="studentFilters.admission_year"
+          type="number"
+          class="text-input narrow"
+          min="1900"
+          max="2999"
+          placeholder="Batch year"
+        />
         <select v-model="studentFilters.archive_state" class="text-input narrow">
           <option value="current">Current records</option>
           <option value="archived">Archived records</option>
@@ -83,6 +97,18 @@
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('year_level')">
                     Year
                     <span class="directory-sort-arrow">{{ sortIndicator('year_level') }}</span>
+                  </button>
+                </th>
+                <th :aria-sort="sortAriaValue('admission_year')">
+                  <button type="button" class="directory-sort-btn" @click="toggleStudentSort('admission_year')">
+                    Batch
+                    <span class="directory-sort-arrow">{{ sortIndicator('admission_year') }}</span>
+                  </button>
+                </th>
+                <th :aria-sort="sortAriaValue('student_status')">
+                  <button type="button" class="directory-sort-btn" @click="toggleStudentSort('student_status')">
+                    Status
+                    <span class="directory-sort-arrow">{{ sortIndicator('student_status') }}</span>
                   </button>
                 </th>
                 <th :aria-sort="sortAriaValue('room_count')">
@@ -144,6 +170,13 @@
                 <td>{{ student.student_id || '—' }}</td>
                 <td>
                   <span class="pill navy">{{ yearLevelShortLabel(student.year_level) }}</span>
+                </td>
+                <td>{{ student.admission_year || '--' }}</td>
+                <td>
+                  <span
+                    class="pill"
+                    :class="student.student_status === 'enrolled' ? 'success' : 'neutral'"
+                  >{{ studentStatusLabel(student.student_status) }}</span>
                 </td>
                 <td :title="roomNamesLabel(student)">
                   <span class="directory-table-sections">{{ roomNamesLabel(student) }}</span>
@@ -210,6 +243,8 @@ const {
   directoryError,
   studentFilters,
   yearLevelOptions,
+  studentStatusOptions,
+  studentStatusLabel,
   students,
   studentsPagination,
   studentsRangeLabel,

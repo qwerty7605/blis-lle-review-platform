@@ -1016,6 +1016,8 @@ Route::get('/students/directory', function (Request $request) use ($canManageRoo
     $validated = $request->validate([
         'search' => ['nullable', 'string', 'max:255'],
         'year_level' => ['nullable', 'integer'],
+        'student_status' => ['nullable', Rule::in(User::STUDENT_STATUSES)],
+        'admission_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
         'archive_state' => ['nullable', Rule::in(['current', 'archived', 'all'])],
         // Unknown sort keys fall back to name rather than erroring -- the
         // whitelist lives in DashboardAnalyticsService::DIRECTORY_SORTS, which
