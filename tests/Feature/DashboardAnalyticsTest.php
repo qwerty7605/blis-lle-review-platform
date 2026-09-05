@@ -443,13 +443,67 @@ class DashboardAnalyticsTest extends TestCase
 
         $students = collect($response->json('students'));
         $currentRecord = $students->firstWhere('email', 'current-directory@example.com');
-        $archivedRecord = $students->firstWhere('email', 'archived-directory@example.com');
 
         $this->assertSame(['BLIS 1A'], $currentRecord['room_names']);
         $this->assertSame(1, $currentRecord['attempts_submitted']);
         $this->assertEquals(80.0, $currentRecord['average_score_percent']);
+
+        // The listing now defaults to enrolled students and pages server-side,
+        // so archived records are reached deliberately rather than shipped on
+        // every request and filtered away in the browser.
+        $this->assertNull($students->firstWhere('email', 'archived-directory@example.com'));
+        $this->assertSame(2, $response->json('meta.total'));
+        $this->assertSame(1, $response->json('meta.current_page'));
+        $this->assertSame(30, $response->json('meta.per_page'));
+
+        $archivedResponse = $this->getJson('/api/students/directory?archive_state=archived');
+
+        $archivedRecord = collect($archivedResponse->assertOk()->json('students'))
+            ->firstWhere('email', 'archived-directory@example.com');
+
         $this->assertNotNull($archivedRecord['archived_at']);
         $this->assertEquals(90.0, $archivedRecord['average_score_percent']);
+        $this->assertSame(1, $archivedResponse->json('meta.total'));
+    }
+
+    public function test_student_directory_sorts_and_pages_on_the_server(): void
+    {
+        $staff = $this->makeUser('directory-sort-staff@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+
+        $names = [['Zoe Last', '3000003'], ['Adam First', '3000001'], ['Mia Middle', '3000002']];
+
+        foreach ($names as $index => [$name, $studentId]) {
+            $this->makeUser("directory-sort-{$index}@example.com", User::ROLE_STUDENT, $studentId, 1)
+                ->forceFill(['name' => $name])
+                ->save();
+        }
+
+        Sanctum::actingAs($staff);
+
+        $ascending = $this->getJson('/api/students/directory?sort=name&direction=asc')
+            ->assertOk()
+            ->json('students.*.name');
+
+        $this->assertSame(['Adam First', 'Mia Middle', 'Zoe Last'], $ascending);
+
+        $descending = $this->getJson('/api/students/directory?sort=name&direction=desc')
+            ->assertOk()
+            ->json('students.*.name');
+
+        $this->assertSame(['Zoe Last', 'Mia Middle', 'Adam First'], $descending);
+
+        // An unrecognised sort key must not reach ORDER BY -- it falls back to
+        // name rather than erroring or interpolating.
+        $this->getJson('/api/students/directory?sort=name);DROP TABLE users;--')
+            ->assertOk()
+            ->assertJsonPath('meta.sort', 'name');
+
+        $secondPage = $this->getJson('/api/students/directory?per_page=2&page=2')
+            ->assertOk();
+
+        $this->assertSame(['Zoe Last'], $secondPage->json('students.*.name'));
+        $this->assertSame(2, $secondPage->json('meta.last_page'));
+        $this->assertSame(3, $secondPage->json('meta.total'));
     }
 
     public function test_student_directory_route_is_not_available_to_student_accounts(): void

@@ -10,6 +10,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 
 Route::get('/student/dashboard', function (Request $request) use ($canManageRooms, $ensureActive, $normalizeDeliveryMode) {
@@ -987,5 +988,18 @@ Route::get('/students/directory', function (Request $request) use ($canManageRoo
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    return response()->json($dashboardAnalyticsService->buildStudentDirectory());
+    $validated = $request->validate([
+        'search' => ['nullable', 'string', 'max:255'],
+        'year_level' => ['nullable', 'integer'],
+        'archive_state' => ['nullable', Rule::in(['current', 'archived', 'all'])],
+        // Unknown sort keys fall back to name rather than erroring -- the
+        // whitelist lives in DashboardAnalyticsService::DIRECTORY_SORTS, which
+        // is also what stops the value reaching ORDER BY unchecked.
+        'sort' => ['nullable', 'string', 'max:64'],
+        'direction' => ['nullable', Rule::in(['asc', 'desc'])],
+        'page' => ['nullable', 'integer', 'min:1'],
+        'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+    ]);
+
+    return response()->json($dashboardAnalyticsService->paginateStudentDirectory($validated));
 });

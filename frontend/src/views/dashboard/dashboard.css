@@ -3711,6 +3711,12 @@
   background: linear-gradient(180deg, rgba(255, 241, 241, 0.98), rgba(250, 234, 234, 0.96));
 }
 
+/* The Average Score card asks for this tone; without the rule it fell back to
+   the plain card background while every other card was tinted. */
+.user-directory-summary-card.is-gold {
+  background: linear-gradient(180deg, rgba(253, 247, 232, 0.98), rgba(250, 242, 220, 0.96));
+}
+
 .directory-section {
   display: grid;
   gap: 12px;

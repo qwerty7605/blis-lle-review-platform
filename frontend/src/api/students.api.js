@@ -1,8 +1,11 @@
 import http from './http'
 
 class StudentsApi {
-  directory() {
-    return http.get('/students/directory')
+  /**
+   * @param {object} [params] search, year_level, archive_state, sort, direction, page, per_page
+   */
+  directory(params = {}) {
+    return http.get('/students/directory', { params })
   }
 }
 

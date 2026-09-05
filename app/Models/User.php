@@ -97,6 +97,20 @@ class User extends Authenticatable
     }
 
     /**
+     * Rooms where this user is a member that are still active.
+     *
+     * The unfiltered rooms() above is a lifetime membership list, so counting
+     * it makes a fourth year look like they belong to every section they have
+     * ever joined. Anything showing "current sections" wants this instead --
+     * it is the mirror of Room::currentStudentMembers(), which already filters
+     * archived users from the other side of the same pivot.
+     */
+    public function currentRooms(): BelongsToMany
+    {
+        return $this->rooms()->whereNull('rooms.archived_at');
+    }
+
+    /**
      * Limit the query to student accounts.
      */
     public function scopeStudents(Builder $query): Builder
