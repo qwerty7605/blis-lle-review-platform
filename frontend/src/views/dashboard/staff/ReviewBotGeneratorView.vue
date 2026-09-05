@@ -140,6 +140,7 @@
               <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'draft' }" @click="statusFilter = 'draft'">Draft</button>
               <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'published' }" @click="statusFilter = 'published'">Published</button>
               <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">All</button>
+              <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'rejected' }" @click="statusFilter = 'rejected'">Declined</button>
             </div>
 
             <button type="button" class="ghost-btn" :disabled="questionsLoading" @click="loadQuestions">
@@ -159,6 +160,9 @@
           <div class="rbg-bulk-actions">
             <button type="button" class="primary-btn" :disabled="selectedIds.length === 0" @click="publishSelected">
               Map &amp; Publish Selected ({{ selectedIds.length }})
+            </button>
+            <button type="button" class="ghost-btn" :disabled="selectedIds.length === 0" @click="rejectSelected">
+              Decline Selected ({{ selectedIds.length }})
             </button>
             <button type="button" class="ghost-btn" :disabled="selectedIds.length === 0" @click="unpublishSelected">
               Unpublish Selected
@@ -332,6 +336,7 @@ const {
   setEditingCorrectOption,
   saveEditing,
   publishSelected,
+  rejectSelected,
   unpublishSelected,
   deleteQuestion,
 } = useReviewBotAdminModule()

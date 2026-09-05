@@ -157,6 +157,69 @@ Route::post('/library/review-bot/publish', function (
     return response()->json(['published' => $published]);
 });
 
+Route::post('/library/review-bot/reject', function (
+    Request $request
+) use (
+    $ensureActive,
+    $isStaffMasterExaminer,
+    $reviewBotAdminService,
+    $recordAudit
+) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$isStaffMasterExaminer($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    $validated = $request->validate([
+        'question_ids' => ['required', 'array', 'min:1'],
+        'question_ids.*' => ['integer'],
+    ]);
+
+    // Declining keeps the row. Deleting it would make the source exam item
+    // look untouched to the next generation run, which would then produce the
+    // same rejected question again.
+    $rejected = $reviewBotAdminService->reject($validated['question_ids']);
+
+    $recordAudit($user, 'review-bot.admin.reject', 'question_bank_question', null, sprintf('Declined %d Review Bot question(s)', $rejected), $validated, $request);
+
+    return response()->json(['rejected' => $rejected]);
+});
+
+Route::get('/library/review-bot/coverage', function (
+    Request $request
+) use (
+    $ensureActive,
+    $isStaffMasterExaminer,
+    $reviewBotAdminService
+) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$isStaffMasterExaminer($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    $validated = $request->validate([
+        'subject' => ['required', 'string', 'max:255'],
+        'source_bank_id' => ['nullable', 'integer'],
+    ]);
+
+    return response()->json([
+        'coverage' => $reviewBotAdminService->coverageReport(
+            $validated['subject'],
+            isset($validated['source_bank_id']) ? (int) $validated['source_bank_id'] : null,
+        ),
+    ]);
+});
+
 Route::post('/library/review-bot/unpublish', function (
     Request $request
 ) use (

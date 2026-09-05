@@ -21,6 +21,11 @@ class ReviewBotAdminApi {
     return http.post('/library/review-bot/unpublish', { question_ids: questionIds })
   }
 
+  /** Declines drafts without deleting them -- see the reject route's note. */
+  reject(questionIds) {
+    return http.post('/library/review-bot/reject', { question_ids: questionIds })
+  }
+
   deleteQuestion(questionId) {
     return http.delete(`/library/review-bot/questions/${questionId}`)
   }
