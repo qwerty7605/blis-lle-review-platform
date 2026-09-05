@@ -218,6 +218,28 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
     ]);
 });
 
+/**
+ * Summary counters plus recent attempt history, from DashboardAnalyticsService.
+ * The service method backing this existed and was covered by tests but had
+ * never been wired to a route, so the frontend client pointing here returned
+ * 404. The richer subject/topic breakdown lives on /student/analytics below.
+ */
+Route::get('/student/analytics/overview', function (Request $request) use ($canManageRooms, $ensureActive, $dashboardAnalyticsService) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if ($canManageRooms($user)) {
+        return response()->json([
+            'message' => 'Only student accounts can access analytics.',
+        ], 403);
+    }
+
+    return response()->json($dashboardAnalyticsService->buildStudentOverview($user));
+});
+
 Route::get('/student/analytics', function (Request $request) use ($canManageRooms, $ensureActive, $dashboardAnalyticsService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
@@ -238,6 +260,7 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         'Reference Services',
         'Library Management',
         'Selection and Acquisition',
+        'Archival Studies',
     ];
 
     $subjectAliases = [
@@ -253,6 +276,8 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         'library management' => 'Library Management',
         'selection and acquisition' => 'Selection and Acquisition',
         'selection' => 'Selection and Acquisition',
+        'archival studies' => 'Archival Studies',
+        'archives' => 'Archival Studies',
     ];
 
     $normalizeSubject = static function (?string $subject) use ($subjectAliases): ?string {
