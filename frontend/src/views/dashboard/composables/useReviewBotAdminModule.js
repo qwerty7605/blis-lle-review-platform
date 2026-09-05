@@ -106,6 +106,13 @@ export function useReviewBotAdminModule() {
   const questionsLoading = ref(false)
   const questionsError = ref('')
   const statusFilter = ref('draft') // 'draft' | 'published' | 'all' | 'rejected'
+
+  // Coverage is loaded on demand rather than with the question list: it walks
+  // every source item in the file, and most visits never open it.
+  const coverage = ref([])
+  const coverageLoading = ref(false)
+  const coverageError = ref('')
+  const coverageOpen = ref(false)
   const selectedIds = ref([])
 
   const editing = reactive({})
@@ -252,6 +259,8 @@ export function useReviewBotAdminModule() {
     stopGenerationPoll()
     generationPending.value = false
     selectedBankId.value = Number(bankId)
+    coverage.value = []
+    coverageOpen.value = false
     generateError.value = ''
     generateMessage.value = ''
     selectedIds.value = []
@@ -390,6 +399,9 @@ export function useReviewBotAdminModule() {
       await reviewBotAdminApi.publish(selectedIds.value)
       selectedIds.value = []
       await loadQuestions()
+      // These all move an item between covered and not, so a stale panel
+      // would contradict the list right next to it.
+      if (coverageOpen.value) await loadCoverage()
     } catch (error) {
       questionsError.value = firstApiError(error, 'Unable to publish the selected questions.')
     }
@@ -403,6 +415,47 @@ export function useReviewBotAdminModule() {
     if (next === 'rejected' || previous === 'rejected') loadQuestions()
   })
 
+  const coverageSummary = computed(() => {
+    const rows = coverage.value
+
+    return {
+      total: rows.length,
+      complete: rows.filter((row) => row.missing_levels.length === 0).length,
+      empty: rows.filter((row) => row.total === 0).length,
+      partial: rows.filter((row) => row.total > 0 && row.missing_levels.length > 0).length,
+    }
+  })
+
+  async function loadCoverage() {
+    const subject = selectedBank.value?.subject
+
+    if (!selectedBankId.value || !subject) return
+
+    coverageLoading.value = true
+    coverageError.value = ''
+
+    try {
+      const { data } = await reviewBotAdminApi.coverage({
+        subject,
+        source_bank_id: selectedBankId.value,
+      })
+      coverage.value = asList(data?.coverage)
+    } catch (error) {
+      coverageError.value = firstApiError(error, 'Unable to load coverage for this file.')
+      coverage.value = []
+    } finally {
+      coverageLoading.value = false
+    }
+  }
+
+  async function toggleCoverage() {
+    coverageOpen.value = !coverageOpen.value
+
+    if (coverageOpen.value && coverage.value.length === 0) {
+      await loadCoverage()
+    }
+  }
+
   async function rejectSelected() {
     if (selectedIds.value.length === 0) return
 
@@ -412,6 +465,9 @@ export function useReviewBotAdminModule() {
       await reviewBotAdminApi.reject(selectedIds.value)
       selectedIds.value = []
       await loadQuestions()
+      // These all move an item between covered and not, so a stale panel
+      // would contradict the list right next to it.
+      if (coverageOpen.value) await loadCoverage()
     } catch (error) {
       questionsError.value = firstApiError(error, 'Unable to decline the selected questions.')
     }
@@ -426,6 +482,9 @@ export function useReviewBotAdminModule() {
       await reviewBotAdminApi.unpublish(selectedIds.value)
       selectedIds.value = []
       await loadQuestions()
+      // These all move an item between covered and not, so a stale panel
+      // would contradict the list right next to it.
+      if (coverageOpen.value) await loadCoverage()
     } catch (error) {
       questionsError.value = firstApiError(error, 'Unable to unpublish the selected questions.')
     }
@@ -487,6 +546,13 @@ export function useReviewBotAdminModule() {
     saveEditing,
     publishSelected,
     rejectSelected,
+    coverage,
+    coverageLoading,
+    coverageError,
+    coverageOpen,
+    coverageSummary,
+    loadCoverage,
+    toggleCoverage,
     unpublishSelected,
     deleteQuestion,
   }

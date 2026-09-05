@@ -9,6 +9,11 @@ class ReviewBotAdminApi {
     return http.get('/library/review-bot/questions', { params })
   }
 
+  /** Per-exam-item coverage: which cognitive levels each source item still lacks. */
+  coverage(params = {}) {
+    return http.get('/library/review-bot/coverage', { params })
+  }
+
   updateQuestion(questionId, payload) {
     return http.patch(`/library/review-bot/questions/${questionId}`, payload)
   }

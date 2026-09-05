@@ -143,11 +143,73 @@
               <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'rejected' }" @click="statusFilter = 'rejected'">Declined</button>
             </div>
 
+            <button type="button" class="ghost-btn" @click="toggleCoverage">
+              <ListChecks :size="14" />
+              {{ coverageOpen ? 'Hide coverage' : 'Coverage' }}
+            </button>
+
             <button type="button" class="ghost-btn" :disabled="questionsLoading" @click="loadQuestions">
               <RefreshCw :size="14" :class="{ 'spin-soft': questionsLoading }" /> Refresh
             </button>
           </div>
         </header>
+
+        <section v-if="coverageOpen" class="rbg-coverage">
+          <div v-if="coverageError" class="feedback danger">
+            <AlertCircle :size="15" />
+            <span>{{ coverageError }}</span>
+          </div>
+
+          <div v-else-if="coverageLoading" class="review-bot-empty compact">
+            <RefreshCw :size="16" class="spin-soft" />
+            <span>Working out which exam items are covered&hellip;</span>
+          </div>
+
+          <template v-else-if="coverage.length > 0">
+            <p class="muted rbg-coverage-summary">
+              <strong>{{ coverageSummary.complete }}</strong> of {{ coverageSummary.total }} exam items have all four
+              cognitive levels &middot; <strong>{{ coverageSummary.partial }}</strong> partly covered &middot;
+              <strong>{{ coverageSummary.empty }}</strong> with nothing yet. A declined question counts as missing, so
+              its level shows here again.
+            </p>
+
+            <div class="directory-table-wrap">
+              <table class="directory-table">
+                <thead>
+                  <tr>
+                    <th class="directory-table-name-cell">Exam item</th>
+                    <th class="numeric">Live</th>
+                    <th class="numeric">Published</th>
+                    <th class="numeric">Declined</th>
+                    <th>Missing levels</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in coverage" :key="row.source_question_id">
+                    <td class="directory-table-name-cell">
+                      <strong>Item {{ row.item_number }}</strong>
+                      <small class="muted">{{ row.question_text }}</small>
+                    </td>
+                    <td class="numeric">{{ row.total }}</td>
+                    <td class="numeric">{{ row.published }}</td>
+                    <td class="numeric">{{ row.rejected }}</td>
+                    <td>
+                      <span v-if="row.missing_levels.length === 0" class="pill success">Complete</span>
+                      <span v-else class="rbg-coverage-missing">
+                        <span v-for="level in row.missing_levels" :key="level" class="pill neutral">{{ level }}</span>
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+
+          <div v-else class="review-bot-empty compact">
+            <ListChecks :size="16" />
+            <span>No exam items found for this file's subject.</span>
+          </div>
+        </section>
 
         <div v-if="questionsError" class="feedback danger"><AlertCircle :size="15" /><span>{{ questionsError }}</span></div>
 
@@ -296,7 +358,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, RefreshCw, Sparkles } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, ListChecks, RefreshCw, Sparkles } from 'lucide-vue-next'
 import { useReviewBotAdminModule } from '../composables/useReviewBotAdminModule'
 
 const {
@@ -337,12 +399,37 @@ const {
   saveEditing,
   publishSelected,
   rejectSelected,
+  coverage,
+  coverageLoading,
+  coverageError,
+  coverageOpen,
+  coverageSummary,
+  toggleCoverage,
   unpublishSelected,
   deleteQuestion,
 } = useReviewBotAdminModule()
 </script>
 
 <style scoped src="../dashboard.css"></style>
+
+<style scoped>
+.rbg-coverage {
+  display: grid;
+  gap: 10px;
+  margin: 0 18px 14px;
+}
+
+.rbg-coverage-summary {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rbg-coverage-missing {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+</style>
 
 <style scoped>
 .rbg-view {
