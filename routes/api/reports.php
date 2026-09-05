@@ -16,7 +16,14 @@ use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
-Route::get('/reports/overview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive) {
+/**
+ * Delegates to DashboardAnalyticsService rather than recomputing metrics here.
+ * The inline version this replaces returned four counts; the service adds
+ * session enrolments, attempt and completion figures, average score, pass rate,
+ * and per-subject and per-session breakdowns. Purely additive for callers --
+ * the frontend reads data.metrics wholesale.
+ */
+Route::get('/reports/overview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $dashboardAnalyticsService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
@@ -27,34 +34,7 @@ Route::get('/reports/overview', function (Request $request) use ($isStaffMasterE
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    $staffRooms = Room::query()->where('created_by', $user->id);
-    $staffExams = Exam::query()->where('created_by', $user->id);
-
-    $metrics = [
-        'managed_rooms' => $staffRooms->count(),
-        'managed_exams' => $staffExams->count(),
-        'students_enrolled' => DB::table('room_user')
-            ->join('rooms', 'rooms.id', '=', 'room_user.room_id')
-            ->where('rooms.created_by', $user->id)
-            ->distinct('room_user.user_id')
-            ->count('room_user.user_id'),
-        'exam_assignments' => DB::table('exam_room')
-            ->join('exams', 'exams.id', '=', 'exam_room.exam_id')
-            ->where('exams.created_by', $user->id)
-            ->count(),
-    ];
-
-    $recentActivity = AuditLog::query()
-        ->with('actor:id,name,role')
-        ->where('actor_id', $user->id)
-        ->latest()
-        ->limit(14)
-        ->get();
-
-    return response()->json([
-        'metrics' => $metrics,
-        'recent_activity' => $recentActivity,
-    ]);
+    return response()->json($dashboardAnalyticsService->buildStaffReportOverview($user));
 });
 
 Route::get('/reports/exams/{exam}/rooms/{room}/complete-results.csv', function (
