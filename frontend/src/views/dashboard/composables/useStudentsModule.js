@@ -1,12 +1,44 @@
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
 
 const PASSING_SCORE = 75
+
 // Fixed page size -- deliberately not user-adjustable, so the table always
 // paginates the same way for every staff member looking at the directory.
 const STUDENTS_PAGE_SIZE = 30
+
+// Long enough that typing a name does not fire a request per character, short
+// enough that the table still feels like it is keeping up.
+const SEARCH_DEBOUNCE_MS = 300
+
+// Sorting, filtering and paging all happen in SQL now (see
+// DashboardAnalyticsService::paginateStudentDirectory), so this list only has
+// to agree with the server's whitelist -- an unknown key falls back to name
+// there rather than erroring.
+const SORT_KEYS = new Set([
+  'name',
+  'student_id',
+  'year_level',
+  'room_count',
+  'attempts_submitted',
+  'average_score_percent',
+  'pass_rate_percent',
+  'latest_score_percent',
+  'last_activity_at',
+  'email',
+])
+
+// Numeric columns are most useful ranked high-to-low on the first click.
+const DESCENDING_FIRST_KEYS = new Set([
+  'room_count',
+  'attempts_submitted',
+  'average_score_percent',
+  'pass_rate_percent',
+  'latest_score_percent',
+  'last_activity_at',
+])
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -16,17 +48,20 @@ function firstApiError(error, fallbackMessage) {
 
 function yearLevelLabel(value) {
   const numeric = Number(value)
-  if (numeric === 1) return '1st Year'
-  if (numeric === 2) return '2nd Year'
-  if (numeric === 3) return '3rd Year'
-  if (numeric === 4) return '4th Year'
-  return 'Year level not set'
+  if (!Number.isFinite(numeric) || numeric < 1) return 'Unassigned year level'
+
+  const suffixes = ['th', 'st', 'nd', 'rd']
+  const suffix = suffixes[numeric] ?? 'th'
+  return `${numeric}${suffix} Year`
 }
 
 function yearLevelShortLabel(value) {
   const numeric = Number(value)
-  if ([1, 2, 3, 4].includes(numeric)) return yearLevelLabel(numeric).replace(' Year', '')
-  return 'Not set'
+  if (!Number.isFinite(numeric) || numeric < 1) return '--'
+
+  const suffixes = ['th', 'st', 'nd', 'rd']
+  const suffix = suffixes[numeric] ?? 'th'
+  return `${numeric}${suffix}`
 }
 
 // Number(null) is 0, so blank values have to be rejected before coercion or
@@ -44,7 +79,7 @@ function formatPercent(value, fallback = 'N/A') {
 
   return `${new Intl.NumberFormat(undefined, {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    maximumFractionDigits: 1,
   }).format(numeric)}%`
 }
 
@@ -53,86 +88,28 @@ function scoreTone(student) {
   return Number(student?.average_score_percent ?? 0) >= PASSING_SCORE ? 'success' : 'danger'
 }
 
-function compareStudents(left, right) {
-  const nameCompare = String(left?.name ?? '').localeCompare(String(right?.name ?? ''), undefined, {
-    sensitivity: 'base',
-  })
-
-  if (nameCompare !== 0) return nameCompare
-
-  return String(left?.student_id ?? '').localeCompare(String(right?.student_id ?? ''), undefined, {
-    numeric: true,
-    sensitivity: 'base',
-  })
-}
-
-function timestampOrNull(value) {
-  if (!value) return null
-  const timestamp = new Date(value).getTime()
-  return Number.isFinite(timestamp) ? timestamp : null
-}
-
-// Every sortable column maps to the value the comparator should read.
-const SORT_ACCESSORS = {
-  name: (student) => String(student?.name ?? ''),
-  student_id: (student) => student?.student_id ?? null,
-  year_level: (student) => numericOrNull(student?.year_level),
-  room_count: (student) => Number(student?.room_count ?? 0),
-  attempts_submitted: (student) => Number(student?.attempts_submitted ?? 0),
-  average_score_percent: (student) => numericOrNull(student?.average_score_percent),
-  pass_rate_percent: (student) => numericOrNull(student?.pass_rate_percent),
-  latest_score_percent: (student) => numericOrNull(student?.latest_score_percent),
-  last_activity_at: (student) => timestampOrNull(student?.last_activity_at),
-  email: (student) => String(student?.email ?? ''),
-}
-
-// Numeric columns are most useful ranked high-to-low on the first click.
-const DESCENDING_FIRST_KEYS = new Set([
-  'room_count',
-  'attempts_submitted',
-  'average_score_percent',
-  'pass_rate_percent',
-  'latest_score_percent',
-  'last_activity_at',
-])
-
-function isEmptyValue(value) {
-  return value === null || value === undefined || value === ''
-}
-
-// Empty values always sink to the bottom, whichever direction is active.
-function compareEmptiness(left, right) {
-  const leftEmpty = isEmptyValue(left)
-  const rightEmpty = isEmptyValue(right)
-
-  if (leftEmpty && rightEmpty) return 0
-  if (leftEmpty) return 1
-  if (rightEmpty) return -1
-  return 0
-}
-
-function compareValues(left, right) {
-  if (typeof left === 'number' && typeof right === 'number') return left - right
-
-  return String(left).localeCompare(String(right), undefined, {
-    numeric: true,
-    sensitivity: 'base',
-  })
-}
-
 export function useStudentsModule() {
   const auth = useAuthStore()
   const services = useDashboardDataServices()
 
   const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLowerCase())
   const isStaffDirectoryRole = computed(() => (
-    ['admin', 'staff_master_examiner', 'faculty'].includes(normalizedRole.value)
+    ['admin', 'staff_master_examiner'].includes(normalizedRole.value)
   ))
 
   const directoryLoading = ref(false)
   const directoryError = ref('')
   const directorySummary = ref({})
   const directoryStudents = ref([])
+  const directoryMeta = ref({
+    current_page: 1,
+    last_page: 1,
+    per_page: STUDENTS_PAGE_SIZE,
+    total: 0,
+    from: 0,
+    to: 0,
+  })
+
   const studentFilters = reactive({
     search: '',
     year_level: '',
@@ -156,94 +133,52 @@ export function useStudentsModule() {
     return Boolean(student?.archived_at)
   }
 
+  // Responses can land out of order once the search is debounced -- a slow
+  // early request would otherwise overwrite the results of a faster later one.
+  // Only the newest request is allowed to write to the refs.
+  let requestToken = 0
+  let searchTimer = null
+
   async function loadStudentsDirectory() {
     if (!isStaffDirectoryRole.value) return
 
+    const token = ++requestToken
     directoryLoading.value = true
     directoryError.value = ''
 
     try {
-      const { data } = await services.getStudentsDirectory()
+      const { data } = await services.getStudentsDirectory({
+        search: studentFilters.search.trim() || undefined,
+        year_level: studentFilters.year_level || undefined,
+        archive_state: studentFilters.archive_state || undefined,
+        sort: studentSort.key,
+        direction: studentSort.direction,
+        page: studentsPage.value,
+        per_page: STUDENTS_PAGE_SIZE,
+      })
+
+      if (token !== requestToken) return
+
       directorySummary.value = data?.summary ?? {}
       directoryStudents.value = Array.isArray(data?.students) ? data.students : []
+      directoryMeta.value = data?.meta ?? directoryMeta.value
+
+      // The server clamps the page to the last one that exists, so a filter
+      // that shrinks the result set under the current page corrects itself
+      // rather than showing an empty table.
+      if (directoryMeta.value.current_page && directoryMeta.value.current_page !== studentsPage.value) {
+        studentsPage.value = directoryMeta.value.current_page
+      }
     } catch (error) {
+      if (token !== requestToken) return
       directoryError.value = firstApiError(error, 'Unable to load the student directory right now.')
+      directoryStudents.value = []
     } finally {
-      directoryLoading.value = false
+      if (token === requestToken) directoryLoading.value = false
     }
   }
 
-  const filteredStudents = computed(() => {
-    const search = studentFilters.search.trim().toLowerCase()
-
-    return directoryStudents.value.filter((student) => {
-      if (studentFilters.archive_state === 'current' && isArchivedStudent(student)) return false
-      if (studentFilters.archive_state === 'archived' && !isArchivedStudent(student)) return false
-      if (studentFilters.year_level && String(student?.year_level ?? '') !== studentFilters.year_level) return false
-
-      if (!search) return true
-
-      const haystack = [
-        student?.name,
-        student?.email,
-        student?.student_id,
-        ...(Array.isArray(student?.room_names) ? student.room_names : []),
-        student?.latest_exam_title,
-        student?.strongest_subject,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-
-      return haystack.includes(search)
-    })
-  })
-
-  const sortedStudents = computed(() => {
-    const accessor = SORT_ACCESSORS[studentSort.key] ?? SORT_ACCESSORS.name
-    const factor = studentSort.direction === 'desc' ? -1 : 1
-
-    return [...filteredStudents.value].sort((left, right) => {
-      const leftValue = accessor(left)
-      const rightValue = accessor(right)
-
-      const emptiness = compareEmptiness(leftValue, rightValue)
-      if (emptiness !== 0) return emptiness
-
-      const result = compareValues(leftValue, rightValue)
-      if (result !== 0) return result * factor
-
-      return compareStudents(left, right)
-    })
-  })
-
-  const studentsLastPage = computed(() => (
-    Math.max(1, Math.ceil(sortedStudents.value.length / STUDENTS_PAGE_SIZE))
-  ))
-
-  // Clamping here keeps the view valid when a filter shrinks the result set
-  // underneath the page the user is currently on.
-  const studentsCurrentPage = computed(() => Math.min(studentsPage.value, studentsLastPage.value))
-
-  const pagedStudents = computed(() => {
-    const start = (studentsCurrentPage.value - 1) * STUDENTS_PAGE_SIZE
-    return sortedStudents.value.slice(start, start + STUDENTS_PAGE_SIZE)
-  })
-
-  const studentsPagination = computed(() => {
-    const total = sortedStudents.value.length
-    const perPage = STUDENTS_PAGE_SIZE
-    const currentPage = studentsCurrentPage.value
-
-    return {
-      current_page: currentPage,
-      last_page: studentsLastPage.value,
-      per_page: perPage,
-      total,
-      from: total === 0 ? 0 : ((currentPage - 1) * perPage) + 1,
-      to: Math.min(currentPage * perPage, total),
-    }
-  })
+  const studentsPagination = computed(() => directoryMeta.value)
 
   const canGoToPreviousStudentsPage = computed(() => studentsPagination.value.current_page > 1)
   const canGoToNextStudentsPage = computed(() => (
@@ -252,7 +187,7 @@ export function useStudentsModule() {
 
   const studentsRangeLabel = computed(() => {
     const { from, to, total } = studentsPagination.value
-    if (total < 1) return 'No students found'
+    if (!total || total < 1) return 'No students found'
 
     return `Showing ${from}-${to} of ${total} student${total === 1 ? '' : 's'}`
   })
@@ -261,11 +196,14 @@ export function useStudentsModule() {
     const target = Number(page)
     if (!Number.isFinite(target)) return
 
-    studentsPage.value = Math.min(Math.max(1, Math.trunc(target)), studentsLastPage.value)
+    studentsPage.value = Math.min(
+      Math.max(1, Math.trunc(target)),
+      Math.max(1, studentsPagination.value.last_page),
+    )
   }
 
   function toggleStudentSort(key) {
-    if (!SORT_ACCESSORS[key]) return
+    if (!SORT_KEYS.has(key)) return
 
     if (studentSort.key === key) {
       studentSort.direction = studentSort.direction === 'asc' ? 'desc' : 'asc'
@@ -287,52 +225,57 @@ export function useStudentsModule() {
     return studentSort.direction === 'asc' ? 'ascending' : 'descending'
   }
 
-  watch(
-    () => [studentFilters.search, studentFilters.year_level, studentFilters.archive_state],
-    () => {
-      studentsPage.value = 1
-    },
-  )
+  // Typing debounces; everything else is a deliberate click and refetches at
+  // once. Sort changes reset the page in the same tick, so Vue batches them
+  // into a single reload rather than two.
+  watch(() => studentFilters.search, () => {
+    studentsPage.value = 1
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => loadStudentsDirectory(), SEARCH_DEBOUNCE_MS)
+  })
 
-  const studentsWithResults = computed(() => (
-    filteredStudents.value.filter((student) => Number(student?.attempts_submitted ?? 0) > 0)
-  ))
+  watch(() => [studentFilters.year_level, studentFilters.archive_state], () => {
+    studentsPage.value = 1
+    loadStudentsDirectory()
+  })
+
+  watch(() => [studentSort.key, studentSort.direction, studentsPage.value], () => {
+    loadStudentsDirectory()
+  })
 
   const studentDirectoryCards = computed(() => {
-    const scoreValues = studentsWithResults.value
-      .map((student) => Number(student?.average_score_percent))
-      .filter((score) => Number.isFinite(score))
-    const passRateValues = studentsWithResults.value
-      .map((student) => Number(student?.pass_rate_percent))
-      .filter((score) => Number.isFinite(score))
+    const summary = directorySummary.value ?? {}
 
     return [
       {
         key: 'displayed',
-        label: 'Displayed Students',
-        value: filteredStudents.value.length,
-        note: `${studentsWithResults.value.length} with submitted results`,
+        label: 'Matching Students',
+        value: studentsPagination.value.total ?? 0,
+        note: 'Across every page of the current filter',
         tone: 'navy',
       },
       {
         key: 'current',
         label: 'Current Students',
-        value: filteredStudents.value.filter((student) => !isArchivedStudent(student)).length,
-        note: `${directorySummary.value?.current_students ?? 0} in the full directory`,
+        value: summary.current_students ?? 0,
+        note: `${summary.archived_students ?? 0} archived records available`,
         tone: 'success',
       },
       {
         key: 'average-score',
         label: 'Average Score',
-        value: formatPercent(scoreValues.length > 0 ? scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length : null),
-        note: 'Across students with graded attempts',
+        // Summary figures cover every current student, not just the page or
+        // the active filter -- computing them per filter would mean a second
+        // full rollup on every keystroke.
+        value: formatPercent(summary.average_score_percent),
+        note: `Across ${summary.students_with_results ?? 0} students with graded attempts`,
         tone: 'gold',
       },
       {
         key: 'average-pass-rate',
         label: 'Average Pass Rate',
-        value: formatPercent(passRateValues.length > 0 ? passRateValues.reduce((sum, score) => sum + score, 0) / passRateValues.length : null),
-        note: `${directorySummary.value?.archived_students ?? 0} archived records available`,
+        value: formatPercent(summary.average_pass_rate_percent),
+        note: `Share of attempts at or above ${PASSING_SCORE}%`,
         tone: 'neutral',
       },
     ]
@@ -365,13 +308,16 @@ export function useStudentsModule() {
     await loadStudentsDirectory()
   })
 
+  onUnmounted(() => {
+    if (searchTimer) clearTimeout(searchTimer)
+  })
+
   return {
     directoryLoading,
     directoryError,
     studentFilters,
     yearLevelOptions,
-    filteredStudents,
-    pagedStudents,
+    students: directoryStudents,
     studentSort,
     studentsPagination,
     studentsRangeLabel,

@@ -50,13 +50,13 @@
         </select>
       </div>
 
-      <div v-if="directoryLoading && filteredStudents.length === 0" class="room-empty-state">
+      <div v-if="directoryLoading && students.length === 0" class="room-empty-state">
         <RefreshCw :size="34" class="spin-soft" />
         <h4>Loading students</h4>
         <p>Preparing the year-level directory and performance summary.</p>
       </div>
 
-      <div v-else-if="filteredStudents.length === 0" class="room-empty-state">
+      <div v-else-if="students.length === 0" class="room-empty-state">
         <UserRound :size="42" />
         <h4>No students found</h4>
         <p>Adjust the filters to show current or archived student records.</p>
@@ -131,7 +131,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="student in pagedStudents"
+                v-for="student in students"
                 :key="student.id"
                 :class="{ 'is-archived': isArchivedStudent(student) }"
               >
@@ -210,8 +210,7 @@ const {
   directoryError,
   studentFilters,
   yearLevelOptions,
-  filteredStudents,
-  pagedStudents,
+  students,
   studentsPagination,
   studentsRangeLabel,
   canGoToPreviousStudentsPage,

@@ -41,7 +41,7 @@ export function useDashboardDataServices() {
     getItemAnalytics: (examId) => examsApi.itemAnalytics(examId),
 
     getReportsOverview: () => reportsApi.overview(),
-    getStudentsDirectory: () => studentsApi.directory(),
+    getStudentsDirectory: (params) => studentsApi.directory(params),
     exportCompleteResultsXlsx: (examId, roomId) => reportsApi.completeResultsXlsx(examId, roomId),
     exportCompleteResultsCsv: (examId, roomId) => reportsApi.completeResultsCsv(examId, roomId),
     exportResultsSummaryPdf: (examId, roomId) => reportsApi.resultsSummaryPdf(examId, roomId),
