@@ -1,4 +1,5 @@
 import {
+  Award,
   BarChart3,
   BookOpen,
   ClipboardList,
@@ -89,6 +90,14 @@ export const dashboardModules = {
     sub: 'Browse enrolled students and their performance history',
     icon: Users,
   },
+  licensure: {
+    key: 'licensure',
+    routeName: 'dashboard-licensure',
+    label: 'Licensure',
+    title: 'Licensure Results',
+    sub: 'Record board exam outcomes for graduates',
+    icon: Award,
+  },
   exams: {
     key: 'exams',
     routeName: 'dashboard-exams',
@@ -133,9 +142,9 @@ export const dashboardModules = {
 
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult'],
-  staff_master_examiner: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
-  faculty: ['library', 'reviewBotGenerator', 'room', 'students', 'exams', 'reports', 'settings'],
-  admin: ['users', 'room', 'students', 'settings', 'audit'],
+  staff_master_examiner: ['library', 'reviewBotGenerator', 'room', 'students', 'licensure', 'exams', 'reports', 'settings'],
+  faculty: ['library', 'reviewBotGenerator', 'room', 'students', 'licensure', 'exams', 'reports', 'settings'],
+  admin: ['users', 'room', 'students', 'licensure', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {

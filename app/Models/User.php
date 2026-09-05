@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Exceptions\StudentHasAcademicHistoryException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -140,6 +141,45 @@ class User extends Authenticatable
     public function examAttempts(): HasMany
     {
         return $this->hasMany(ExamAttempt::class, 'user_id');
+    }
+
+    /**
+     * Licensure examination outcomes recorded for this student.
+     *
+     * @return HasMany<LleResult, $this>
+     */
+    public function lleResults(): HasMany
+    {
+        return $this->hasMany(LleResult::class, 'user_id');
+    }
+
+    /**
+     * Refuse to delete a student who has sat exams.
+     *
+     * The foreign keys were switched to restrictOnDelete in
+     * 2026_09_06_020000, so the database already rejects this -- but it does so
+     * with a raw integrity-constraint error. Catching it here turns that into
+     * something a caller can act on, and states the reason: attempt history is
+     * the feature half of the LLE training set and cannot be regenerated.
+     * Archive the student instead.
+     */
+    protected static function booted(): void
+    {
+        static::deleting(function (User $user): void {
+            if ($user->examAttempts()->exists()) {
+                throw new StudentHasAcademicHistoryException(
+                    "Cannot delete user {$user->id}: they have exam attempt history. "
+                    . 'Archive the account instead -- attempt history is training data '
+                    . 'for the LLE predictor and cannot be recovered once deleted.'
+                );
+            }
+
+            if ($user->lleResults()->exists()) {
+                throw new StudentHasAcademicHistoryException(
+                    "Cannot delete user {$user->id}: they have a recorded licensure result."
+                );
+            }
+        });
     }
 
     /**
