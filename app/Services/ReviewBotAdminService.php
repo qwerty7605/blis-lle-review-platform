@@ -60,6 +60,16 @@ class ReviewBotAdminService
      */
     private const TOP_UP_DEBOUNCE_MINUTES = 360;
 
+    /**
+     * How long a teacher-triggered run holds its in-flight lock.
+     *
+     * Comfortably longer than GenerateReviewBotQuestionsJob::$timeout (300s)
+     * so a genuinely running job is never mistaken for a dead one, and the job
+     * releases the key itself when it finishes -- this is only the ceiling for
+     * a worker that died without running failed().
+     */
+    private const GENERATION_LOCK_MINUTES = 10;
+
     public function __construct(
         private readonly QuestionMappingService $questionMappingService,
         private readonly ReviewBotQuestionScreeningService $screeningService,
@@ -135,6 +145,22 @@ class ReviewBotAdminService
         // without treating "cover everything" as the default every time.
         $sourceLimit = max(1, (int) ceil($totalSourceItems * self::AUTO_GENERATION_COVERAGE_RATIO));
 
+        // One run per source file at a time. A second click (or a click while
+        // the poll has not caught up yet) used to dispatch a whole second
+        // generation over the same items: the screening then rejected almost
+        // all of its output as near-duplicates of the first run's, so the only
+        // thing it reliably produced was a second OpenAI bill. Cache::add is
+        // atomic, so two simultaneous requests cannot both win.
+        $lockKey = 'review-bot-generate:' . (int) $sourceBank->id;
+
+        if (!Cache::add($lockKey, true, now()->addMinutes(self::GENERATION_LOCK_MINUTES))) {
+            return [
+                'status' => 'in_progress',
+                'message' => 'Review questions are already being generated from this file. They will appear as drafts below shortly.',
+                'bank_id' => (int) $bank->id,
+            ];
+        }
+
         GenerateReviewBotQuestionsJob::dispatch(
             (int) $bank->id,
             (int) $teacher->id,
@@ -143,6 +169,7 @@ class ReviewBotAdminService
             null,
             $sourceLimit,
             (int) $sourceBank->id,
+            $lockKey,
         )->afterCommit();
 
         return [
@@ -360,7 +387,9 @@ class ReviewBotAdminService
             ->when($sourceBankId, fn ($query) => $query->where('question_bank_id', $sourceBankId))
             ->when($subtopicId, fn ($query) => $query->where('subtopic_id', $subtopicId))
             ->when(!$subtopicId && $topicId, fn ($query) => $query->where('topic_id', $topicId))
-            ->whereDoesntHave('generatedVariants')
+            // Rejected variants do not count: an item whose whole batch was
+            // declined has no usable coverage, so it has to be eligible again.
+            ->whereDoesntHave('liveGeneratedVariants')
             ->orderBy('item_number')
             ->orderBy('id')
             ->limit(max(1, $limit))
@@ -572,7 +601,13 @@ PROMPT;
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->when(filled($filters['subject'] ?? null), fn ($query) => $query->where('subject', $filters['subject']))
             ->when(filled($filters['topic_id'] ?? null), fn ($query) => $query->where('topic_id', (int) $filters['topic_id']))
-            ->when(filled($filters['status'] ?? null), fn ($query) => $query->where('status', $filters['status']))
+            ->when(
+                filled($filters['status'] ?? null),
+                fn ($query) => $query->where('status', $filters['status']),
+                // Without this a declined draft reappears in the review queue
+                // next to the drafts still awaiting a decision.
+                fn ($query) => $query->where('status', '!=', QuestionBankQuestion::STATUS_REJECTED),
+            )
             // Scopes the list to one generation batch's source file -- the
             // "Review/Edit" step of the Library-file-first workflow shows just
             // what came from the file the teacher is currently working on.
@@ -663,6 +698,81 @@ PROMPT;
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->whereIn('id', $questionIds)
             ->update(['status' => QuestionBankQuestion::STATUS_DRAFT]);
+    }
+
+    /**
+     * Decline generated drafts without deleting them.
+     *
+     * Kept as rows so the decision survives, so coverage can tell "produced
+     * nothing usable" from "never attempted", and so a teacher can change their
+     * mind by publishing one directly. Students never see them -- every
+     * student-facing query filters on status = published.
+     *
+     * @param  array<int, int>  $questionIds
+     */
+    public function reject(array $questionIds): int
+    {
+        if ($questionIds === []) {
+            return 0;
+        }
+
+        return QuestionBankQuestion::query()
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->whereIn('id', $questionIds)
+            ->update(['status' => QuestionBankQuestion::STATUS_REJECTED]);
+    }
+
+    /**
+     * Per-exam-item coverage for a subject: how many review questions each
+     * source item has, which cognitive levels are still missing, and which
+     * items produced nothing at all.
+     *
+     * Items with no live variants are picked up automatically by the next
+     * generation run, since resolveSourceQuestions() only skips items that
+     * already have one. Items with a partial ladder are not -- a level can be
+     * missing because generation produced nothing for it or because a teacher
+     * declined it, and those want different responses.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function coverageReport(string $subject, ?int $sourceBankId = null): array
+    {
+        $sources = QuestionBankQuestion::query()
+            ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
+            ->where('subject', $subject)
+            ->when($sourceBankId, fn ($query) => $query->where('question_bank_id', $sourceBankId))
+            ->orderBy('item_number')
+            ->orderBy('id')
+            ->get(['id', 'item_number', 'question_text', 'topic_id']);
+
+        if ($sources->isEmpty()) {
+            return [];
+        }
+
+        $variants = QuestionBankQuestion::query()
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->whereIn('source_question_id', $sources->pluck('id'))
+            ->get(['source_question_id', 'cognitive_level', 'status'])
+            ->groupBy('source_question_id');
+
+        return $sources->map(function (QuestionBankQuestion $source) use ($variants): array {
+            $group = $variants->get($source->id, collect());
+            $live = $group->where('status', '!=', QuestionBankQuestion::STATUS_REJECTED);
+            $levels = $live->pluck('cognitive_level')->filter()->unique();
+
+            return [
+                'source_question_id' => (int) $source->id,
+                'item_number' => (int) $source->item_number,
+                'question_text' => (string) $source->question_text,
+                'is_tagged' => $source->topic_id !== null,
+                'total' => $live->count(),
+                'published' => $live->where('status', QuestionBankQuestion::STATUS_PUBLISHED)->count(),
+                'draft' => $live->where('status', QuestionBankQuestion::STATUS_DRAFT)->count(),
+                'rejected' => $group->where('status', QuestionBankQuestion::STATUS_REJECTED)->count(),
+                'covered_levels' => $levels->values()->all(),
+                'missing_levels' => array_values(array_diff(QuestionBankQuestion::COGNITIVE_LEVELS, $levels->all())),
+            ];
+        })->values()->all();
     }
 
     public function delete(QuestionBankQuestion $question): void

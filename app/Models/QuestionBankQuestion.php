@@ -26,6 +26,13 @@ class QuestionBankQuestion extends Model
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
 
+    /**
+     * A generated draft a teacher has declined. Kept rather than deleted so the
+     * decision is a record, and so coverage reporting can distinguish "this
+     * exam item produced nothing usable" from "this item was never attempted".
+     */
+    public const STATUS_REJECTED = 'rejected';
+
     /** Answer key not independently checked (no API key, or the check failed). */
     public const VERIFICATION_UNCHECKED = 'unchecked';
 
@@ -38,6 +45,7 @@ class QuestionBankQuestion extends Model
     public const STATUSES = [
         self::STATUS_DRAFT,
         self::STATUS_PUBLISHED,
+        self::STATUS_REJECTED,
     ];
 
     public const TAG_STATUSES = [
@@ -139,6 +147,21 @@ class QuestionBankQuestion extends Model
     public function generatedVariants(): HasMany
     {
         return $this->hasMany(self::class, 'source_question_id');
+    }
+
+    /**
+     * Generated variants that still count as coverage of this exam item.
+     *
+     * Rejected variants deliberately do not. resolveSourceQuestions() skips
+     * items that already have variants, so counting rejected ones would leave
+     * an item whose whole batch was declined permanently ineligible for
+     * regeneration -- stuck with nothing usable and no way to try again.
+     *
+     * @return HasMany<self, $this>
+     */
+    public function liveGeneratedVariants(): HasMany
+    {
+        return $this->generatedVariants()->where('status', '!=', self::STATUS_REJECTED);
     }
 
     /**

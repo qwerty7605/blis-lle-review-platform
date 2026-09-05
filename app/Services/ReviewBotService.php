@@ -72,33 +72,58 @@ class ReviewBotService
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Subject/topic/subtopic counts for the student's Review Bot landing page.
+     *
+     * Counted in SQL. This used to hydrate every published Review Bot question
+     * as an Eloquent model with its topic and subtopic relations attached,
+     * purely to group them and call count() -- on a bank that only ever grows,
+     * for a page every student opens. The grouped result is bounded by the
+     * taxonomy (a few dozen rows) rather than by how many questions exist.
+     *
+     * @return array<int, array<string, mixed>>
+     */
     public function catalog(): array
     {
-        $published = QuestionBankQuestion::query()
+        $counts = DB::table('question_bank_questions as q')
+            ->leftJoin('topics as t', 't.id', '=', 'q.topic_id')
+            ->leftJoin('subtopics as st', 'st.id', '=', 'q.subtopic_id')
+            ->where('q.usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->where('q.status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->groupBy('q.subject', 'q.topic_id', 't.name', 'q.subtopic_id', 'st.name')
+            ->selectRaw('q.subject, q.topic_id, t.name as topic_name, q.subtopic_id, st.name as subtopic_name, COUNT(*) as question_count')
+            ->get();
+
+        $difficulties = DB::table('question_bank_questions')
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
-            ->with(['topic:id,name', 'subtopic:id,name,topic_id'])
-            ->get(['id', 'subject', 'topic_id', 'subtopic_id', 'difficulty']);
+            ->whereNotNull('difficulty')
+            ->where('difficulty', '!=', '')
+            ->distinct()
+            ->get(['subject', 'difficulty'])
+            ->groupBy(fn ($row) => $this->normalizeSubjectLabel($row->subject))
+            ->map(fn (Collection $rows) => $rows->pluck('difficulty')->unique()->values()->all());
 
-        $bySubject = $published->groupBy(fn (QuestionBankQuestion $question) => $this->normalizeSubjectLabel($question->subject));
+        $bySubject = $counts->groupBy(fn ($row) => $this->normalizeSubjectLabel($row->subject));
 
         return collect(self::SUBJECT_PROFILES)
-            ->map(function (array $profile, string $subject) use ($bySubject): array {
-                $questions = $bySubject->get($subject, collect());
+            ->map(function (array $profile, string $subject) use ($bySubject, $difficulties): array {
+                $rows = $bySubject->get($subject, collect());
 
-                $topics = $questions
-                    ->filter(fn (QuestionBankQuestion $question) => $question->topic)
+                // Rows with no topic still count toward the subject total, but
+                // cannot be listed under a topic heading.
+                $topics = $rows
+                    ->filter(fn ($row) => $row->topic_id !== null && $row->topic_name !== null)
                     ->groupBy('topic_id')
-                    ->map(function (Collection $topicQuestions): array {
-                        $topic = $topicQuestions->first()->topic;
+                    ->map(function (Collection $topicRows): array {
+                        $first = $topicRows->first();
 
-                        $subtopics = $topicQuestions
-                            ->filter(fn (QuestionBankQuestion $question) => $question->subtopic)
-                            ->groupBy('subtopic_id')
-                            ->map(fn (Collection $subtopicQuestions): array => [
-                                'id' => (int) $subtopicQuestions->first()->subtopic->id,
-                                'name' => (string) $subtopicQuestions->first()->subtopic->name,
-                                'question_count' => $subtopicQuestions->count(),
+                        $subtopics = $topicRows
+                            ->filter(fn ($row) => $row->subtopic_id !== null && $row->subtopic_name !== null)
+                            ->map(fn ($row): array => [
+                                'id' => (int) $row->subtopic_id,
+                                'name' => (string) $row->subtopic_name,
+                                'question_count' => (int) $row->question_count,
                             ])
                             ->values()
                             ->sortBy('name')
@@ -106,9 +131,9 @@ class ReviewBotService
                             ->all();
 
                         return [
-                            'id' => (int) $topic->id,
-                            'name' => (string) $topic->name,
-                            'question_count' => $topicQuestions->count(),
+                            'id' => (int) $first->topic_id,
+                            'name' => (string) $first->topic_name,
+                            'question_count' => (int) $topicRows->sum('question_count'),
                             'subtopics' => $subtopics,
                         ];
                     })
@@ -117,21 +142,16 @@ class ReviewBotService
                     ->values()
                     ->all();
 
-                $difficulties = $questions
-                    ->pluck('difficulty')
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->all();
+                $questionCount = (int) $rows->sum('question_count');
 
                 return [
                     'subject' => $subject,
                     'description' => $profile['description'],
                     'focus_areas' => $profile['focus_areas'],
-                    'question_count' => $questions->count(),
-                    'bot_ready' => $questions->isNotEmpty(),
+                    'question_count' => $questionCount,
+                    'bot_ready' => $questionCount > 0,
                     'topics' => $topics,
-                    'difficulties' => $difficulties,
+                    'difficulties' => $difficulties->get($subject, []),
                 ];
             })
             ->values()
@@ -566,38 +586,111 @@ class ReviewBotService
      * item counts as a miss so it stays in rotation rather than being treated
      * as learned.
      */
-    protected function recordItemState(int $userId, int $questionId, bool $wasCorrect): void
+    /**
+     * Fold a whole session's outcomes into review_bot_item_states in two
+     * queries rather than two per question.
+     *
+     * The existing rows are locked before they are read, because every column
+     * here is derived from its own current value. Two sessions finishing at the
+     * same moment would otherwise both read the same starting count and one
+     * increment would be lost -- and these counters are what the adaptive
+     * queue's weak/learning/mastered bucketing reads.
+     *
+     * @param  array<int, bool>  $outcomes  question id => answered correctly
+     */
+    protected function recordItemStates(int $userId, array $outcomes): void
     {
-        $state = ReviewBotItemState::query()->firstOrNew([
-            'user_id' => $userId,
-            'question_bank_question_id' => $questionId,
-        ]);
+        if ($outcomes === []) {
+            return;
+        }
 
-        $state->times_seen = (int) $state->times_seen + 1;
-        $state->times_correct = (int) $state->times_correct + ($wasCorrect ? 1 : 0);
-        $state->consecutive_correct = $wasCorrect ? (int) $state->consecutive_correct + 1 : 0;
-        $state->last_seen_at = now();
-        $state->save();
+        $existing = ReviewBotItemState::query()
+            ->where('user_id', $userId)
+            ->whereIn('question_bank_question_id', array_keys($outcomes))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('question_bank_question_id');
+
+        $now = now();
+        $rows = [];
+
+        foreach ($outcomes as $questionId => $wasCorrect) {
+            $state = $existing->get($questionId);
+
+            $rows[] = [
+                'user_id' => $userId,
+                'question_bank_question_id' => $questionId,
+                'times_seen' => (int) ($state->times_seen ?? 0) + 1,
+                'times_correct' => (int) ($state->times_correct ?? 0) + ($wasCorrect ? 1 : 0),
+                // A wrong answer resets the streak outright: the bucket query
+                // reads consecutive_correct, not the correct/seen ratio.
+                'consecutive_correct' => $wasCorrect ? (int) ($state->consecutive_correct ?? 0) + 1 : 0,
+                'last_seen_at' => $now,
+                'created_at' => $state->created_at ?? $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        ReviewBotItemState::query()->upsert(
+            $rows,
+            ['user_id', 'question_bank_question_id'],
+            ['times_seen', 'times_correct', 'consecutive_correct', 'last_seen_at', 'updated_at'],
+        );
     }
 
     /**
      * @param  array<int, array{question_id: int, option_id?: int|null, answer_text?: string|null}>  $answers
      * @return array<string, mixed>
      */
+    /**
+     * Grade and close a review session.
+     *
+     * The whole thing runs in one transaction. Grading writes an answer row and
+     * a mastery-state row per question, and the mastery row is an increment
+     * rather than an assignment -- so a failure partway through used to leave
+     * the attempt unsubmitted (meaning the guard below would not stop a retry)
+     * while the questions already processed kept their bumped times_seen and
+     * consecutive_correct. A second run then counted them again, promoting
+     * items into the "mastered" bucket on evidence the student never produced.
+     */
     public function submitSession(ReviewBotAttempt $attempt, array $answers): array
     {
-        if ($attempt->status === ReviewBotAttempt::STATUS_SUBMITTED) {
-            throw new RuntimeException('This review session was already submitted.');
-        }
+        return DB::transaction(function () use ($attempt, $answers): array {
+            // Lock the row before trusting its status, so two submissions of the
+            // same session racing each other cannot both pass this check.
+            $locked = ReviewBotAttempt::query()
+                ->whereKey($attempt->getKey())
+                ->lockForUpdate()
+                ->first();
 
+            if (!$locked) {
+                throw new RuntimeException('This review session no longer exists.');
+            }
+
+            if ($locked->status === ReviewBotAttempt::STATUS_SUBMITTED) {
+                throw new RuntimeException('This review session was already submitted.');
+            }
+
+            return $this->gradeSession($attempt, $answers);
+        });
+    }
+
+    /**
+     * @param  array<int, array{question_id: int, option_id?: int|null, answer_text?: string|null}>  $answers
+     * @return array<string, mixed>
+     */
+    protected function gradeSession(ReviewBotAttempt $attempt, array $answers): array
+    {
         $attempt->loadMissing(['attemptQuestions.question.options', 'topic:id,name', 'subtopic:id,name']);
 
         $answersByQuestionId = collect($answers)->keyBy(fn (array $answer) => (int) ($answer['question_id'] ?? 0));
-        $questionIds = $attempt->attemptQuestions->pluck('question_bank_question_id')->map(fn ($id) => (int) $id);
 
         $correctCount = 0;
         $answeredCount = 0;
         $missedItems = [];
+        $answerRows = [];
+        $outcomes = [];
+        $now = now();
 
         foreach ($attempt->attemptQuestions as $attemptQuestion) {
             $question = $attemptQuestion->question;
@@ -626,20 +719,18 @@ class ReviewBotService
                 $correctCount++;
             }
 
-            ReviewBotAttemptAnswer::updateOrCreate(
-                [
-                    'review_bot_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $question->id,
-                ],
-                [
-                    'question_bank_option_id' => $selectedOption?->id,
-                    'answer_text' => $answerText !== '' ? $answerText : null,
-                    'is_correct' => $isCorrect,
-                    'answered_at' => now(),
-                ]
-            );
+            $answerRows[] = [
+                'review_bot_attempt_id' => (int) $attempt->id,
+                'question_bank_question_id' => (int) $question->id,
+                'question_bank_option_id' => $selectedOption?->id,
+                'answer_text' => $answerText !== '' ? $answerText : null,
+                'is_correct' => $isCorrect,
+                'answered_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
 
-            $this->recordItemState((int) $attempt->user_id, (int) $question->id, $isCorrect);
+            $outcomes[(int) $question->id] = $isCorrect;
 
             if ($hasAnswer && !$isCorrect) {
                 $correctOption = $question->options->first(fn ($option) => (bool) $option->is_correct);
@@ -654,6 +745,18 @@ class ReviewBotService
             }
         }
 
+        // Two statements for the whole session, where this used to be four
+        // queries per question.
+        if ($answerRows !== []) {
+            ReviewBotAttemptAnswer::query()->upsert(
+                $answerRows,
+                ['review_bot_attempt_id', 'question_bank_question_id'],
+                ['question_bank_option_id', 'answer_text', 'is_correct', 'answered_at', 'updated_at'],
+            );
+        }
+
+        $this->recordItemStates((int) $attempt->user_id, $outcomes);
+
         $totalItems = $attempt->attemptQuestions->count();
         $scorePercent = $totalItems > 0 ? round(($correctCount / $totalItems) * 100, 2) : 0.0;
 
@@ -662,7 +765,7 @@ class ReviewBotService
             'answered_count' => $answeredCount,
             'correct_answers' => $correctCount,
             'score_percent' => $scorePercent,
-            'submitted_at' => now(),
+            'submitted_at' => $now,
         ])->save();
 
         $previousAttempt = ReviewBotAttempt::query()

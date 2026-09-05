@@ -209,7 +209,10 @@ class ReviewBotQuestionScreeningService
             return $generated;
         }
 
-        $existing = $this->existingVectors($subject, $topicId);
+        // One streamed pass over the bank scores every candidate at once,
+        // instead of decoding the whole bank into memory and then scanning it
+        // per candidate.
+        $bestExistingByIndex = $this->bestSimilarityAgainstBank($vectors, $subject, $topicId);
         $acceptedVectors = [];
 
         foreach ($generated as $index => $item) {
@@ -221,7 +224,7 @@ class ReviewBotQuestionScreeningService
 
             $generated[$index]['embedding'] = $this->encodeVector($vector);
 
-            $bestExisting = $this->highestSimilarity($vector, $existing);
+            $bestExisting = $bestExistingByIndex[$index] ?? 0.0;
 
             if ($bestExisting >= self::DUPLICATE_REJECT_THRESHOLD) {
                 $generated[$index]['rejected_reason'] = 'duplicate_of_existing_question';
@@ -271,19 +274,34 @@ class ReviewBotQuestionScreeningService
     }
 
     /**
-     * Existing Review Bot vectors for the subject, narrowed to the topic when
-     * one is given. Vectors are stored normalised, so similarity is a plain dot
+     * Highest cosine similarity between each candidate vector and anything
+     * already in the bank for this subject (narrowed to the topic when one is
+     * given). Vectors are stored normalised, so similarity is a plain dot
      * product.
      *
-     * This is a linear scan; it is comfortably fast at a few thousand questions
-     * per subject inside a queued job. If a subject's bank grows past that,
-     * this is the piece to move behind a vector index.
+     * Streamed deliberately: the previous version decoded every stored vector
+     * into one PHP array first, which grew without bound as a subject's bank
+     * did. Scoring each chunk against all candidates as it arrives keeps only a
+     * chunk in memory and produces exactly the same numbers.
      *
-     * @return array<int, array<int, float>>
+     * Still a linear scan -- comfortably fast at a few thousand questions per
+     * subject inside a queued job. If a subject's bank grows past that, this is
+     * the piece to move behind a vector index.
+     *
+     * @param  array<int, array<int, float>>  $candidates  index => unit vector
+     * @return array<int, float>  index => best similarity found
      */
-    protected function existingVectors(string $subject, ?int $topicId): array
+    protected function bestSimilarityAgainstBank(array $candidates, string $subject, ?int $topicId): array
     {
-        $vectors = [];
+        $best = [];
+
+        foreach (array_keys($candidates) as $index) {
+            $best[$index] = 0.0;
+        }
+
+        if ($candidates === []) {
+            return $best;
+        }
 
         DB::table('question_bank_questions')
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
@@ -292,34 +310,23 @@ class ReviewBotQuestionScreeningService
             ->whereNotNull('embedding')
             ->select('embedding')
             ->orderBy('id')
-            ->chunk(500, function (Collection $rows) use (&$vectors): void {
+            ->chunk(500, function (Collection $rows) use ($candidates, &$best): void {
                 foreach ($rows as $row) {
-                    $vector = $this->decodeVector($row->embedding);
+                    $stored = $this->decodeVector($row->embedding);
 
-                    if ($vector !== []) {
-                        $vectors[] = $vector;
+                    if ($stored === []) {
+                        continue;
+                    }
+
+                    foreach ($candidates as $index => $vector) {
+                        $similarity = $this->dot($vector, $stored);
+
+                        if ($similarity > $best[$index]) {
+                            $best[$index] = $similarity;
+                        }
                     }
                 }
             });
-
-        return $vectors;
-    }
-
-    /**
-     * @param  array<int, float>  $vector
-     * @param  array<int, array<int, float>>  $others
-     */
-    protected function highestSimilarity(array $vector, array $others): float
-    {
-        $best = 0.0;
-
-        foreach ($others as $other) {
-            $similarity = $this->dot($vector, $other);
-
-            if ($similarity > $best) {
-                $best = $similarity;
-            }
-        }
 
         return $best;
     }

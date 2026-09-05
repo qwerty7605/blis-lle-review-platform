@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { questionsApi, reviewBotAdminApi } from '@/api'
 
 // Generation runs in a background queue job and can legitimately take several
@@ -105,7 +105,7 @@ export function useReviewBotAdminModule() {
   const questions = ref([])
   const questionsLoading = ref(false)
   const questionsError = ref('')
-  const statusFilter = ref('draft') // 'draft' | 'published' | 'all'
+  const statusFilter = ref('draft') // 'draft' | 'published' | 'all' | 'rejected'
   const selectedIds = ref([])
 
   const editing = reactive({})
@@ -119,7 +119,9 @@ export function useReviewBotAdminModule() {
   const topicOptions = computed(() => Object.keys(curatedTopics.value[selectedBank.value?.subject] ?? {}))
 
   const filteredQuestions = computed(() => (
-    statusFilter.value === 'all'
+    // 'all' and 'rejected' are both resolved server-side -- 'all' already
+    // excludes declined drafts, and 'rejected' returns only those.
+    ['all', 'rejected'].includes(statusFilter.value)
       ? questions.value
       : questions.value.filter((question) => question.status === statusFilter.value)
   ))
@@ -186,7 +188,12 @@ export function useReviewBotAdminModule() {
     questionsError.value = ''
 
     try {
-      const { data } = await reviewBotAdminApi.listQuestions({ source_bank_id: selectedBankId.value })
+      const { data } = await reviewBotAdminApi.listQuestions({
+        source_bank_id: selectedBankId.value,
+        // The endpoint hides declined drafts by default so they do not sit in
+        // the review queue; seeing them again is an explicit request.
+        ...(statusFilter.value === 'rejected' ? { status: 'rejected' } : {}),
+      })
       questions.value = asList(data?.questions).map(normalizeQuestion)
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
 
@@ -388,6 +395,28 @@ export function useReviewBotAdminModule() {
     }
   }
 
+  // Switching into or out of the declined view changes what the server sends,
+  // so that one crossing has to refetch. Draft/published/all are filtered from
+  // the same payload and must not.
+  watch(statusFilter, (next, previous) => {
+    if (!selectedBankId.value) return
+    if (next === 'rejected' || previous === 'rejected') loadQuestions()
+  })
+
+  async function rejectSelected() {
+    if (selectedIds.value.length === 0) return
+
+    questionsError.value = ''
+
+    try {
+      await reviewBotAdminApi.reject(selectedIds.value)
+      selectedIds.value = []
+      await loadQuestions()
+    } catch (error) {
+      questionsError.value = firstApiError(error, 'Unable to decline the selected questions.')
+    }
+  }
+
   async function unpublishSelected() {
     if (selectedIds.value.length === 0) return
 
@@ -457,6 +486,7 @@ export function useReviewBotAdminModule() {
     setEditingCorrectOption,
     saveEditing,
     publishSelected,
+    rejectSelected,
     unpublishSelected,
     deleteQuestion,
   }
