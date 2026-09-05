@@ -130,10 +130,14 @@ class LoadTestDirectorySeeder extends Seeder
             ->pluck('id');
 
         if ($userIds->isNotEmpty()) {
-            // Explicit rather than relying on the FK cascade, so this still
-            // works if those constraints are ever tightened to restrictOnDelete
-            // (which they should be -- attempt history is training data).
+            // Explicit rather than relying on an FK cascade. exam_attempts,
+            // review_bot_attempts and lle_results all restrict on delete now
+            // (2026_09_06_020000 and the lle_results migration), so the users
+            // row cannot go until these are cleared -- which is the point of
+            // that change, and why the order here matters.
+            DB::table('lle_results')->whereIn('user_id', $userIds->all())->delete();
             DB::table('exam_attempts')->whereIn('user_id', $userIds->all())->delete();
+            DB::table('review_bot_attempts')->whereIn('user_id', $userIds->all())->delete();
             DB::table('room_user')->whereIn('user_id', $userIds->all())->delete();
             DB::table('users')->whereIn('id', $userIds->all())->delete();
         }

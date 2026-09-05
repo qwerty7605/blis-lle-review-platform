@@ -392,4 +392,5 @@ Route::middleware('auth:sanctum')->group(function () use (
     require __DIR__ . '/api/settings.php';
     require __DIR__ . '/api/admin.php';
     require __DIR__ . '/api/predictions.php';
+    require __DIR__ . '/api/lle-results.php';
 });

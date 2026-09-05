@@ -7,6 +7,7 @@ import { roomsApi } from '@/api/rooms.api'
 import { settingsApi } from '@/api/settings.api'
 import { studentExamsApi } from '@/api/studentExams.api'
 import { studentsApi } from '@/api/students.api'
+import { lleResultsApi } from '@/api/lleResults.api'
 import { usersApi } from '@/api/users.api'
 
 export function useDashboardDataServices() {
@@ -42,6 +43,9 @@ export function useDashboardDataServices() {
 
     getReportsOverview: () => reportsApi.overview(),
     getStudentsDirectory: (params) => studentsApi.directory(params),
+    getLleResults: (params) => lleResultsApi.list(params),
+    recordLleResult: (payload) => lleResultsApi.record(payload),
+    removeLleResult: (id) => lleResultsApi.remove(id),
     exportCompleteResultsXlsx: (examId, roomId) => reportsApi.completeResultsXlsx(examId, roomId),
     exportCompleteResultsCsv: (examId, roomId) => reportsApi.completeResultsCsv(examId, roomId),
     exportResultsSummaryPdf: (examId, roomId) => reportsApi.resultsSummaryPdf(examId, roomId),
