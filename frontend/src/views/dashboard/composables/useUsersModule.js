@@ -84,6 +84,19 @@ export function useUsersModule() {
     email: '',
     password: '',
   })
+  const studentStatusOptions = [
+    { value: 'enrolled', label: 'Enrolled' },
+    { value: 'graduated', label: 'Graduated' },
+    { value: 'dropped', label: 'Dropped out' },
+    { value: 'transferred', label: 'Transferred' },
+    { value: 'on_leave', label: 'On leave' },
+    { value: 'archived_unspecified', label: 'Archived (reason not recorded)' },
+  ]
+
+  function studentStatusLabel(value) {
+    return studentStatusOptions.find((option) => option.value === value)?.label ?? '--'
+  }
+
   const userForm = reactive({
     id: null,
     name: '',
@@ -91,6 +104,8 @@ export function useUsersModule() {
     student_id: '',
     role: 'student',
     year_level: '1',
+    student_status: 'enrolled',
+    admission_year: '',
     is_active: true,
     archived: false,
     password: '',
@@ -233,6 +248,8 @@ export function useUsersModule() {
     userForm.student_id = ''
     userForm.role = 'student'
     userForm.year_level = '1'
+    userForm.student_status = 'enrolled'
+    userForm.admission_year = ''
     userForm.is_active = true
     userForm.archived = false
     userForm.password = ''
@@ -251,7 +268,9 @@ export function useUsersModule() {
     userForm.email = user.email ?? ''
     userForm.student_id = user.student_id ?? ''
     userForm.role = user.role ?? 'student'
-    userForm.year_level = user.year_level ? String(user.year_level) : '1'
+    userForm.year_level = user.year_level ? String(user.year_level) : ''
+    userForm.student_status = user.student_status ?? 'enrolled'
+    userForm.admission_year = user.admission_year ? String(user.admission_year) : ''
     userForm.is_active = Boolean(user.is_active)
     userForm.archived = Boolean(user.archived_at)
     userForm.password = ''
@@ -379,9 +398,21 @@ export function useUsersModule() {
       email: userForm.email.trim(),
       student_id: userForm.role === 'student' ? (userForm.student_id.trim() || null) : null,
       role: userForm.role,
-      year_level: userForm.role === 'student' ? Number(userForm.year_level) : null,
+      // Blank must travel as null, not Number('') === 0, which the year-level
+      // range rule would reject.
+      year_level: userForm.role === 'student' && userForm.year_level !== ''
+        ? Number(userForm.year_level)
+        : null,
       is_active: Boolean(userForm.is_active),
-      archived: userForm.role === 'student' ? Boolean(userForm.archived) : false,
+    }
+
+    if (userForm.role === 'student') {
+      // The status drives archived_at server-side, so it is the only signal
+      // sent -- an "archived" flag alongside it could contradict it.
+      payload.student_status = userForm.student_status
+      payload.admission_year = userForm.admission_year === '' ? null : Number(userForm.admission_year)
+    } else {
+      payload.archived = false
     }
 
     if (userForm.password.trim()) {
@@ -523,6 +554,8 @@ export function useUsersModule() {
   })
 
   return {
+    studentStatusOptions,
+    studentStatusLabel,
     adminUsers,
     usersLoading,
     usersSaving,

@@ -24,6 +24,8 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
             'year_level' => ['nullable', Rule::in(User::YEAR_LEVELS)],
             'archive_state' => ['nullable', Rule::in(['current', 'archived', 'all'])],
+            'student_status' => ['nullable', Rule::in(User::STUDENT_STATUSES)],
+            'admission_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:250'],
         ]);
@@ -32,7 +34,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $perPage = (int) ($validated['per_page'] ?? 200);
 
         $users = User::query()
-            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'is_active', 'archived_at', 'created_at', 'updated_at')
+            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'student_status', 'admission_year', 'is_active', 'archived_at', 'created_at', 'updated_at')
             ->when(
                 filled($validated['search'] ?? null),
                 fn ($query) => $query->where(function ($inner) use ($validated) {
@@ -54,6 +56,14 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             ->when(
                 filled($validated['year_level'] ?? null),
                 fn ($query) => $query->where('year_level', (int) $validated['year_level'])
+            )
+            ->when(
+                filled($validated['student_status'] ?? null),
+                fn ($query) => $query->where('student_status', $validated['student_status'])
+            )
+            ->when(
+                filled($validated['admission_year'] ?? null),
+                fn ($query) => $query->where('admission_year', (int) $validated['admission_year'])
             )
             ->when(
                 filled($validated['archive_state'] ?? null) && $validated['archive_state'] !== 'all',
@@ -100,11 +110,19 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             ],
             'role' => ['required', Rule::in(User::ROLES)],
             'year_level' => [
-                Rule::requiredIf(fn () => $request->input('role') === User::ROLE_STUDENT),
+                // Required for someone who is actually studying; a graduate or
+                // a dropout being entered retrospectively has no current level.
+                Rule::requiredIf(fn () => $request->input('role') === User::ROLE_STUDENT
+                    && User::isEnrolledStatus($request->input('student_status', User::STUDENT_STATUS_ENROLLED))),
                 'nullable',
                 'integer',
-                Rule::in(User::YEAR_LEVELS),
+                // A range rather than the standard ladder: irregulars sit
+                // beyond fourth year and have to be recordable.
+                'min:' . User::YEAR_LEVEL_MIN,
+                'max:' . User::YEAR_LEVEL_MAX,
             ],
+            'student_status' => ['nullable', Rule::in(User::STUDENT_STATUSES)],
+            'admission_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
             'password' => ['required', 'string', 'min:8'],
             'is_active' => ['nullable', 'boolean'],
             'archived' => ['nullable', 'boolean'],
@@ -116,20 +134,40 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $normalizedYearLevel = filled($validated['year_level'] ?? null)
             ? (int) $validated['year_level']
             : null;
-        $archivedAt = ($validated['role'] ?? null) === User::ROLE_STUDENT && (bool) ($validated['archived'] ?? false)
-            ? now()
-            : null;
+        $isStudent = ($validated['role'] ?? null) === User::ROLE_STUDENT;
 
-        $user = User::create([
+        // An explicit status wins; otherwise the archived checkbox decides.
+        // Ticking it without saying why lands in the unspecified holding state
+        // rather than silently claiming the student graduated.
+        $studentStatus = null;
+
+        if ($isStudent) {
+            $studentStatus = $validated['student_status']
+                ?? ((bool) ($validated['archived'] ?? false)
+                    ? User::STUDENT_STATUS_ARCHIVED_UNSPECIFIED
+                    : User::STUDENT_STATUS_ENROLLED);
+        }
+
+        $user = new User([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'student_id' => $validated['role'] === User::ROLE_STUDENT ? $normalizedStudentId : null,
+            'student_id' => $isStudent ? $normalizedStudentId : null,
             'role' => $validated['role'],
-            'year_level' => $validated['role'] === User::ROLE_STUDENT ? $normalizedYearLevel : null,
+            'year_level' => $isStudent ? $normalizedYearLevel : null,
+            'admission_year' => $isStudent && filled($validated['admission_year'] ?? null)
+                ? (int) $validated['admission_year']
+                : null,
             'is_active' => $validated['is_active'] ?? true,
-            'archived_at' => $archivedAt,
             'password' => $validated['password'],
         ]);
+
+        // Writes student_status and archived_at together so they cannot
+        // disagree -- see User::applyStudentStatus().
+        if ($studentStatus !== null) {
+            $user->applyStudentStatus($studentStatus);
+        }
+
+        $user->save();
 
         $recordAudit(
             $actor,
@@ -169,7 +207,9 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'student_id' => ['sometimes', 'nullable', 'string', 'max:32', 'regex:/^\d{7,20}$/', Rule::unique('users', 'student_id')->ignore($user->id)],
             'role' => ['sometimes', 'required', Rule::in(User::ROLES)],
-            'year_level' => ['sometimes', 'nullable', 'integer', Rule::in(User::YEAR_LEVELS)],
+            'year_level' => ['sometimes', 'nullable', 'integer', 'min:' . User::YEAR_LEVEL_MIN, 'max:' . User::YEAR_LEVEL_MAX],
+            'student_status' => ['sometimes', 'nullable', Rule::in(User::STUDENT_STATUSES)],
+            'admission_year' => ['sometimes', 'nullable', 'integer', 'min:1900', 'max:2999'],
             'is_active' => ['sometimes', 'required', 'boolean'],
             'password' => ['sometimes', 'required', 'string', 'min:8'],
             'archived' => ['sometimes', 'boolean'],
@@ -197,9 +237,19 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             ], 422);
         }
 
-        if ($resolvedRole === User::ROLE_STUDENT && blank($resolvedYearLevel)) {
+        $resolvedStatus = $validated['student_status']
+            ?? $user->student_status
+            ?? User::STUDENT_STATUS_ENROLLED;
+
+        // Only an enrolled student needs a current year level. Requiring it of
+        // a graduate forced staff to leave a stale level on records that had
+        // moved on, which is how a graduate ends up indistinguishable from a
+        // real fourth year.
+        if ($resolvedRole === User::ROLE_STUDENT
+            && User::isEnrolledStatus($resolvedStatus)
+            && blank($resolvedYearLevel)) {
             return response()->json([
-                'message' => 'Year level is required for student accounts.',
+                'message' => 'Year level is required while a student is enrolled.',
             ], 422);
         }
 
@@ -223,19 +273,31 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             }
         }
 
-        $fillPayload = collect($validated)->except(['password', 'archived'])->all();
+        $fillPayload = collect($validated)->except(['password', 'archived', 'student_status'])->all();
 
         if (array_key_exists('year_level', $fillPayload) && !is_null($fillPayload['year_level'])) {
             $fillPayload['year_level'] = (int) $fillPayload['year_level'];
         }
 
-        if (array_key_exists('archived', $validated)) {
-            $fillPayload['archived_at'] = $resolvedRole === User::ROLE_STUDENT && (bool) $validated['archived']
-                ? ($user->archived_at ?? now())
-                : null;
-        }
-
         $user->fill($fillPayload);
+
+        // Status and archived_at are written together, and only one of the two
+        // inputs may drive them. An explicit student_status is the richer
+        // signal, so it wins; the archived checkbox is the fallback for callers
+        // that predate the field.
+        if ($resolvedRole !== User::ROLE_STUDENT) {
+            $user->student_status = null;
+            $user->archived_at = null;
+        } elseif (array_key_exists('student_status', $validated) && filled($validated['student_status'])) {
+            $user->applyStudentStatus($validated['student_status']);
+        } elseif (array_key_exists('archived', $validated)) {
+            $user->applyStudentStatus((bool) $validated['archived']
+                ? ($user->student_status && !User::isEnrolledStatus($user->student_status)
+                    // Already archived for a known reason -- keep the reason.
+                    ? $user->student_status
+                    : User::STUDENT_STATUS_ARCHIVED_UNSPECIFIED)
+                : User::STUDENT_STATUS_ENROLLED);
+        }
 
         if (array_key_exists('password', $validated)) {
             $user->password = $validated['password'];

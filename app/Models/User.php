@@ -20,7 +20,52 @@ class User extends Authenticatable
     public const ROLE_ADMIN = 'admin';
     public const ROLE_STAFF_MASTER_EXAMINER = 'staff_master_examiner';
     public const ROLE_STUDENT = 'student';
+    /** The standard four-year ladder, used for self-service registration. */
     public const YEAR_LEVELS = [1, 2, 3, 4];
+
+    /**
+     * Staff may record a level outside the standard ladder. Irregular students
+     * -- shifters, repeaters, anyone returning from a leave -- routinely sit
+     * beyond fourth year, and a field that cannot express them forces staff to
+     * either mis-file them as fourth years or leave the level blank.
+     */
+    public const YEAR_LEVEL_MIN = 1;
+    public const YEAR_LEVEL_MAX = 8;
+
+    /** Currently studying. The only status that leaves archived_at null. */
+    public const STUDENT_STATUS_ENROLLED = 'enrolled';
+
+    /** Completed the programme. Pairs with an lle_results row to train on. */
+    public const STUDENT_STATUS_GRADUATED = 'graduated';
+
+    /** Left without completing. Never sat the board -- censored, not a failure. */
+    public const STUDENT_STATUS_DROPPED = 'dropped';
+
+    /** Moved to another programme or institution. */
+    public const STUDENT_STATUS_TRANSFERRED = 'transferred';
+
+    /** Temporarily away and expected back. */
+    public const STUDENT_STATUS_ON_LEAVE = 'on_leave';
+
+    /**
+     * Archived before the reason was recorded. Everything archived prior to
+     * this field existing lands here, because guessing would be worse than
+     * admitting we do not know -- a dropout filed as a graduate becomes a
+     * fabricated training example.
+     */
+    public const STUDENT_STATUS_ARCHIVED_UNSPECIFIED = 'archived_unspecified';
+
+    /**
+     * @var list<string>
+     */
+    public const STUDENT_STATUSES = [
+        self::STUDENT_STATUS_ENROLLED,
+        self::STUDENT_STATUS_GRADUATED,
+        self::STUDENT_STATUS_DROPPED,
+        self::STUDENT_STATUS_TRANSFERRED,
+        self::STUDENT_STATUS_ON_LEAVE,
+        self::STUDENT_STATUS_ARCHIVED_UNSPECIFIED,
+    ];
 
     public const ROLES = [
         self::ROLE_ADMIN,
@@ -42,6 +87,8 @@ class User extends Authenticatable
         'student_id',
         'role',
         'year_level',
+        'student_status',
+        'admission_year',
         'is_active',
         'archived_at',
         'password',
@@ -109,6 +156,48 @@ class User extends Authenticatable
     public function currentRooms(): BelongsToMany
     {
         return $this->rooms()->whereNull('rooms.archived_at');
+    }
+
+    /**
+     * Whether a status means the student is still in circulation.
+     *
+     * Only `enrolled` does. Everything else -- graduated, dropped, transferred,
+     * on leave, or archived before anyone said why -- means they should be off
+     * the rosters, which is what archived_at expresses.
+     */
+    public static function isEnrolledStatus(?string $status): bool
+    {
+        return $status === self::STUDENT_STATUS_ENROLLED;
+    }
+
+    /**
+     * Set a student's lifecycle status and keep archived_at consistent with it.
+     *
+     * These two fields have to agree: a student marked `graduated` who is still
+     * un-archived would keep appearing in the directory and on class lists, and
+     * an archived student marked `enrolled` would vanish from the very list
+     * meant to show them. Writing both here means no caller has to remember.
+     *
+     * Does not save -- the caller decides when, so this composes with other
+     * changes in one write.
+     */
+    public function applyStudentStatus(string $status): static
+    {
+        if (!in_array($status, self::STUDENT_STATUSES, true)) {
+            throw new \InvalidArgumentException("Unknown student status [{$status}].");
+        }
+
+        $this->student_status = $status;
+
+        if (self::isEnrolledStatus($status)) {
+            $this->archived_at = null;
+        } elseif (is_null($this->archived_at)) {
+            // Preserved when already set: re-classifying an archived student
+            // records why they left, not a new leaving date.
+            $this->archived_at = now();
+        }
+
+        return $this;
     }
 
     /**
@@ -194,6 +283,7 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'year_level' => 'integer',
             'archived_at' => 'datetime',
+            'admission_year' => 'integer',
             'password' => 'hashed',
         ];
     }
