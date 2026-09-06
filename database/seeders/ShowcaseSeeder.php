@@ -37,6 +37,9 @@ use Illuminate\Support\Facades\Hash;
  *   php artisan db:seed --class=ShowcaseSeeder
  *   SHOWCASE_PURGE_ONLY=1 php artisan db:seed --class=ShowcaseSeeder
  *
+ * SHOWCASE_HISTORY_YEARS (default 10) controls how many graduating cohorts of
+ * back-history to build. Set it to 0 for just the current intake.
+ *
  * Sign in as any account below with the password `password`.
  */
 class ShowcaseSeeder extends Seeder
@@ -46,6 +49,22 @@ class ShowcaseSeeder extends Seeder
     private const DOMAIN = 'showcase.local';
     private const PREFIX = 'SHOWCASE';
     private const STUDENT_ID_BASE = 8100000;
+
+    /** Historical accounts number from here, well clear of the current intake. */
+    private const HISTORY_STUDENT_ID_BASE = 8200000;
+
+    /**
+     * Board pass rates by cohort, oldest first, cycled if more years are asked
+     * for. Real programmes do not hold a flat rate -- a curriculum change or a
+     * strong batch moves it -- and a flat one would make the year-on-year
+     * outcome charts look synthetic.
+     *
+     * @var list<float>
+     */
+    private const HISTORIC_PASS_RATES = [0.58, 0.64, 0.61, 0.72, 0.69, 0.78, 0.74, 0.81, 0.77, 0.85];
+
+    /** Cohort sizes, cycled the same way. */
+    private const HISTORIC_COHORT_SIZES = [22, 26, 24, 31, 28, 33, 30, 36, 34, 38];
 
     /** Every subject the Review Bot and the predictor know about. */
     private const SUBJECTS = [
@@ -103,6 +122,7 @@ class ShowcaseSeeder extends Seeder
         $this->seedLicensureResults();
         $this->seedExams();
         $this->seedExamAttempts();
+        $this->seedHistory();
         $this->seedReviewBotBank();
         $this->seedReviewBotSessions();
         $this->seedAuditTrail();
@@ -1035,6 +1055,353 @@ class ShowcaseSeeder extends Seeder
         }
     }
 
+    // ---------------------------------------------------------------- history
+
+    /**
+     * Back-history: one graduating cohort per year, each with the exam record
+     * they built over four years and the board result they eventually got.
+     *
+     * This is what makes the retraining story real. LetPredictionService was
+     * trained on a single hand-labelled batch and its docblock asks for more;
+     * a decade of cohorts, each with a full feature history and a recorded
+     * outcome, is the shape that data has to arrive in. It is also the only way
+     * the archive views have anything in them -- rooms from closed academic
+     * years, exams nobody will sit again, alumni who left years ago.
+     *
+     * Written with bulk inserts rather than Eloquent: at ten cohorts this is
+     * tens of thousands of answer rows, and per-model saves would turn a
+     * seconds-long seed into a minutes-long one.
+     */
+    private function seedHistory(): void
+    {
+        $years = max(0, (int) env('SHOWCASE_HISTORY_YEARS', 10));
+
+        if ($years === 0) {
+            return;
+        }
+
+        $currentYear = (int) $this->now->format('Y');
+        $sequence = 0;
+
+        $this->command?->info("Building {$years} year(s) of cohort history...");
+
+        for ($offset = $years; $offset >= 1; $offset--) {
+            $graduationYear = $currentYear - $offset;
+            $admissionYear = $graduationYear - 4;
+            $index = ($years - $offset) % count(self::HISTORIC_COHORT_SIZES);
+
+            $size = self::HISTORIC_COHORT_SIZES[$index];
+            $passRate = self::HISTORIC_PASS_RATES[$index];
+
+            $room = $this->seedHistoricRoom($graduationYear);
+            $exams = $this->seedHistoricExams($graduationYear, $room);
+            $cohort = $this->seedHistoricCohort($graduationYear, $admissionYear, $size, $sequence, $room);
+            $sequence += $size;
+
+            $this->seedHistoricAttempts($cohort, $exams, $admissionYear);
+            $this->seedHistoricResults($cohort, $graduationYear, $passRate);
+        }
+    }
+
+    private function seedHistoricRoom(int $graduationYear): Room
+    {
+        $closedAt = CarbonImmutable::create($graduationYear, 6, 30);
+
+        return Room::query()->create([
+            'name' => sprintf('BLIS 4A (AY %d-%d)', $graduationYear - 1, $graduationYear),
+            // rooms.code is capped at 12 characters, and the 8-character
+            // prefix plus a 4-digit year uses exactly that.
+            'code' => self::PREFIX . $graduationYear,
+            'created_by' => $this->staff['examiner']->id,
+            // Archived the moment the cohort graduated, which is what keeps
+            // them out of currentStudentMembers() and the room_count column.
+            'archived_at' => $closedAt,
+            'created_at' => $closedAt->subYears(4),
+            'updated_at' => $closedAt,
+        ]);
+    }
+
+    /**
+     * @return array<string, int> subject => exam id
+     */
+    private function seedHistoricExams(int $graduationYear, Room $room): array
+    {
+        $rows = [];
+        $pivot = [];
+        $exams = [];
+
+        foreach (self::SUBJECTS as $index => $subject) {
+            // Spread across the cohort's four years, so a student's attempt
+            // history has a real chronology for the semester bucketing to
+            // split rather than everything landing on one date.
+            $sat = CarbonImmutable::create($graduationYear - 3, 1, 1)->addMonths($index * 8);
+
+            $exam = Exam::query()->create([
+                'title' => sprintf('[%s] %s Mock (AY %d)', self::PREFIX, $subject, $graduationYear),
+                'subject' => $subject,
+                'description' => 'Historical mock exam retained for records.',
+                'question_bank_id' => $this->libraryBanks[$subject]->id,
+                'total_items' => 10,
+                'duration_minutes' => 60,
+                'scheduled_at' => $sat,
+                'schedule_start_at' => $sat,
+                'schedule_end_at' => $sat->addDays(2),
+                'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
+                'results_visibility_mode' => 'visible',
+                'one_take_only' => false,
+                'shuffle_questions' => false,
+                'created_by' => $this->staff['examiner']->id,
+                'created_at' => $sat->subWeek(),
+                'updated_at' => $sat,
+            ]);
+
+            $pivot[] = [
+                'exam_id' => $exam->id,
+                'room_id' => $room->id,
+                'assigned_by' => $this->staff['examiner']->id,
+                'archived_at' => CarbonImmutable::create($graduationYear, 6, 30),
+                'archived_by' => $this->staff['examiner']->id,
+                'created_at' => $sat->subWeek(),
+                'updated_at' => $sat,
+            ];
+
+            $exams[$subject] = ['id' => (int) $exam->id, 'sat_at' => $sat];
+        }
+
+        DB::table('exam_room')->insert($pivot);
+
+        return $exams;
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \stdClass>
+     */
+    private function seedHistoricCohort(int $graduationYear, int $admissionYear, int $size, int $sequence, Room $room)
+    {
+        $enrolledAt = CarbonImmutable::create($admissionYear, 8, 1);
+        $leftAt = CarbonImmutable::create($graduationYear, 6, 30);
+        $rows = [];
+
+        for ($i = 0; $i < $size; $i++) {
+            $n = $sequence + $i;
+
+            // Roughly one in nine leaves before finishing. They are dropouts,
+            // not board-exam failures -- keeping the two apart is the whole
+            // reason student_status exists, and mixing them would poison any
+            // model trained on this data.
+            $dropped = $i % 9 === 8;
+
+            $rows[] = [
+                'name' => sprintf('Alumnus %d-%02d', $graduationYear, $i + 1),
+                'email' => sprintf('alum%d-%d@%s', $graduationYear, $n, self::DOMAIN),
+                'student_id' => (string) (self::HISTORY_STUDENT_ID_BASE + $n),
+                'role' => User::ROLE_STUDENT,
+                'year_level' => null,
+                'student_status' => $dropped
+                    ? User::STUDENT_STATUS_DROPPED
+                    : User::STUDENT_STATUS_GRADUATED,
+                'admission_year' => $admissionYear,
+                'is_active' => false,
+                'archived_at' => $dropped ? $enrolledAt->addYears(2) : $leftAt,
+                'password' => $this->password,
+                'created_at' => $enrolledAt,
+                'updated_at' => $leftAt,
+            ];
+        }
+
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('users')->insert($chunk);
+        }
+
+        $cohort = DB::table('users')
+            ->select('id', 'student_status', 'created_at')
+            ->where('email', 'like', sprintf('alum%d-%%@%s', $graduationYear, self::DOMAIN))
+            ->orderBy('id')
+            ->get();
+
+        DB::table('room_user')->insert($cohort->map(fn ($student): array => [
+            'room_id' => $room->id,
+            'user_id' => $student->id,
+            'created_at' => $enrolledAt,
+            'updated_at' => $enrolledAt,
+        ])->all());
+
+        return $cohort;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \stdClass>  $cohort
+     * @param  array<string, array{id: int, sat_at: CarbonImmutable}>  $exams
+     */
+    private function seedHistoricAttempts($cohort, array $exams, int $admissionYear): void
+    {
+        // The item ids are the same for every exam in a cohort, since all six
+        // draw from the same per-subject Library file.
+        $questionsByBank = [];
+
+        foreach (self::SUBJECTS as $subject) {
+            $questionsByBank[$subject] = DB::table('question_bank_questions')
+                ->where('question_bank_id', $this->libraryBanks[$subject]->id)
+                ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
+                ->orderBy('item_number')
+                ->pluck('id')
+                ->all();
+        }
+
+        $attemptRows = [];
+
+        foreach ($cohort as $position => $student) {
+            // A dropout stops sitting exams partway through, which is what
+            // makes them censored rather than failed.
+            $isDropout = $student->student_status === User::STUDENT_STATUS_DROPPED;
+            $subjects = $isDropout ? array_slice(self::SUBJECTS, 0, 2) : self::SUBJECTS;
+
+            $ability = 48 + (($position * 11) % 42);
+
+            foreach ($subjects as $round => $subject) {
+                $exam = $exams[$subject];
+                $satAt = $exam['sat_at'];
+
+                // A gentle upward drift across the degree, so the semester
+                // buckets show improvement rather than noise.
+                $drift = (int) round(($round / max(1, count($subjects) - 1)) * 9);
+                $score = max(5, min(100, $ability + $drift + mt_rand(-7, 7)));
+
+                $attemptRows[] = [
+                    'exam_id' => $exam['id'],
+                    'room_id' => null,
+                    'user_id' => $student->id,
+                    'status' => ExamAttempt::STATUS_SUBMITTED,
+                    'total_items' => 10,
+                    'duration_minutes' => 60,
+                    'answered_count' => 10,
+                    'correct_answers' => (int) round($score / 10),
+                    'score_percent' => $score,
+                    'started_at' => $satAt->addHours(1),
+                    'expires_at' => $satAt->addHours(2),
+                    'submitted_at' => $satAt->addHours(1)->addMinutes(mt_rand(20, 55)),
+                    'created_at' => $satAt,
+                    'updated_at' => $satAt,
+                ];
+            }
+        }
+
+        // room_id is NOT NULL, so point them at the cohort's own archived room.
+        $roomId = DB::table('room_user')->where('user_id', $cohort->first()->id)->value('room_id');
+
+        foreach ($attemptRows as $index => $row) {
+            $attemptRows[$index]['room_id'] = $roomId;
+        }
+
+        foreach (array_chunk($attemptRows, 1000) as $chunk) {
+            DB::table('exam_attempts')->insert($chunk);
+        }
+
+        // Attempt items and answers, so per-question analytics and the live
+        // board footer have something behind the historical exams too.
+        $attempts = DB::table('exam_attempts')
+            ->select('id', 'exam_id', 'user_id', 'score_percent', 'started_at')
+            ->whereIn('user_id', $cohort->pluck('id'))
+            ->get();
+
+        $examSubject = [];
+        foreach ($exams as $subject => $exam) {
+            $examSubject[$exam['id']] = $subject;
+        }
+
+        $questionRows = [];
+        $answerRows = [];
+
+        foreach ($attempts as $attempt) {
+            $subject = $examSubject[$attempt->exam_id] ?? null;
+            $questionIds = $subject ? $questionsByBank[$subject] : [];
+            $correct = (int) round(((float) $attempt->score_percent) / 10);
+
+            foreach ($questionIds as $index => $questionId) {
+                $questionRows[] = [
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $questionId,
+                    'item_number' => $index + 1,
+                    'created_at' => $attempt->started_at,
+                    'updated_at' => $attempt->started_at,
+                ];
+
+                $answerRows[] = [
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $questionId,
+                    'question_bank_option_id' => null,
+                    'answer_text' => null,
+                    'is_correct' => $index < $correct,
+                    'answered_at' => $attempt->started_at,
+                    'created_at' => $attempt->started_at,
+                    'updated_at' => $attempt->started_at,
+                ];
+            }
+        }
+
+        foreach (array_chunk($questionRows, 2000) as $chunk) {
+            DB::table('exam_attempt_questions')->insert($chunk);
+        }
+
+        foreach (array_chunk($answerRows, 2000) as $chunk) {
+            DB::table('exam_attempt_answers')->insert($chunk);
+        }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \stdClass>  $cohort
+     */
+    private function seedHistoricResults($cohort, int $graduationYear, float $passRate): void
+    {
+        $rows = [];
+        $takenAt = CarbonImmutable::create($graduationYear, 9, 15);
+        $graduates = $cohort->where('student_status', User::STUDENT_STATUS_GRADUATED)->values();
+
+        foreach ($graduates as $index => $graduate) {
+            // A couple per cohort are left unrecorded on purpose: in practice
+            // some outcomes never get transcribed, and the Licensure screen is
+            // where that backlog shows up.
+            if ($index % 13 === 12) {
+                continue;
+            }
+
+            $passed = ($index / max(1, $graduates->count())) < $passRate;
+
+            $rows[] = [
+                'user_id' => $graduate->id,
+                'exam_year' => $graduationYear,
+                'taken_at' => $takenAt,
+                'result' => $passed ? LleResult::RESULT_PASS : LleResult::RESULT_FAIL,
+                'rating' => $passed ? round(mt_rand(7500, 9200) / 100, 2) : round(mt_rand(6200, 7490) / 100, 2),
+                'remarks' => null,
+                'recorded_by' => $this->staff['examiner']->id,
+                'created_at' => $takenAt,
+                'updated_at' => $takenAt,
+            ];
+
+            // Roughly a third of those who fail sit it again the next year and
+            // pass -- two rows for one person, which is why the unique key is
+            // (user, exam_year).
+            if (!$passed && $index % 3 === 0) {
+                $rows[] = [
+                    'user_id' => $graduate->id,
+                    'exam_year' => $graduationYear + 1,
+                    'taken_at' => $takenAt->addYear(),
+                    'result' => LleResult::RESULT_PASS,
+                    'rating' => round(mt_rand(7500, 8200) / 100, 2),
+                    'remarks' => 'Passed on retake.',
+                    'recorded_by' => $this->staff['examiner']->id,
+                    'created_at' => $takenAt->addYear(),
+                    'updated_at' => $takenAt->addYear(),
+                ];
+            }
+        }
+
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('lle_results')->insert($chunk);
+        }
+    }
+
     // ------------------------------------------------------------ audit trail
 
     private function seedAuditTrail(): void
@@ -1062,6 +1429,27 @@ class ShowcaseSeeder extends Seeder
                 'updated_at' => $this->now->subDays(7 - $index),
             ]);
         }
+    }
+
+    private function historySummary(): string
+    {
+        $years = DB::table('lle_results')
+            ->join('users', 'users.id', '=', 'lle_results.user_id')
+            ->where('users.email', 'like', 'alum%@' . self::DOMAIN)
+            ->selectRaw('MIN(exam_year) as first_year, MAX(exam_year) as last_year, COUNT(*) as total')
+            ->first();
+
+        if (!$years || !$years->total) {
+            return 'none (SHOWCASE_HISTORY_YEARS=0)';
+        }
+
+        return sprintf(
+            '%d cohorts, board results %d-%d',
+            User::query()->where('email', 'like', 'alum%@' . self::DOMAIN)
+                ->distinct()->count('admission_year'),
+            $years->first_year,
+            $years->last_year,
+        );
     }
 
     // ----------------------------------------------------------------- report
@@ -1099,6 +1487,8 @@ class ShowcaseSeeder extends Seeder
                 ['Exam attempts', ExamAttempt::query()->whereIn('user_id', (clone $students)->select('id'))->count()],
                 ['Review Bot questions', $reviewBot->map(fn ($n, $s) => "{$s}={$n}")->implode(', ')],
                 ['Review Bot sessions', ReviewBotAttempt::query()->whereIn('user_id', (clone $students)->select('id'))->count()],
+                ['Cohort history', $this->historySummary()],
+                ['Archived rooms', Room::query()->where('code', 'like', self::PREFIX . '%')->whereNotNull('archived_at')->count()],
                 ['Sign in as', 'examiner@' . self::DOMAIN . ' / admin@' . self::DOMAIN . ' / student0@' . self::DOMAIN],
             ],
         );
