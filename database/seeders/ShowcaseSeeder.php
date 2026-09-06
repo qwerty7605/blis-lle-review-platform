@@ -39,6 +39,10 @@ use Illuminate\Support\Facades\Hash;
  *
  * SHOWCASE_HISTORY_YEARS (default 10) controls how many graduating cohorts of
  * back-history to build. Set it to 0 for just the current intake.
+ * SHOWCASE_COHORT_SIZE (default 300) is the intake per year level, which sets
+ * both current enrolment and the size of each historical cohort. The default
+ * reflects a real BLIS programme: four year levels of ~300 is ~1,200 enrolled
+ * at any moment, and a decade of intake takes the total past 4,000.
  *
  * Sign in as any account below with the password `password`.
  */
@@ -63,8 +67,14 @@ class ShowcaseSeeder extends Seeder
      */
     private const HISTORIC_PASS_RATES = [0.58, 0.64, 0.61, 0.72, 0.69, 0.78, 0.74, 0.81, 0.77, 0.85];
 
-    /** Cohort sizes, cycled the same way. */
-    private const HISTORIC_COHORT_SIZES = [22, 26, 24, 31, 28, 33, 30, 36, 34, 38];
+    /**
+     * Cohort sizes as a proportion of the base intake, cycled the same way. A
+     * programme's intake drifts year to year rather than holding steady, and
+     * identical cohorts would read as generated.
+     *
+     * @var list<float>
+     */
+    private const HISTORIC_COHORT_RATIOS = [0.74, 0.87, 0.80, 1.03, 0.93, 1.10, 1.00, 1.20, 1.13, 1.27];
 
     /** Every subject the Review Bot and the predictor know about. */
     private const SUBJECTS = [
@@ -419,13 +429,25 @@ class ShowcaseSeeder extends Seeder
 
     // --------------------------------------------------------------- students
 
+    /** Intake per year level, and the base each historical cohort scales from. */
+    private function cohortSize(): int
+    {
+        return max(1, (int) env('SHOWCASE_COHORT_SIZE', 300));
+    }
+
     private function seedStudents(): void
     {
         $currentYear = (int) $this->now->format('Y');
         $sequence = 0;
 
         // Enrolled, one cohort per year level.
-        foreach ([1 => 8, 2 => 8, 3 => 8, 4 => 10] as $yearLevel => $count) {
+        $perYear = $this->cohortSize();
+
+        // Year levels thin slightly as a cohort ages, which is what attrition
+        // looks like from the enrolment side rather than the alumni side.
+        foreach ([1 => 1.0, 2 => 0.96, 3 => 0.92, 4 => 0.89] as $yearLevel => $retention) {
+            $count = (int) round($perYear * $retention);
+
             for ($i = 0; $i < $count; $i++) {
                 $student = $this->makeStudent(
                     $sequence++,
@@ -436,9 +458,10 @@ class ShowcaseSeeder extends Seeder
 
                 $student->rooms()->syncWithoutDetaching([$this->rooms[$yearLevel]->id]);
 
-                // The fourth years are the ones with a full exam history, so
-                // they are the ones the LET predictor can score.
-                if ($yearLevel === 4 && $i < 4) {
+                // Most fourth years have sat enough of the six subjects for the
+                // predictor to score them; the rest keep a partial history so
+                // the "not enough history yet" branch is populated too.
+                if ($yearLevel === 4 && $i < (int) round($count * 0.6)) {
                     $this->predictionReady[] = $student;
                 }
             }
@@ -692,24 +715,24 @@ class ShowcaseSeeder extends Seeder
             ->orderBy('id')
             ->get();
 
-        $predictionIds = collect($this->predictionReady)->pluck('id')->all();
+        $predictionIds = array_flip(collect($this->predictionReady)->pluck('id')->all());
+        $specs = [];
 
         foreach ($fourthYears as $position => $student) {
-            $isPredictionReady = in_array($student->id, $predictionIds, true);
-
-            // Prediction needs at least 8 scored attempts AND an average in
+            // Prediction needs at least eight scored attempts AND an average in
             // every one of the six subjects, so these students sit all six --
             // twice over, which also exercises the latest-attempt-per-session
-            // rule that the analytics rely on.
-            $subjects = $isPredictionReady ? array_merge(self::SUBJECTS, self::SUBJECTS) : array_slice(self::SUBJECTS, 0, 2);
+            // rule the analytics rely on.
+            $subjects = isset($predictionIds[$student->id])
+                ? array_merge(self::SUBJECTS, self::SUBJECTS)
+                : array_slice(self::SUBJECTS, 0, 2);
 
             // A distinct ability per student so scores cluster rather than
-            // being uniform noise, and the pass/fail split is meaningful.
+            // being uniform noise, and the pass/fail split means something.
             $ability = 52 + (($position * 7) % 40);
 
             foreach ($subjects as $round => $subject) {
                 $exam = $this->exams[$subject];
-
                 $opensAt = CarbonImmutable::instance(\Carbon\Carbon::instance($exam->schedule_start_at));
 
                 if ($opensAt->greaterThan($this->now)) {
@@ -717,94 +740,152 @@ class ShowcaseSeeder extends Seeder
                 }
 
                 $isRetake = $round >= count(self::SUBJECTS);
-                $drift = $isRetake ? 6 : 0;
-                $score = max(5, min(100, $ability + $drift + mt_rand(-8, 8)));
 
-                $this->seedAttempt(
-                    $student,
-                    $exam,
-                    ExamAttempt::STATUS_SUBMITTED,
-                    $score,
-                    $opensAt->addHours($isRetake ? 30 : 1),
-                );
+                $specs[] = [
+                    'user_id' => (int) $student->id,
+                    'exam' => $exam,
+                    'status' => ExamAttempt::STATUS_SUBMITTED,
+                    'score' => max(5, min(100, $ability + ($isRetake ? 6 : 0) + mt_rand(-8, 8))),
+                    'started_at' => $opensAt->addHours($isRetake ? 30 : 1),
+                ];
             }
         }
 
         // One student sitting the open exam right now, so the live board has
         // something in progress to show.
-        $liveExam = $this->exams[self::SUBJECTS[4]];
         $liveStudent = $fourthYears->first();
 
         if ($liveStudent) {
-            $this->seedAttempt($liveStudent, $liveExam, ExamAttempt::STATUS_IN_PROGRESS, null, $this->now->subMinutes(25));
+            $specs[] = [
+                'user_id' => (int) $liveStudent->id,
+                'exam' => $this->exams[self::SUBJECTS[4]],
+                'status' => ExamAttempt::STATUS_IN_PROGRESS,
+                'score' => null,
+                'started_at' => $this->now->subMinutes(25),
+            ];
         }
+
+        $this->insertAttempts($specs);
     }
 
-    private function seedAttempt(User $student, Exam $exam, string $status, ?int $score, \DateTimeInterface $startedAt): void
+    /**
+     * Bulk-insert attempts and their per-item rows.
+     *
+     * Built as arrays and inserted in chunks rather than saved one model at a
+     * time: at a realistic intake this is a couple of thousand attempts and
+     * tens of thousands of answer rows, and per-row inserts turned a
+     * seconds-long seed into a minutes-long one.
+     *
+     * @param  list<array{user_id: int, exam: Exam, status: string, score: int|null, started_at: CarbonImmutable}>  $specs
+     */
+    private function insertAttempts(array $specs): void
     {
-        // Model date casts hand back a mutable Carbon, and every ->addMinutes()
-        // below would shift the shared instance rather than derive a new one.
-        $startedAt = CarbonImmutable::instance(\Carbon\Carbon::instance($startedAt));
-
-        $questions = QuestionBankQuestion::query()
-            ->where('question_bank_id', $exam->question_bank_id)
-            ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
-            ->orderBy('item_number')
-            ->with('options')
-            ->get();
-
-        if ($questions->isEmpty()) {
+        if ($specs === []) {
             return;
         }
 
-        $submitted = $status === ExamAttempt::STATUS_SUBMITTED;
-        $total = $questions->count();
-        $correctTarget = $submitted ? (int) round($total * ($score / 100)) : 0;
-        // Half answered on a live attempt, so the board shows real progress.
-        $answerCount = $submitted ? $total : (int) ceil($total / 2);
+        $questionsByBank = [];
+        $attemptRows = [];
 
-        $attempt = ExamAttempt::query()->create([
-            'exam_id' => $exam->id,
-            'room_id' => $this->rooms[4]->id,
-            'user_id' => $student->id,
-            'status' => $status,
-            'total_items' => $total,
-            'duration_minutes' => (int) $exam->duration_minutes,
-            'answered_count' => $answerCount,
-            'correct_answers' => $correctTarget,
-            'score_percent' => $submitted ? $score : null,
-            'started_at' => $startedAt,
-            'expires_at' => $startedAt->addMinutes((int) $exam->duration_minutes),
-            'submitted_at' => $submitted ? $startedAt->addMinutes(mt_rand(18, 50)) : null,
-        ]);
+        foreach ($specs as $spec) {
+            $exam = $spec['exam'];
+            $bankId = (int) $exam->question_bank_id;
 
-        foreach ($questions->values() as $index => $question) {
-            DB::table('exam_attempt_questions')->insert([
-                'exam_attempt_id' => $attempt->id,
-                'question_bank_question_id' => $question->id,
-                'item_number' => $index + 1,
-                'created_at' => $startedAt,
-                'updated_at' => $startedAt,
-            ]);
+            $questionsByBank[$bankId] ??= DB::table('question_bank_questions')
+                ->where('question_bank_id', $bankId)
+                ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
+                ->orderBy('item_number')
+                ->pluck('id')
+                ->all();
 
-            if ($index >= $answerCount) {
+            $total = count($questionsByBank[$bankId]);
+
+            if ($total === 0) {
                 continue;
             }
 
-            $isCorrect = $index < $correctTarget;
-            $option = $question->options->first(fn ($o) => (bool) $o->is_correct === $isCorrect)
-                ?? $question->options->first();
+            $submitted = $spec['status'] === ExamAttempt::STATUS_SUBMITTED;
+            $startedAt = $spec['started_at'];
 
-            DB::table('exam_attempt_answers')->insert([
-                'exam_attempt_id' => $attempt->id,
-                'question_bank_question_id' => $question->id,
-                'question_bank_option_id' => $option?->id,
-                'answer_text' => null,
-                'is_correct' => $isCorrect,
-                'answered_at' => $startedAt->addMinutes($index + 1),
+            $attemptRows[] = [
+                'exam_id' => (int) $exam->id,
+                'room_id' => $this->rooms[4]->id,
+                'user_id' => $spec['user_id'],
+                'status' => $spec['status'],
+                'total_items' => $total,
+                'duration_minutes' => (int) $exam->duration_minutes,
+                // Half answered on a live attempt, so the board shows progress.
+                'answered_count' => $submitted ? $total : (int) ceil($total / 2),
+                'correct_answers' => $submitted ? (int) round($total * ($spec['score'] / 100)) : 0,
+                'score_percent' => $submitted ? $spec['score'] : null,
+                'started_at' => $startedAt,
+                'expires_at' => $startedAt->addMinutes((int) $exam->duration_minutes),
+                'submitted_at' => $submitted ? $startedAt->addMinutes(mt_rand(18, 50)) : null,
                 'created_at' => $startedAt,
                 'updated_at' => $startedAt,
-            ]);
+            ];
+        }
+
+        foreach (array_chunk($attemptRows, 1000) as $chunk) {
+            DB::table('exam_attempts')->insert($chunk);
+        }
+
+        $userIds = collect($specs)->pluck('user_id')->unique()->values()->all();
+        $examIds = collect($specs)->map(fn (array $spec): int => (int) $spec['exam']->id)->unique()->values()->all();
+
+        $attempts = DB::table('exam_attempts')
+            ->select('id', 'exam_id', 'status', 'total_items', 'answered_count', 'correct_answers', 'started_at')
+            ->whereIn('user_id', $userIds)
+            ->whereIn('exam_id', $examIds)
+            ->orderBy('id')
+            ->get();
+
+        $bankByExam = [];
+
+        foreach ($specs as $spec) {
+            $bankByExam[(int) $spec['exam']->id] = (int) $spec['exam']->question_bank_id;
+        }
+
+        $questionRows = [];
+        $answerRows = [];
+
+        foreach ($attempts as $attempt) {
+            $questionIds = $questionsByBank[$bankByExam[$attempt->exam_id] ?? 0] ?? [];
+            $answerCap = (int) $attempt->answered_count;
+            $correct = (int) $attempt->correct_answers;
+
+            foreach ($questionIds as $index => $questionId) {
+                $questionRows[] = [
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $questionId,
+                    'item_number' => $index + 1,
+                    'created_at' => $attempt->started_at,
+                    'updated_at' => $attempt->started_at,
+                ];
+
+                if ($index >= $answerCap) {
+                    continue;
+                }
+
+                $answerRows[] = [
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $questionId,
+                    'question_bank_option_id' => null,
+                    'answer_text' => null,
+                    'is_correct' => $index < $correct,
+                    'answered_at' => $attempt->started_at,
+                    'created_at' => $attempt->started_at,
+                    'updated_at' => $attempt->started_at,
+                ];
+            }
+        }
+
+        foreach (array_chunk($questionRows, 2000) as $chunk) {
+            DB::table('exam_attempt_questions')->insert($chunk);
+        }
+
+        foreach (array_chunk($answerRows, 2000) as $chunk) {
+            DB::table('exam_attempt_answers')->insert($chunk);
         }
     }
 
@@ -1088,9 +1169,9 @@ class ShowcaseSeeder extends Seeder
         for ($offset = $years; $offset >= 1; $offset--) {
             $graduationYear = $currentYear - $offset;
             $admissionYear = $graduationYear - 4;
-            $index = ($years - $offset) % count(self::HISTORIC_COHORT_SIZES);
+            $index = ($years - $offset) % count(self::HISTORIC_COHORT_RATIOS);
 
-            $size = self::HISTORIC_COHORT_SIZES[$index];
+            $size = max(1, (int) round($this->cohortSize() * self::HISTORIC_COHORT_RATIOS[$index]));
             $passRate = self::HISTORIC_PASS_RATES[$index];
 
             $room = $this->seedHistoricRoom($graduationYear);
@@ -1098,7 +1179,13 @@ class ShowcaseSeeder extends Seeder
             $cohort = $this->seedHistoricCohort($graduationYear, $admissionYear, $size, $sequence, $room);
             $sequence += $size;
 
-            $this->seedHistoricAttempts($cohort, $exams, $admissionYear);
+            // Per-item rows only for the two most recent cohorts. They exist
+            // for item-level views -- the live board footer, per-question
+            // breakdowns -- which nobody opens for a decade-old exam, and at
+            // full intake they would be ~380,000 rows of nothing anyone reads.
+            // Every analytics path that matters reads exam_attempts.score_percent,
+            // which every historical attempt still carries.
+            $this->seedHistoricAttempts($cohort, $exams, $offset <= 2);
             $this->seedHistoricResults($cohort, $graduationYear, $passRate);
         }
     }
@@ -1233,7 +1320,7 @@ class ShowcaseSeeder extends Seeder
      * @param  \Illuminate\Support\Collection<int, \stdClass>  $cohort
      * @param  array<string, array{id: int, sat_at: CarbonImmutable}>  $exams
      */
-    private function seedHistoricAttempts($cohort, array $exams, int $admissionYear): void
+    private function seedHistoricAttempts($cohort, array $exams, bool $withItemDetail): void
     {
         // The item ids are the same for every exam in a cohort, since all six
         // draw from the same per-subject Library file.
@@ -1297,8 +1384,12 @@ class ShowcaseSeeder extends Seeder
             DB::table('exam_attempts')->insert($chunk);
         }
 
+        if (!$withItemDetail) {
+            return;
+        }
+
         // Attempt items and answers, so per-question analytics and the live
-        // board footer have something behind the historical exams too.
+        // board footer have something behind the recent historical exams too.
         $attempts = DB::table('exam_attempts')
             ->select('id', 'exam_id', 'user_id', 'score_percent', 'started_at')
             ->whereIn('user_id', $cohort->pluck('id'))
