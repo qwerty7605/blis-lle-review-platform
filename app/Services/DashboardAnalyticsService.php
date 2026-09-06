@@ -891,50 +891,6 @@ class DashboardAnalyticsService
         return $timestamp === false ? 0 : $timestamp;
     }
 
-    public function buildItemDifficulty(Exam $exam): array
-    {
-        $attemptIds = ExamAttempt::where('exam_id', $exam->id)
-            ->where('status', ExamAttempt::STATUS_SUBMITTED)
-            ->pluck('id');
-
-        if ($attemptIds->isEmpty()) {
-            return [];
-        }
-
-        $stats = DB::table('exam_attempt_answers')
-            ->whereIn('exam_attempt_id', $attemptIds)
-            ->select('question_bank_question_id', DB::raw('count(*) as total_attempts'), DB::raw('sum(is_correct) as correct_answers'))
-            ->groupBy('question_bank_question_id')
-            ->get();
-
-        $questionIds = $stats->pluck('question_bank_question_id');
-        $questions = DB::table('question_bank_questions')
-            ->whereIn('id', $questionIds)
-            ->get(['id', 'question_text', 'item_number', 'question_bank_id']);
-
-        $results = [];
-        foreach ($stats as $stat) {
-            $question = $questions->firstWhere('id', $stat->question_bank_question_id);
-            $total = (int) $stat->total_attempts;
-            $correct = (int) $stat->correct_answers;
-            $successRate = $total > 0 ? round(($correct / $total) * 100, 2) : 0;
-            $failureRate = 100 - $successRate;
-
-            $results[] = [
-                'question_id' => $stat->question_bank_question_id,
-                'question_text' => $question ? $question->question_text : 'Unknown Question',
-                'total_attempts' => $total,
-                'correct_answers' => $correct,
-                'success_rate_percent' => $successRate,
-                'failure_rate_percent' => $failureRate,
-            ];
-        }
-
-        usort($results, fn($a, $b) => $b['failure_rate_percent'] <=> $a['failure_rate_percent']);
-
-        return $results;
-    }
-
     /**
      * @return array<string, mixed>|array{}
      */
