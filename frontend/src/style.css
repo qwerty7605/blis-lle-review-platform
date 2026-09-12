@@ -10,11 +10,25 @@
   --lnu-bg: #F9F8F4;
   --lnu-success: #2E7D32;
   --lnu-danger: #C62828;
+  /* Brighter destructive-action red used on .danger-btn's filled surface --
+     kept distinct from --lnu-danger (used for danger text/borders/tints)
+     rather than merged into one token, so this pass doesn't change the
+     live color of every delete/reject button in the app. */
+  --lnu-danger-strong: #FF4F52;
+  --lnu-danger-strong-hover: #EC3E42;
   --lnu-gray: #ECEFF1;
   --lnu-gray-dark: #B0BEC5;
   --lnu-text: #0D1547;
   --lnu-text-muted: #607080;
   --lnu-white: #FFFFFF;
+
+  /* "Info" blue used by info-panel headers (Review Bot, Review Bot
+     Generator, Analytics) -- previously 4 slightly different hand-typed
+     blues (#1f418f/#20428f/#21489a/#234a9c) standing in for one intended
+     color across those three pages. --lnu-info-rgb exists so rgba()
+     tints can reference it without hardcoding the triple by hand. */
+  --lnu-info: #1F418F;
+  --lnu-info-rgb: 31, 65, 143;
 
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -22,6 +36,20 @@
 
   --shadow-sm: 0 8px 24px rgba(13, 21, 71, 0.08);
   --shadow-md: 0 18px 42px rgba(13, 21, 71, 0.12);
+
+  /* Semantic surface/ink/control scale shared by the dashboard primitives
+     (see the "Shared UI refresh" block at the end of dashboard.css). Named
+     by role rather than by colour so a card, a table header and a toolbar
+     can't drift apart the way they had. */
+  --surface: #ffffff;
+  --surface-muted: #f7f8fb;
+  --border-soft: rgba(13, 21, 71, 0.10);
+  --border-strong: rgba(13, 21, 71, 0.18);
+  --ink: #102149;
+  --ink-muted: #5d6b86;
+  --ink-soft: #66738c;
+  --control-height: 36px;
+  --control-radius: 9px;
 
   --focus-ring: 0 0 0 3px rgba(26, 35, 126, 0.2);
 }
@@ -61,6 +89,14 @@ textarea {
   font: inherit;
 }
 
+/* Browsers default <code> to a monospace stack -- inherit the shared body
+   font instead so a room code or filename dropped in a <code> tag doesn't
+   quietly switch typefaces mid-sentence. A more specific selector (e.g.
+   .library-upload-note code) can still opt back into monospace on purpose. */
+code {
+  font-family: inherit;
+}
+
 button {
   cursor: pointer;
 }
@@ -92,4 +128,33 @@ button {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Shared "submit" button for the three auth pages (Login/Register/Forgot
+   Password) -- used to be defined three times with small independent
+   drift in hover intensity; one definition here so all three match and
+   any future auth screen gets it for free. */
+.submit-btn {
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--lnu-navy-light);
+  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
+  transform: translateY(-1px);
+}
+
+.submit-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }

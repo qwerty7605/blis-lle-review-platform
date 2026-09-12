@@ -146,21 +146,7 @@ function handleSubmit() {
   box-shadow: var(--focus-ring);
 }
 
-.submit-btn {
-  height: 44px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
-  font-weight: 700;
-  transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
-}
-
-.submit-btn:hover {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 8px 16px rgba(26, 35, 126, 0.24);
-  transform: translateY(-1px);
-}
+/* .submit-btn is shared globally, see style.css */
 
 .status-msg {
   margin-top: 12px;

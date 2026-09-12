@@ -9,28 +9,28 @@ use App\Models\QuestionBankQuestion;
 use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Models\User;
+use App\Services\QuestionGeneration\LocalReviewQuestionGenerator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
-use Throwable;
 
 /**
- * Teacher-side Review Bot Question Generator: grounds AI generation in a
+ * Teacher-side Review Bot Question Generator: grounds generation in a
  * teacher's own uploaded library content, then persists the result as
  * draft QuestionBankQuestion rows (usage_type = review_bot) for the
- * teacher to review/edit and publish. This is the only place in the
- * Review Bot feature that ever calls OpenAI -- students only ever read
- * published rows (see ReviewBotService).
+ * teacher to review/edit and publish. Generation is a free local
+ * transformation of the teacher's own vetted content (see
+ * LocalReviewQuestionGenerator) -- no AI API call, no cost. Students only
+ * ever read published rows (see ReviewBotService).
  */
 class ReviewBotAdminService
 {
     /**
-     * Source items per API call. Four items yields up to sixteen questions in
-     * one response -- large enough to be efficient, small enough that a
-     * malformed response costs only a handful of items.
+     * Source items processed per persistence batch. No longer an API-cost
+     * consideration now that generation is local, but kept as a sane
+     * transactional chunk size.
      */
     public const GENERATION_BATCH_SIZE = 4;
 
@@ -56,7 +56,7 @@ class ReviewBotAdminService
      * same area are skipped for this long. The generation job itself already
      * skips items that already have variants, so this exists purely to stop
      * a burst of students hitting the same thin area from queuing redundant
-     * jobs (and redundant API spend) before the first one has even run.
+     * jobs before the first one has even run.
      */
     private const TOP_UP_DEBOUNCE_MINUTES = 360;
 
@@ -73,17 +73,8 @@ class ReviewBotAdminService
     public function __construct(
         private readonly QuestionMappingService $questionMappingService,
         private readonly ReviewBotQuestionScreeningService $screeningService,
+        private readonly LocalReviewQuestionGenerator $generator = new LocalReviewQuestionGenerator(),
     ) {
-    }
-
-    public function hasApiKey(): bool
-    {
-        return trim((string) config('services.openai.api_key', '')) !== '';
-    }
-
-    public function missingConfigurationMessage(): string
-    {
-        return 'OPENAI_API_KEY is not configured, so Review Bot question generation is unavailable.';
     }
 
     /**
@@ -126,10 +117,6 @@ class ReviewBotAdminService
 
         $bank = $this->reviewBotBankFor($subject, (int) $teacher->id);
 
-        if (!$this->hasApiKey()) {
-            return ['status' => 'skipped', 'message' => $this->missingConfigurationMessage(), 'bank_id' => (int) $bank->id];
-        }
-
         $totalSourceItems = (int) $sourceBank->assessmentQuestions()->count();
 
         if ($totalSourceItems === 0) {
@@ -149,8 +136,8 @@ class ReviewBotAdminService
         // the poll has not caught up yet) used to dispatch a whole second
         // generation over the same items: the screening then rejected almost
         // all of its output as near-duplicates of the first run's, so the only
-        // thing it reliably produced was a second OpenAI bill. Cache::add is
-        // atomic, so two simultaneous requests cannot both win.
+        // thing it reliably produced was wasted work. Cache::add is atomic, so
+        // two simultaneous requests cannot both win.
         $lockKey = 'review-bot-generate:' . (int) $sourceBank->id;
 
         if (!Cache::add($lockKey, true, now()->addMinutes(self::GENERATION_LOCK_MINUTES))) {
@@ -192,15 +179,11 @@ class ReviewBotAdminService
      * background job a teacher's own "Generate" click would.
      *
      * Deliberately quiet on every "can't do it right now" path (no bank set
-     * up yet, no API key, already queued recently) -- there is no student-
-     * facing error to surface, this is a best-effort background nicety.
+     * up yet, already queued recently) -- there is no student-facing error to
+     * surface, this is a best-effort background nicety.
      */
     public function queueTopUp(string $subject, ?int $topicId, ?int $subtopicId): void
     {
-        if (!$this->hasApiKey()) {
-            return;
-        }
-
         $bank = QuestionBank::query()
             ->where('title', QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX . $subject)
             ->where('subject', $subject)
@@ -245,10 +228,6 @@ class ReviewBotAdminService
      */
     public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit, ?int $sourceBankId = null): array
     {
-        if (!$this->hasApiKey()) {
-            return ['created' => 0, 'sources_processed' => 0, 'rejected' => [], 'errors' => [$this->missingConfigurationMessage()]];
-        }
-
         $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit, $sourceBankId);
 
         if ($sourceQuestions->isEmpty()) {
@@ -328,7 +307,7 @@ class ReviewBotAdminService
                     'difficulty' => $item['difficulty'],
                     'cognitive_level' => $item['cognitive_level'],
                     'tag_status' => QuestionBankQuestion::TAG_STATUS_CONFIRMED,
-                    'tag_source' => QuestionBankQuestion::TAG_SOURCE_AI,
+                    'tag_source' => QuestionBankQuestion::TAG_SOURCE_RULE_BASED,
                     'explanation' => $item['explanation'],
                     'status' => QuestionBankQuestion::STATUS_DRAFT,
                     'verification_status' => $item['verification_status'] ?? QuestionBankQuestion::VERIFICATION_UNCHECKED,
@@ -378,6 +357,12 @@ class ReviewBotAdminService
             ->with([
                 'questionBank:id,title',
                 'options:id,question_bank_question_id,option_label,option_text,is_correct',
+                // Needed by LocalReviewQuestionGenerator's comprehension/
+                // application/analysis templates ($source->topic/subtopic
+                // name) -- eager-loaded here so building variants for a whole
+                // chunk doesn't lazy-load one query per source item.
+                'topic:id,name',
+                'subtopic:id,name',
             ])
             ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
             ->where('subject', $subject)
@@ -397,108 +382,19 @@ class ReviewBotAdminService
     }
 
     /**
+     * Builds review questions from one chunk of source items via
+     * LocalReviewQuestionGenerator (free, local, no network call), then
+     * pipes the result through normalizeGeneratedQuestions() as a cheap
+     * defensive re-validation -- the same shape/enum checks that used to
+     * guard against a malformed AI response now double as a guard against a
+     * generator bug, at no extra cost.
+     *
      * @param  Collection<int, QuestionBankQuestion>  $sourceQuestions
      * @return array<int, array<string, mixed>>
      */
     protected function requestGeneration(Collection $sourceQuestions, string $subject): array
     {
-        $apiKey = (string) config('services.openai.api_key', '');
-        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-        $model = (string) config('services.openai.model', 'gpt-4o-mini');
-
-        $systemPrompt = <<<'PROMPT'
-You rewrite a teacher's exam items into review questions. A student who got the original item wrong will practise on your questions, so each one must test the SAME underlying concept as the item it came from -- never a different fact.
-
-For EACH source item, produce one question at each cognitive level: recall, comprehension, application, analysis.
-
-What the levels mean here:
-- recall: state the fact directly, in different words from the source.
-- comprehension: rephrase or reverse the relationship (give the definition, ask for the term).
-- application: a short, realistic library scenario that requires the concept to resolve.
-- analysis: compare, contrast, or distinguish the concept from a neighbouring one.
-
-Rules:
-- Return valid JSON only.
-- Every question must carry "source_index": the index of the source item it came from, copied exactly.
-- Every question must carry "cognitive_level": one of recall, comprehension, application, analysis.
-- Do not copy the source wording, sentence structure, or answer choices verbatim.
-- Each question must be either "multiple_choice" or "true_false".
-- For "multiple_choice", provide exactly 4 options and exactly one correct option id.
-- For "true_false", provide exactly 2 options: True and False, and identify the correct option id.
-- Every distractor must be plausible to a student who half-knows the concept. Never pad with an obviously absurd option.
-- Do not make the correct option noticeably longer than the distractors.
-- Include a short explanation of why the correct answer is correct -- this is shown to the student after they answer.
-- Assign a "difficulty" (easy, medium, or hard).
-- If a source item genuinely cannot support one of the levels, omit that level for that item rather than inventing content to fill it.
-- Never mention source item ids, item numbers, or teacher bank titles in the question text.
-PROMPT;
-
-        $userPrompt = [
-            'subject' => $subject,
-            'cognitive_levels' => QuestionBankQuestion::COGNITIVE_LEVELS,
-            'sources' => $sourceQuestions->map(function (QuestionBankQuestion $question, int $index): array {
-                $correctOption = $question->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
-
-                return [
-                    'index' => $index,
-                    'question_text' => trim((string) ($question->question_text ?? '')),
-                    'answer_text' => trim((string) ($question->answer_text ?? $correctOption?->option_text ?? '')),
-                    'options' => $question->options
-                        ->map(fn (QuestionBankOption $option): string => trim((string) $option->option_text))
-                        ->filter()
-                        ->values()
-                        ->all(),
-                ];
-            })->values()->all(),
-            'response_schema' => [
-                'questions' => [
-                    [
-                        'source_index' => 0,
-                        'prompt' => 'string',
-                        'type' => 'multiple_choice | true_false',
-                        'options' => [['id' => 'a', 'text' => 'option text']],
-                        'correct_option_id' => 'a',
-                        'explanation' => 'string',
-                        'difficulty' => 'easy | medium | hard',
-                        'cognitive_level' => 'recall | comprehension | application | analysis',
-                    ],
-                ],
-            ],
-        ];
-
-        try {
-            $response = Http::withToken($apiKey)
-                ->acceptJson()
-                ->timeout(90)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => $model,
-                    'temperature' => 0.7,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => json_encode($userPrompt, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)],
-                    ],
-                ])
-                ->throw()
-                ->json();
-        } catch (Throwable) {
-            return [];
-        }
-
-        $content = data_get($response, 'choices.0.message.content');
-
-        if (!is_string($content) || trim($content) === '') {
-            return [];
-        }
-
-        try {
-            /** @var array<string, mixed> $decoded */
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-        } catch (Throwable) {
-            return [];
-        }
-
-        return $this->normalizeGeneratedQuestions($decoded['questions'] ?? []);
+        return $this->normalizeGeneratedQuestions($this->generator->generate($sourceQuestions, $subject));
     }
 
     /**

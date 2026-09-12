@@ -290,11 +290,20 @@ export function useExamsModule() {
         .map((exam) => {
           const linkedBanks = questionBanksForExam(exam)
 
+          // The API returns every exam_room row on `rooms`, archived ones
+          // included, with the pivot attached. Split them here so the list
+          // can answer "which rooms is this exam live in?" separately from
+          // "which rooms used to run it?" -- the same distinction the Rooms
+          // page already makes from the other direction.
+          const linkedRooms = Array.isArray(exam.rooms) ? exam.rooms : []
+          const isArchivedAssignment = (room) => Boolean(room?.pivot?.archived_at)
+
           return {
             ...exam,
             question_banks: linkedBanks,
             question_bank_ids: linkedBanks.map((bank) => bank.id),
-            archived_rooms: Array.isArray(exam.archived_rooms) ? exam.archived_rooms : [],
+            assigned_rooms: linkedRooms.filter((room) => !isArchivedAssignment(room)),
+            archived_rooms: linkedRooms.filter(isArchivedAssignment),
             subject: exam.subject ?? summarizeQuestionBankSubject(linkedBanks),
             schedule_start_at: exam.schedule_start_at ?? exam.scheduled_at ?? null,
             schedule_end_at: exam.schedule_end_at ?? null,

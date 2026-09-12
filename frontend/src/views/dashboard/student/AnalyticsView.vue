@@ -1,290 +1,321 @@
 <template>
   <section class="dashboard-view analytics-page">
-    <div v-if="analyticsError" class="feedback danger">
+    <div v-if="analyticsError" class="feedback danger" role="alert">
       <AlertCircle :size="15" />
       <span>{{ analyticsError }}</span>
     </div>
 
-    <article class="surface-card analytics-header">
-      <div>
-        <p class="analytics-kicker">Analytics</p>
-        <h3>Your progress at a glance</h3>
-        <p>Simple view of your scores, subjects, and recent exams.</p>
-      </div>
+    <!-- Row 1 -- brand panel + the one number this page is really about -->
+    <div class="analytics-hero-row">
+      <article class="analytics-hero-card">
+        <h1 class="analytics-hero-title">Analytics</h1>
+        <p class="analytics-hero-subtitle">Track Your Performance</p>
+        <p class="analytics-hero-body">Deep dive into your scores and subject mastery across all examinations.</p>
+      </article>
 
-      <button type="button" class="ghost-btn analytics-refresh-btn" :disabled="analyticsLoading" @click="loadAnalytics">
-        <RefreshCw :size="15" :class="{ 'spin-soft': analyticsLoading }" />
-        Refresh
-      </button>
-    </article>
+      <article class="analytics-overview-card">
+        <div class="analytics-overview-body">
+          <div class="analytics-overview-primary">
+            <div class="analytics-overview-labelrow">
+              <span class="analytics-label"><TrendingUp :size="12" />Overall Average</span>
+              <span class="info-hint" tabindex="0" :aria-label="overviewDescription">
+                <Info :size="12" />
+                <span class="info-hint-bubble" role="tooltip">{{ overviewDescription }}</span>
+              </span>
+              <button
+                type="button"
+                class="analytics-refresh-btn"
+                :disabled="analyticsLoading"
+                title="Refresh analytics"
+                aria-label="Refresh analytics"
+                @click="loadAnalytics"
+              >
+                <RefreshCw :size="12" :class="{ 'spin-soft': analyticsLoading }" />
+              </button>
+            </div>
 
-    <div class="stats-grid analytics-stats-grid">
-      <article
-        v-for="stat in decoratedStats"
-        :key="stat.label"
-        class="stat-card analytics-stat-card"
-        :class="`analytics-stat-card-${stat.tone}`"
-      >
-        <div class="analytics-stat-top">
-          <div class="stat-icon analytics-stat-icon" :class="`tone-${stat.tone}`">
-            <component :is="stat.icon" :size="18" />
+            <strong class="analytics-overview-value">{{ averageScore === null ? '--' : Math.round(averageScore) }}%</strong>
+            <span class="analytics-overview-sublabel">Current Level</span>
           </div>
-          <span class="analytics-stat-tag" :class="`tone-${stat.tone}`">{{ stat.tag }}</span>
+
+          <div class="analytics-overview-chart">
+            <ScoreTrendChart
+              v-if="trendPoints.length > 0"
+              :points="trendPoints"
+              :threshold="stats.passing_threshold"
+              variant="compact"
+            />
+            <div v-else class="analytics-overview-chart-empty">
+              <ClipboardList :size="18" />
+              <p>Your score trend appears here once you finish an exam.</p>
+            </div>
+          </div>
+
+          <div class="analytics-overview-boxes">
+            <div class="analytics-overview-box">
+              <span class="analytics-overview-box-label">Status</span>
+              <span class="analytics-overview-box-value">
+                <component :is="studyStatus.icon" :size="13" />{{ studyStatus.label }}
+              </span>
+            </div>
+            <div class="analytics-overview-box">
+              <span class="analytics-overview-box-label">Exams Taken</span>
+              <span class="analytics-overview-box-value">
+                <TrendingUp :size="13" />{{ stats.completed_attempts }}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div class="analytics-stat-label-row">
-          <p class="stat-label analytics-stat-label">{{ stat.label }}</p>
-          <span class="info-hint" tabindex="0" :aria-label="stat.description">
-            <Info :size="13" />
-            <span class="info-hint-bubble" role="tooltip">{{ stat.description }}</span>
-          </span>
-        </div>
-
-        <div v-if="stat.showRadial" class="analytics-stat-radial-row">
-          <RadialScore :value="averageScore" :size="92" />
-          <p class="analytics-stat-note">{{ stat.hint }}</p>
-        </div>
-        <template v-else>
-          <p class="stat-value analytics-stat-value">{{ stat.displayValue }}</p>
-          <p class="analytics-stat-note">{{ stat.hint }}</p>
-        </template>
+        <p class="analytics-overview-footnote">
+          Your average score is calculated across <strong>{{ stats.completed_attempts }} {{ stats.completed_attempts === 1 ? 'examination' : 'examinations' }}</strong>.
+          <template v-if="averageScore !== null">
+            You are currently
+            <strong :class="isOnTarget ? 'metric-success' : 'metric-danger'">
+              {{ Math.abs(Math.round(averageScore - stats.passing_threshold)) }}% {{ isOnTarget ? 'above' : 'away' }}
+            </strong>
+            {{ isOnTarget ? 'the recommended passing threshold.' : 'from the recommended passing threshold.' }}
+          </template>
+        </p>
       </article>
     </div>
 
     <div class="analytics-main-grid">
-      <article class="surface-card analytics-card analytics-subjects-card">
-        <header class="analytics-card-head">
-          <div class="analytics-card-head-title">
-            <h3>Subjects</h3>
-            <span class="info-hint" tabindex="0" :aria-label="subjectsCardDescription">
-              <Info :size="13" />
-              <span class="info-hint-bubble" role="tooltip">{{ subjectsCardDescription }}</span>
+      <div class="analytics-col">
+        <!-- Subjects -->
+        <section class="analytics-section" aria-labelledby="analytics-subjects-heading">
+          <header class="analytics-section-head">
+            <h2 id="analytics-subjects-heading" class="analytics-section-title">Subjects</h2>
+            <span class="info-hint" tabindex="0" :aria-label="subjectsDescription">
+              <Info :size="12" />
+              <span class="info-hint-bubble" role="tooltip">{{ subjectsDescription }}</span>
             </span>
-          </div>
-          <span class="pill neutral">{{ subjects.length }}</span>
-        </header>
-
-        <div v-if="isInitialLoading" class="room-empty-state compact analytics-empty-state">
-          <RefreshCw :size="26" class="spin-soft" />
-          <h4>Loading subjects</h4>
-          <p>Please wait.</p>
-        </div>
-
-        <div v-else class="subject-list">
-          <article v-for="subject in subjects" :key="subject.label" class="subject-row">
-            <div class="subject-row-top">
-              <div>
-                <strong>{{ subject.label }}</strong>
-                <p>{{ subject.attempts_count }} {{ subject.attempts_count === 1 ? 'exam' : 'exams' }}</p>
-              </div>
-
-              <div class="subject-row-score">
-                <span class="pill" :class="pillClass(subject.scoreTone)">{{ subject.bandLabel }}</span>
-                <strong>{{ formatScore(subject.average_score_percent) }}</strong>
-              </div>
-            </div>
-
-            <div v-if="subject.attempts_count === 0" class="subject-row-empty">
-              No finished exam yet.
-            </div>
-
-            <template v-else>
-              <div class="bar-track analytics-bar-track">
-                <div class="bar-fill" :class="barClass(subject.scoreTone)" :style="{ width: `${subject.coveragePercent}%` }" />
-              </div>
-
-              <div class="subject-row-meta">
-                <span>Last: {{ formatScore(subject.latest_score_percent) }}</span>
-                <span>Best: {{ formatScore(subject.best_score_percent) }}</span>
-                <span :class="textToneClass(subject.trendTone)">{{ trendLabel(subject) }}</span>
-              </div>
-            </template>
-          </article>
-        </div>
-      </article>
-
-      <div class="analytics-side-stack">
-        <article class="surface-card analytics-card analytics-guidance-card">
-          <header class="analytics-card-head">
-            <div>
-              <h3>What To Review Next</h3>
-              <p>An in-depth read on your results, down to the specific topic if we have one mapped.</p>
-            </div>
+            <span class="analytics-section-count">{{ subjects.length }}</span>
           </header>
 
-          <div v-if="isInitialLoading" class="room-empty-state compact analytics-empty-state">
-            <RefreshCw :size="26" class="spin-soft" />
-            <h4>Loading notes</h4>
-            <p>Please wait.</p>
+          <div v-if="isInitialLoading" class="analytics-empty">
+            <RefreshCw :size="22" class="spin-soft" />
+            <p>Loading your subject breakdown...</p>
           </div>
 
-          <div v-else-if="reviewNarrative.empty" class="guidance-narrative">
-            <Lightbulb :size="20" class="guidance-narrative-icon" />
-            <p>{{ reviewNarrative.emptyMessage }}</p>
-          </div>
-
-          <div v-else class="guidance-narrative guidance-narrative-full">
-            <div v-if="reviewNarrative.headline" class="guidance-headline">
-              <span class="guidance-headline-icon"><Lightbulb :size="18" /></span>
-              <div>
-                <span class="guidance-kicker">{{ reviewNarrative.headline.label }}</span>
-                <p class="guidance-headline-text">{{ reviewNarrative.headline.text }}</p>
-              </div>
-            </div>
-
-            <ul v-if="reviewNarrative.points.length > 0" class="guidance-points">
-              <li v-for="point in reviewNarrative.points" :key="point.label">
-                <span class="guidance-point-dot" aria-hidden="true"></span>
-                <span>
-                  <strong class="guidance-point-label">{{ point.label }}:</strong>
-                  <span class="guidance-point-text">{{ point.text }}</span>
+          <div v-else class="subject-grid">
+            <article v-for="subject in subjects" :key="subject.label" class="subject-card">
+              <div class="subject-card-top">
+                <span class="subject-card-icon" aria-hidden="true">
+                  <component :is="subjectIcon(subject.label)" :size="14" />
                 </span>
-              </li>
-            </ul>
-          </div>
-        </article>
-
-        <article class="surface-card analytics-card analytics-history-card">
-          <header class="analytics-card-head">
-            <div>
-              <div class="analytics-card-head-title">
-                <h3>Recent Scores</h3>
-                <span class="info-hint" tabindex="0" :aria-label="recentScoresDescription">
-                  <Info :size="13" />
-                  <span class="info-hint-bubble" role="tooltip">{{ recentScoresDescription }}</span>
-                </span>
+                <div class="subject-card-copy">
+                  <strong class="subject-card-name">{{ subject.label }}</strong>
+                  <p class="subject-card-count">{{ subject.attempts_count }} {{ subject.attempts_count === 1 ? 'exam' : 'exams' }}</p>
+                </div>
+                <strong class="subject-card-score" :class="textToneClass(subject.scoreTone)">
+                  {{ formatScore(subject.average_score_percent) }}
+                </strong>
               </div>
-              <p>See how your finished exam scores are moving over time.</p>
-            </div>
-            <span class="pill neutral">{{ scoreHistory.length }} exams</span>
-          </header>
 
-          <div v-if="!hasAttemptData && !analyticsLoading" class="room-empty-state compact analytics-empty-state">
-            <ClipboardList :size="26" />
-            <h4>No scores yet</h4>
-            <p>Finish an exam first.</p>
+              <div
+                class="score-track"
+                role="img"
+                :aria-label="`${subject.label}: ${formatScore(subject.average_score_percent)} average, passing mark ${stats.passing_threshold}%`"
+              >
+                <div
+                  class="score-track-fill"
+                  :class="barClass(subject.scoreTone)"
+                  :style="{ width: `${clampPercent(subject.coveragePercent)}%` }"
+                />
+              </div>
+
+              <div class="subject-card-meta">
+                <template v-if="subject.attempts_count === 0">
+                  <span class="subject-card-meta-empty">No finished exam yet</span>
+                </template>
+                <template v-else>
+                  <span class="subject-card-meta-facts">
+                    <span>Last: <strong>{{ formatShortScore(subject.latest_score_percent) }}</strong></span>
+                    <span>Best: <strong>{{ formatShortScore(subject.best_score_percent) }}</strong></span>
+                  </span>
+                  <span class="subject-card-trend" :class="trendToneClass(subject)">{{ trendLabel(subject) }}</span>
+                </template>
+              </div>
+            </article>
           </div>
+        </section>
 
-          <div v-else-if="scoreHistory.length === 0" class="room-empty-state compact analytics-empty-state">
-            <ClipboardList :size="26" />
-            <h4>No scores yet</h4>
-            <p>Finish an exam first.</p>
-          </div>
-
-          <ScoreTrendChart v-else :points="trendPoints" />
-        </article>
-
-        <article class="surface-card analytics-card predictive-card analytics-prediction-card">
-          <header class="analytics-card-head">
-            <div>
-              <h3>LET Readiness Overview</h3>
-              <p>{{ predictivePanel.description }}</p>
-            </div>
-            <span class="pill" :class="predictivePanel.isConnected ? predictivePanel.predictionTone : 'gold'">
-              {{ predictivePanel.statusLabel }}
+        <!-- Study plan -->
+        <section class="analytics-section" aria-labelledby="analytics-plan-heading">
+          <header class="analytics-section-head">
+            <h2 id="analytics-plan-heading" class="analytics-section-title">Your Study Plan</h2>
+            <span class="info-hint" tabindex="0" :aria-label="studyPlanDescription">
+              <Info :size="12" />
+              <span class="info-hint-bubble" role="tooltip">{{ studyPlanDescription }}</span>
+            </span>
+            <span class="analytics-section-count">
+              {{ studyPlan.length }} focus {{ studyPlan.length === 1 ? 'area' : 'areas' }}
             </span>
           </header>
 
-          <div v-if="predictivePanel.isConnected" class="predictive-connected">
-            <div class="predictive-status-row">
-              <div class="predictive-icon-wrap" :class="`tone-${predictivePanel.predictionTone}`">
+          <div v-if="isInitialLoading" class="analytics-empty">
+            <RefreshCw :size="22" class="spin-soft" />
+            <p>Working out what to study next...</p>
+          </div>
+
+          <div v-else-if="studyPlan.length === 0" class="analytics-empty">
+            <component :is="hasAttemptData ? ShieldCheck : ClipboardList" :size="22" />
+            <h3>{{ hasAttemptData ? 'Nothing flagged right now' : 'No study plan yet' }}</h3>
+            <p>
+              {{
+                hasAttemptData
+                  ? `Every topic you've answered questions in is already at or above the ${stats.passing_threshold}% passing mark.`
+                  : 'Finish an exam and your weakest topics get ranked here, worst first.'
+              }}
+            </p>
+          </div>
+
+          <ol v-else class="plan-list">
+            <li v-for="item in studyPlan" :key="`${item.level}-${item.subtopic_id ?? item.topic_id}-${item.rank}`" class="plan-card">
+              <span class="plan-rank" aria-hidden="true">{{ item.rank }}</span>
+
+              <div class="plan-copy">
+                <strong class="plan-title">{{ item.label }}</strong>
+                <p class="plan-sub">{{ planContext(item) }}</p>
+              </div>
+
+              <strong class="plan-score" :class="textToneClass(item.scoreTone)">{{ formatShortScore(item.score) }}</strong>
+
+              <RouterLink
+                v-if="item.review_ready"
+                class="plan-review-btn"
+                :to="{ name: 'dashboard-review-bot', query: item.reviewQuery }"
+                :aria-label="`Practice ${item.label} in the Review Bot`"
+              >
+                Review
+                <ArrowRight :size="13" />
+              </RouterLink>
+              <span v-else class="plan-review-empty" title="Your teacher has not published Review Bot questions for this area yet.">
+                No set yet
+              </span>
+            </li>
+          </ol>
+        </section>
+      </div>
+
+      <div class="analytics-col analytics-side-col">
+        <!-- LET readiness -->
+        <article class="analytics-card analytics-prediction-card" aria-labelledby="analytics-let-heading">
+          <header class="analytics-card-head">
+            <h2 id="analytics-let-heading" class="analytics-card-title">LET Readiness</h2>
+            <span class="status-pill" :class="predictivePanel.isConnected ? 'is-connected' : 'is-pending'">
+              <span class="status-pill-dot" aria-hidden="true"></span>{{ predictivePanel.statusLabel }}
+            </span>
+          </header>
+
+          <template v-if="predictivePanel.isConnected">
+            <div class="prediction-panel">
+              <span class="prediction-icon" :class="`tone-${predictivePanel.predictionTone}`" aria-hidden="true">
                 <ShieldCheck v-if="predictivePanel.prediction === 'PASS'" :size="20" />
                 <AlertCircle v-else :size="20" />
-              </div>
+              </span>
 
-              <div>
-                <strong>
+              <div class="prediction-copy">
+                <strong class="prediction-headline">
                   {{ predictivePanel.prediction === 'PASS' ? 'Likely to pass the LET' : 'At risk of not passing the LET' }}
                 </strong>
-                <p>Estimated confidence: {{ predictivePanel.probability_percent }}% (based on {{ predictivePanel.support }} similar past cases)</p>
+
+                <p class="prediction-confidence">
+                  <span>Confidence Score:</span>
+                  <strong>{{ predictivePanel.probability_percent }}%</strong>
+                </p>
+
+                <div class="score-track prediction-track" aria-hidden="true">
+                  <div class="score-track-fill gold" :style="{ width: `${clampPercent(predictivePanel.probability_percent)}%` }" />
+                </div>
               </div>
             </div>
 
-            <details class="predictive-reasoning">
+            <details v-if="predictivePanel.decision_rules?.length > 0" class="prediction-reasoning">
               <summary>Why this estimate?</summary>
-              <ul class="predictive-rule-list">
+              <ul>
                 <li v-for="(rule, index) in predictivePanel.decision_rules" :key="index">{{ rule }}</li>
               </ul>
             </details>
 
-            <p class="predictive-note">
-              This model was trained on a very small sample of past students, so treat it as a rough signal —
-              not a certainty. Use your subject scores and recent results above to decide what to focus on.
+            <p class="prediction-note">
+              Treat this as a rough signal<template v-if="predictivePanel.support">, based on {{ predictivePanel.support }} similar past cases</template>.
+              Use subject scores above to focus study efforts.
             </p>
-          </div>
+          </template>
 
-          <div v-else-if="predictivePanel.isInsufficientHistory" class="predictive-placeholder">
-            <div class="predictive-status-row">
-              <div class="predictive-icon-wrap">
+          <template v-else>
+            <div class="prediction-panel is-placeholder">
+              <span class="prediction-icon" aria-hidden="true">
                 <Sparkles :size="20" />
-              </div>
+              </span>
 
-              <div>
-                <strong>Not enough exam history yet</strong>
-                <p>{{ predictivePanel.description }}</p>
+              <div class="prediction-copy">
+                <strong class="prediction-headline">
+                  {{ predictivePanel.isInsufficientHistory ? 'Not enough exam history yet' : 'Readiness estimate is not connected yet' }}
+                </strong>
+                <p class="prediction-placeholder-text">
+                  {{
+                    predictivePanel.isInsufficientHistory
+                      ? predictivePanel.description
+                      : 'Once connected, this will flag the subject areas to strengthen before your LET exam.'
+                  }}
+                </p>
               </div>
             </div>
 
-            <p class="predictive-note">
-              For now, use your subject scores and recent results above to identify what to focus on and improve before the LET.
+            <p class="prediction-note">
+              For now, use your subject scores and recent results to decide what to focus on before the LET.
             </p>
+          </template>
+        </article>
+
+        <!-- What to review next -->
+        <article class="analytics-card analytics-guidance-card" aria-labelledby="analytics-review-heading">
+          <header class="analytics-card-head is-stacked">
+            <h2 id="analytics-review-heading" class="analytics-card-title">What To Review Next</h2>
+            <p class="analytics-card-sub">Focus recommendations based on your exam results.</p>
+          </header>
+
+          <div v-if="isInitialLoading" class="analytics-empty is-inline">
+            <RefreshCw :size="20" class="spin-soft" />
+            <p>Loading your study notes...</p>
           </div>
 
-          <div v-else class="predictive-placeholder">
-            <div class="predictive-status-row">
-              <div class="predictive-icon-wrap">
-                <Sparkles :size="20" />
-              </div>
+          <p v-else-if="reviewNarrative.empty" class="guidance-empty">{{ reviewNarrative.emptyMessage }}</p>
 
-              <div>
-                <strong>Skill gap analysis is not connected yet</strong>
-                <p>Once connected, this will highlight the subject areas you need to strengthen before your LET exam.</p>
+          <template v-else>
+            <div v-if="reviewNarrative.headline" class="guidance-lead">
+              <div class="guidance-lead-head">
+                <span class="guidance-lead-chip" aria-hidden="true">
+                  <component :is="guidanceStyle(reviewNarrative.headline.key).icon" :size="15" />
+                </span>
+                <span class="guidance-kicker">{{ reviewNarrative.headline.label }}</span>
               </div>
+              <p class="guidance-lead-text">{{ reviewNarrative.headline.text }}</p>
             </div>
 
-            <p class="predictive-note">
-              For now, use your subject scores and recent results above to identify what to focus on and improve before the LET.
-            </p>
-          </div>
+            <ul v-if="reviewNarrative.points.length > 0" class="guidance-points">
+              <li
+                v-for="point in reviewNarrative.points"
+                :key="point.key ?? point.label"
+                class="guidance-point"
+                :class="`is-${guidanceStyle(point.key).tone}`"
+              >
+                <span class="guidance-point-chip" aria-hidden="true">
+                  <component :is="guidanceStyle(point.key).icon" :size="13" />
+                </span>
+                <div class="guidance-point-copy">
+                  <span class="guidance-point-label">{{ point.label }}</span>
+                  <p class="guidance-point-text">{{ point.text }}</p>
+                </div>
+              </li>
+            </ul>
+          </template>
         </article>
       </div>
     </div>
-
-    <article class="surface-card analytics-card analytics-results-card">
-      <header class="analytics-card-head">
-        <h3>Recent Exams</h3>
-        <span class="pill neutral">{{ recentAttempts.length }}</span>
-      </header>
-
-      <div v-if="!hasAttemptData && !analyticsLoading" class="room-empty-state compact analytics-empty-state">
-        <BarChart3 :size="26" />
-        <h4>No results yet</h4>
-        <p>Your finished exams will appear here.</p>
-      </div>
-
-      <div v-else-if="recentAttempts.length === 0" class="room-empty-state compact analytics-empty-state">
-        <BarChart3 :size="26" />
-        <h4>No results yet</h4>
-        <p>Your finished exams will appear here.</p>
-      </div>
-
-      <div v-else class="results-list">
-        <article v-for="attempt in recentAttempts" :key="attempt.attempt_id" class="result-row">
-          <div class="result-row-main">
-            <strong>{{ attempt.title }}</strong>
-            <p>{{ attempt.subject || 'Uncategorized' }}</p>
-          </div>
-
-          <span class="pill" :class="pillClass(attempt.scoreTone)">{{ attempt.scoreDisplay }}</span>
-
-          <div class="result-row-meta">
-            <span>{{ attempt.correct_answers }}/{{ attempt.total_items }} correct</span>
-            <span v-if="attempt.room?.name">{{ attempt.room.name }}</span>
-            <span>{{ attempt.submittedAtText }}</span>
-          </div>
-        </article>
-      </div>
-    </article>
   </section>
 </template>
 
@@ -292,65 +323,102 @@
 import { computed } from 'vue'
 import {
   AlertCircle,
+  AlertTriangle,
+  ArrowRight,
   BarChart3,
+  BookMarked,
+  BookOpen,
+  Building2,
   ClipboardList,
-  Gauge,
   Info,
-  Lightbulb,
+  Laptop,
+  ListTree,
+  PackageSearch,
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Target,
+  TrendingUp,
 } from 'lucide-vue-next'
 import { useStudentInsightsModule } from '../composables/useStudentInsightsModule'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
-import RadialScore from '@/components/charts/RadialScore.vue'
 
 const {
   analyticsLoading,
   analyticsLoaded,
   analyticsError,
   hasAttemptData,
-  statCards,
+  stats,
   subjects,
   averageScore,
   reviewNarrative,
   scoreHistory,
-  recentAttempts,
+  studyPlan,
   predictivePanel,
   loadAnalytics,
 } = useStudentInsightsModule()
 
-const subjectsCardDescription = 'The big percentage is your average score across every finished exam in this subject. '
-  + 'The bar plots it against the 75% passing mark (gold line). '
-  + 'Last = your most recent score, Best = your highest score, trend = change vs. your previous attempt in this subject.'
+const overviewDescription = 'The big number is your average across every finished exam. '
+  + 'The line plots your last exams in order, oldest to newest (A1 is the oldest) against the gold 75% passing mark -- '
+  + 'hover a point to see which exam it was and its exact score.'
 
-const recentScoresDescription = 'A1 through A8 are your last 8 finished exams in order, oldest (A1) to most recent (A8) -- '
-  + 'not tied to any one subject. Hover a point on the chart to see which exam it was and its exact score.'
+const studyPlanDescription = 'Your weakest mapped areas, worst first, based on how you actually answered '
+  + 'the individual questions -- not whole exam scores. Only areas below the 75% passing mark are listed. '
+  + 'Review opens the Review Bot already filtered to that area.'
 
-const statMeta = [
-  {
-    icon: ClipboardList,
-    tag: 'Progress',
-    description: 'How many exams you have fully submitted. Exams you started but haven\'t finished yet aren\'t counted.',
-  },
-  {
-    icon: Gauge,
-    tag: 'Average',
-    showRadial: true,
-    description: 'Your average score across every exam you have completed so far.',
-  },
-]
+const subjectsDescription = 'The percentage is your average score across every finished exam in this subject, '
+  + 'and the bar plots it from 0 to 100%. Last = your most recent score, Best = your highest, '
+  + 'and the trend compares your two most recent attempts in this subject.'
 
-const decoratedStats = computed(() => (
-  statCards.value.map((stat, index) => ({
-    ...stat,
-    icon: statMeta[index]?.icon ?? BarChart3,
-    tag: statMeta[index]?.tag ?? 'Summary',
-    description: statMeta[index]?.description ?? '',
-    displayValue: stat.value === 'N/A' ? '--' : stat.value,
-    showRadial: Boolean(statMeta[index]?.showRadial) && averageScore.value !== null,
-  }))
+// Purely decorative (not derived from any data) -- one fixed icon per the
+// app's 6 core subjects (see constants/librarySubjects.js), same set used
+// site-wide wherever a subject needs a visual anchor.
+const SUBJECT_ICONS = {
+  'Cataloging and Classification': BookMarked,
+  'Indexing and Abstracting': ListTree,
+  'Information Technology': Laptop,
+  'Reference Services': BookOpen,
+  'Library Management': Building2,
+  'Selection and Acquisition': PackageSearch,
+}
+
+function subjectIcon(label) {
+  return SUBJECT_ICONS[label] ?? BarChart3
+}
+
+/*
+ * Icon + tone per "What To Review Next" slot, keyed on the stable key the
+ * composable emits rather than the human label -- the label is display copy
+ * and free to be reworded without silently dropping every icon back to the
+ * fallback.
+ */
+const GUIDANCE_STYLES = {
+  opportunity: { icon: Target, tone: 'good' },
+  on_track: { icon: ShieldCheck, tone: 'good' },
+  also_review: { icon: AlertTriangle, tone: 'warn' },
+  strength: { icon: TrendingUp, tone: 'good' },
+}
+
+function guidanceStyle(key) {
+  return GUIDANCE_STYLES[key] ?? { icon: Info, tone: 'neutral' }
+}
+
+const isOnTarget = computed(() => (
+  averageScore.value !== null && averageScore.value >= stats.value.passing_threshold
 ))
+
+// Plain-language read of the same two facts the card already shows (any
+// finished exams at all, and whether the average clears the passing mark),
+// so the summary box says where the student stands without a third metric.
+const studyStatus = computed(() => {
+  if ((stats.value.completed_attempts ?? 0) === 0) {
+    return { label: 'Not Started', icon: ClipboardList }
+  }
+
+  return isOnTarget.value
+    ? { label: 'On Track', icon: ShieldCheck }
+    : { label: 'Active Study', icon: Target }
+})
 
 const trendPoints = computed(() => (
   scoreHistory.value.map((item) => ({
@@ -363,8 +431,33 @@ const trendPoints = computed(() => (
 ))
 
 const isInitialLoading = computed(() => analyticsLoading.value && !analyticsLoaded.value)
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value ?? 0)))
+}
+
 function formatScore(value) {
   return value === null || value === undefined ? '--' : `${Number(value).toFixed(1)}%`
+}
+
+/** Whole-number variant for the dense Last/Best meta row, where a decimal buys nothing. */
+function formatShortScore(value) {
+  return value === null || value === undefined ? '--' : `${Math.round(Number(value))}%`
+}
+
+/*
+ * Where a study-plan row sits and how much evidence is behind it. A subtopic
+ * row names its parent topic too (a subtopic name alone -- "Co-Citation" --
+ * often isn't placeable); a topic row would only repeat itself, so it stops
+ * at the subject.
+ */
+function planContext(item) {
+  const itemsSeen = `${item.attempted_count} ${item.attempted_count === 1 ? 'item' : 'items'} seen`
+  const parts = item.level === 'subtopic' && item.topic
+    ? [item.subject, item.topic, itemsSeen]
+    : [item.subject, itemsSeen]
+
+  return parts.filter(Boolean).join(' · ')
 }
 
 function trendLabel(subject) {
@@ -372,14 +465,6 @@ function trendLabel(subject) {
   if (subject.trend === 'down') return `Went down${subject.trend_delta ? ` -${Math.abs(subject.trend_delta).toFixed(1)}` : ''}`
   if (subject.trend === 'steady') return 'Steady'
   return 'No data'
-}
-
-function pillClass(tone) {
-  if (tone === 'success') return 'success'
-  if (tone === 'navy') return 'navy'
-  if (tone === 'gold') return 'gold'
-  if (tone === 'danger') return 'danger'
-  return 'neutral'
 }
 
 function barClass(tone) {
@@ -397,154 +482,868 @@ function textToneClass(tone) {
   return 'muted-text'
 }
 
+/* "Steady" is the absence of movement, not a result worth colouring -- the
+   shared trendTone maps it to navy, which in this dense meta row read as a
+   third status competing with the improving/declining ones. */
+function trendToneClass(subject) {
+  if (subject.trend === 'up') return 'ok'
+  if (subject.trend === 'down') return 'danger-text'
+  return 'muted-text'
+}
 </script>
 
 <style scoped src="../dashboard.css"></style>
 
 <style scoped>
 .analytics-page {
+  --a-ink: #102149;
+  --a-muted: #66738c;
+  --a-label: #5d6b86;
+  --a-card-border: rgba(13, 21, 71, 0.09);
+  --a-card-radius: 14px;
+  --a-card-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+
   gap: 16px;
 }
 
-.analytics-header {
+/* ---- Row 1: brand panel + overall average ---- */
+.analytics-hero-row {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.4fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.analytics-hero-card {
+  border-radius: var(--radius-md);
+  padding: 24px 26px;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  background: #20428f;
-  border-color: rgba(24, 55, 124, 0.34);
-  color: #ffffff;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, var(--lnu-navy-deep), var(--lnu-navy) 70%, var(--lnu-navy-light));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
 }
 
-.analytics-kicker {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(255, 230, 171, 0.92);
-}
-
-.analytics-header h3 {
-  margin: 0 0 6px;
-  color: #ffffff;
-  font-size: clamp(24px, 3vw, 30px);
-}
-
-.analytics-header p:last-child {
+.analytics-hero-title {
   margin: 0;
-  color: rgba(241, 246, 255, 0.88);
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.analytics-hero-subtitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.analytics-hero-body {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 40ch;
+}
+
+.analytics-overview-card {
+  border-radius: var(--radius-md);
+  padding: 16px 20px 14px;
+  display: grid;
+  gap: 12px;
+  align-content: center;
+  background: linear-gradient(160deg, #e9f7ee 0%, #f4fbf6 52%, #ffffff 100%);
+  border: 1px solid rgba(47, 138, 79, 0.2);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-overview-body {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr) minmax(132px, auto);
+  gap: 18px;
+  align-items: center;
+}
+
+.analytics-overview-primary {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+}
+
+.analytics-overview-labelrow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 2px;
+}
+
+.analytics-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--a-label);
+  white-space: nowrap;
 }
 
 .analytics-refresh-btn {
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--a-label);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .analytics-refresh-btn:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.32);
-  background: rgba(255, 255, 255, 0.18);
+  background: #fff;
+  color: var(--lnu-navy);
 }
 
-.analytics-stats-grid {
-  /* Capped and left-stuck (no auto margin) left a large empty gap next to
-     the two remaining tiles on anything wider than a phone -- matches the
-     full-width rhythm every other section on this page already uses. */
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.analytics-refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.analytics-stat-card {
-  min-height: 156px;
+.analytics-overview-value {
+  font-size: clamp(30px, 3vw, 40px);
+  font-weight: 800;
+  color: var(--a-ink);
+  line-height: 1.05;
+}
+
+.analytics-overview-sublabel {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--a-label);
+}
+
+.analytics-overview-chart {
+  min-width: 0;
+}
+
+.analytics-overview-chart-empty {
   display: grid;
-  gap: 10px;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 118px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(13, 21, 71, 0.16);
+  color: var(--a-muted);
+  text-align: center;
+}
+
+.analytics-overview-chart-empty p {
+  margin: 0;
+  font-size: 11.5px;
+  max-width: 28ch;
+}
+
+.analytics-overview-boxes {
+  display: grid;
+  gap: 8px;
+}
+
+.analytics-overview-box {
+  display: grid;
+  gap: 3px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(13, 21, 71, 0.1);
+}
+
+.analytics-overview-box-label {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--a-label);
+}
+
+.analytics-overview-box-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--a-ink);
+  white-space: nowrap;
+}
+
+.analytics-overview-footnote {
+  margin: 0;
+  padding-top: 11px;
+  border-top: 1px solid rgba(13, 21, 71, 0.1);
+  font-size: 12px;
+  line-height: 1.55;
+  color: #4f5d78;
+}
+
+/* metric-* (not tone-*) on purpose -- dashboard.css's shared .tone-success/
+   .tone-danger utility also carries a pill background, meant for actual
+   badges elsewhere in the app. This is plain colored text; a distinct
+   class name avoids inheriting that background instead of fighting it. */
+.analytics-overview-footnote strong.metric-success { color: #226b3f; }
+.analytics-overview-footnote strong.metric-danger { color: #b03a33; }
+
+/* ---- Two-column body ---- */
+.analytics-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.analytics-col {
+  display: grid;
+  gap: 18px;
   align-content: start;
-  padding: 16px;
-  border-width: 1px;
+  min-width: 0;
 }
 
-.analytics-stat-card-navy {
-  background: #dfe9ff;
-  border-color: rgba(49, 92, 191, 0.22);
+.analytics-side-col {
+  gap: 16px;
 }
 
-.analytics-stat-card-success {
-  background: #ddf3e5;
-  border-color: rgba(63, 146, 94, 0.22);
-}
-
-.analytics-stat-card-gold {
-  background: #ffefc4;
-  border-color: rgba(205, 151, 43, 0.22);
-}
-
-.analytics-stat-card-danger {
-  background: #ffe2de;
-  border-color: rgba(198, 40, 40, 0.18);
-}
-
-.analytics-stat-top {
+/* A bare section label over loose cards (not another card wrapper) -- one
+   less nested box between the page and the data, and it keeps the two
+   tinted cards in the right column reading as the only "panels" here. */
+.analytics-section-head {
   display: flex;
   align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+
+.analytics-section-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--a-ink);
+}
+
+.analytics-section-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--a-muted);
+}
+
+/* ---- Shared progress track ---- */
+.score-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.08);
+  overflow: hidden;
+}
+
+.score-track-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.score-track-fill.navy { background: #315cbf; }
+.score-track-fill.ok { background: #2f8a4f; }
+.score-track-fill.gold { background: linear-gradient(90deg, #e3ae40, #c9902a); }
+.score-track-fill.danger { background: #e0453f; }
+
+/* ---- Subjects ---- */
+.subject-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* start (not the stretch default) -- two subjects side by side can have
+     different name lengths/wrap heights, and stretch would force the
+     shorter card to match the taller one's height. */
+  align-items: start;
+  gap: 10px;
+}
+
+.subject-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 14px;
+  background: #fff;
+  border: 1px solid var(--a-card-border);
+  border-radius: var(--a-card-radius);
+  box-shadow: var(--a-card-shadow);
+}
+
+.subject-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.subject-card-icon {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--lnu-info-rgb), 0.09);
+  color: var(--lnu-info);
+}
+
+.subject-card-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.subject-card-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--a-ink);
+}
+
+.subject-card-count {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--a-muted);
+}
+
+.subject-card-score {
+  flex-shrink: 0;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.subject-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subject-card-meta-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--a-muted);
+}
+
+.subject-card-meta-facts strong {
+  font-weight: 800;
+  color: var(--a-ink);
+}
+
+.subject-card-meta-empty {
+  color: var(--a-muted);
+  font-weight: 700;
+}
+
+.subject-card-trend {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+/* ---- Study plan ---- */
+.plan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  counter-reset: none;
+}
+
+.plan-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "rank copy score action";
+  align-items: center;
+  gap: 6px 12px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--a-card-border);
+  border-radius: var(--a-card-radius);
+  box-shadow: var(--a-card-shadow);
+}
+
+/* The top row is the "start here" one, so its rank reads as a filled marker
+   while the rest stay quiet outlines -- the ordering alone is easy to skim
+   past when every badge looks identical. */
+.plan-rank {
+  grid-area: rank;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 21, 71, 0.08);
+  color: var(--a-ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.plan-card:first-child .plan-rank {
+  background: var(--a-ink);
+  color: #fff;
+}
+
+.plan-copy {
+  grid-area: copy;
+  min-width: 0;
+}
+
+.plan-title {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--a-ink);
+}
+
+.plan-sub {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--a-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-score {
+  grid-area: score;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.plan-review-btn {
+  grid-area: action;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--lnu-navy), var(--lnu-navy-light));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.plan-review-btn:hover {
+  background: linear-gradient(135deg, var(--lnu-navy-light), var(--lnu-navy));
+}
+
+.plan-review-btn:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+.plan-review-empty {
+  grid-area: action;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--a-muted);
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* ---- Right-column cards ---- */
+.analytics-card {
+  border-radius: var(--a-card-radius);
+  padding: 16px 17px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.analytics-prediction-card {
+  background: linear-gradient(165deg, #fff5e0 0%, #fffaef 55%, #fffdf8 100%);
+  border: 1px solid rgba(205, 151, 43, 0.26);
+}
+
+.analytics-guidance-card {
+  background: linear-gradient(165deg, #e9f8ee 0%, #f3fbf5 55%, #fafffb 100%);
+  border: 1px solid rgba(47, 138, 79, 0.22);
+}
+
+.analytics-card-head {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
 
-.analytics-stat-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+.analytics-card-head.is-stacked {
+  flex-direction: column;
+  gap: 0;
 }
 
-.analytics-stat-tag {
+.analytics-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--a-ink);
+}
+
+.analytics-card-sub {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--a-muted);
+}
+
+.status-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill.is-connected {
+  background: #f0b23d;
+  color: #4a3208;
+}
+
+.status-pill.is-pending {
+  background: rgba(13, 21, 71, 0.08);
+  color: #4a5570;
+}
+
+/* ---- LET readiness ---- */
+.prediction-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  background: #fffdf7;
+  border: 1px solid rgba(205, 151, 43, 0.22);
+  box-shadow: var(--a-card-shadow);
+}
+
+.prediction-panel.is-placeholder {
+  border-style: dashed;
+  background: rgba(255, 253, 247, 0.7);
+  box-shadow: none;
+}
+
+.prediction-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 11px;
+  background: linear-gradient(140deg, rgba(240, 178, 61, 0.34), rgba(255, 220, 150, 0.5));
+  color: #8a6117;
+}
+
+.prediction-icon.tone-success {
+  background: linear-gradient(140deg, rgba(47, 138, 79, 0.24), rgba(150, 220, 175, 0.42));
+  color: #226b3f;
+}
+
+.prediction-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.prediction-headline {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--a-ink);
+}
+
+.prediction-confidence {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--a-muted);
+}
+
+/* Amber regardless of the PASS/FAIL call -- this is a "how sure is the
+   model" number, and colouring it red/green makes it read as a second
+   verdict competing with the headline right above it. */
+.prediction-confidence strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: #a9711a;
+}
+
+.prediction-track {
+  margin-top: 8px;
+}
+
+.prediction-placeholder-text {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--a-muted);
+}
+
+.prediction-reasoning summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #8a6117;
+}
+
+.prediction-reasoning ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--a-muted);
+}
+
+.prediction-note {
+  margin: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  line-height: 1.5;
+  color: #7a6134;
+}
+
+/* ---- What to review next ---- */
+.analytics-guidance-card {
+  gap: 13px;
+  padding: 17px 18px 18px;
+}
+
+/* The lead recommendation: solid white against the card's tinted ground, so
+   it sits forward of the supporting notes on material alone -- no extra
+   badge or heavier border needed to say "this one first". */
+.guidance-lead {
+  position: relative;
+  padding: 14px 15px 15px 18px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid rgba(47, 138, 79, 0.2);
+  box-shadow: 0 2px 6px rgba(13, 21, 71, 0.05);
+  overflow: hidden;
+}
+
+.guidance-lead::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #2f8a4f, #1b6b41);
+}
+
+.guidance-lead-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.guidance-lead-chip {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(140deg, rgba(47, 138, 79, 0.18), rgba(120, 200, 150, 0.3));
+  color: #1b6b41;
+}
+
+.guidance-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #1b6b41;
+}
+
+/* Full width under the chip rather than in a column beside it -- this
+   sentence names a topic and a score and routinely runs three lines, and a
+   narrow column made it ragged. */
+.guidance-lead-text {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #1c2b4f;
+  overflow-wrap: break-word;
+}
+
+.guidance-points {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(47, 138, 79, 0.14);
+  overflow: hidden;
+}
+
+.guidance-point {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+}
+
+/* Hairlines between the supporting notes, not a box around each -- they
+   should read as one quiet group under the lead rather than three more
+   cards competing with it. */
+.guidance-point + .guidance-point {
+  border-top: 1px solid rgba(47, 138, 79, 0.14);
+}
+
+.guidance-point-chip {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 21, 71, 0.06);
+  color: var(--a-muted);
+}
+
+.guidance-point.is-warn .guidance-point-chip {
+  background: rgba(205, 151, 43, 0.18);
+  color: #8a6117;
+}
+
+.guidance-point.is-good .guidance-point-chip {
+  background: rgba(47, 138, 79, 0.16);
+  color: #1b6b41;
+}
+
+.guidance-point-copy {
+  min-width: 0;
+}
+
+.guidance-point-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--a-ink);
 }
 
-.analytics-stat-tag.tone-navy,
-.analytics-stat-icon.tone-navy {
-  background: rgba(33, 72, 154, 0.14);
-  color: #21489a;
-}
+.guidance-point.is-warn .guidance-point-label { color: #7a5512; }
+.guidance-point.is-good .guidance-point-label { color: #1b6b41; }
 
-.analytics-stat-tag.tone-success,
-.analytics-stat-icon.tone-success {
-  background: rgba(47, 138, 79, 0.14);
-  color: #267242;
-}
-
-.analytics-stat-tag.tone-gold,
-.analytics-stat-icon.tone-gold {
-  background: rgba(207, 138, 31, 0.14);
-  color: #9d6110;
-}
-
-.analytics-stat-tag.tone-danger,
-.analytics-stat-icon.tone-danger {
-  background: rgba(181, 54, 54, 0.12);
-  color: #9f3434;
-}
-
-.analytics-stat-label-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.analytics-stat-label {
+/* Darker than the page's shared muted tone: this is the body copy of a
+   recommendation, not a timestamp, and it was the lightest text on the
+   card while carrying real instructions. */
+.guidance-point-text {
   margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  color: rgba(16, 33, 73, 0.72);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #4d5b78;
+  overflow-wrap: break-word;
 }
 
+.guidance-empty {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px dashed rgba(47, 138, 79, 0.3);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #4d5b78;
+}
+
+/* ---- Empty / loading ---- */
+.analytics-empty {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 150px;
+  padding: 20px;
+  text-align: center;
+  border: 1px dashed rgba(13, 21, 71, 0.16);
+  border-radius: var(--a-card-radius);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--a-muted);
+}
+
+.analytics-empty.is-inline {
+  min-height: 110px;
+}
+
+.analytics-empty h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--a-ink);
+}
+
+.analytics-empty p {
+  margin: 0;
+  font-size: 12px;
+  max-width: 34ch;
+}
+
+/* ---- Tooltip hint ---- */
 .info-hint {
   position: relative;
   display: inline-flex;
@@ -557,7 +1356,7 @@ function textToneClass(tone) {
 
 .info-hint:hover,
 .info-hint:focus-visible {
-  color: rgba(16, 33, 73, 0.75);
+  color: rgba(16, 33, 73, 0.78);
   outline: none;
 }
 
@@ -568,7 +1367,7 @@ function textToneClass(tone) {
   left: 50%;
   transform: translateX(-50%) translateY(4px);
   width: max-content;
-  max-width: 240px;
+  max-width: 250px;
   padding: 8px 10px;
   border-radius: 10px;
   background: var(--lnu-navy-deep, #102149);
@@ -577,6 +1376,8 @@ function textToneClass(tone) {
   font-weight: 500;
   line-height: 1.4;
   text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
   box-shadow: 0 10px 20px rgba(13, 21, 71, 0.22);
   opacity: 0;
   pointer-events: none;
@@ -599,429 +1400,96 @@ function textToneClass(tone) {
   transform: translateX(-50%) translateY(0);
 }
 
-.analytics-stat-value {
-  margin: 0;
-  color: #102149;
-  font-size: clamp(34px, 3vw, 40px);
-  line-height: 1;
-}
+/* ---- Tone text ---- */
+.ok { color: #226b3f; }
+.danger-text { color: #c0392b; }
+.gold-text { color: #8f6414; }
+.navy-text { color: #234593; }
+.muted-text { color: var(--a-muted); }
 
-.analytics-stat-note {
-  margin: 0;
-  color: rgba(16, 33, 73, 0.72);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.analytics-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
-  gap: 16px;
-}
-
-.analytics-side-stack {
-  display: grid;
-  gap: 16px;
-}
-
-.analytics-card {
-  display: grid;
-  gap: 14px;
-  min-height: 0;
-}
-
-.analytics-subjects-card,
-.analytics-results-card {
-  background: #ffffff;
-}
-
-.analytics-guidance-card {
-  background:
-    radial-gradient(circle at 88% 18%, rgba(121, 203, 145, 0.22), transparent 24%),
-    linear-gradient(160deg, #def6e4 0%, #eefaf1 42%, #ffffff 100%);
-  border-color: rgba(63, 146, 94, 0.2);
-}
-
-.analytics-history-card {
-  background:
-    radial-gradient(circle at 88% 16%, rgba(94, 191, 223, 0.2), transparent 24%),
-    linear-gradient(160deg, #def3fb 0%, #eef9fd 42%, #ffffff 100%);
-  border-color: rgba(49, 92, 191, 0.18);
-}
-
-.analytics-prediction-card {
-  background:
-    radial-gradient(circle at 88% 16%, rgba(245, 196, 89, 0.26), transparent 22%),
-    linear-gradient(160deg, #ffe7b4 0%, #fff4d8 42%, #ffffff 100%);
-  border-color: rgba(205, 151, 43, 0.2);
-}
-
-.analytics-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.analytics-card-head-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.analytics-card-head h3 {
-  margin: 0;
-  color: var(--lnu-navy-deep);
-}
-
-.analytics-card-head p {
-  margin: 4px 0 0;
-  color: rgba(17, 33, 73, 0.68);
-  font-size: 14px;
-}
-
-.analytics-empty-state {
-  min-height: 180px;
-}
-
-.subject-list,
-.results-list {
-  display: grid;
-  gap: 12px;
-}
-
-.subject-row,
-.result-row,
-.score-chip {
-  border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
-}
-
-.subject-row {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-}
-
-.subject-row-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.subject-row-top strong,
-.result-row-main strong {
-  display: block;
-  color: var(--lnu-text);
-}
-
-.subject-row-top p,
-.result-row-main p {
-  margin: 4px 0 0;
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-}
-
-.subject-row-score {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
-}
-
-.subject-row-score strong {
-  font-size: 18px;
-  color: var(--lnu-navy-deep);
-}
-
-.subject-row-empty {
-  padding: 12px;
-  border-radius: 12px;
-  background: #f6f8fd;
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-}
-
-.analytics-bar-track {
-  position: relative;
-  overflow: visible;
-  height: 12px;
-  background: rgba(31, 65, 143, 0.12);
-  background-image: repeating-linear-gradient(
-    to right,
-    rgba(13, 21, 71, 0.28) 0,
-    rgba(13, 21, 71, 0.28) 2px,
-    transparent 2px,
-    transparent 25%
-  );
-}
-
-.analytics-bar-track::after {
-  content: '';
-  position: absolute;
-  top: -5px;
-  bottom: -5px;
-  left: 75%;
-  width: 3px;
-  background: #cd972b;
-  border-radius: 2px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
-}
-
-.bar-fill.navy {
-  background: #315cbf;
-}
-
-.bar-fill.ok {
-  background: #3f925e;
-}
-
-.bar-fill.gold {
-  background: #cd972b;
-}
-
-.bar-fill.danger {
-  background: #c24b4b;
-}
-
-.subject-row-meta,
-.result-row-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  color: var(--lnu-text-muted);
-  font-size: 12px;
-}
-
-.guidance-narrative {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px;
-  border: 1px solid rgba(42, 123, 76, 0.24);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(235, 248, 239, 0.98));
-  box-shadow: 0 10px 18px rgba(43, 124, 76, 0.08);
-}
-
-.guidance-narrative-full {
-  display: grid;
-  gap: 16px;
-}
-
-.guidance-narrative-icon {
-  flex-shrink: 0;
-  color: #2a7b4c;
-}
-
-.guidance-narrative > p {
-  margin: 0;
-  color: var(--lnu-text);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.guidance-headline {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.guidance-headline-icon {
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(42, 123, 76, 0.14);
-  color: #2a7b4c;
-}
-
-.guidance-kicker {
-  display: block;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #2a7b4c;
-  margin-bottom: 4px;
-}
-
-.guidance-headline-text {
-  margin: 0;
-  color: var(--lnu-navy-deep);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.guidance-points {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 10px;
-}
-
-.guidance-points li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.guidance-point-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: #2a7b4c;
-}
-
-.guidance-point-label {
-  color: var(--lnu-navy-deep);
-  font-size: 13px;
-  font-weight: 700;
-  margin-right: 4px;
-}
-
-.guidance-point-text {
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.predictive-card {
-  overflow: hidden;
-}
-
-.predictive-placeholder {
-  border: 1px dashed rgba(181, 126, 24, 0.32);
-  border-radius: 16px;
-  padding: 16px;
-  background:
-    radial-gradient(circle at top right, rgba(245, 196, 89, 0.32), transparent 34%),
-    linear-gradient(180deg, rgba(255, 249, 231, 0.98), rgba(255, 255, 255, 0.96));
-  display: grid;
-  gap: 14px;
-}
-
-.predictive-status-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.predictive-icon-wrap {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(212, 145, 24, 0.2), rgba(255, 215, 131, 0.34));
-  color: #8a6117;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.predictive-status-row strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--lnu-text);
-}
-
-.predictive-status-row p,
-.predictive-note {
-  margin: 0;
-  font-size: 14px;
-  color: var(--lnu-text-muted);
-  line-height: 1.5;
-}
-
-.analytics-stat-radial-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.analytics-stat-radial-row .analytics-stat-note {
-  margin: 0;
-}
-
-.result-row {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-}
-
-.pill.gold {
-  background: rgba(207, 138, 31, 0.16);
-  color: #8c5610;
-}
-
-.pill.danger {
-  background: rgba(198, 40, 40, 0.14);
-  color: #a43131;
-}
-
-.pill.success {
-  background: rgba(47, 138, 79, 0.16);
-  color: #256d3f;
-}
-
-.pill.navy {
-  background: rgba(33, 72, 154, 0.14);
-  color: #234593;
-}
-
-.pill.neutral {
-  background: rgba(21, 127, 166, 0.12);
-  color: #155e78;
-}
-
-.ok {
-  color: #267242;
-}
-
-.danger-text {
-  color: #a43131;
-}
-
-.gold-text {
-  color: #9a6a16;
-}
-
-.navy-text {
-  color: #234593;
-}
-
-.muted-text {
-  color: var(--lnu-text-muted);
-}
-
+/* ---- Responsive ---- */
 @media (max-width: 1200px) {
+  .analytics-hero-row,
   .analytics-main-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 640px) {
-  .analytics-header,
-  .subject-row-top,
+@media (max-width: 1080px) {
+  .analytics-overview-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .analytics-overview-chart {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 720px) {
+  .subject-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-overview-body {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-overview-chart {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .analytics-overview-boxes {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .analytics-card-head {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .analytics-stats-grid {
-    grid-template-columns: 1fr;
+  .subject-card-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
   }
 
-  .subject-row-score {
-    justify-items: start;
+  .subject-card-trend {
+    text-align: left;
+  }
+
+  /* The action drops to its own full-width row rather than squeezing four
+     columns into a phone width -- the score stays on the title line, where
+     it is the thing being scanned. */
+  .plan-card {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rank copy score"
+      "action action action";
+    gap: 10px 12px;
+  }
+
+  .plan-review-btn,
+  .plan-review-empty {
+    justify-self: stretch;
+    text-align: center;
+  }
+
+  .plan-review-empty {
+    padding: 6px 0 0;
+  }
+
+  .analytics-guidance-card {
+    padding: 15px 15px 16px;
+  }
+
+  .guidance-lead {
+    padding: 13px 13px 14px 16px;
+  }
+
+  .guidance-point {
+    padding: 11px 12px;
   }
 }
 </style>

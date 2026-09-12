@@ -1,14 +1,16 @@
 <template>
-  <div class="trend-chart" ref="wrapperRef">
+  <div class="trend-chart" :class="{ 'is-compact': isCompact }" ref="wrapperRef">
     <svg
       :viewBox="`0 0 ${width} ${height}`"
-      preserveAspectRatio="none"
+      :preserveAspectRatio="isCompact ? 'xMidYMid meet' : 'none'"
       class="trend-chart-svg"
       role="img"
       :aria-label="ariaLabel"
     >
-      <!-- gridlines + y-axis labels -->
-      <g class="trend-grid">
+      <!-- gridlines + y-axis labels (full variant only -- the compact variant
+           lives inside a summary card where the threshold line on its own is
+           reference enough, and gridlines would out-shout the trend itself) -->
+      <g v-if="!isCompact" class="trend-grid">
         <template v-for="tick in yTicks" :key="`grid-${tick}`">
           <line
             :x1="padding.left"
@@ -32,21 +34,31 @@
           :y2="yFor(threshold)"
           class="trend-threshold-line"
         />
-        <text :x="width - padding.right" :y="yFor(threshold) - 6" class="trend-threshold-label" text-anchor="end">
+        <text
+          v-if="isCompact"
+          :x="width - padding.right + 6"
+          :y="yFor(threshold)"
+          class="trend-threshold-label"
+          text-anchor="start"
+          dominant-baseline="middle"
+        >
+          {{ threshold }}%
+        </text>
+        <text v-else :x="width - padding.right" :y="yFor(threshold) - 6" class="trend-threshold-label" text-anchor="end">
           Passing — {{ threshold }}%
         </text>
       </g>
 
       <!-- trend line -->
       <path v-if="points.length > 1" :d="linePath" class="trend-line-path" fill="none" />
-      <path v-if="points.length > 1" :d="areaPath" class="trend-area-path" />
+      <path v-if="points.length > 1 && !isCompact" :d="areaPath" class="trend-area-path" />
 
       <!-- points -->
       <g v-for="(point, index) in plotted" :key="point.id ?? index">
         <circle
           :cx="point.x"
           :cy="point.y"
-          :r="hoveredIndex === index ? 8 : 6"
+          :r="pointRadius(index)"
           class="trend-point"
           :class="`tone-${point.tone}`"
           @mouseenter="hoveredIndex = index"
@@ -86,31 +98,43 @@ import { computed, ref } from 'vue'
 const props = defineProps({
   points: { type: Array, default: () => [] }, // [{ id, label, value, sublabel, tone }]
   threshold: { type: Number, default: 75 },
+  // 'full' = standalone chart card (own gridlines/axis). 'compact' = inline
+  // inside a summary card: line, points, threshold marker and x labels only.
+  variant: { type: String, default: 'full' },
 })
 
-const width = 600
-const height = 220
-const padding = { top: 18, right: 12, bottom: 26, left: 34 }
+const isCompact = computed(() => props.variant === 'compact')
+
+// The full variant keeps preserveAspectRatio="none" (its historical look);
+// the compact one scales uniformly instead, so its small labels are never
+// stretched by whatever width the surrounding card happens to give it --
+// hence a viewBox whose ratio is already close to the box it renders into.
+const width = computed(() => (isCompact.value ? 360 : 600))
+const height = computed(() => (isCompact.value ? 150 : 220))
+const padding = computed(() => (isCompact.value
+  ? { top: 14, right: 40, bottom: 22, left: 10 }
+  : { top: 18, right: 12, bottom: 26, left: 34 }))
+
 const yTicks = [0, 25, 50, 75, 100]
 
 const hoveredIndex = ref(null)
 const wrapperRef = ref(null)
 
 function yFor(value) {
-  const usable = height - padding.top - padding.bottom
-  return padding.top + usable * (1 - Math.max(0, Math.min(100, value)) / 100)
+  const usable = height.value - padding.value.top - padding.value.bottom
+  return padding.value.top + usable * (1 - Math.max(0, Math.min(100, value)) / 100)
 }
 
 const plotted = computed(() => {
   const list = props.points
   if (list.length === 0) return []
 
-  const usableWidth = width - padding.left - padding.right
+  const usableWidth = width.value - padding.value.left - padding.value.right
   const step = list.length > 1 ? usableWidth / (list.length - 1) : 0
 
   return list.map((point, index) => ({
     ...point,
-    x: list.length === 1 ? padding.left + usableWidth / 2 : padding.left + step * index,
+    x: list.length === 1 ? padding.value.left + usableWidth / 2 : padding.value.left + step * index,
     y: yFor(Number(point.value ?? 0)),
   }))
 })
@@ -129,9 +153,19 @@ const areaPath = computed(() => {
 
 const ariaLabel = computed(() => `Score trend across ${props.points.length} exam${props.points.length === 1 ? '' : 's'}`)
 
+function pointRadius(index) {
+  const isHovered = hoveredIndex.value === index
+  if (isCompact.value) return isHovered ? 5.5 : 3.8
+  return isHovered ? 8 : 6
+}
+
 function shouldShowXLabel(index) {
   const total = plotted.value.length
   if (total <= 7) return true
+  // The compact variant plots a short, fixed window (the last 8 exams), so
+  // every label still fits -- thinning them out there would drop half the
+  // A1..A8 sequence the axis is meant to spell out.
+  if (isCompact.value && total <= 12) return true
   const everyNth = Math.ceil(total / 6)
   return index % everyNth === 0 || index === total - 1
 }
@@ -140,8 +174,8 @@ const tooltipStyle = computed(() => {
   if (hoveredIndex.value === null) return {}
   const point = plotted.value[hoveredIndex.value]
   return {
-    left: `${(point.x / width) * 100}%`,
-    top: `${(point.y / height) * 100}%`,
+    left: `${(point.x / width.value) * 100}%`,
+    top: `${(point.y / height.value) * 100}%`,
   }
 })
 </script>
@@ -208,6 +242,37 @@ const tooltipStyle = computed(() => {
 .trend-x-label {
   font-size: 10px;
   fill: var(--lnu-text-muted);
+}
+
+/* ---- Compact variant ---- */
+.trend-chart.is-compact .trend-chart-svg {
+  height: 150px;
+}
+
+.trend-chart.is-compact .trend-line-path {
+  stroke-width: 2.5;
+}
+
+.trend-chart.is-compact .trend-threshold-line {
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+}
+
+.trend-chart.is-compact .trend-threshold-label {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* One accent for every point: at this size a four-colour scale reads as
+   noise, and each point's own score is a hover away in the tooltip. */
+.trend-chart.is-compact .trend-point {
+  fill: #1a3a8c;
+  stroke-width: 1.6;
+}
+
+.trend-chart.is-compact .trend-x-label {
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .trend-tooltip {

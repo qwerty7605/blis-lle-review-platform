@@ -115,238 +115,273 @@
       </div>
     </article>
 
-    <article v-else class="surface-card room-shell-card">
-      <header class="room-page-head">
-        <div class="room-page-title">
-          <DoorOpen :size="18" />
-          <h3>Rooms</h3>
-        </div>
-        <button v-if="canCreateRooms" class="primary-btn add-room-btn" :disabled="roomLoading" @click="openCreateRoomModal">
-          <Plus :size="16" />
-          Add Room
-        </button>
-      </header>
-
-      <div v-if="roomLoading && rooms.length === 0" class="room-empty-state">
+    <template v-else>
+      <div v-if="roomLoading && rooms.length === 0" class="surface-card rooms-empty-card">
         <RefreshCw :size="34" class="spin-soft" />
         <h4>Loading rooms</h4>
         <p>Please wait while we fetch your room list.</p>
       </div>
 
-      <div v-else-if="rooms.length === 0" class="room-empty-state">
+      <div v-else-if="rooms.length === 0" class="surface-card rooms-empty-card">
         <House :size="42" />
         <h4>{{ canCreateRooms ? 'Add a Room' : 'No Rooms Available' }}</h4>
         <p>
           {{
             canCreateRooms
-              ? 'This page allows you to create and manage rooms for your assigned examinations.'
+              ? 'Create a room for your class and share the generated code with students.'
               : 'No rooms are available to manage yet.'
           }}
         </p>
+        <button v-if="canCreateRooms" type="button" class="primary-btn rooms-join-btn" :disabled="roomLoading" @click="openCreateRoomModal">
+          <Plus :size="16" />
+          Add Room
+        </button>
       </div>
 
-      <div v-else class="room-layout">
-        <aside class="room-list-panel">
-          <p class="muted">{{ roomCollectionLabel }}: <strong>{{ rooms.length }}</strong></p>
+      <div v-else class="rooms-grid">
+        <aside class="surface-card rooms-list-card">
+          <div class="rooms-list-head">
+            <span class="rooms-list-label">{{ roomCollectionLabel }}</span>
+            <span class="rooms-count-badge">{{ rooms.length }}</span>
+          </div>
 
-          <div class="room-list">
+          <button v-if="canCreateRooms" type="button" class="primary-btn rooms-join-btn" :disabled="roomLoading" @click="openCreateRoomModal">
+            <Plus :size="15" />
+            Add Room
+          </button>
+
+          <label class="rooms-search">
+            <Search :size="14" />
+            <input v-model="roomSearchQuery" type="text" placeholder="Search rooms..." />
+          </label>
+
+          <div class="rooms-list">
             <button
-              v-for="room in rooms"
+              v-for="room in filteredRooms"
               :key="room.id"
               type="button"
-              class="room-item room-item-clickable"
+              class="rooms-list-item"
               :class="{ active: selectedRoomId === room.id }"
               @click="selectRoom(room.id)"
             >
-              <div>
+              <div class="rooms-list-item-head">
                 <strong>{{ room.name }}</strong>
-                <p>Code: {{ room.code }}</p>
+                <ChevronRight :size="15" class="rooms-list-chevron" />
               </div>
-              <div class="room-meta">
-                <small>{{ room.members_count ?? 0 }} members</small>
-                <small v-if="room.creator?.name">By {{ room.creator.name }}</small>
+              <p class="rooms-list-code">CODE: {{ room.code }}</p>
+              <div class="rooms-list-meta">
+                <span><Users :size="12" />{{ room.members_count ?? 0 }} members</span>
               </div>
+              <p v-if="room.creator?.name" class="rooms-list-by">By {{ room.creator.name }}</p>
             </button>
+
+            <p v-if="filteredRooms.length === 0" class="muted rooms-list-empty">No rooms match "{{ roomSearchQuery }}".</p>
           </div>
         </aside>
 
-        <section class="room-detail-panel">
-          <div v-if="roomDetailsLoading" class="room-detail-loading">
+        <section class="room-detail-column">
+          <div v-if="roomDetailsLoading" class="surface-card rooms-detail-loading">
             <RefreshCw :size="18" class="spin-soft" />
             <span>Loading room details...</span>
           </div>
 
           <template v-else-if="selectedRoom">
-            <header class="room-detail-head">
-              <div class="room-detail-head-copy">
+            <header class="room-banner">
+              <div class="room-banner-copy">
                 <h4>{{ selectedRoom.name }}</h4>
-                <p class="room-detail-subtitle">
-                  <DoorOpen :size="14" />
-                  Room Code:
-                  <strong>{{ selectedRoom.code }}</strong>
-                </p>
+                <div class="room-banner-meta">
+                  <span class="room-banner-pill"><DoorOpen :size="12" />Room Code: {{ selectedRoom.code }}</span>
+                  <span class="room-banner-pill"><Users :size="12" />{{ selectedRoom.members_count ?? selectedRoom.members.length }} members</span>
+                </div>
               </div>
-              <div class="room-detail-head-actions">
-                <button class="ghost-btn room-head-edit-btn" :disabled="roomLoading || roomDetailsLoading || roomExporting" @click="openRoomExportModal">
+              <div class="room-banner-actions">
+                <button type="button" class="ghost-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading || roomExporting" @click="openRoomExportModal">
                   <Download :size="14" />
-                  Export Grades
+                  Export
                 </button>
-                <button class="danger-btn room-head-delete-btn" :disabled="roomLoading || roomDetailsLoading" @click="openDeleteRoomModal">
-                  <Trash2 :size="14" />
-                  Delete
-                </button>
-                <button class="ghost-btn room-head-edit-btn" :disabled="roomLoading || roomDetailsLoading" @click="openEditRoomModal">
+                <button type="button" class="ghost-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading" @click="openEditRoomModal">
                   <Pencil :size="14" />
                   Edit
+                </button>
+                <button type="button" class="danger-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading" @click="openDeleteRoomModal">
+                  <Trash2 :size="14" />
+                  Delete
                 </button>
               </div>
             </header>
 
-            <div class="room-detail-grid">
-              <article v-if="isStaffRole" class="detail-card">
-                <header class="room-section-head">
+            <article v-if="isStaffRole" class="surface-card rooms-exams-card">
+              <div class="rooms-exams-head">
+                <div>
                   <h5>Room Exams</h5>
-                </header>
-
-                <div class="management-inline">
-                  <span class="pill success">{{ selectedRoomActiveExams.length }} active</span>
-                  <span class="pill neutral">{{ selectedRoomArchivedExams.length }} archived</span>
+                  <p class="muted">Manage and review exam sessions assigned to this room</p>
                 </div>
+                <button
+                  v-if="selectedRoomArchivedExams.length > 0"
+                  type="button"
+                  class="rooms-link-btn"
+                  @click="showArchivedExams = !showArchivedExams"
+                >
+                  {{ showArchivedExams ? 'Hide archived' : `View archived (${selectedRoomArchivedExams.length})` }}
+                </button>
+              </div>
 
-                <p v-if="selectedRoomActiveExams.length === 0 && selectedRoomArchivedExams.length === 0" class="muted empty-detail">
-                  No exams assigned to this room yet.
-                </p>
-
-                <div v-if="selectedRoomActiveExams.length > 0" class="exam-card-grid">
-                  <article v-for="exam in selectedRoomActiveExams" :key="exam.id" class="exam-card">
+              <p v-if="selectedRoomActiveExams.length === 0" class="muted empty-detail">No exams assigned to this room yet.</p>
+              <div v-else class="rooms-exam-list">
+                <article v-for="exam in selectedRoomActiveExams" :key="exam.id" class="rooms-exam-row">
+                  <div class="rooms-exam-row-head">
                     <div>
-                      <strong class="exam-card-title">{{ exam.title }}</strong>
-                      <p class="exam-card-meta">{{ exam.progress ?? '0 / 0 answered' }}</p>
-                      <p class="exam-card-meta">{{ examDeliveryModeLabel(exam.delivery_mode) }}</p>
-                      <p class="exam-card-date">
-                        Schedule: {{ formatExamSchedule(exam.schedule_start_at ?? exam.scheduled_at, exam.schedule_end_at) }}
+                      <strong class="rooms-exam-title">{{ exam.title }}</strong>
+                      <p class="rooms-exam-subtitle">
+                        {{ exam.progress ?? '0 / 0 answered' }} • {{ examDeliveryModeLabel(exam.delivery_mode) }}
                       </p>
                     </div>
-
-                    <div class="exam-card-actions">
+                    <div class="rooms-exam-row-actions">
                       <button
                         v-if="canViewExamResults"
                         type="button"
-                        class="primary-btn exam-start-btn"
+                        class="rooms-exam-btn"
                         :disabled="liveBoardLoading || liveBoardRefreshing"
                         @click="openRoomLiveBoard(exam)"
                       >
                         <BarChart3 :size="14" />
-                        Open Live Board
+                        Live Board
                       </button>
                       <button
                         type="button"
-                        class="ghost-btn"
+                        class="rooms-exam-icon-btn"
+                        title="Archive exam"
                         :disabled="roomLoading || roomDetailsLoading"
                         @click="handleArchiveRoomExam(exam)"
                       >
                         <Archive :size="14" />
-                        Archive
                       </button>
                     </div>
-                  </article>
-                </div>
+                  </div>
 
-                <details v-if="selectedRoomArchivedExams.length > 0" class="surface-card collapsible-card room-archive-card">
-                  <summary class="collapsible-summary">
+                  <div class="rooms-exam-row-foot">
+                    <span class="rooms-exam-window-fallback">
+                      Schedule: {{ formatExamSchedule(exam.schedule_start_at ?? exam.scheduled_at, exam.schedule_end_at) }}
+                    </span>
+
+                    <!-- Room -> Exam, the mirror of the Exams page's room
+                         chips: one click to see everywhere this exam runs. -->
+                    <RouterLink
+                      class="assignment-chip is-link"
+                      :to="{ name: 'dashboard-exams', query: { exam: exam.id } }"
+                      :title="`Open ${exam.title} on the Exams page`"
+                    >
+                      <FileText :size="12" />
+                      Exam setup
+                    </RouterLink>
+                  </div>
+                </article>
+              </div>
+
+              <div v-if="showArchivedExams && selectedRoomArchivedExams.length > 0" class="rooms-exam-list archived">
+                <article v-for="exam in selectedRoomArchivedExams" :key="`archived-${exam.id}`" class="rooms-exam-row archived">
+                  <div class="rooms-exam-row-head">
                     <div>
-                      <strong>Archived Exams</strong>
-                      <p class="muted">Moved out of the current room view to reduce clutter.</p>
+                      <strong class="rooms-exam-title">{{ exam.title }}</strong>
+                      <p class="rooms-exam-subtitle">{{ exam.total_items }} items • {{ exam.duration_minutes }} mins</p>
                     </div>
-                    <div class="collapsible-summary-meta">
-                      <span class="pill neutral">{{ selectedRoomArchivedExams.length }} archived</span>
-                      <ChevronDown :size="16" class="collapsible-icon" />
-                    </div>
-                  </summary>
-
-                  <div class="collapsible-content">
-                    <div class="exam-card-grid">
-                      <article v-for="exam in selectedRoomArchivedExams" :key="`archived-${exam.id}`" class="exam-card archived-card">
-                        <div>
-                          <strong class="exam-card-title">{{ exam.title }}</strong>
-                          <p class="exam-card-meta">{{ exam.total_items }} items • {{ exam.duration_minutes }} mins</p>
-                          <p class="exam-card-date">
-                            Archived {{ exam.room_archived_at ? new Date(exam.room_archived_at).toLocaleDateString() : 'from current room' }}
-                          </p>
-                        </div>
-
-                        <div class="exam-card-actions">
-                          <button
-                            type="button"
-                            class="ghost-btn"
-                            :disabled="roomLoading || roomDetailsLoading"
-                            @click="handleRestoreRoomExam(exam)"
-                          >
-                            <ArchiveRestore :size="14" />
-                            Restore
-                          </button>
-                        </div>
-                      </article>
+                    <div class="rooms-exam-row-actions">
+                      <button
+                        type="button"
+                        class="rooms-exam-icon-btn restore"
+                        title="Restore exam"
+                        :disabled="roomLoading || roomDetailsLoading"
+                        @click="handleRestoreRoomExam(exam)"
+                      >
+                        <ArchiveRestore :size="14" />
+                      </button>
                     </div>
                   </div>
-                </details>
-              </article>
 
-              <article class="detail-card">
-                <header class="room-section-head">
-                  <h5>Class List</h5>
-                </header>
-
-                <div class="management-inline">
-                  <span class="pill success">{{ selectedRoom.members_count ?? selectedRoom.members.length }} current</span>
-                  <span class="pill navy">{{ selectedRoomYearSummary.label }}</span>
-                </div>
-
-                <p class="muted room-roster-copy">{{ selectedRoomRosterCopy }}</p>
-
-                <p v-if="selectedRoomCurrentMembers.length === 0" class="muted empty-detail">
-                  No members enrolled yet.
-                </p>
-
-                <div v-if="selectedRoomCurrentMembers.length > 0" class="room-roster-shell">
-                  <div class="room-roster-grid management">
-                    <article v-for="member in selectedRoomCurrentMembers" :key="member.id" class="room-roster-card">
-                      <div class="room-roster-card-copy">
-                        <strong>{{ member.name }}</strong>
-                        <p v-if="member.student_id">Student ID: {{ member.student_id }}</p>
-                        <p v-else>{{ member.email }}</p>
-                      </div>
-                      <div class="room-roster-card-actions">
-                        <span v-if="selectedRoomYearSummary.is_mixed" class="pill navy">
-                          {{ member.year_level_label || yearLevelLabel(member.year_level) }}
-                        </span>
-                        <button
-                          v-if="canRemoveRoomMember(member)"
-                          type="button"
-                          class="member-kick-icon-btn"
-                          :aria-label="`Remove ${member.name} from room`"
-                          title="Remove from room"
-                          :disabled="roomLoading || roomDetailsLoading"
-                          @click="handleKickRoomMember(member)"
-                        >
-                          <UserMinus :size="14" />
-                        </button>
-                      </div>
-                    </article>
+                  <div class="rooms-exam-row-foot">
+                    <span class="rooms-exam-window-fallback">
+                      Archived {{ exam.room_archived_at ? new Date(exam.room_archived_at).toLocaleDateString() : 'from current room' }}
+                    </span>
                   </div>
-                </div>
-              </article>
-            </div>
+                </article>
+              </div>
+            </article>
           </template>
 
-          <div v-else class="room-detail-empty">
+          <div v-else class="surface-card rooms-detail-empty">
             <DoorOpen :size="30" />
             <h4>Select a room</h4>
             <p>Choose a room from the list to view members and assigned exams.</p>
           </div>
         </section>
+
+        <aside v-if="selectedRoom" class="room-side-column">
+          <article class="surface-card rooms-roster-card">
+            <div class="rooms-roster-head">
+              <Users :size="15" />
+              <h5>Class List</h5>
+            </div>
+
+            <div class="rooms-roster-tags">
+              <span class="rooms-tag success">{{ selectedRoom.members_count ?? selectedRoom.members.length }} current</span>
+              <span class="rooms-tag neutral">{{ selectedRoomYearSummary.label }}</span>
+            </div>
+
+            <p class="muted rooms-roster-copy">{{ selectedRoomRosterCopy }}</p>
+
+            <p v-if="selectedRoomCurrentMembers.length === 0" class="muted empty-detail">No members enrolled yet.</p>
+
+            <div v-else class="rooms-roster-list">
+              <div v-for="member in selectedRoomCurrentMembers" :key="member.id" class="rooms-roster-item">
+                <span class="rooms-roster-avatar"><CircleUserRound :size="22" /></span>
+                <div class="rooms-roster-item-copy">
+                  <strong>{{ member.name }}</strong>
+                  <p v-if="member.student_id">Student ID: {{ member.student_id }}</p>
+                  <p v-else>{{ member.email }}</p>
+                </div>
+                <span v-if="selectedRoomYearSummary.is_mixed" class="rooms-tag neutral small">
+                  {{ member.year_level_label || yearLevelLabel(member.year_level) }}
+                </span>
+                <button
+                  v-if="canRemoveRoomMember(member)"
+                  type="button"
+                  class="member-kick-icon-btn"
+                  :aria-label="`Remove ${member.name} from room`"
+                  title="Remove from room"
+                  :disabled="roomLoading || roomDetailsLoading"
+                  @click="handleKickRoomMember(member)"
+                >
+                  <UserMinus :size="14" />
+                </button>
+              </div>
+            </div>
+          </article>
+
+          <article v-if="isStaffRole" class="rooms-summary-card">
+            <p class="rooms-summary-title">Room Overview</p>
+
+            <div class="rooms-summary-row">
+              <span>Active Exam Coverage</span>
+              <strong>{{ roomExamCoveragePercent }}%</strong>
+            </div>
+            <div class="rooms-summary-bar">
+              <div class="rooms-summary-bar-fill" :style="{ width: `${roomExamCoveragePercent}%` }" />
+            </div>
+
+            <div class="rooms-summary-stats">
+              <div class="rooms-summary-stat">
+                <strong>{{ selectedRoomActiveExams.length }}</strong>
+                <span>Active</span>
+              </div>
+              <div class="rooms-summary-stat">
+                <strong>{{ selectedRoomArchivedExams.length }}</strong>
+                <span>Archived</span>
+              </div>
+            </div>
+          </article>
+        </aside>
       </div>
-    </article>
+    </template>
 
     <teleport to="body">
       <div v-if="showCreateRoomModal && canCreateRooms" class="modal-backdrop" @click.self="closeCreateRoomModal">
@@ -483,6 +518,7 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
 import {
   AlertCircle,
   Archive,
@@ -490,7 +526,8 @@ import {
   BarChart3,
   CheckCircle2,
   ChevronLeft,
-  ChevronDown,
+  ChevronRight,
+  CircleUserRound,
   DoorOpen,
   Download,
   FileText,
@@ -498,18 +535,27 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   UserMinus,
+  Users,
   X,
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatExamSchedule } from '../composables/useDashboardFormatters'
 import { useRoomsModule } from '../composables/useRoomsModule'
+
+// Local, not composable state -- mirrors the same "reveal archived exams
+// inline" toggle the student Rooms page uses (see RoomsView.vue), reset per
+// page load like every other UI-only reveal on this view.
+const showArchivedExams = ref(false)
 
 const {
   isStaffRole,
   canCreateRooms,
   canViewExamResults,
   roomName,
+  roomSearchQuery,
+  filteredRooms,
   rooms,
   selectedRoomId,
   selectedRoom,
@@ -569,6 +615,744 @@ const {
   liveBoardItemSummaryText,
   exportRoomGrades,
 } = useRoomsModule({ mode: 'management' })
+
+// Read-only "how much of this room's assigned exam list is still live" --
+// same shape as the student page's completion-rate summary (a percent bar
+// plus a two-stat row), but measured against exam archive state (a room-
+// wide fact) instead of one student's attempt history, which management
+// mode has no reason to track here.
+const roomExamCoveragePercent = computed(() => {
+  const total = selectedRoomActiveExams.value.length + selectedRoomArchivedExams.value.length
+  if (total === 0) return 0
+  return Math.round((selectedRoomActiveExams.value.length / total) * 100)
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
+<style scoped>
+/*
+  Mirrors RoomsView.vue's (student) redesign class-for-class so both roles
+  see the same room-browsing layout, with staff-only actions layered on top
+  (Add/Edit/Delete/Export in the banner, Archive/Restore/Live Board on each
+  exam row, a Room Overview card instead of a per-student completion bar).
+  Kept local rather than folded into the shared .room-list-panel/.detail-
+  card/.exam-card family in dashboard.css -- those classes are reused by
+  other pages too, so restyling them there would have changed those pages
+  as well. Keeping this local avoids that entirely, same reasoning as the
+  student page's own local style block.
+*/
+
+.room-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-empty-card {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--lnu-text-muted);
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-empty-card h4 {
+  margin: 0;
+  color: var(--lnu-text);
+}
+
+.rooms-empty-card p {
+  margin: 0;
+  max-width: 320px;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1.4fr) 260px;
+  align-items: stretch;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.room-detail-column,
+.room-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- Room list card ---- */
+.rooms-list-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  background: #fff;
+}
+
+.rooms-list-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rooms-list-label {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-count-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  color: var(--lnu-navy);
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rooms-join-btn {
+  flex-shrink: 0;
+  width: 100%;
+  height: 36px;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rooms-search {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  background: #f7f8fb;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--lnu-text);
+  outline: none;
+}
+
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-list-item {
+  flex-shrink: 0;
+  text-align: left;
+  border: 1px solid rgba(26, 35, 126, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rooms-list-item:hover:not(.active) {
+  background: rgba(26, 35, 126, 0.04);
+}
+
+.rooms-list-item.active {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+}
+
+.rooms-list-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rooms-list-item strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rooms-list-chevron {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.rooms-list-code {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  opacity: 0.75;
+}
+
+.rooms-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.rooms-list-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.rooms-list-by {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.rooms-list-empty {
+  padding: 10px 2px;
+  font-size: 13px;
+}
+
+/* ---- Room banner ---- */
+.room-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-radius: var(--radius-md);
+  padding: 18px 22px;
+  background: linear-gradient(120deg, var(--lnu-navy-deep), var(--lnu-navy) 70%, var(--lnu-navy-light));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
+}
+
+.room-banner-copy h4 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.room-banner-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.room-banner-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.room-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.room-banner-action-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Ghost buttons default to a navy-on-white look, which reads as nearly
+   invisible against this banner's dark gradient -- a translucent white
+   pill (matching .room-banner-pill's own treatment) keeps them legible
+   without needing a one-off variant per button. The delete action stays
+   plain .danger-btn red, which already has enough contrast here on its own. */
+.room-banner-actions .ghost-btn.room-banner-action-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.room-banner-actions .ghost-btn.room-banner-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---- Room exams ---- */
+.rooms-exams-card {
+  padding: 18px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.rooms-exams-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rooms-exams-head h5 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lnu-navy);
+}
+
+.rooms-exams-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-link-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--lnu-navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rooms-link-btn:hover {
+  color: var(--lnu-navy-light);
+}
+
+.rooms-exam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-exam-list.archived {
+  flex: none;
+  max-height: 260px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(26, 35, 126, 0.14);
+}
+
+.rooms-exam-row {
+  flex-shrink: 0;
+  border: 1px solid rgba(26, 35, 126, 0.12);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fafbfd;
+}
+
+.rooms-exam-row.archived {
+  background: #f4f5f8;
+}
+
+.rooms-exam-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.rooms-exam-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lnu-navy);
+  line-height: 1.3;
+}
+
+.rooms-exam-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-exam-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rooms-exam-row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rooms-exam-window-fallback {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-exam-btn {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  white-space: nowrap;
+  background: linear-gradient(135deg, var(--lnu-navy), var(--lnu-navy-light));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.15s ease;
+}
+
+.rooms-exam-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--lnu-navy-light), var(--lnu-navy));
+}
+
+.rooms-exam-btn:disabled {
+  background: #f4f5f8;
+  border-color: rgba(26, 35, 126, 0.14);
+  color: var(--lnu-text-muted);
+  cursor: not-allowed;
+}
+
+.rooms-exam-icon-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  background: #fff;
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.rooms-exam-icon-btn:hover:not(:disabled) {
+  background: rgba(26, 35, 126, 0.06);
+  border-color: rgba(26, 35, 126, 0.28);
+  color: var(--lnu-navy);
+}
+
+.rooms-exam-icon-btn.restore {
+  border-color: rgba(15, 157, 120, 0.3);
+  color: #0f9d78;
+}
+
+.rooms-exam-icon-btn.restore:hover:not(:disabled) {
+  background: rgba(15, 157, 120, 0.08);
+  border-color: rgba(15, 157, 120, 0.5);
+}
+
+.rooms-exam-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rooms-detail-loading,
+.rooms-detail-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--lnu-text-muted);
+  background: #fff;
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-detail-empty h4 {
+  margin: 0;
+  color: var(--lnu-text);
+}
+
+.rooms-detail-empty p {
+  margin: 0;
+  max-width: 260px;
+}
+
+/* ---- Class list + room overview ---- */
+.rooms-roster-card {
+  padding: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.rooms-roster-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--lnu-navy);
+}
+
+.rooms-roster-head h5 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.rooms-roster-tags {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rooms-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.rooms-tag.success { background: rgba(46, 125, 50, 0.14); color: var(--lnu-success); }
+.rooms-tag.neutral { background: rgba(26, 35, 126, 0.08); color: var(--lnu-text-muted); }
+
+.rooms-tag.small {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.rooms-roster-copy {
+  flex-shrink: 0;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.rooms-roster-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-roster-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f7f8fb;
+}
+
+.rooms-roster-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-text-muted);
+}
+
+.rooms-roster-item-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.rooms-roster-item-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lnu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rooms-roster-item-copy p {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--lnu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rooms-summary-card {
+  flex-shrink: 0;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(var(--lnu-info-rgb), 0.08);
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
+}
+
+.rooms-summary-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lnu-navy);
+}
+
+.rooms-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--lnu-text);
+}
+
+.rooms-summary-row strong {
+  color: var(--lnu-navy);
+  font-size: 15px;
+}
+
+.rooms-summary-bar {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.12);
+  overflow: hidden;
+}
+
+.rooms-summary-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lnu-navy);
+  transition: width 0.3s ease;
+}
+
+.rooms-summary-stats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rooms-summary-stat {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
+}
+
+.rooms-summary-stat strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--lnu-navy);
+}
+
+.rooms-summary-stat span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--lnu-text-muted);
+}
+
+@media (max-width: 1200px) {
+  .rooms-grid {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .room-side-column {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .rooms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .room-side-column {
+    grid-template-columns: 1fr;
+  }
+
+  .room-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .room-banner-actions {
+    width: 100%;
+  }
+
+  .room-banner-action-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+</style>

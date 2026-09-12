@@ -41,24 +41,10 @@ class ClassifyQuestionBankQuestionsJob implements ShouldQueue
             return;
         }
 
-        if (!$questionMappingService->hasApiKey()) {
-            $questionMappingService->markBankMappingStatus(
-                $bank,
-                QuestionBank::MAPPING_STATUS_SKIPPED,
-                $questionMappingService->missingConfigurationMessage(),
-                [
-                    'mapping_requested_at' => $bank->mapping_requested_at ?? now(),
-                    'mapping_completed_at' => now(),
-                ],
-            );
-
-            return;
-        }
-
         $questionMappingService->markBankMappingStatus(
             $bank,
             QuestionBank::MAPPING_STATUS_PROCESSING,
-            'AI item mapping is running in the background.',
+            'Item mapping is running in the background.',
             [
                 'mapping_requested_at' => $bank->mapping_requested_at ?? now(),
                 'mapping_completed_at' => null,
@@ -98,7 +84,7 @@ class ClassifyQuestionBankQuestionsJob implements ShouldQueue
             $questionMappingService->markBankMappingStatus(
                 $bank,
                 QuestionBank::MAPPING_STATUS_FAILED,
-                Str::limit('AI item mapping failed. ' . $errors->implode(' '), 500),
+                Str::limit('Item mapping failed. ' . $errors->implode(' '), 500),
                 [
                     'mapping_requested_at' => $bank->mapping_requested_at ?? now(),
                     'mapping_completed_at' => now(),
@@ -113,7 +99,7 @@ class ClassifyQuestionBankQuestionsJob implements ShouldQueue
             : sprintf('Mapped %d item(s) — suggestions are waiting for your review.', $updated);
 
         if ($errors->isNotEmpty()) {
-            $message .= ' Some items were skipped: ' . $errors->first();
+            $message .= ' Note: ' . $errors->first();
 
             if ($errors->count() > 1) {
                 $message .= sprintf(' (+%d more)', $errors->count() - 1);
@@ -142,7 +128,7 @@ class ClassifyQuestionBankQuestionsJob implements ShouldQueue
         app(QuestionMappingService::class)->markBankMappingStatus(
             $bank,
             QuestionBank::MAPPING_STATUS_FAILED,
-            Str::limit('AI item mapping failed. ' . $exception->getMessage(), 500),
+            Str::limit('Item mapping failed. ' . $exception->getMessage(), 500),
             [
                 'mapping_requested_at' => $bank->mapping_requested_at ?? now(),
                 'mapping_completed_at' => now(),

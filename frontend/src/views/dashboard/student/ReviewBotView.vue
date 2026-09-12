@@ -1,272 +1,274 @@
 <template>
   <section class="review-bot-view">
-    <div v-if="sessionError" class="feedback danger">
+    <div v-if="sessionError" class="feedback danger" role="alert">
       <AlertCircle :size="15" />
       <span>{{ sessionError }}</span>
     </div>
 
-    <div v-if="catalogError" class="feedback danger">
+    <div v-if="catalogError" class="feedback danger" role="alert">
       <AlertCircle :size="15" />
       <span>{{ catalogError }}</span>
     </div>
 
-    <article class="surface-card review-bot-head">
-      <p class="review-bot-kicker">Review Bot</p>
-      <h3>BLIS Review Bot</h3>
-      <p>Practice questions your teachers have already generated and published — no waiting on AI.</p>
-    </article>
-
-    <div class="review-bot-layout">
-      <article class="surface-card review-bot-setup">
-        <header class="review-section-head">
-          <h3>Setup</h3>
-          <span class="pill navy">{{ form.questionCount }} items</span>
+    <div class="review-grid">
+      <!-- Setup: fixed head, scrolling body, pinned action bar -->
+      <aside class="surface-card review-panel review-setup" aria-labelledby="review-setup-heading">
+        <header class="review-panel-head">
+          <div class="review-panel-head-copy">
+            <h2 id="review-setup-heading">Setup</h2>
+            <p>Questions your teachers already published.</p>
+          </div>
+          <span class="review-head-badge">{{ form.questionCount }} items</span>
         </header>
 
-        <section class="review-field">
-          <div class="review-field-head">
-            <strong>Mode</strong>
-          </div>
+        <div class="review-setup-body">
+          <section class="review-group">
+            <span class="review-group-label">Mode</span>
 
-          <div class="review-count-chips">
-            <button
-              type="button"
-              class="review-count-chip"
-              :class="{ active: mode === 'manual' }"
-              @click="setMode('manual')"
-            >
-              Choose Subject/Topic
-            </button>
-            <button
-              type="button"
-              class="review-count-chip"
-              :class="{ active: mode === 'weak_area' }"
-              :disabled="!weakArea"
-              @click="setMode('weak_area')"
-            >
-              <Target :size="13" /> Review My Weak Areas
-            </button>
-          </div>
-
-          <div v-if="mode === 'weak_area'" class="review-weak-area-box">
-            <template v-if="weakArea">
-              <p class="review-muted">We detected that you need more practice in:</p>
-              <strong class="review-weak-area-label">{{ weakAreaLabel }}</strong>
-              <p v-if="weakAreaScoreText" class="review-muted">Your previous performance: {{ weakAreaScoreText }}</p>
-            </template>
-            <p v-else class="review-muted">
-              Take and submit a few more exams first — we need some history to detect a weak area.
-            </p>
-          </div>
-        </section>
-
-        <template v-if="mode === 'manual'">
-          <section class="review-field">
-            <div class="review-field-head">
-              <strong>Subject</strong>
-            </div>
-
-            <div v-if="catalogLoading" class="review-bot-empty compact">
-              <RefreshCw :size="18" class="spin-soft" />
-              <p>Loading subjects...</p>
-            </div>
-
-            <div v-else-if="readySubjects.length === 0" class="review-bot-empty compact">
-              <BookOpen :size="20" />
-              <p>No published Review Bot questions yet. Check back after your teacher publishes some.</p>
-            </div>
-
-            <div v-else class="review-subject-grid">
+            <div class="review-segmented" role="group" aria-label="Review mode">
               <button
-                v-for="subject in readySubjects"
-                :key="subject.subject"
                 type="button"
-                class="review-subject-chip"
-                :class="[`tone-${subjectToneKey(subject.subject)}`, { 'is-selected': form.subject === subject.subject }]"
-                @click="selectSubject(subject.subject)"
+                class="review-segment"
+                :class="{ active: mode === 'manual' }"
+                :aria-pressed="(mode === 'manual').toString()"
+                @click="setMode('manual')"
               >
-                {{ shortSubjectLabel(subject.subject) }}
+                Subject / Topic
               </button>
+              <button
+                type="button"
+                class="review-segment"
+                :class="{ active: mode === 'weak_area' }"
+                :aria-pressed="(mode === 'weak_area').toString()"
+                :disabled="!weakArea"
+                :title="weakArea ? '' : 'Needs a few more graded exams first'"
+                @click="setMode('weak_area')"
+              >
+                <Target :size="12" />
+                Weak Areas
+              </button>
+            </div>
+
+            <div v-if="mode === 'weak_area'" class="review-weak-box">
+              <template v-if="weakArea">
+                <span class="review-weak-kicker">Detected focus area</span>
+                <strong>{{ weakAreaLabel }}</strong>
+                <p v-if="weakAreaScoreText">Previous performance: {{ weakAreaScoreText }}</p>
+              </template>
+              <p v-else class="review-weak-empty">
+                Take and submit a few more exams first — we need some history to detect a weak area.
+              </p>
             </div>
           </section>
 
-          <section v-if="availableTopics.length > 0" class="review-field">
-            <div class="review-field-head">
-              <strong>Topic</strong>
-            </div>
+          <template v-if="mode === 'manual'">
+            <section class="review-group">
+              <span class="review-group-label">Subject</span>
 
-            <div class="review-subject-grid">
-              <button
-                v-for="topic in availableTopics"
-                :key="topic.id"
-                type="button"
-                class="review-subject-chip"
-                :class="{ 'is-selected': form.topicId === topic.id }"
-                @click="selectTopic(form.topicId === topic.id ? null : topic.id)"
-              >
-                {{ topic.name }}
-              </button>
-            </div>
-          </section>
+              <div v-if="catalogLoading" class="review-inline-empty">
+                <RefreshCw :size="16" class="spin-soft" />
+                <p>Loading subjects...</p>
+              </div>
 
-          <section v-if="availableSubtopics.length > 0" class="review-field">
-            <div class="review-field-head">
-              <strong>Subtopic</strong>
-            </div>
+              <div v-else-if="readySubjects.length === 0" class="review-inline-empty">
+                <BookOpen :size="18" />
+                <p>No published questions yet. Check back after your teacher publishes some.</p>
+              </div>
 
-            <div class="review-subject-grid">
-              <button
-                v-for="subtopic in availableSubtopics"
-                :key="subtopic.id"
-                type="button"
-                class="review-subject-chip"
-                :class="{ 'is-selected': form.subtopicId === subtopic.id }"
-                @click="selectSubtopic(form.subtopicId === subtopic.id ? null : subtopic.id)"
-              >
-                {{ subtopic.name }}
-              </button>
-            </div>
-          </section>
+              <div v-else class="review-subject-grid">
+                <button
+                  v-for="subject in readySubjects"
+                  :key="subject.subject"
+                  type="button"
+                  class="review-subject-chip"
+                  :class="[`tone-${subjectToneKey(subject.subject)}`, { 'is-selected': form.subject === subject.subject }]"
+                  :aria-pressed="(form.subject === subject.subject).toString()"
+                  @click="selectSubject(subject.subject)"
+                >
+                  {{ shortSubjectLabel(subject.subject) }}
+                </button>
+              </div>
+            </section>
 
-          <section v-if="availableDifficulties.length > 0" class="review-field">
-            <div class="review-field-head">
-              <strong>Difficulty</strong>
-            </div>
+            <section v-if="availableTopics.length > 0" class="review-group">
+              <div class="review-group-labelrow">
+                <span class="review-group-label">Topic</span>
+                <button v-if="form.topicId" type="button" class="review-clear-link" @click="selectTopic(null)">Clear</button>
+              </div>
 
-            <div class="review-count-chips">
-              <button
-                type="button"
-                class="review-count-chip"
-                :class="{ active: !form.difficulty }"
-                @click="setDifficulty('')"
-              >
-                Any
-              </button>
-              <button
-                v-for="difficulty in availableDifficulties"
-                :key="difficulty"
-                type="button"
-                class="review-count-chip"
-                :class="{ active: form.difficulty === difficulty }"
-                @click="setDifficulty(difficulty)"
-              >
-                {{ difficulty }}
-              </button>
-            </div>
-          </section>
-        </template>
+              <div class="review-chip-list">
+                <button
+                  v-for="topic in availableTopics"
+                  :key="topic.id"
+                  type="button"
+                  class="review-chip"
+                  :class="{ 'is-selected': form.topicId === topic.id }"
+                  :aria-pressed="(form.topicId === topic.id).toString()"
+                  @click="selectTopic(form.topicId === topic.id ? null : topic.id)"
+                >
+                  {{ topic.name }}
+                </button>
+              </div>
+            </section>
 
-        <section class="review-field">
-          <div class="review-field-head">
-            <strong>Items</strong>
-          </div>
+            <section v-if="availableSubtopics.length > 0" class="review-group">
+              <div class="review-group-labelrow">
+                <span class="review-group-label">Subtopic</span>
+                <button v-if="form.subtopicId" type="button" class="review-clear-link" @click="selectSubtopic(null)">Clear</button>
+              </div>
 
-          <div class="review-count-row">
-            <div class="review-count-chips">
+              <div class="review-chip-list">
+                <button
+                  v-for="subtopic in availableSubtopics"
+                  :key="subtopic.id"
+                  type="button"
+                  class="review-chip"
+                  :class="{ 'is-selected': form.subtopicId === subtopic.id }"
+                  :aria-pressed="(form.subtopicId === subtopic.id).toString()"
+                  @click="selectSubtopic(form.subtopicId === subtopic.id ? null : subtopic.id)"
+                >
+                  {{ subtopic.name }}
+                </button>
+              </div>
+            </section>
+
+            <section v-if="availableDifficulties.length > 0" class="review-group">
+              <span class="review-group-label">Difficulty</span>
+
+              <div class="review-chip-row">
+                <button
+                  type="button"
+                  class="review-chip"
+                  :class="{ 'is-selected': !form.difficulty }"
+                  @click="setDifficulty('')"
+                >
+                  Any
+                </button>
+                <button
+                  v-for="difficulty in availableDifficulties"
+                  :key="difficulty"
+                  type="button"
+                  class="review-chip is-capitalized"
+                  :class="{ 'is-selected': form.difficulty === difficulty }"
+                  @click="setDifficulty(difficulty)"
+                >
+                  {{ difficulty }}
+                </button>
+              </div>
+            </section>
+          </template>
+
+          <section class="review-group">
+            <span class="review-group-label">Items</span>
+
+            <div class="review-chip-row">
               <button
                 v-for="count in questionCountOptions"
                 :key="count"
                 type="button"
-                class="review-count-chip"
-                :class="{ active: form.questionCount === count }"
+                class="review-chip is-numeric"
+                :class="{ 'is-selected': form.questionCount === count }"
                 @click="setQuestionCount(count)"
               >
                 {{ count }}
               </button>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <div class="review-bot-actions">
+        <footer class="review-setup-foot">
           <button
             type="button"
-            class="primary-btn"
+            class="primary-btn review-start-btn"
             :disabled="sessionStarting || !canStart"
             @click="startSession"
           >
-            <Sparkles :size="16" />
+            <Sparkles :size="15" />
             {{ sessionStarting ? 'Starting...' : 'Start Review' }}
           </button>
 
-          <button v-if="hasSession" type="button" class="ghost-btn" :disabled="sessionStarting" @click="startAnother">
+          <button v-if="hasSession" type="button" class="ghost-btn review-clear-btn" :disabled="sessionStarting" @click="startAnother">
             Clear
           </button>
-        </div>
-      </article>
+        </footer>
+      </aside>
 
-      <article class="surface-card review-bot-session">
-        <header class="review-section-head">
-          <h3>Review</h3>
-
-          <div v-if="hasSession" class="review-session-pills">
-            <span class="pill neutral">{{ session.subject }}</span>
-            <span v-if="!result" class="pill navy">{{ answeredCount }}/{{ session.questions.length }} answered</span>
+      <!-- Session: fixed head, scrolling question list, pinned submit bar -->
+      <section class="surface-card review-panel review-session" aria-labelledby="review-session-heading">
+        <header class="review-panel-head">
+          <div class="review-panel-head-copy">
+            <h2 id="review-session-heading">Review</h2>
+            <p v-if="hasSession">{{ session.subject }}</p>
+            <p v-else>Nothing running yet</p>
           </div>
+
+          <div v-if="hasSession && !result" class="review-progress">
+            <span class="review-progress-value">{{ answeredCount }}<em>/{{ session.questions.length }}</em></span>
+            <div class="review-progress-track" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100">
+              <div class="review-progress-fill" :style="{ width: `${progressPercent}%` }" />
+            </div>
+          </div>
+
+          <span v-else-if="result" class="review-head-badge">Submitted</span>
         </header>
 
         <div class="review-session-body">
-          <div v-if="hasSession && session.scopeNote && !result" class="feedback info">
-            <Info :size="15" />
+          <div v-if="hasSession && session.scopeNote && !result" class="review-note">
+            <Info :size="14" />
             <span>{{ session.scopeNote }}</span>
           </div>
 
-          <div v-if="sessionStarting" class="review-bot-empty">
-            <RefreshCw :size="22" class="spin-soft" />
-            <h4>Preparing your set</h4>
-            <p>Please wait.</p>
+          <div v-if="sessionStarting" class="review-empty">
+            <RefreshCw :size="24" class="spin-soft" />
+            <h3>Preparing your set</h3>
+            <p>Pulling questions for the filters you picked.</p>
           </div>
 
-          <div v-else-if="!hasSession" class="review-bot-empty">
-            <Sparkles :size="24" />
-            <h4>No review session yet</h4>
-            <p>Choose a subject (or use your weak areas) and start a review.</p>
+          <div v-else-if="!hasSession" class="review-empty">
+            <span class="review-empty-icon"><Sparkles :size="22" /></span>
+            <h3>No review session yet</h3>
+            <p>Pick a subject on the left — or let us choose your weak areas — then start a review.</p>
           </div>
 
           <template v-else>
-            <div v-if="result" class="review-session-top">
-              <div class="review-bot-results">
-                <div class="review-bot-score" :class="scoreToneClass(result.scorePercent)">
-                  <span class="review-score-kicker">Score</span>
-                  <strong>{{ result.scorePercent }}%</strong>
-                  <span>{{ result.correctAnswers }} / {{ result.totalItems }} correct</span>
-                  <span v-if="result.improved !== null" class="review-improved" :class="{ down: result.improved === false }">
-                    {{ result.improved ? '▲ Improved from last time' : '▼ Lower than last time' }}
-                  </span>
-                </div>
+            <div v-if="result" class="review-result" :class="scoreToneClass(result.scorePercent)">
+              <div class="review-result-score">
+                <span class="review-result-kicker">Score</span>
+                <strong>{{ result.scorePercent }}%</strong>
+                <span class="review-result-count">{{ result.correctAnswers }} / {{ result.totalItems }} correct</span>
+              </div>
 
-                <div class="review-recommendation" v-if="result.recommendation">
+              <div class="review-result-copy">
+                <span v-if="result.improved !== null" class="review-improved" :class="{ down: result.improved === false }">
+                  {{ result.improved ? '▲ Improved from last time' : '▼ Lower than last time' }}
+                </span>
+
+                <template v-if="result.recommendation">
                   <strong>{{ recommendationHeading(result.recommendation.action) }}</strong>
                   <p>{{ result.recommendation.message }}</p>
-                  <div class="review-recommendation-actions">
-                    <button
-                      v-if="result.recommendation.action === 'repeat_topic'"
-                      type="button"
-                      class="primary-btn"
-                      @click="repeatSameTopic"
-                    >
-                      Review This Topic Again
-                    </button>
-                    <button
-                      v-else-if="result.recommendation.action === 'next_topic'"
-                      type="button"
-                      class="primary-btn"
-                      @click="reviewNextTopic"
-                    >
-                      Review Next Weak Topic
-                    </button>
-                    <button type="button" class="ghost-btn" @click="startAnother">
-                      Start a New Review
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
+                </template>
 
-            <div v-else class="review-session-top">
-              <div class="review-session-status">
-                <span class="review-session-label">Progress</span>
-                <strong>{{ answeredCount }} of {{ session.questions.length }}</strong>
-                <span>Submit anytime</span>
+                <div class="review-result-actions">
+                  <button
+                    v-if="result.recommendation?.action === 'repeat_topic'"
+                    type="button"
+                    class="primary-btn"
+                    @click="repeatSameTopic"
+                  >
+                    Review This Topic Again
+                  </button>
+                  <button
+                    v-else-if="result.recommendation?.action === 'next_topic'"
+                    type="button"
+                    class="primary-btn"
+                    @click="reviewNextTopic"
+                  >
+                    Review Next Weak Topic
+                  </button>
+                  <button type="button" class="ghost-btn" @click="startAnother">
+                    Start a New Review
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -310,7 +312,11 @@
               </div>
             </div>
 
-            <footer v-if="!result" class="review-bot-footer">
+            <footer v-if="!result" class="review-session-foot">
+              <span class="review-foot-hint">
+                {{ allAnswered ? 'All items answered.' : `${session.questions.length - answeredCount} item(s) left.` }}
+              </span>
+
               <button
                 type="button"
                 class="primary-btn"
@@ -323,12 +329,13 @@
             </footer>
           </template>
         </div>
-      </article>
+      </section>
     </div>
   </section>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
 
@@ -368,6 +375,16 @@ const {
   reviewNextTopic,
   repeatSameTopic,
 } = useReviewBotModule()
+
+// Drives the header progress bar, which replaced the old full-width
+// "Progress / 0 of 10" box -- same two numbers, but folded into the panel
+// header so the question list keeps that vertical space.
+const progressPercent = computed(() => {
+  const total = session.value?.questions?.length ?? 0
+  if (total === 0) return 0
+
+  return Math.round((answeredCount.value / total) * 100)
+})
 
 const subjectToneLookup = {
   'Cataloging and Classification': 'cataloging',
@@ -425,531 +442,718 @@ function recommendationHeading(action) {
 <style scoped src="../dashboard.css"></style>
 
 <style scoped>
+/*
+  Fits one screen with no page-level scroll: .review-bot-view fills the
+  flex-column .layout-content box (see DashboardLayout.vue's is-fill-screen
+  chain, which this route opts into), the two panels take that fixed height,
+  and only the panels' own bodies scroll -- the setup list and the question
+  list. Each panel is head / scroll / footer, so the Start and Submit actions
+  stay put instead of being scrolled away.
+
+  The page head card this view used to carry is gone: the shared layout
+  topbar already renders "Review Bot" with the same description, and a
+  second 34px title was the single biggest reason the page overflowed.
+*/
+
 .review-bot-view {
-  display: grid;
-  gap: 16px;
-}
-
-.review-bot-head {
-  display: grid;
-  gap: 8px;
-  background: #f4f7ff;
-  border-color: rgba(31, 65, 143, 0.18);
-}
-
-.review-bot-kicker {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #234a9c;
-}
-
-.review-bot-head h3 {
-  margin: 0;
-  color: var(--lnu-navy-deep);
-  font-size: clamp(26px, 4vw, 34px);
-  line-height: 1.08;
-}
-
-.review-bot-head p {
-  margin: 0;
-  color: var(--lnu-text-muted);
-  line-height: 1.55;
-}
-
-.review-bot-layout {
-  display: grid;
-  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.review-bot-setup,
-.review-bot-session {
-  display: grid;
-  gap: 14px;
-  padding: 18px;
-}
-
-.review-bot-setup {
-  background: #fffaf0;
-}
-
-.review-bot-session {
-  background: #fcfdff;
-  grid-template-rows: auto minmax(0, 1fr);
-  /* A hard height clipped everything below it to whatever was left over once
-     the scope-note banner + progress box took their share -- on a shorter
-     viewport (or whenever that banner shows) there wasn't enough left for
-     .review-question-scroll to show a full question, just a sliver of
-     options with nothing above or below them. min-height instead: still
-     tall by default, but free to grow past that so the question always has
-     room, with the page scrolling rather than a barely-usable inner box. */
-  min-height: min(760px, calc(100vh - 220px));
-}
-
-.review-section-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.review-section-head h3 {
-  margin: 0;
-  color: var(--lnu-navy-deep);
-}
-
-.review-field {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 16px;
-  border: 1px solid rgba(13, 21, 71, 0.1);
-  background: #ffffff;
-}
-
-.review-field-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.review-field-head strong {
-  color: var(--lnu-navy-deep);
-  font-size: 15px;
-}
-
-.review-weak-area-box {
-  display: grid;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 14px;
-  background: #eef3ff;
-  border: 1px solid rgba(31, 65, 143, 0.14);
-}
-
-.review-weak-area-label {
-  color: var(--lnu-navy-deep);
-  font-size: 15px;
-}
-
-.review-subject-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.review-subject-chip {
-  border-radius: 14px;
-  padding: 12px;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.review-subject-chip:hover {
-  transform: translateY(-1px);
-}
-
-.review-subject-chip.is-selected {
-  border-color: rgba(31, 65, 143, 0.28);
-  box-shadow: 0 10px 18px rgba(16, 32, 73, 0.08);
-}
-
-.review-count-chip svg,
-.pill svg {
-  vertical-align: -2px;
-}
-
-.review-count-row {
-  display: grid;
-  gap: 12px;
-}
-
-.review-count-chips,
-.review-session-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.review-count-chip {
-  border: 1px solid rgba(23, 49, 108, 0.12);
-  border-radius: 999px;
-  background: #ffffff;
-  color: var(--lnu-text);
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: capitalize;
-}
-
-.review-count-chip.active,
-.review-count-chip:hover {
-  border-color: rgba(49, 92, 191, 0.2);
-  background: #dfe9ff;
-  color: #20428f;
-}
-
-.review-count-chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.review-muted {
-  margin: 0;
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-}
-
-.review-bot-actions,
-.review-bot-results,
-.review-bot-footer,
-.review-recommendation-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.review-bot-results {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.review-bot-footer {
-  justify-content: flex-end;
-  padding-top: 8px;
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
-  flex-shrink: 0;
-}
-
-.review-session-body {
-  /* flex, not a fixed-row grid: the scope-note banner above
-     .review-session-top is conditional (v-if="session.scopeNote"), so a
-     grid-template-rows with a hardcoded track count put that banner's row
-     in the track meant for the question list whenever both were present --
-     the "0 of 10" box and the scrollable list overlapping the same slot in
-     the screenshot that prompted this fix. Flex has no such row-count
-     assumption: every fixed-height child (banner, progress box, footer)
-     just takes its natural height, and only the scroll area is asked to
-     grow/shrink into whatever space is left. */
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.review-session-body > .review-bot-empty {
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
 
-.review-session-body > .feedback {
+.review-bot-view > .feedback {
   flex-shrink: 0;
 }
 
-.review-session-top {
+.review-grid {
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(0, 330px) minmax(0, 1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* padding:0 (the shared .surface-card sets 18px) -- head, body and footer
+   pad themselves, so the scroll area can run edge to edge and its scrollbar
+   sits against the panel border rather than floating inside a gutter.
+   overflow:hidden keeps that scroll area inside the rounded corners. */
+.review-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.review-setup {
+  background: #fffdf7;
+}
+
+.review-session {
+  background: #fcfdff;
+}
+
+/* ---- Panel head ---- */
+.review-panel-head {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 15px;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.08);
 }
 
-.review-session-status {
+.review-panel-head-copy {
+  min-width: 0;
+}
+
+.review-panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--lnu-navy-deep);
+}
+
+.review-panel-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--lnu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-head-badge {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.09);
+  color: var(--lnu-navy-deep);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.review-progress {
+  flex-shrink: 0;
   display: grid;
-  gap: 3px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  border: 1px solid rgba(31, 65, 143, 0.12);
-  background: #eef3ff;
+  gap: 5px;
+  justify-items: end;
+  min-width: 96px;
 }
 
-.review-session-label {
-  font-size: 11px;
+.review-progress-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--lnu-navy-deep);
+  line-height: 1;
+}
+
+.review-progress-value em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lnu-text-muted);
+}
+
+.review-progress-track {
+  width: 96px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.1);
+  overflow: hidden;
+}
+
+.review-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lnu-navy), var(--lnu-navy-light));
+  transition: width 0.3s ease;
+}
+
+/* ---- Setup body ---- */
+.review-setup-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 15px;
+  display: grid;
+  gap: 15px;
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+/* Flat labelled groups rather than a white card per field: six nested cards
+   inside an already-carded panel was the bulk of this column's height, and
+   the borders added no grouping the label wasn't already giving. */
+.review-group {
+  display: grid;
+  gap: 8px;
+}
+
+.review-group-labelrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.review-group-label {
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(16, 32, 73, 0.58);
+  color: #5d6b86;
 }
 
-.review-session-status strong {
+.review-clear-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--lnu-info);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- Segmented mode switch ---- */
+.review-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(13, 21, 71, 0.06);
+}
+
+.review-segment {
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #5d6b86;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.review-segment.active {
+  background: #fff;
+  color: var(--lnu-navy);
+  box-shadow: 0 1px 3px rgba(13, 21, 71, 0.14);
+}
+
+.review-segment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.review-weak-box {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: #eef3ff;
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
+}
+
+.review-weak-kicker {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5d6b86;
+}
+
+.review-weak-box strong {
+  font-size: 13.5px;
   color: var(--lnu-navy-deep);
-  font-size: 20px;
-  line-height: 1.1;
+  line-height: 1.35;
 }
 
-.review-session-status span:last-child {
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-}
-
-.review-bot-empty {
-  min-height: 250px;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  gap: 8px;
-  border: 1px dashed rgba(13, 21, 71, 0.18);
-  border-radius: 18px;
-  background: #f6f8fd;
-  padding: 18px;
-  color: var(--lnu-text-muted);
-}
-
-.review-bot-empty.compact {
-  min-height: 110px;
-}
-
-.review-bot-empty h4,
-.review-bot-empty p {
+.review-weak-box p {
   margin: 0;
+  font-size: 11.5px;
+  color: var(--lnu-text-muted);
 }
 
-.review-bot-score {
+.review-weak-empty {
+  line-height: 1.5;
+}
+
+/* ---- Subject chips ---- */
+.review-subject-grid {
   display: grid;
-  gap: 4px;
-  padding: 16px 18px;
-  border-radius: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.review-subject-chip {
+  border-radius: 10px;
+  padding: 9px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid transparent;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+/* currentColor picks up whichever tone-* palette the chip carries, so the
+   selected ring matches the subject instead of one shared blue. */
+.review-subject-chip.is-selected {
+  border-color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+/* ---- Shared chips (topic, subtopic, difficulty, item count) ---- */
+.review-chip-list,
+.review-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Long topic lists scroll in place rather than pushing the Items group and
+   the Start button out of view. */
+.review-chip-list {
+  max-height: 124px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.review-chip {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--lnu-text);
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.review-chip:hover:not(.is-selected) {
+  border-color: rgba(49, 92, 191, 0.3);
+  background: #f2f6ff;
+}
+
+.review-chip.is-selected {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+}
+
+.review-chip.is-capitalized {
+  text-transform: capitalize;
+}
+
+.review-chip.is-numeric {
+  min-width: 40px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.review-inline-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(13, 21, 71, 0.16);
+  background: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  color: var(--lnu-text-muted);
+}
+
+.review-inline-empty p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* ---- Setup footer ---- */
+.review-setup-foot {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 11px 15px;
+  border-top: 1px solid rgba(13, 21, 71, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.review-start-btn {
+  flex: 1;
+  height: 36px;
+  justify-content: center;
+  gap: 6px;
+}
+
+.review-clear-btn {
+  flex-shrink: 0;
+  height: 36px;
+}
+
+/* ---- Session body ---- */
+.review-session-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.review-note {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 12px 15px 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: rgba(var(--lnu-info-rgb), 0.07);
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
+  color: var(--lnu-info);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.review-empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 24px;
+  text-align: center;
+  color: var(--lnu-text-muted);
+}
+
+.review-empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--lnu-info-rgb), 0.1);
+  color: var(--lnu-info);
+}
+
+.review-empty h3 {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--lnu-navy-deep);
+}
+
+.review-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 34ch;
+}
+
+/* ---- Result ---- */
+.review-result {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  margin: 12px 15px 0;
+  padding: 13px 14px;
+  border-radius: 12px;
   border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
-.review-bot-score.strong {
-  background: #ddf3e5;
-  border-color: rgba(63, 146, 94, 0.2);
+.review-result.strong { background: #eaf7ef; border-color: rgba(63, 146, 94, 0.22); }
+.review-result.steady { background: #eef3ff; border-color: rgba(49, 92, 191, 0.2); }
+.review-result.focus { background: #fff6e0; border-color: rgba(205, 151, 43, 0.26); }
+
+.review-result-score {
+  display: grid;
+  gap: 1px;
+  align-content: center;
+  justify-items: center;
+  min-width: 92px;
+  padding-right: 14px;
+  border-right: 1px solid rgba(13, 21, 71, 0.1);
 }
 
-.review-bot-score.steady {
-  background: #dfe9ff;
-  border-color: rgba(49, 92, 191, 0.18);
-}
-
-.review-bot-score.focus {
-  background: #ffefc4;
-  border-color: rgba(205, 151, 43, 0.22);
-}
-
-.review-score-kicker {
-  font-size: 11px;
+.review-result-kicker {
+  font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(16, 32, 73, 0.68);
+  color: #5d6b86;
 }
 
-.review-bot-score strong {
-  font-size: 34px;
-  line-height: 1;
+.review-result-score strong {
+  font-size: 28px;
+  line-height: 1.1;
   color: var(--lnu-navy-deep);
 }
 
-.review-bot-score span {
+.review-result-count {
+  font-size: 11px;
   color: var(--lnu-text-muted);
+  white-space: nowrap;
+}
+
+.review-result-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  align-content: center;
+}
+
+.review-result-copy strong {
   font-size: 13px;
+  color: var(--lnu-navy-deep);
+}
+
+.review-result-copy p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--lnu-text-muted);
 }
 
 .review-improved {
-  font-weight: 700;
-  color: #267242;
+  font-size: 11px;
+  font-weight: 800;
+  color: #226b3f;
 }
 
 .review-improved.down {
   color: #ad5340;
 }
 
-.review-recommendation {
-  display: grid;
-  gap: 8px;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: #f6f8fd;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+.review-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 6px;
 }
 
-.review-recommendation strong {
-  color: var(--lnu-navy-deep);
+.review-result-actions .primary-btn,
+.review-result-actions .ghost-btn {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
-.review-recommendation p {
-  margin: 0;
-  color: var(--lnu-text-muted);
-  font-size: 14px;
-}
-
+/* ---- Question list ---- */
 .review-question-scroll {
   flex: 1;
-  /* Backstop so this never shrinks to a sliver no matter how much fixed
-     content (banner, progress box) sits above it -- enough to show one
-     full question's text and options before scrolling kicks in. */
-  min-height: 360px;
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 6px;
+  padding: 12px 15px;
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
 }
 
 .review-question-list {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .review-question-card {
   display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 18px;
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  background: #ffffff;
+  gap: 9px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  background: #fff;
 }
 
 .review-question-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .review-question-number {
-  display: block;
-  color: var(--lnu-text-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
+  color: #5d6b86;
 }
 
 .review-question-text {
   margin: 0;
-  color: var(--lnu-text);
-  font-size: 17px;
+  font-size: 14.5px;
   line-height: 1.55;
+  color: var(--lnu-text);
 }
 
 .review-option-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .review-option {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.92);
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid rgba(13, 21, 71, 0.11);
+  border-radius: 10px;
+  background: #fff;
   color: var(--lnu-text);
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.review-option:hover:not(.is-selected) {
+  background: #f7f9ff;
 }
 
 .review-option.is-selected {
-  border-color: rgba(31, 65, 143, 0.24);
+  border-color: rgba(var(--lnu-info-rgb), 0.32);
   background: #ebf1ff;
 }
 
 .review-option input {
   margin-top: 2px;
   accent-color: var(--lnu-navy);
+  flex-shrink: 0;
 }
 
 .review-explanation {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
   background: #f6f8fd;
   border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
-.review-explanation strong,
+.review-explanation strong {
+  font-size: 12.5px;
+  color: var(--lnu-navy-deep);
+}
+
 .review-explanation p {
   margin: 0;
-}
-
-.review-explanation p {
-  color: var(--lnu-text-muted);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.5;
+  color: var(--lnu-text-muted);
 }
 
-.tone-cataloging {
-  background: #e4edff;
-  color: #234a9c;
+/* ---- Session footer ---- */
+.review-session-foot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 15px;
+  border-top: 1px solid rgba(13, 21, 71, 0.08);
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.tone-indexing {
-  background: #def3f6;
-  color: #1c7286;
+.review-foot-hint {
+  font-size: 11.5px;
+  color: var(--lnu-text-muted);
 }
 
-.tone-technology {
-  background: #fff0ca;
-  color: #966112;
+.review-session-foot .primary-btn {
+  height: 34px;
 }
 
-.tone-reference {
-  background: #ffe6e1;
-  color: #ad5340;
-}
+/* ---- Subject tones ---- */
+.tone-cataloging { background: #e4edff; color: var(--lnu-info); }
+.tone-indexing { background: #def3f6; color: #1c7286; }
+.tone-technology { background: #fff0ca; color: #966112; }
+.tone-reference { background: #ffe6e1; color: #ad5340; }
+.tone-management { background: #e2f4e7; color: #267242; }
+.tone-acquisition { background: #f7ead8; color: #83551e; }
 
-.tone-management {
-  background: #e2f4e7;
-  color: #267242;
-}
-
-.tone-acquisition {
-  background: #f7ead8;
-  color: #83551e;
-}
-
-@media (max-width: 1100px) {
-  .review-bot-layout {
-    grid-template-columns: 1fr;
+/* ---- Responsive ----
+   Below 1000px the two panels can't both hold a usable width, so the page
+   gives up the fixed-height treatment entirely: panels stack, every inner
+   scroll is released, and .layout-content's own overflow takes over. Fixed
+   viewport panes on a narrow screen are worse than a normal scrolling page. */
+@media (max-width: 1000px) {
+  .review-bot-view {
+    flex: none;
   }
 
-  .review-bot-session {
-    height: auto;
+  .review-grid {
+    grid-template-columns: 1fr;
+    flex: none;
+    min-height: 0;
+  }
+
+  .review-panel {
+    min-height: 0;
+  }
+
+  .review-setup-body,
+  .review-question-scroll,
+  .review-chip-list {
+    overflow: visible;
+    max-height: none;
   }
 
   .review-question-scroll {
     flex: none;
-    overflow: visible;
-    padding-right: 0;
+  }
+
+  .review-empty {
+    min-height: 220px;
   }
 }
 
-@media (max-width: 720px) {
-  .review-bot-head,
-  .review-bot-setup,
-  .review-bot-session,
-  .review-question-card {
-    padding: 14px;
-  }
-
-  .review-section-head,
-  .review-field-head,
-  .review-question-head {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 640px) {
+  .review-panel-head,
+  .review-setup-body,
+  .review-question-scroll {
+    padding-left: 13px;
+    padding-right: 13px;
   }
 
   .review-subject-grid {
     grid-template-columns: 1fr;
   }
 
-  .review-bot-actions,
-  .review-bot-footer {
-    width: 100%;
+  .review-result {
+    grid-template-columns: 1fr;
   }
 
-  .review-bot-actions .primary-btn,
-  .review-bot-actions .ghost-btn,
-  .review-bot-footer .primary-btn,
-  .review-bot-footer .ghost-btn {
+  .review-result-score {
+    justify-items: start;
+    padding-right: 0;
+    padding-bottom: 11px;
+    border-right: none;
+    border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  }
+
+  .review-session-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .review-session-foot .primary-btn {
     width: 100%;
     justify-content: center;
   }

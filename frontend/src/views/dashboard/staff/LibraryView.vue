@@ -30,7 +30,7 @@
       <div v-else-if="libraryQuestionBanks.length === 0" class="room-empty-state">
         <BookOpen :size="42" />
         <h4>No Question Banks Yet</h4>
-        <p>Upload a DOCX to convert assessment questions and queue AI item mapping in the background.</p>
+        <p>Upload a DOCX to convert assessment questions and queue automatic item mapping in the background.</p>
       </div>
 
       <div v-else class="management-list">
@@ -80,11 +80,19 @@
             <button
               type="button"
               class="ghost-btn"
+              @click="openEditLibraryBankModal(bank)"
+            >
+              <Pencil :size="15" />
+              Edit
+            </button>
+            <button
+              type="button"
+              class="ghost-btn"
               :disabled="libraryMappingSaving || ['queued', 'processing'].includes(bank.mapping_status)"
               @click="queueBankMapping(bank.id)"
             >
               <Sparkles :size="15" />
-              Map Items with AI
+              Map Items
             </button>
             <button
               type="button"
@@ -106,7 +114,7 @@
           <header class="modal-head library-modal-head">
             <div class="library-modal-title-wrap">
               <h4>Add Assessment Questions</h4>
-              <p>Upload your DOCX, tag optional topics, and the system will queue AI item mapping after save.</p>
+              <p>Pick a DOCX — the name, subject, and item mapping are all handled automatically on save.</p>
             </div>
             <button type="button" class="modal-close" @click="closeLibraryQuestionModal">
               <X :size="16" />
@@ -115,39 +123,6 @@
 
           <div class="library-modal-body">
             <section class="library-form-panel">
-              <label class="field-stack">
-                <span class="field-label">Question Name</span>
-                <input
-                  v-model.trim="libraryForm.questionName"
-                  type="text"
-                  class="text-input"
-                  maxlength="255"
-                  placeholder="e.g. Mock Exam - Library Science Set A"
-                />
-              </label>
-
-              <label class="field-stack">
-                <span class="field-label">Subject Category</span>
-                <select v-model="libraryForm.subjectCategory" class="text-input">
-                  <option disabled value="">Select subject category</option>
-                  <option v-for="subject in librarySubjectCategories" :key="subject" :value="subject">
-                    {{ subject }}
-                  </option>
-                </select>
-              </label>
-
-              <label class="field-stack">
-                <span class="field-label">AI Item Mapping</span>
-                <select v-model="libraryForm.aiTaggingMode" class="text-input">
-                  <option value="review">Suggest topics for my review (recommended)</option>
-                  <option value="auto">Auto-label — apply immediately</option>
-                </select>
-                <p class="library-upload-note">
-                  Every item gets an AI-suggested topic, difficulty, and cognitive level so exam results can show a deeper
-                  breakdown. Choose whether suggestions apply right away or wait for you to confirm them.
-                </p>
-              </label>
-
               <label class="field-stack">
                 <span class="field-label">Upload a DOCX file (Questions)</span>
                 <div class="library-upload-panel">
@@ -306,26 +281,136 @@
                   </div>
                 </div>
 
-                <div v-if="Array.isArray(question.options) && question.options.length > 0" class="library-bank-option-list">
-                  <div
-                    v-for="option in question.options"
-                    :key="option.id"
-                    class="library-bank-option-row"
-                    :class="{ correct: option.is_correct }"
-                  >
-                    <span class="library-bank-option-label">{{ option.option_label }}.</span>
-                    <span>{{ option.option_text }}</span>
+                <template v-if="editingQuestionId !== question.id">
+                  <div v-if="Array.isArray(question.options) && question.options.length > 0" class="library-bank-option-list">
+                    <div
+                      v-for="option in question.options"
+                      :key="option.id"
+                      class="library-bank-option-row"
+                      :class="{ correct: option.is_correct }"
+                    >
+                      <span class="library-bank-option-label">{{ option.option_label }}.</span>
+                      <span>{{ option.option_text }}</span>
+                    </div>
+                  </div>
+
+                  <p v-else class="digitalized-open-ended">Open-ended response</p>
+
+                  <p class="digitalized-answer">
+                    Answer:
+                    <span v-if="question.answer_label">{{ question.answer_label }}</span>
+                    <span v-if="question.answer_text">. {{ question.answer_text }}</span>
+                    <span v-if="!question.answer_label && !question.answer_text">No answer key stored.</span>
+                  </p>
+
+                  <div class="library-bank-question-actions">
+                    <button type="button" class="ghost-btn" @click="startEditingQuestion(question)">
+                      <Pencil :size="14" />
+                      Edit
+                    </button>
+                  </div>
+                </template>
+
+                <div v-else class="library-question-edit-form">
+                  <label class="field-stack">
+                    <span class="field-label">Question Text</span>
+                    <textarea v-model.trim="questionEditForm.question_text" class="text-input" rows="3"></textarea>
+                  </label>
+
+                  <div class="room-form-grid">
+                    <label class="field-stack">
+                      <span class="field-label">Question Type</span>
+                      <select v-model="questionEditForm.question_type" class="text-input">
+                        <option v-for="type in libraryQuestionTypeOptions" :key="type" :value="type">
+                          {{ questionTypeLabel(type) }}
+                        </option>
+                      </select>
+                    </label>
+
+                    <label class="field-stack">
+                      <span class="field-label">Difficulty</span>
+                      <select v-model="questionEditForm.difficulty" class="text-input">
+                        <option value="">Not set</option>
+                        <option v-for="level in libraryDifficultyOptions" :key="level" :value="level">
+                          {{ questionTypeLabel(level) }}
+                        </option>
+                      </select>
+                    </label>
+
+                    <label class="field-stack">
+                      <span class="field-label">Cognitive Level</span>
+                      <select v-model="questionEditForm.cognitive_level" class="text-input">
+                        <option value="">Not set</option>
+                        <option v-for="level in libraryCognitiveLevelOptions" :key="level" :value="level">
+                          {{ cognitiveLevelLabel(level) }}
+                        </option>
+                      </select>
+                    </label>
+
+                    <label class="field-stack">
+                      <span class="field-label">Topic</span>
+                      <select v-model="questionEditForm.topic_name" class="text-input" @change="handleQuestionEditTopicChange">
+                        <option value="">Not set</option>
+                        <option v-for="topic in questionEditTopicOptions" :key="topic" :value="topic">{{ topic }}</option>
+                      </select>
+                    </label>
+
+                    <label class="field-stack">
+                      <span class="field-label">Subtopic</span>
+                      <select v-model="questionEditForm.subtopic_name" class="text-input" :disabled="!questionEditForm.topic_name">
+                        <option value="">Not set</option>
+                        <option v-for="subtopic in questionEditSubtopicOptions" :key="subtopic" :value="subtopic">
+                          {{ subtopic }}
+                        </option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div v-if="questionEditForm.question_type !== 'open_ended'" class="digitalized-options">
+                    <p class="field-label">Choices (select the correct one)</p>
+                    <div
+                      v-for="(option, optionIndex) in questionEditForm.options"
+                      :key="optionIndex"
+                      class="library-question-edit-option-row"
+                    >
+                      <input
+                        type="radio"
+                        :name="`edit-question-${question.id}`"
+                        :checked="option.is_correct"
+                        @change="setQuestionEditCorrectOption(optionIndex)"
+                      />
+                      <span class="library-bank-option-label">{{ option.label }}.</span>
+                      <input v-model.trim="option.text" type="text" class="text-input" />
+                      <button
+                        type="button"
+                        class="ghost-btn icon-only"
+                        title="Remove choice"
+                        @click="removeQuestionEditOption(optionIndex)"
+                      >
+                        <X :size="14" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      class="ghost-btn"
+                      :disabled="questionEditForm.options.length >= 8"
+                      @click="addQuestionEditOption"
+                    >
+                      <Plus :size="14" />
+                      Add Choice
+                    </button>
+                  </div>
+
+                  <div class="modal-actions">
+                    <button type="button" class="ghost-btn" :disabled="questionEditSaving" @click="cancelEditingQuestion">
+                      Cancel
+                    </button>
+                    <button type="button" class="primary-btn" :disabled="questionEditSaving" @click="saveEditingQuestion">
+                      <RefreshCw v-if="questionEditSaving" :size="14" class="spin-soft" />
+                      <span>{{ questionEditSaving ? 'Saving...' : 'Save Question' }}</span>
+                    </button>
                   </div>
                 </div>
-
-                <p v-else class="digitalized-open-ended">Open-ended response</p>
-
-                <p class="digitalized-answer">
-                  Answer:
-                  <span v-if="question.answer_label">{{ question.answer_label }}</span>
-                  <span v-if="question.answer_text">. {{ question.answer_text }}</span>
-                  <span v-if="!question.answer_label && !question.answer_text">No answer key stored.</span>
-                </p>
               </article>
             </div>
           </div>
@@ -342,6 +427,55 @@
               Confirm All Suggested Tags
             </button>
             <button type="button" class="ghost-btn" @click="closeLibraryBankQuestionsModal">Close</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showEditLibraryBankModal" class="modal-backdrop" @click.self="closeEditLibraryBankModal">
+        <div class="modal-card">
+          <header class="modal-head">
+            <h4>Edit Question Set</h4>
+            <button type="button" class="modal-close" @click="closeEditLibraryBankModal">
+              <X :size="16" />
+            </button>
+          </header>
+
+          <div class="room-form-grid">
+            <label class="field-stack">
+              <span class="field-label">Question Name</span>
+              <input v-model.trim="libraryBankEditForm.title" type="text" class="text-input" maxlength="255" />
+            </label>
+
+            <label class="field-stack">
+              <span class="field-label">Subject Category</span>
+              <select v-model="libraryBankEditForm.subject" class="text-input">
+                <option value="">General subject</option>
+                <option v-for="subject in librarySubjectCategories" :key="subject" :value="subject">
+                  {{ subject }}
+                </option>
+              </select>
+              <p class="library-upload-note">
+                Changing the subject re-queues automatic mapping for every item that wasn't manually confirmed by you —
+                your own confirmed tags are left untouched.
+              </p>
+            </label>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" :disabled="libraryBankEditSaving" @click="closeEditLibraryBankModal">
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="primary-btn"
+              :disabled="libraryBankEditSaving || !libraryBankEditForm.title.trim()"
+              @click="handleUpdateLibraryBank"
+            >
+              <RefreshCw v-if="libraryBankEditSaving" :size="14" class="spin-soft" />
+              <span>{{ libraryBankEditSaving ? 'Saving...' : 'Save Changes' }}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -381,7 +515,7 @@
 </template>
 
 <script setup>
-import { AlertCircle, BookOpen, CheckCircle2, Eye, FileText, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, CheckCircle2, Eye, FileText, Pencil, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-vue-next'
 import { formatDateTime } from '../composables/useDashboardFormatters'
 import { useLibraryModule } from '../composables/useLibraryModule'
 
@@ -425,11 +559,14 @@ const {
   showLibraryQuestionModal,
   showLibraryBankQuestionsModal,
   showDeleteLibraryBankModal,
+  showEditLibraryBankModal,
   libraryLoading,
   libraryBankQuestionsLoading,
   librarySaving,
   libraryDeleting,
   libraryMappingSaving,
+  libraryBankEditSaving,
+  questionEditSaving,
   libraryError,
   libraryMessage,
   libraryParsing,
@@ -443,19 +580,37 @@ const {
   digitalizedQuestions,
   libraryBankQuestions,
   libraryForm,
+  libraryBankEditForm,
   librarySubjectCategories,
+  libraryDifficultyOptions,
+  libraryCognitiveLevelOptions,
+  libraryQuestionTypeOptions,
   canSaveLibraryQuestionBank,
+  editingQuestionId,
+  questionEditForm,
+  questionEditTopicOptions,
+  questionEditSubtopicOptions,
   openLibraryQuestionModal,
   closeLibraryQuestionModal,
   openLibraryBankQuestionsModal,
   closeLibraryBankQuestionsModal,
   openDeleteLibraryBankModal,
   closeDeleteLibraryBankModal,
+  openEditLibraryBankModal,
+  closeEditLibraryBankModal,
+  handleUpdateLibraryBank,
   handleLibraryDocxChange,
   handleSaveLibraryQuestionBank,
   handleDeleteLibraryBank,
   queueBankMapping,
   confirmBankTags,
+  startEditingQuestion,
+  cancelEditingQuestion,
+  handleQuestionEditTopicChange,
+  addQuestionEditOption,
+  removeQuestionEditOption,
+  setQuestionEditCorrectOption,
+  saveEditingQuestion,
 } = useLibraryModule()
 </script>
 
@@ -539,5 +694,32 @@ const {
   min-width: 20px;
   font-weight: 700;
   color: var(--lnu-navy-deep);
+}
+
+.library-bank-question-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.library-question-edit-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+}
+
+.library-question-edit-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.library-question-edit-option-row .text-input {
+  flex: 1;
+}
+
+.ghost-btn.icon-only {
+  padding: 6px;
 }
 </style>

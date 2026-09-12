@@ -21,6 +21,35 @@
         </button>
       </header>
 
+      <!-- Room filter. Narrows the existing list below; "All Rooms" leaves
+           it exactly as it was. -->
+      <div v-if="exams.length > 0" class="management-toolbar exams-filter-bar">
+        <label class="exams-filter">
+          <span class="exams-filter-label">Room</span>
+          <select v-model="selectedRoomFilter" class="text-input exams-filter-select">
+            <option value="">All Rooms</option>
+            <option v-for="room in manageableRooms" :key="room.id" :value="String(room.id)">
+              {{ room.name }}<template v-if="room.code"> ({{ room.code }})</template>
+            </option>
+          </select>
+        </label>
+
+        <p class="exams-filter-summary">
+          <strong>{{ examListHeading }}</strong>
+          <span>{{ filteredExams.length }} of {{ exams.length }} exam(s)</span>
+        </p>
+
+        <button
+          v-if="selectedRoomFilter"
+          type="button"
+          class="ghost-btn exams-filter-clear"
+          @click="selectedRoomFilter = ''"
+        >
+          <X :size="14" />
+          Clear filter
+        </button>
+      </div>
+
       <div v-if="examLoading && exams.length === 0" class="room-empty-state">
         <RefreshCw :size="34" class="spin-soft" />
         <h4>Loading exams</h4>
@@ -33,8 +62,25 @@
         <p>Create an exam and assign it to one or more rooms.</p>
       </div>
 
+      <!-- Exams exist, just none in the selected room -- a different problem
+           from having no exams at all, so it gets its own way out. -->
+      <div v-else-if="filteredExams.length === 0" class="room-empty-state">
+        <DoorOpen :size="42" />
+        <h4>No exams in {{ selectedRoomName }}</h4>
+        <p>This room has no exams assigned yet. Assign one by editing an exam, or switch back to all rooms.</p>
+        <button type="button" class="ghost-btn" @click="selectedRoomFilter = ''">
+          Show all rooms
+        </button>
+      </div>
+
       <div v-else class="management-list">
-        <article v-for="exam in exams" :key="exam.id" class="management-item">
+        <article
+          v-for="exam in filteredExams"
+          :key="exam.id"
+          :id="`exam-${exam.id}`"
+          class="management-item"
+          :class="{ 'is-highlighted': highlightedExamId === exam.id }"
+        >
           <div class="management-item-main">
             <div class="management-item-heading">
               <strong>{{ exam.title }}</strong>
@@ -51,8 +97,41 @@
                 <strong>{{ exam.duration_minutes }} mins</strong>
               </div>
               <div>
-                <small>Rooms</small>
-                <strong>{{ exam.active_rooms_count ?? exam.rooms?.length ?? 0 }}</strong>
+                <small>Assigned Rooms</small>
+                <strong>{{ exam.assigned_rooms?.length ?? 0 }}</strong>
+              </div>
+            </div>
+
+            <!-- Exam -> Rooms. Each chip opens that room's page directly, so
+                 "where is this exam being used?" never costs a page hunt. -->
+            <div class="assignment-row">
+              <span class="assignment-label">Assigned Rooms</span>
+
+              <div v-if="exam.assigned_rooms?.length > 0" class="assignment-chips">
+                <router-link
+                  v-for="room in exam.assigned_rooms"
+                  :key="`room-${room.id}`"
+                  class="assignment-chip"
+                  :to="{ name: 'dashboard-room-management', query: { room: room.id } }"
+                  :title="`Open ${room.name}`"
+                >
+                  <DoorOpen :size="12" />
+                  {{ room.name }}<em v-if="room.code">{{ room.code }}</em>
+                </router-link>
+              </div>
+
+              <span v-else class="assignment-empty">Not assigned to any room</span>
+
+              <div v-if="exam.archived_rooms?.length > 0" class="assignment-chips">
+                <span
+                  v-for="room in exam.archived_rooms"
+                  :key="`archived-room-${room.id}`"
+                  class="assignment-chip is-archived"
+                  title="Archived from this room"
+                >
+                  <Archive :size="12" />
+                  {{ room.name }}
+                </span>
               </div>
             </div>
 
@@ -457,11 +536,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   AlertCircle,
+  Archive,
   CheckCircle2,
   ChevronDown,
+  DoorOpen,
   FileText,
   Pencil,
   Plus,
@@ -471,6 +553,12 @@ import {
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatExamSchedule } from '../composables/useDashboardFormatters'
 import { useExamsModule } from '../composables/useExamsModule'
+
+const route = useRoute()
+const highlightedExamId = ref(null)
+
+/** '' = All Rooms. Held as a string because it is bound to a <select>. */
+const selectedRoomFilter = ref('')
 
 const {
   exams,
@@ -501,6 +589,78 @@ const {
   handleSaveExam,
   handleDeleteExam,
 } = useExamsModule()
+
+const selectedRoomName = computed(() => {
+  const room = manageableRooms.value.find((entry) => String(entry.id) === selectedRoomFilter.value)
+  if (!room) return 'this room'
+
+  return room.code ? `${room.name} (${room.code})` : room.name
+})
+
+/*
+ * Matches on the exam's *active* assignments only: an exam archived out of
+ * a room is deliberately not "in" that room any more, which is the same
+ * reading the Rooms page uses when it files those under Archived.
+ * An exam in several rooms shows up under each of them.
+ */
+const filteredExams = computed(() => {
+  if (selectedRoomFilter.value === '') return exams.value
+
+  return exams.value.filter((exam) => (
+    (exam.assigned_rooms ?? []).some((room) => String(room.id) === selectedRoomFilter.value)
+  ))
+})
+
+const examListHeading = computed(() => (
+  selectedRoomFilter.value === '' ? 'All exams' : `Exams in ${selectedRoomName.value}`
+))
+
+/*
+ * A room that gets deleted while its filter is active would otherwise leave
+ * the list stuck empty with no matching option in the dropdown.
+ */
+watch([manageableRooms, selectedRoomFilter], () => {
+  if (selectedRoomFilter.value === '') return
+
+  const stillExists = manageableRooms.value.some((room) => String(room.id) === selectedRoomFilter.value)
+  if (!stillExists) {
+    selectedRoomFilter.value = ''
+  }
+})
+
+/*
+ * Deep link back from the Rooms page's "Open exam" action (?exam=<id>).
+ * Waits on the list actually containing that exam -- the query is read
+ * before the fetch resolves -- then highlights and scrolls to it rather
+ * than dropping the teacher at the top of an unfiltered list.
+ */
+watch(
+  () => [exams.value.length, route.query?.exam],
+  () => {
+    const requestedId = Number(route.query?.exam)
+
+    if (!Number.isFinite(requestedId) || requestedId < 1) {
+      highlightedExamId.value = null
+      return
+    }
+
+    if (!exams.value.some((exam) => Number(exam.id) === requestedId)) return
+
+    highlightedExamId.value = requestedId
+
+    // The deep link names one specific exam, so an active room filter that
+    // would hide it gets cleared -- otherwise the link lands on an empty
+    // list with no indication of why.
+    selectedRoomFilter.value = ''
+
+    nextTick(() => {
+      document
+        .getElementById(`exam-${requestedId}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  },
+  { immediate: true },
+)
 
 const questionSetDropdownRef = ref(null)
 const questionSetDropdownOpen = ref(false)

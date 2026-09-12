@@ -441,7 +441,7 @@ const {
   display: grid;
   gap: 8px;
   background: #f4f7ff;
-  border-color: rgba(31, 65, 143, 0.18);
+  border-color: rgba(var(--lnu-info-rgb), 0.18);
 }
 
 .rbg-kicker {
@@ -450,7 +450,7 @@ const {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #234a9c;
+  color: var(--lnu-info);
 }
 
 .rbg-head h3 {
@@ -505,7 +505,7 @@ const {
 
 .rbg-bank-row:hover,
 .rbg-bank-row:focus-visible {
-  background: rgba(31, 65, 143, 0.06);
+  background: rgba(var(--lnu-info-rgb), 0.06);
   outline: none;
 }
 
@@ -621,7 +621,7 @@ const {
   padding: 10px 14px;
   border-radius: 12px;
   background: #eef3ff;
-  border: 1px solid rgba(31, 65, 143, 0.14);
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
   flex-wrap: wrap;
 }
 

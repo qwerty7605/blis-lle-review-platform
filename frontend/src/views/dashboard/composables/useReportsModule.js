@@ -94,6 +94,10 @@ export function useReportsModule() {
   const reportActivity = ref([])
   const reportSessionPerformance = ref([])
   const reportSubjectPerformance = ref([])
+  // Distribution / trend / cohort topics / watchlist / room comparison, all
+  // from DashboardAnalyticsService::buildStaffAnalytics() and scoped the same
+  // way as the metrics above, so the two never disagree.
+  const reportAnalytics = ref({})
   const reportTargetsLoading = ref(false)
   const reportStudentsLoading = ref(false)
 
@@ -368,6 +372,7 @@ export function useReportsModule() {
       reportActivity.value = data.recent_activity ?? []
       reportSessionPerformance.value = data.session_performance ?? []
       reportSubjectPerformance.value = data.subject_performance ?? []
+      reportAnalytics.value = data.analytics ?? {}
     } catch (error) {
       reportError.value = firstApiError(error, 'Unable to load report data.')
     } finally {
@@ -433,6 +438,7 @@ export function useReportsModule() {
     reportActivity,
     reportSessionPerformance,
     reportSubjectPerformance,
+    reportAnalytics,
     reportTargetsLoading,
     reportStudentsLoading,
     reportExportingKey,

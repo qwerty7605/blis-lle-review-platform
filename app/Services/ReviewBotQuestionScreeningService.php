@@ -5,21 +5,24 @@ namespace App\Services;
 use App\Models\QuestionBankQuestion;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Throwable;
 
 /**
- * Automated screening for AI-generated Review Bot questions, run inside the
- * generation job before a teacher ever sees the batch.
+ * Automated screening for locally-generated Review Bot questions (see
+ * LocalReviewQuestionGenerator), run inside the generation job before a
+ * teacher ever sees the batch.
  *
- * Three passes, cheapest first:
- *   1. Mechanical checks -- no API call. Structural defects only.
- *   2. Near-duplicate rejection -- one batched embeddings call, then cosine
- *      similarity against questions already in the same subject.
- *   3. Answer-key verification -- one cheap completion per question, shown the
- *      question WITHOUT its key. Disagreement is the strongest inexpensive
- *      signal that an item is miskeyed.
+ * Two passes, cheapest first:
+ *   1. Mechanical checks -- structural defects only.
+ *   2. Near-duplicate rejection -- local feature-hashed text vectors (no
+ *      network call, see embed()), then cosine similarity against questions
+ *      already in the same subject.
+ *
+ * There used to be a third pass, an AI completion asked to independently
+ * re-derive the answer key as a miskey check. It's gone, not just disabled:
+ * LocalReviewQuestionGenerator never re-derives an answer, it only inherits
+ * one from an already-vetted source item (see its class docblock), so there
+ * is nothing left for a second opinion to check.
  *
  * Nothing here approves or publishes anything. Every question still lands as a
  * draft for the teacher; screening only decides what gets discarded outright
@@ -28,20 +31,23 @@ use Throwable;
 class ReviewBotQuestionScreeningService
 {
     /**
-     * Thresholds calibrated against text-embedding-3-small at 256 dimensions,
-     * measured on real Review Bot phrasing:
-     *
-     *   1.00  identical text
-     *   0.97  trivial rewording ("developed" -> "created")
-     *   0.66  same concept asked scenario-style
-     *   0.54  same concept, fully reworded
-     *   0.37  same topic, different concept
-     *   0.16  unrelated
-     *
-     * The 0.54-0.66 band is exactly what generating several question styles
-     * from one source item is supposed to produce, so the reject line sits
-     * above it. This catches near-verbatim repeats -- it deliberately does NOT
-     * try to enforce one question per concept.
+     * Dimensionality of the local hashed text vectors embed() produces (see
+     * its docblock) -- kept at the same size the old OpenAI embeddings used
+     * so the on-disk blob format (encodeVector()/decodeVector()) didn't need
+     * to change.
+     */
+    private const VECTOR_DIMENSIONS = 256;
+
+    /**
+     * Thresholds for cosine similarity between two local hashed-word-count
+     * vectors (see embed()). Unlike a semantic embedding, these vectors are
+     * purely lexical -- similarity tracks shared wording, not shared meaning
+     * -- so the practical effect is closer to "textually near-identical" than
+     * "same concept different words". That's an intentionally tighter net
+     * than the old semantic version: it catches accidental near-verbatim
+     * repeats (e.g. a top-up run re-covering an already-generated area)
+     * without trying to police paraphrase quality, which local generation's
+     * deterministic templates don't produce in the first place.
      */
     public const DUPLICATE_REJECT_THRESHOLD = 0.90;
 
@@ -56,11 +62,6 @@ class ReviewBotQuestionScreeningService
     public const FLAG_ANSWER_LENGTH_GIVEAWAY = 'answer_length_giveaway';
     public const FLAG_MISSING_EXPLANATION = 'missing_explanation';
     public const FLAG_NEAR_DUPLICATE = 'near_duplicate';
-
-    public function hasApiKey(): bool
-    {
-        return trim((string) config('services.openai.api_key', '')) !== '';
-    }
 
     /**
      * Screen a freshly generated batch.
@@ -96,7 +97,7 @@ class ReviewBotQuestionScreeningService
                 continue;
             }
 
-            $accepted[] = $this->applyAnswerKeyVerification($item);
+            $accepted[] = $item;
         }
 
         return ['accepted' => $accepted, 'rejected' => $rejected];
@@ -350,50 +351,92 @@ class ReviewBotQuestionScreeningService
     }
 
     /**
-     * One batched embeddings call for the whole set.
+     * Turns each text into a fixed-length local vector via feature hashing
+     * (the "hashing trick" -- the same idea behind scikit-learn's
+     * HashingVectorizer / Vowpal Wabbit) weighted by batch-local inverse
+     * document frequency (the same pairing scikit-learn's TfidfTransformer
+     * gives a HashingVectorizer): tokenize into lowercase words, hash each
+     * token into one of VECTOR_DIMENSIONS buckets, and accumulate each hit
+     * weighted by how rare that token is *within this call's own texts*.
+     *
+     * The IDF weighting matters specifically because of how
+     * LocalReviewQuestionGenerator works: many generated prompts in the same
+     * batch share a fixed template ("Which of the following is best
+     * identified by this description...", the same scenario carrier
+     * sentence, ...) and differ only in a handful of content words. A plain
+     * word-count vector would let that shared boilerplate dominate and flag
+     * unrelated variants as near-duplicates; downweighting tokens that
+     * appear in most of the batch's texts lets the actual distinguishing
+     * words -- the ones that differ per concept -- drive the comparison
+     * instead. No training, no persisted vocabulary, no network call.
+     *
+     * Same return contract the old OpenAI-backed version had (unit-normalised
+     * vectors keyed by input index, missing index for a text with no
+     * tokens), so every caller downstream (applyDuplicateScreening(),
+     * bestSimilarityAgainstBank(), dot(), encodeVector()/decodeVector())
+     * needed zero changes.
      *
      * @param  array<int, string>  $texts
      * @return array<int, array<int, float>>
      */
     public function embed(array $texts): array
     {
-        $texts = array_map(fn (string $text): string => trim($text), $texts);
+        $documents = [];
 
-        if (!$this->hasApiKey() || array_filter($texts) === []) {
+        foreach ($texts as $index => $text) {
+            $tokens = $this->tokenize((string) $text);
+
+            if ($tokens !== []) {
+                $documents[$index] = $tokens;
+            }
+        }
+
+        if ($documents === []) {
             return [];
         }
 
-        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
+        $documentFrequency = [];
 
-        try {
-            $response = Http::withToken((string) config('services.openai.api_key'))
-                ->acceptJson()
-                ->timeout(60)
-                ->post($baseUrl . '/embeddings', [
-                    'model' => (string) config('services.openai.embedding_model', 'text-embedding-3-small'),
-                    'dimensions' => (int) config('services.openai.embedding_dimensions', 256),
-                    'input' => $texts,
-                ])
-                ->throw()
-                ->json();
-        } catch (Throwable) {
-            return [];
+        foreach ($documents as $tokens) {
+            foreach (array_unique($tokens) as $token) {
+                $documentFrequency[$token] = ($documentFrequency[$token] ?? 0) + 1;
+            }
         }
 
+        $documentCount = count($documents);
         $vectors = [];
 
-        foreach (($response['data'] ?? []) as $row) {
-            $index = (int) ($row['index'] ?? count($vectors));
-            $embedding = $row['embedding'] ?? null;
+        foreach ($documents as $index => $tokens) {
+            $vector = array_fill(0, self::VECTOR_DIMENSIONS, 0.0);
 
-            if (!is_array($embedding) || $embedding === []) {
-                continue;
+            foreach ($tokens as $token) {
+                // Smoothed IDF: a token in every text of the batch (weight
+                // approaching log(1) = 0) contributes almost nothing; a token
+                // unique to one text weighs the most.
+                $weight = log((1 + $documentCount) / (1 + $documentFrequency[$token]));
+                $bucket = crc32($token) % self::VECTOR_DIMENSIONS;
+                $vector[$bucket] += $weight;
             }
 
-            $vectors[$index] = $this->normalise(array_map('floatval', $embedding));
+            $vectors[$index] = $this->normalise($vector);
         }
 
         return $vectors;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function tokenize(string $text): array
+    {
+        $normalized = Str::lower(trim($text));
+        $normalized = preg_replace('/[^a-z0-9\s]/', ' ', $normalized) ?? $normalized;
+        $tokens = preg_split('/\s+/', trim($normalized), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        // Single-character tokens are almost entirely punctuation/option
+        // labels ("a", "b") left over from stripping, not real words -- they
+        // add noise without adding signal to a similarity comparison.
+        return array_values(array_filter($tokens, fn (string $token): bool => mb_strlen($token) > 1));
     }
 
     /**
@@ -433,83 +476,4 @@ class ReviewBotQuestionScreeningService
         return $unpacked === false ? [] : array_values($unpacked);
     }
 
-    /**
-     * Ask an independent completion to answer the question with no answer key
-     * in sight, then compare. Failure leaves the item "unchecked" rather than
-     * blocking generation.
-     *
-     * @param  array<string, mixed>  $item
-     * @return array<string, mixed>
-     */
-    protected function applyAnswerKeyVerification(array $item): array
-    {
-        $expectedLabel = Str::upper(trim((string) ($item['correct_option_label'] ?? '')));
-        $options = is_array($item['options'] ?? null) ? $item['options'] : [];
-
-        if (!$this->hasApiKey() || $expectedLabel === '' || $options === []) {
-            return $item;
-        }
-
-        $answered = $this->askVerifier((string) ($item['prompt'] ?? ''), $options);
-
-        if ($answered === null) {
-            return $item;
-        }
-
-        $item['verifier_answer_label'] = $answered;
-        $item['verification_status'] = $answered === $expectedLabel
-            ? QuestionBankQuestion::VERIFICATION_AGREED
-            : QuestionBankQuestion::VERIFICATION_DISAGREED;
-
-        return $item;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $options
-     */
-    protected function askVerifier(string $prompt, array $options): ?string
-    {
-        if (trim($prompt) === '') {
-            return null;
-        }
-
-        $rendered = collect($options)
-            ->map(fn ($option): string => sprintf(
-                '%s. %s',
-                Str::upper(trim((string) ($option['label'] ?? ''))),
-                trim((string) ($option['text'] ?? ''))
-            ))
-            ->implode("\n");
-
-        $systemPrompt = 'You are answering a single exam question. Reply with ONLY the letter label of the option you believe is correct (for example: A). No punctuation, no explanation, no other text.';
-
-        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-
-        try {
-            $response = Http::withToken((string) config('services.openai.api_key'))
-                ->acceptJson()
-                ->timeout(30)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => (string) config('services.openai.model', 'gpt-4o-mini'),
-                    'temperature' => 0,
-                    'max_tokens' => 4,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => trim($prompt) . "\n\n" . $rendered],
-                    ],
-                ])
-                ->throw()
-                ->json();
-        } catch (Throwable) {
-            return null;
-        }
-
-        $content = Str::upper(trim((string) data_get($response, 'choices.0.message.content', '')));
-
-        if (!preg_match('/[A-Z]/', $content, $matches)) {
-            return null;
-        }
-
-        return $matches[0];
-    }
 }
