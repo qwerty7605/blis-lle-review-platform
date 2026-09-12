@@ -2,6 +2,7 @@
 
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
+use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Services\Library\DocxQuestionParser;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ Route::get('/library/banks', function (Request $request) use ($isStaffMasterExam
     ]);
 });
 
-Route::post('/library/import/preview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+Route::post('/library/import/preview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit, $questionMappingService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
@@ -138,6 +139,8 @@ Route::post('/library/import/preview', function (Request $request) use ($isStaff
         $request,
     );
 
+    $suggestion = $questionMappingService->suggestSubjectForParsedQuestions($result['questions']);
+
     return response()->json([
         'message' => 'DOCX parsed successfully.',
         'preview' => [
@@ -147,6 +150,8 @@ Route::post('/library/import/preview', function (Request $request) use ($isStaff
             'answer_key_items' => $result['answer_key_items'],
             'total_items' => count($result['questions']),
             'source_filename' => $file->getClientOriginalName(),
+            'suggested_subject' => $suggestion['subject'],
+            'suggested_subject_confidence' => $suggestion['confidence'],
         ],
     ]);
 });
@@ -182,56 +187,22 @@ Route::post('/library/banks', function (Request $request) use ($isStaffMasterExa
     $taggingMode = $validated['ai_tagging_mode'] ?? QuestionBank::MAPPING_MODE_REVIEW;
 
     $questions = collect($validated['questions'])
-        ->map(function (array $question, int $index): array {
-            $optionRows = collect($question['options'] ?? [])
-                ->map(function (array $option, int $optionIndex): array {
-                    $defaultLabel = chr(ord('A') + min($optionIndex, 25));
-
-                    return [
-                        'sort_order' => $optionIndex + 1,
-                        'label' => Str::upper(trim((string) ($option['label'] ?? $defaultLabel))),
-                        'text' => trim((string) ($option['text'] ?? '')),
-                        'is_correct' => (bool) ($option['is_correct'] ?? false),
-                    ];
-                })
-                ->filter(fn (array $option): bool => $option['text'] !== '')
-                ->values();
-
-            if ($optionRows->isNotEmpty()) {
-                $answerLabel = Str::upper(trim((string) ($question['answer_label'] ?? '')));
-                if ($answerLabel === '') {
-                    $firstCorrectOption = $optionRows->first(fn (array $option): bool => $option['is_correct']);
-                    $answerLabel = is_array($firstCorrectOption)
-                        ? Str::upper(trim((string) ($firstCorrectOption['label'] ?? '')))
-                        : '';
-                }
-
-                $optionRows = $optionRows->map(function (array $option) use ($answerLabel): array {
-                    $option['is_correct'] = $answerLabel !== '' && $option['label'] === $answerLabel;
-
-                    return $option;
-                })->values();
-
-                $resolvedCorrectOption = $optionRows->first(fn (array $option): bool => $option['is_correct']);
-                $answerText = is_array($resolvedCorrectOption)
-                    ? ($resolvedCorrectOption['text'] ?? null)
-                    : null;
-                $type = $question['question_type'] ?? 'multiple_choice';
-                $type = in_array($type, ['multiple_choice', 'true_false', 'open_ended'], true) ? $type : 'multiple_choice';
-            } else {
-                $answerLabel = null;
-                $answerText = $question['answer_text'] ?? null;
-                $type = 'open_ended';
-            }
+        ->map(function (array $question, int $index) use ($questionMappingService): array {
+            $resolved = $questionMappingService->resolveQuestionContent(
+                $question['options'] ?? [],
+                $question['answer_label'] ?? null,
+                $question['question_type'] ?? null,
+                $question['answer_text'] ?? null,
+            );
 
             return [
                 'item_number' => $index + 1,
                 'text' => trim((string) ($question['text'] ?? '')),
                 'topic_name' => filled($question['topic_name'] ?? null) ? trim((string) $question['topic_name']) : null,
-                'question_type' => $type,
-                'answer_label' => $answerLabel,
-                'answer_text' => $answerText,
-                'options' => $optionRows->all(),
+                'question_type' => $resolved['question_type'],
+                'answer_label' => $resolved['answer_label'],
+                'answer_text' => $resolved['answer_text'],
+                'options' => $resolved['options'],
             ];
         })
         ->filter(fn (array $question): bool => $question['text'] !== '')
@@ -316,6 +287,115 @@ Route::post('/library/banks', function (Request $request) use ($isStaffMasterExa
         'bank' => $bank,
         'mapping_generation' => $mapping,
     ], 201);
+});
+
+Route::patch('/library/banks/{bank}', function (
+    Request $request,
+    QuestionBank $bank
+) use (
+    $isStaffMasterExaminer,
+    $ensureActive,
+    $recordAudit,
+    $questionMappingService
+) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$isStaffMasterExaminer($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if ((int) $bank->created_by !== (int) $user->id) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if (Str::startsWith($bank->title, QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX)) {
+        return response()->json(['message' => 'This is a Review Bot bank, not a Library set -- it cannot be edited here.'], 422);
+    }
+
+    $validated = $request->validate([
+        'title' => ['required', 'string', 'max:255'],
+        'subject' => ['nullable', 'string', 'max:255'],
+    ]);
+
+    $newTitle = trim((string) $validated['title']);
+    $newSubject = filled($validated['subject'] ?? null) ? trim((string) $validated['subject']) : null;
+    $subjectChanged = trim((string) $bank->subject) !== trim((string) $newSubject);
+    $resetCount = 0;
+
+    DB::transaction(function () use ($bank, $newTitle, $newSubject, $subjectChanged, &$resetCount) {
+        $bank->title = $newTitle;
+        $bank->subject = $newSubject;
+        $bank->save();
+
+        if (!$subjectChanged) {
+            return;
+        }
+
+        // The question's own `subject` column (not the bank's) is what
+        // mapping groups by -- see QuestionMappingService::classifyForAssessmentQuestions()
+        // -- so it must stay in sync or reclassification would silently
+        // keep using the old subject.
+        $bank->assessmentQuestions()->update(['subject' => $newSubject]);
+
+        // Only reset AI/rule-based guesses -- a teacher's own manually
+        // confirmed tag (tag_source = faculty) is a deliberate human edit
+        // and a subject correction shouldn't silently erase it.
+        $resettableIds = $bank->assessmentQuestions()
+            ->where(function ($query) {
+                $query->whereNull('tag_source')
+                    ->orWhere('tag_source', '!=', QuestionBankQuestion::TAG_SOURCE_FACULTY);
+            })
+            ->pluck('id');
+
+        $resetCount = $resettableIds->count();
+
+        if ($resetCount > 0) {
+            $bank->assessmentQuestions()
+                ->whereIn('id', $resettableIds)
+                ->update([
+                    'topic_id' => null,
+                    'subtopic_id' => null,
+                    'difficulty' => null,
+                    'cognitive_level' => null,
+                    'tag_status' => null,
+                    'tag_source' => null,
+                ]);
+        }
+    });
+
+    $mapping = null;
+    if ($subjectChanged && $resetCount > 0) {
+        $mapping = $questionMappingService->queueBankMapping($bank, $bank->mapping_mode ?? QuestionBank::MAPPING_MODE_AUTO);
+    }
+
+    $bank->load('creator:id,name')->loadCount(['questions']);
+
+    $recordAudit(
+        $user,
+        'library.bank.update',
+        'question_bank',
+        $bank->id,
+        "Edited a question bank's title/subject",
+        [
+            'title' => $bank->title,
+            'subject' => $bank->subject,
+            'subject_changed' => $subjectChanged,
+            'items_requeued' => $resetCount,
+        ],
+        $request,
+    );
+
+    return response()->json([
+        'message' => $subjectChanged && $resetCount > 0
+            ? sprintf('Question bank updated. %d item(s) queued for re-mapping under the new subject.', $resetCount)
+            : 'Question bank updated.',
+        'bank' => $bank,
+        'mapping_generation' => $mapping,
+    ]);
 });
 
 Route::delete('/library/banks/{bank}', function (
@@ -451,6 +531,7 @@ Route::get('/library/topics', function (Request $request) use ($isStaffMasterExa
 
     $validated = $request->validate([
         'subject' => ['nullable', 'string', 'max:255'],
+        'topic' => ['nullable', 'string', 'max:255'],
     ]);
 
     $subject = trim((string) ($validated['subject'] ?? ''));
@@ -466,11 +547,27 @@ Route::get('/library/topics', function (Request $request) use ($isStaffMasterExa
 
     $curated = $questionMappingService->curatedTopicsForSubject($subject);
 
-    return response()->json([
+    $response = [
         'subject' => $subject,
         'curated_topics' => $curated,
         'topics' => $existingTopicNames->concat($curated)->unique()->sort()->values(),
-    ]);
+    ];
+
+    $topic = trim((string) ($validated['topic'] ?? ''));
+
+    if ($topic !== '') {
+        $existingSubtopicNames = Subtopic::query()
+            ->whereHas('topic', fn ($query) => $query->where('subject', $subject)->where('name', $topic))
+            ->orderBy('name')
+            ->pluck('name');
+
+        $curatedSubtopics = $questionMappingService->curatedSubtopicsForTopic($subject, $topic);
+
+        $response['curated_subtopics'] = $curatedSubtopics;
+        $response['subtopics'] = $existingSubtopicNames->concat($curatedSubtopics)->unique()->sort()->values();
+    }
+
+    return response()->json($response);
 });
 
 Route::post('/library/banks/{bank}/queue-mapping', function (
@@ -609,7 +706,7 @@ Route::patch('/library/banks/{bank}/tags/status', function (
     ]);
 });
 
-Route::patch('/library/questions/{question}/tags', function (
+Route::patch('/library/questions/{question}', function (
     Request $request,
     QuestionBankQuestion $question
 ) use (
@@ -635,10 +732,48 @@ Route::patch('/library/questions/{question}/tags', function (
     }
 
     $validated = $request->validate([
+        'question_text' => ['required', 'string'],
+        'question_type' => ['nullable', Rule::in(QuestionBankQuestion::TYPES)],
+        'answer_label' => ['nullable', 'string', 'max:2'],
+        'answer_text' => ['nullable', 'string'],
+        'options' => ['nullable', 'array', 'max:8'],
+        'options.*.label' => ['nullable', 'string', 'max:2'],
+        'options.*.text' => ['required_with:options', 'string'],
+        'options.*.is_correct' => ['nullable', 'boolean'],
         'topic_name' => ['nullable', 'string', 'max:255'],
+        'subtopic_name' => ['nullable', 'string', 'max:255'],
         'difficulty' => ['nullable', Rule::in(QuestionBankQuestion::DIFFICULTIES)],
         'cognitive_level' => ['nullable', Rule::in(QuestionBankQuestion::COGNITIVE_LEVELS)],
     ]);
+
+    // "Which option counts as correct" is resolved identically to bank
+    // creation -- see QuestionMappingService::resolveQuestionContent().
+    $resolved = $questionMappingService->resolveQuestionContent(
+        $validated['options'] ?? [],
+        $validated['answer_label'] ?? null,
+        $validated['question_type'] ?? null,
+        $validated['answer_text'] ?? null,
+    );
+
+    DB::transaction(function () use ($question, $validated, $resolved) {
+        $question->forceFill([
+            'question_text' => trim((string) $validated['question_text']),
+            'question_type' => $resolved['question_type'],
+            'answer_label' => $resolved['answer_label'],
+            'answer_text' => $resolved['answer_text'],
+        ])->save();
+
+        $question->options()->delete();
+
+        foreach ($resolved['options'] as $option) {
+            $question->options()->create([
+                'sort_order' => $option['sort_order'],
+                'option_label' => $option['label'],
+                'option_text' => $option['text'],
+                'is_correct' => $option['is_correct'],
+            ]);
+        }
+    });
 
     $question = $questionMappingService->applyManualTags(
         $question,
@@ -646,19 +781,25 @@ Route::patch('/library/questions/{question}/tags', function (
         $validated['difficulty'] ?? null,
         $validated['cognitive_level'] ?? null,
         $user->id,
+        $validated['subtopic_name'] ?? null,
     );
 
-    $question->load('topic:id,subject,name');
+    $question->load([
+        'topic:id,subject,name',
+        'subtopic:id,topic_id,name',
+        'options:id,question_bank_question_id,option_label,option_text,is_correct',
+    ]);
 
     $recordAudit(
         $user,
-        'library.mapping.edit',
+        'library.question.edit',
         'question_bank_question',
         $question->id,
-        'Edited/confirmed an item\'s topic, difficulty, or cognitive level',
+        "Edited a question's content and/or classification",
         [
             'question_bank_id' => $question->question_bank_id,
             'topic_id' => $question->topic_id,
+            'subtopic_id' => $question->subtopic_id,
             'difficulty' => $question->difficulty,
             'cognitive_level' => $question->cognitive_level,
         ],
@@ -666,7 +807,7 @@ Route::patch('/library/questions/{question}/tags', function (
     );
 
     return response()->json([
-        'message' => 'Item tags updated.',
+        'message' => 'Question updated.',
         'question' => $question,
     ]);
 });

@@ -45,7 +45,7 @@
           </div>
         </div>
 
-        <button class="layout-logout" @click="handleLogout">
+        <button class="logout-btn" @click="handleLogout">
           <LogOut :size="16" />
           Log out
         </button>
@@ -53,14 +53,14 @@
     </aside>
 
     <section class="layout-main">
-      <header class="layout-topbar" :class="{ 'is-student-dashboard-home': isStudentDashboardHome }">
+      <header class="layout-topbar" :class="{ 'is-fill-screen': isFillScreenRoute }">
         <div>
           <h1>{{ pageTitle }}</h1>
           <p>{{ pageSubtitle }}</p>
         </div>
       </header>
 
-      <main class="layout-content" :class="{ 'is-student-dashboard-home': isStudentDashboardHome }">
+      <main class="layout-content" :class="{ 'is-fill-screen': isFillScreenRoute }">
         <RouterView />
       </main>
     </section>
@@ -92,9 +92,18 @@ const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLow
 const navItems = computed(() => getDashboardNavItems(normalizedRole.value))
 
 const currentRouteName = computed(() => String(route.name ?? ''))
-const isStudentDashboardHome = computed(() => (
-  normalizedRole.value === 'student' && currentRouteName.value === 'dashboard-home'
-))
+// Routes that lay themselves out to fill one screen with no page-level
+// scroll (see their own <style> for the flex-fill chain) instead of the
+// default scrollable page -- each such view already carries its own more
+// prominent heading, so the shared topbar above shrinks rather than
+// repeating that weight twice.
+const FILL_SCREEN_ROUTES = [
+  'dashboard-home',
+  'dashboard-rooms',
+  'dashboard-room-management',
+  'dashboard-review-bot',
+]
+const isFillScreenRoute = computed(() => FILL_SCREEN_ROUTES.includes(currentRouteName.value))
 
 const pageTitle = computed(() => String(route.meta?.title ?? 'Dashboard'))
 const pageSubtitle = computed(() => String(route.meta?.sub ?? 'Manage your modules and workflows.'))
@@ -156,6 +165,7 @@ onBeforeUnmount(() => {
 })
 </script>
 
+<style scoped src="./dashboard.css"></style>
 <style scoped>
 .layout-shell {
   min-height: 100vh;
@@ -361,19 +371,6 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.78);
 }
 
-.layout-logout {
-  height: 38px;
-  border: 1px solid rgba(240, 208, 128, 0.35);
-  border-radius: 9px;
-  background: rgba(240, 208, 128, 0.14);
-  color: var(--lnu-gold-light);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-weight: 600;
-}
-
 .layout-main {
   min-width: 0;
   height: 100vh;
@@ -385,49 +382,61 @@ onBeforeUnmount(() => {
 
 .layout-topbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid rgba(240, 208, 128, 0.3);
   background: linear-gradient(120deg, var(--lnu-navy), var(--lnu-navy-light));
-  padding: 20px 24px;
+  padding: 14px 24px;
   color: var(--lnu-white);
 }
 
 .layout-topbar h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .layout-topbar p {
-  margin: 6px 0 0;
-  font-size: 15px;
+  margin: 4px 0 0;
+  font-size: 13px;
   color: rgba(255, 255, 255, 0.82);
 }
 
-.layout-topbar.is-student-dashboard-home {
-  padding-top: 16px;
-  padding-bottom: 16px;
+/* Fill-screen pages (dashboard home, rooms) carry their own more prominent
+   heading already -- see DashboardHomeView.vue's hero and RoomsView.vue's
+   own page head -- so this shared topbar is redundant there and shrinks
+   rather than repeating that weight twice. */
+.layout-topbar.is-fill-screen {
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
-.layout-topbar.is-student-dashboard-home h1 {
-  font-size: 24px;
+.layout-topbar.is-fill-screen h1 {
+  font-size: 18px;
 }
 
-.layout-topbar.is-student-dashboard-home p {
-  margin-top: 4px;
-  font-size: 14px;
+.layout-topbar.is-fill-screen p {
+  margin-top: 2px;
+  font-size: 12px;
 }
 
 .layout-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 22px 24px;
+  padding: 18px 22px;
   background: transparent;
 }
 
-.layout-content.is-student-dashboard-home {
+/* A fill-screen page lays itself out to fit one screen with no page-level
+   scroll (see that view's own <style>) -- becoming a flex column here lets
+   it stretch to fill exactly this box. overflow stays auto (not hidden) as
+   a safety net: if a screen is unusually short, the page scrolls instead of
+   silently clipping content. */
+.layout-content.is-fill-screen {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 20px;
   overflow-y: auto;
 }
 
@@ -495,7 +504,7 @@ onBeforeUnmount(() => {
     padding: 16px;
   }
 
-  .layout-content.is-student-dashboard-home {
+  .layout-content.is-fill-screen {
     overflow: visible;
     display: block;
   }

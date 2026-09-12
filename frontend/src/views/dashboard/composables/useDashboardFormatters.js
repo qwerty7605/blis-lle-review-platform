@@ -16,6 +16,23 @@ const CLOCK_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   second: '2-digit',
 })
 
+const COMPACT_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+})
+
+const LONG_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  month: 'long',
+  day: '2-digit',
+  year: 'numeric',
+})
+
+const TIME_ONLY_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
 export function normalizeExamDeliveryMode(mode) {
   return 'open_navigation'
 }
@@ -40,11 +57,38 @@ export function formatDateTime(value) {
   return DATE_TIME_FORMATTER.format(parsed)
 }
 
+// A short "Aug 24, 2024" date — used where a feed/list needs to stay
+// scannable and full timestamps (formatDateTime) would be too heavy.
+export function formatCompactDate(value) {
+  const parsed = parseDateTime(value)
+  if (!parsed) return 'n/a'
+
+  return COMPACT_DATE_FORMATTER.format(parsed)
+}
+
 export function formatClockTime(value) {
   const parsed = parseDateTime(value)
   if (!parsed) return 'n/a'
 
   return CLOCK_TIME_FORMATTER.format(parsed)
+}
+
+// "September 05, 2026" -- used where a date needs to stand on its own line
+// without a time attached (see formatTimeOnly for that half).
+export function formatLongDate(value) {
+  const parsed = parseDateTime(value)
+  if (!parsed) return 'n/a'
+
+  return LONG_DATE_FORMATTER.format(parsed)
+}
+
+// "2:00 PM" -- no seconds, unlike formatClockTime (built for an exam-attempt
+// countdown reading, not a schedule label).
+export function formatTimeOnly(value) {
+  const parsed = parseDateTime(value)
+  if (!parsed) return 'n/a'
+
+  return TIME_ONLY_FORMATTER.format(parsed)
 }
 
 export function formatExamSchedule(startValue, endValue = null) {

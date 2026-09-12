@@ -48,6 +48,12 @@ const props = defineProps({
   threshold: { type: [Number, null], default: 75 },
   size: { type: Number, default: 96 },
   label: { type: String, default: '' },
+  // Most callers show a plain score, where a bigger number is always better
+  // and the magnitude-based default below is correct. But a few numbers
+  // (e.g. "confidence you will FAIL") are high-is-bad — for those, the
+  // caller passes its own success/danger/gold/navy tone instead of letting
+  // this component infer one from the raw value.
+  tone: { type: String, default: null },
 })
 
 const box = 100
@@ -63,6 +69,8 @@ const MIN_VISIBLE_PERCENT = 6
 const hasValue = computed(() => props.value !== null && props.value !== undefined && !Number.isNaN(Number(props.value)))
 
 const tone = computed(() => {
+  if (props.tone) return props.tone
+
   const v = Number(props.value ?? 0)
   if (v >= 85) return 'success'
   if (v >= 75) return 'navy'
@@ -125,7 +133,13 @@ const thresholdTick = computed(() => {
   position: absolute;
   inset: 0;
   display: grid;
-  place-items: center;
+  /* place-items only centers each row *within its own row* -- with no
+     align-content, the two auto rows (number, label) default to stretch
+     and split the full circle height between them, pushing the number up
+     and the label down instead of the pair sitting together dead center.
+     align-content:center packs both rows as one tight group first. */
+  align-content: center;
+  justify-items: center;
   text-align: center;
   line-height: 1.15;
 }

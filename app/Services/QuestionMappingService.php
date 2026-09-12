@@ -4,30 +4,33 @@ namespace App\Services;
 
 use App\Jobs\ClassifyQuestionBankQuestionsJob;
 use App\Models\QuestionBank;
-use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
 use App\Models\Subtopic;
 use App\Models\Topic;
+use App\Services\QuestionClassification\LocalQuestionClassifier;
+use App\Services\QuestionClassification\ScalarClassification;
+use App\Services\QuestionClassification\TopicClassification;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
-use Throwable;
 
 /**
  * Classifies faculty-authored assessment items into a topic + subtopic,
  * a difficulty tier, and a cognitive (Bloom's-style) level, so exam
  * results can be broken down more deeply than "subject" alone. Runs once
- * per uploaded set, in the background, and never touches AI again for
- * that content afterward.
+ * per uploaded set, in the background, using a free local keyword/heuristic
+ * classifier (see LocalQuestionClassifier) -- no AI API call, no cost.
  */
 class QuestionMappingService
 {
-    private const CLASSIFICATION_BATCH_SIZE = 15;
+    public function __construct(
+        private readonly LocalQuestionClassifier $classifier = new LocalQuestionClassifier(),
+    ) {
+    }
 
     /**
-     * Curated topic -> subtopic list per BLIS core subject. The AI is only
-     * ever allowed to choose from this list (never invent a topic or
+     * Curated topic -> subtopic list per BLIS core subject. The classifier
+     * is only ever allowed to choose from this list (never invent a topic or
      * subtopic name), so results stay comparable across every teacher's
      * uploads instead of fragmenting into near-duplicate names.
      *
@@ -208,16 +211,6 @@ class QuestionMappingService
         ],
     ];
 
-    public function hasApiKey(): bool
-    {
-        return trim((string) config('services.openai.api_key', '')) !== '';
-    }
-
-    public function missingConfigurationMessage(): string
-    {
-        return 'OPENAI_API_KEY is not configured, so AI item mapping is unavailable.';
-    }
-
     /**
      * @return array<int, string>
      */
@@ -245,11 +238,49 @@ class QuestionMappingService
     }
 
     /**
+     * Guesses a bank's subject from a freshly DOCX-parsed (not yet
+     * persisted) question set, so the Library upload form can pre-fill
+     * "Subject Category" instead of a teacher picking it every time. Never
+     * guesses wildly: below the same confidence bar topic-matching itself
+     * uses, it returns a null subject and lets the teacher fill it in.
+     *
+     * @param  array<int, array{text?: string, answer_text?: string, options?: array<int, array{text?: string}>}>  $parsedQuestions
+     * @return array{subject: ?string, confidence: float}
+     */
+    public function suggestSubjectForParsedQuestions(array $parsedQuestions): array
+    {
+        $searchTexts = collect($parsedQuestions)
+            ->map(function (array $question): string {
+                $parts = [
+                    (string) ($question['text'] ?? ''),
+                    (string) ($question['answer_text'] ?? ''),
+                ];
+
+                foreach ($question['options'] ?? [] as $option) {
+                    $parts[] = (string) ($option['text'] ?? '');
+                }
+
+                return $this->classifier->buildSearchTextFromParts($parts);
+            })
+            ->all();
+
+        $result = $this->classifier->classifySubjectForTexts($searchTexts);
+
+        if ($result->value === '' || $result->confidence < LocalQuestionClassifier::TOPIC_CONFIDENCE_THRESHOLD) {
+            return ['subject' => null, 'confidence' => $result->confidence];
+        }
+
+        return ['subject' => $this->normalizeSubjectLabel($result->value), 'confidence' => $result->confidence];
+    }
+
+    /**
      * Queue background classification for a bank's assessment questions
      * that don't have a topic yet (i.e. weren't manually tagged by the
-     * teacher at upload). $mode controls whether AI suggestions apply
-     * immediately ("auto") or land as pending_review for a teacher to
-     * confirm ("review").
+     * teacher at upload). $mode controls whether the classifier's
+     * suggestions apply immediately ("auto") or land as pending_review for
+     * a teacher to confirm ("review") -- though a low-confidence guess is
+     * always forced into pending_review regardless of $mode, see
+     * applyClassification().
      *
      * @param  Collection<int, QuestionBankQuestion>|null  $sourceQuestions
      * @return array{status: string, message: string, queued: int}
@@ -261,8 +292,8 @@ class QuestionMappingService
 
         if (in_array($bank->mapping_status, [QuestionBank::MAPPING_STATUS_QUEUED, QuestionBank::MAPPING_STATUS_PROCESSING], true)) {
             $message = $bank->mapping_status === QuestionBank::MAPPING_STATUS_PROCESSING
-                ? 'AI item mapping is already running for this set.'
-                : 'AI item mapping is already queued for this set.';
+                ? 'Item mapping is already running for this set.'
+                : 'Item mapping is already queued for this set.';
 
             return ['status' => (string) $bank->mapping_status, 'message' => $message, 'queued' => 0];
         }
@@ -290,19 +321,7 @@ class QuestionMappingService
             return ['status' => QuestionBank::MAPPING_STATUS_COMPLETED, 'message' => $message, 'queued' => 0];
         }
 
-        if (!$this->hasApiKey()) {
-            $message = $this->missingConfigurationMessage();
-
-            $this->markBankMappingStatus($bank, QuestionBank::MAPPING_STATUS_SKIPPED, $message, [
-                'mapping_mode' => $mode,
-                'mapping_requested_at' => now(),
-                'mapping_completed_at' => now(),
-            ]);
-
-            return ['status' => QuestionBank::MAPPING_STATUS_SKIPPED, 'message' => $message, 'queued' => 0];
-        }
-
-        $message = sprintf('AI item mapping queued for %d question(s).', count($candidateIds));
+        $message = sprintf('Item mapping queued for %d question(s).', count($candidateIds));
 
         $this->markBankMappingStatus($bank, QuestionBank::MAPPING_STATUS_QUEUED, $message, [
             'mapping_mode' => $mode,
@@ -350,42 +369,37 @@ class QuestionMappingService
             return ['updated' => 0, 'errors' => []];
         }
 
-        if (!$this->hasApiKey()) {
-            return ['updated' => 0, 'errors' => [$this->missingConfigurationMessage()]];
-        }
-
         $updated = 0;
         $errors = [];
 
         foreach ($sourceQuestions->groupBy(fn (QuestionBankQuestion $question) => $this->normalizeSubjectLabel($question->subject)) as $subject => $subjectQuestions) {
             $allowedTopics = self::CURATED_TOPICS[$subject] ?? [];
+            $hasCuratedTopics = $allowedTopics !== [];
 
-            if ($allowedTopics === []) {
-                $errors[] = sprintf('No curated topic list is defined for subject "%s", so those items were skipped.', $subject);
-                continue;
+            // No curated topic list for this subject (typically an unset/
+            // undetected "General" subject) doesn't mean nothing can be
+            // classified -- cognitive level and difficulty are subject-
+            // independent. Only topic/subtopic get skipped (left null,
+            // which the confidence gate in applyClassification() already
+            // forces into pending_review); a whole bank shouldn't hard-fail
+            // over one missing piece of metadata.
+            if (!$hasCuratedTopics) {
+                $errors[] = sprintf(
+                    'Subject "%s" has no curated topic list yet, so those item(s) got difficulty and cognitive level applied automatically but no topic -- set a subject on the bank to enable topic mapping.',
+                    $subject,
+                );
             }
 
-            foreach ($subjectQuestions->chunk(self::CLASSIFICATION_BATCH_SIZE) as $chunk) {
-                $classified = $this->requestClassificationBatch($chunk->values(), $subject, $allowedTopics);
+            foreach ($subjectQuestions as $question) {
+                $cognitiveLevel = $this->classifier->classifyCognitiveLevel($question);
+                $difficulty = $this->classifier->classifyDifficulty($question);
 
-                if ($classified === []) {
-                    $errors[] = sprintf('AI mapping returned no usable results for a batch in "%s".', $subject);
-                    continue;
-                }
+                $sanitizedTopic = $hasCuratedTopics
+                    ? $this->sanitizeLocalTopic($this->classifier->classifyTopic($question, $subject), $allowedTopics)
+                    : new TopicClassification(null, null, 0.0);
 
-                $classifiedById = collect($classified)->keyBy('source_question_id');
-
-                foreach ($chunk as $question) {
-                    $result = $classifiedById->get((int) $question->id);
-
-                    if (!is_array($result)) {
-                        $errors[] = sprintf('Item #%d was not classified by the AI response.', (int) $question->item_number);
-                        continue;
-                    }
-
-                    $this->applyClassification($question, $result, $mode);
-                    $updated++;
-                }
+                $this->applyClassification($question, $sanitizedTopic, $cognitiveLevel, $difficulty, $mode);
+                $updated++;
             }
         }
 
@@ -406,7 +420,7 @@ class QuestionMappingService
 
     /**
      * Manually set/confirm a question's topic, subtopic, difficulty, and
-     * cognitive level (used by the teacher review UI to edit an AI
+     * cognitive level (used by the teacher review UI to edit a classifier
      * suggestion or tag an item by hand).
      */
     public function applyManualTags(
@@ -476,180 +490,131 @@ class QuestionMappingService
     }
 
     /**
-     * @param  array<string, mixed>  $result
+     * Normalizes a raw options payload (label/text/is_correct per row) into
+     * persistable option rows plus the derived answer_label/answer_text/
+     * question_type. "Which option counts as correct" is resolved once
+     * here and reused by both bank creation (POST /library/banks) and
+     * per-question content editing (PATCH /library/questions/{question}),
+     * so the two paths can never disagree on how an answer key is derived.
+     *
+     * @param  array<int, array{label?: string, text?: string, is_correct?: bool}>  $rawOptions
+     * @return array{options: array<int, array{sort_order: int, label: string, text: string, is_correct: bool}>, answer_label: ?string, answer_text: ?string, question_type: string}
      */
-    protected function applyClassification(QuestionBankQuestion $question, array $result, string $mode): void
-    {
-        $topicName = trim((string) ($result['topic'] ?? ''));
-        $subtopicName = trim((string) ($result['subtopic'] ?? ''));
-        $difficulty = trim((string) ($result['difficulty'] ?? ''));
-        $cognitiveLevel = trim((string) ($result['cognitive_level'] ?? ''));
+    public function resolveQuestionContent(
+        array $rawOptions,
+        ?string $requestedAnswerLabel,
+        ?string $requestedType,
+        ?string $fallbackAnswerText = null,
+    ): array {
+        $optionRows = collect($rawOptions)
+            ->map(function (array $option, int $optionIndex): array {
+                $defaultLabel = chr(ord('A') + min($optionIndex, 25));
 
-        $topic = $topicName !== '' ? $this->resolveTopic($question->subject, $topicName) : null;
-        $subtopic = $topic && $subtopicName !== '' ? $this->resolveSubtopic($topic, $subtopicName) : null;
+                return [
+                    'sort_order' => $optionIndex + 1,
+                    'label' => Str::upper(trim((string) ($option['label'] ?? $defaultLabel))),
+                    'text' => trim((string) ($option['text'] ?? '')),
+                    'is_correct' => (bool) ($option['is_correct'] ?? false),
+                ];
+            })
+            ->filter(fn (array $option): bool => $option['text'] !== '')
+            ->values();
+
+        if ($optionRows->isEmpty()) {
+            return [
+                'options' => [],
+                'answer_label' => null,
+                'answer_text' => $fallbackAnswerText,
+                'question_type' => QuestionBankQuestion::TYPE_OPEN_ENDED,
+            ];
+        }
+
+        $answerLabel = Str::upper(trim((string) $requestedAnswerLabel));
+        if ($answerLabel === '') {
+            $firstCorrectOption = $optionRows->first(fn (array $option): bool => $option['is_correct']);
+            $answerLabel = is_array($firstCorrectOption)
+                ? Str::upper(trim((string) ($firstCorrectOption['label'] ?? '')))
+                : '';
+        }
+
+        $optionRows = $optionRows->map(function (array $option) use ($answerLabel): array {
+            $option['is_correct'] = $answerLabel !== '' && $option['label'] === $answerLabel;
+
+            return $option;
+        })->values();
+
+        $resolvedCorrectOption = $optionRows->first(fn (array $option): bool => $option['is_correct']);
+        $answerText = is_array($resolvedCorrectOption) ? ($resolvedCorrectOption['text'] ?? null) : null;
+
+        $type = in_array($requestedType, QuestionBankQuestion::TYPES, true)
+            ? $requestedType
+            : QuestionBankQuestion::TYPE_MULTIPLE_CHOICE;
+
+        return [
+            'options' => $optionRows->all(),
+            'answer_label' => $answerLabel !== '' ? $answerLabel : null,
+            'answer_text' => $answerText,
+            'question_type' => $type,
+        ];
+    }
+
+    /**
+     * Writes a local classifier's guess onto the question. A low-confidence
+     * guess on ANY of the three dimensions forces tag_status into
+     * pending_review regardless of $mode, so a teacher catches weak guesses
+     * -- but a topic/subtopic/difficulty/cognitive_level is always written,
+     * never left blank, mirroring "the classifier always produces something".
+     */
+    protected function applyClassification(
+        QuestionBankQuestion $question,
+        TopicClassification $topic,
+        ScalarClassification $cognitiveLevel,
+        ScalarClassification $difficulty,
+        string $mode,
+    ): void {
+        $topicModel = $topic->topic !== null ? $this->resolveTopic($question->subject, $topic->topic) : null;
+        $subtopicModel = $topicModel && $topic->subtopic !== null
+            ? $this->resolveSubtopic($topicModel, $topic->subtopic)
+            : null;
+
+        $isLowConfidence = $topic->confidence < LocalQuestionClassifier::TOPIC_CONFIDENCE_THRESHOLD
+            || $cognitiveLevel->confidence < LocalQuestionClassifier::COGNITIVE_CONFIDENCE_THRESHOLD
+            || $difficulty->confidence < LocalQuestionClassifier::DIFFICULTY_CONFIDENCE_THRESHOLD;
 
         $question->forceFill([
-            'topic_id' => $topic?->id,
-            'subtopic_id' => $subtopic?->id,
-            'difficulty' => in_array($difficulty, QuestionBankQuestion::DIFFICULTIES, true) ? $difficulty : $question->difficulty,
-            'cognitive_level' => in_array($cognitiveLevel, QuestionBankQuestion::COGNITIVE_LEVELS, true) ? $cognitiveLevel : null,
-            'tag_status' => $mode === QuestionBank::MAPPING_MODE_AUTO
-                ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
-                : QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW,
-            'tag_source' => QuestionBankQuestion::TAG_SOURCE_AI,
+            'topic_id' => $topicModel?->id,
+            'subtopic_id' => $subtopicModel?->id,
+            'difficulty' => $difficulty->value,
+            'cognitive_level' => $cognitiveLevel->value,
+            'tag_status' => $isLowConfidence
+                ? QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW
+                : ($mode === QuestionBank::MAPPING_MODE_AUTO
+                    ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
+                    : QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW),
+            'tag_source' => QuestionBankQuestion::TAG_SOURCE_RULE_BASED,
         ])->save();
     }
 
     /**
-     * @param  Collection<int, QuestionBankQuestion>  $questions
+     * Guards against a dictionary-authoring typo or a future edit to
+     * CURATED_TOPICS that TopicKeywordDictionary wasn't updated to match --
+     * re-validates the classifier's own guess is an exact member of the
+     * allowed topic/subtopic list before it's ever persisted.
+     *
      * @param  array<string, array<int, string>>  $allowedTopics topic name => subtopic names
-     * @return array<int, array<string, mixed>>
      */
-    protected function requestClassificationBatch(Collection $questions, string $subject, array $allowedTopics): array
+    protected function sanitizeLocalTopic(TopicClassification $topic, array $allowedTopics): TopicClassification
     {
-        $apiKey = (string) config('services.openai.api_key', '');
-        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
-        $model = (string) config('services.openai.model', 'gpt-4o-mini');
-
-        if (!$this->hasApiKey()) {
-            return [];
+        if ($topic->topic === null || !array_key_exists($topic->topic, $allowedTopics)) {
+            return new TopicClassification(null, null, 0.0);
         }
 
-        $systemPrompt = <<<'PROMPT'
-You classify faculty-authored library science exam questions for a review dashboard. You do not rewrite or evaluate the questions.
+        $allowedSubtopics = $allowedTopics[$topic->topic] ?? [];
+        $subtopic = $topic->subtopic !== null && in_array($topic->subtopic, $allowedSubtopics, true)
+            ? $topic->subtopic
+            : null;
 
-Rules:
-- Return valid JSON only.
-- Classify every item listed in "questions".
-- "allowed_topics" is a map of topic name -> list of allowed subtopic names for that topic.
-- "topic" MUST be copied exactly (character for character) from the keys of "allowed_topics". Never invent a new topic name.
-- "subtopic" MUST be copied exactly from the subtopic list for the "topic" you chose. Never invent a new subtopic name, and never mix subtopics from a different topic.
-- "difficulty" must be exactly one of: easy, medium, hard.
-- "cognitive_level" must be exactly one of: recall, comprehension, application, analysis — using Bloom's-style meaning:
-  recall = restates a fact or definition; comprehension = explains why/what something means; application = applies a rule to a new situation; analysis = compares, evaluates, or judges between options.
-- Base the classification only on the question text, options, and answer provided.
-PROMPT;
-
-        $userPrompt = [
-            'subject' => $subject,
-            'allowed_topics' => $allowedTopics,
-            'questions' => $questions->map(function (QuestionBankQuestion $question): array {
-                $correctOption = $question->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
-
-                return [
-                    'source_question_id' => (int) $question->id,
-                    'question_text' => trim((string) ($question->question_text ?? '')),
-                    'answer_text' => trim((string) ($question->answer_text ?? $correctOption?->option_text ?? '')),
-                    'options' => $question->options
-                        ->map(fn (QuestionBankOption $option): string => trim((string) $option->option_text))
-                        ->filter()
-                        ->values()
-                        ->all(),
-                ];
-            })->all(),
-            'response_schema' => [
-                'questions' => [
-                    [
-                        'source_question_id' => 1,
-                        'topic' => 'one of the keys of allowed_topics, copied exactly',
-                        'subtopic' => 'one of the subtopics under the chosen topic, copied exactly',
-                        'difficulty' => 'easy | medium | hard',
-                        'cognitive_level' => 'recall | comprehension | application | analysis',
-                    ],
-                ],
-            ],
-        ];
-
-        try {
-            $response = Http::withToken($apiKey)
-                ->acceptJson()
-                ->timeout(60)
-                ->post($baseUrl . '/chat/completions', [
-                    'model' => $model,
-                    'temperature' => 0.2,
-                    'response_format' => ['type' => 'json_object'],
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user', 'content' => json_encode($userPrompt, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)],
-                    ],
-                ])
-                ->throw()
-                ->json();
-        } catch (Throwable) {
-            return [];
-        }
-
-        $content = data_get($response, 'choices.0.message.content');
-
-        if (!is_string($content) || trim($content) === '') {
-            return [];
-        }
-
-        try {
-            /** @var array<string, mixed> $decoded */
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-        } catch (Throwable) {
-            return [];
-        }
-
-        return $this->normalizeClassificationResults($decoded['questions'] ?? [], $allowedTopics);
-    }
-
-    /**
-     * @param  mixed  $rawResults
-     * @param  array<string, array<int, string>>  $allowedTopics topic name => subtopic names
-     * @return array<int, array<string, mixed>>
-     */
-    protected function normalizeClassificationResults(mixed $rawResults, array $allowedTopics): array
-    {
-        if (!is_array($rawResults)) {
-            return [];
-        }
-
-        $allowedTopicLookup = collect($allowedTopics)
-            ->keys()
-            ->mapWithKeys(fn (string $topic): array => [Str::lower(trim($topic)) => $topic])
-            ->all();
-
-        $normalized = [];
-
-        foreach ($rawResults as $result) {
-            if (!is_array($result)) {
-                continue;
-            }
-
-            $sourceQuestionId = (int) ($result['source_question_id'] ?? 0);
-            $topicKey = Str::lower(trim((string) ($result['topic'] ?? '')));
-            $topic = $allowedTopicLookup[$topicKey] ?? null;
-            $difficulty = Str::lower(trim((string) ($result['difficulty'] ?? '')));
-            $cognitiveLevel = Str::lower(trim((string) ($result['cognitive_level'] ?? '')));
-
-            if (
-                $sourceQuestionId < 1
-                || $topic === null
-                || !in_array($difficulty, QuestionBankQuestion::DIFFICULTIES, true)
-                || !in_array($cognitiveLevel, QuestionBankQuestion::COGNITIVE_LEVELS, true)
-            ) {
-                continue;
-            }
-
-            $allowedSubtopics = $allowedTopics[$topic] ?? [];
-            $subtopicLookup = collect($allowedSubtopics)
-                ->mapWithKeys(fn (string $subtopic): array => [Str::lower(trim($subtopic)) => $subtopic])
-                ->all();
-            $subtopicKey = Str::lower(trim((string) ($result['subtopic'] ?? '')));
-            $subtopic = $subtopicLookup[$subtopicKey] ?? null;
-
-            $normalized[] = [
-                'source_question_id' => $sourceQuestionId,
-                'topic' => $topic,
-                'subtopic' => $subtopic,
-                'difficulty' => $difficulty,
-                'cognitive_level' => $cognitiveLevel,
-            ];
-        }
-
-        return $normalized;
+        return new TopicClassification($topic->topic, $subtopic, $topic->confidence);
     }
 
     protected function normalizeSubjectLabel(mixed $subject): string

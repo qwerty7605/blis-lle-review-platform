@@ -142,7 +142,10 @@ async function handleSubmit() {
   min-height: 100dvh;
   display: grid;
   grid-template-columns: minmax(320px, 460px) 1fr;
-  background: #f8f9fa;
+  background:
+    radial-gradient(circle at 10% 12%, rgba(26, 35, 126, 0.12), transparent 32%),
+    radial-gradient(circle at 90% 90%, rgba(201, 168, 76, 0.24), transparent 35%),
+    var(--lnu-bg);
 }
 
 .auth-brand {
@@ -380,30 +383,7 @@ async function handleSubmit() {
   font-weight: 700;
 }
 
-.submit-btn {
-  height: 44px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.submit-btn:hover:not(:disabled) {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 12px 20px rgba(26, 35, 126, 0.35);
-  transform: translateY(-2px);
-}
-
-.submit-btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
+/* .submit-btn is shared globally, see style.css */
 
 .spinner {
   width: 16px;

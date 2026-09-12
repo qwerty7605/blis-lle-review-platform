@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AuditLog;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
+use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -331,6 +332,10 @@ class DashboardAnalyticsService
             ],
             'subject_performance' => $this->buildSubjectPerformance($submittedLatestAttempts),
             'session_performance' => $sessionPerformance,
+            // Distribution, trend, cohort topic accuracy, watchlist and room
+            // comparison -- the parts of the picture the flat averages above
+            // cannot show. Same scoping, so the numbers agree with each other.
+            'analytics' => $this->buildStaffAnalytics($staff),
             'recent_activity' => AuditLog::query()
                 ->with('actor:id,name,role')
                 ->where('actor_id', $staff->id)
@@ -1090,6 +1095,413 @@ class DashboardAnalyticsService
             ->sortBy(fn (array $subtopic): string => Str::lower((string) $subtopic['label']))
             ->values()
             ->all();
+    }
+
+    /**
+     * Class-wide analytics for the teacher Reports page: the shape of the
+     * scores, which way they are moving, which mapped topics the cohort keeps
+     * missing, and which students to talk to next.
+     *
+     * Scoped exactly like buildStaffReportOverview() -- this teacher's own
+     * exams and rooms, current (non-archived) students, and only the latest
+     * attempt per student per session, so a retake never double-counts.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildStaffAnalytics(User $staff): array
+    {
+        $latestAttemptIds = DB::table('exam_attempts')
+            ->join('exams', 'exams.id', '=', 'exam_attempts.exam_id')
+            ->join('rooms', 'rooms.id', '=', 'exam_attempts.room_id')
+            ->join('users', 'users.id', '=', 'exam_attempts.user_id')
+            ->where('exams.created_by', $staff->id)
+            ->where('rooms.created_by', $staff->id)
+            ->where('users.role', User::ROLE_STUDENT)
+            ->whereNull('users.archived_at')
+            ->groupBy('exam_attempts.exam_id', 'exam_attempts.room_id', 'exam_attempts.user_id')
+            ->selectRaw('MAX(exam_attempts.id) as id')
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values();
+
+        if ($latestAttemptIds->isEmpty()) {
+            return $this->emptyStaffAnalytics();
+        }
+
+        $attempts = ExamAttempt::query()
+            ->whereIn('exam_attempts.id', $latestAttemptIds->all())
+            ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
+            ->with([
+                'exam:id,title,subject',
+                'room:id,name,code',
+                'student:id,name,student_id',
+            ])
+            ->get();
+
+        if ($attempts->isEmpty()) {
+            return $this->emptyStaffAnalytics();
+        }
+
+        $submittedIds = $attempts->pluck('id')->map(fn ($id): int => (int) $id)->values();
+
+        return [
+            'score_distribution' => $this->buildScoreDistribution($attempts),
+            'trend' => $this->buildStaffScoreTrend($attempts),
+            'topic_performance' => $this->buildCohortTopicPerformance($submittedIds),
+            'students_needing_attention' => $this->buildStudentRanking($attempts, 'asc', 6),
+            'top_performers' => $this->buildStudentRanking($attempts, 'desc', 3),
+            'room_comparison' => $this->buildRoomComparison($attempts),
+            'graded_attempts' => (int) $attempts->count(),
+            'students_graded' => (int) $attempts->pluck('user_id')->unique()->count(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyStaffAnalytics(): array
+    {
+        return [
+            'score_distribution' => [],
+            'trend' => [],
+            'topic_performance' => [],
+            'students_needing_attention' => [],
+            'top_performers' => [],
+            'room_comparison' => [],
+            'graded_attempts' => 0,
+            'students_graded' => 0,
+        ];
+    }
+
+    /**
+     * Score bands for the distribution histogram. Split at the passing mark so
+     * "how many cleared it" is readable off the chart without doing sums.
+     */
+    private const SCORE_BANDS = [
+        ['label' => '0-59', 'min' => 0.0, 'max' => 59.9999],
+        ['label' => '60-74', 'min' => 60.0, 'max' => 74.9999],
+        ['label' => '75-84', 'min' => 75.0, 'max' => 84.9999],
+        ['label' => '85-100', 'min' => 85.0, 'max' => 100.0],
+    ];
+
+    /** Below this many answered items a topic is one student's bad day, not a class-wide signal. */
+    private const COHORT_TOPIC_MIN_ANSWERS = 3;
+
+    /**
+     * @param  Collection<int, ExamAttempt>  $attempts
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildScoreDistribution(Collection $attempts): array
+    {
+        $scores = $this->extractScores($attempts);
+        $total = $scores->count();
+
+        return collect(self::SCORE_BANDS)
+            ->map(function (array $band) use ($scores, $total): array {
+                $count = $scores
+                    ->filter(fn (float $score): bool => $score >= $band['min'] && $score <= $band['max'])
+                    ->count();
+
+                return [
+                    'label' => $band['label'],
+                    'count' => $count,
+                    'percent' => $total > 0 ? round(($count / $total) * 100, 1) : 0.0,
+                    'is_passing' => $band['min'] >= self::PASSING_SCORE,
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Average score per exam session, oldest to newest -- answers "is the
+     * cohort improving?", which a single overall average cannot.
+     *
+     * @param  Collection<int, ExamAttempt>  $attempts
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildStaffScoreTrend(Collection $attempts): array
+    {
+        $sessions = $attempts
+            ->groupBy(fn (ExamAttempt $attempt) => $this->sessionKey((int) $attempt->exam_id, (int) $attempt->room_id))
+            ->map(function (Collection $sessionAttempts): array {
+                $scores = $this->extractScores($sessionAttempts);
+                $first = $sessionAttempts->first();
+
+                return [
+                    'exam_id' => (int) $first->exam_id,
+                    'room_id' => (int) $first->room_id,
+                    'exam_title' => (string) ($first->exam?->title ?? 'Exam'),
+                    'room_name' => (string) ($first->room?->name ?? ''),
+                    'average_score_percent' => $scores->isNotEmpty() ? round((float) $scores->avg(), 2) : null,
+                    'graded_count' => $scores->count(),
+                    'sort_key' => $sessionAttempts
+                        ->map(fn (ExamAttempt $attempt) => $this->attemptSubmissionTimestamp($attempt))
+                        ->filter()
+                        ->max(),
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['average_score_percent'] !== null)
+            ->sortBy('sort_key')
+            ->values();
+
+        return $sessions
+            ->slice(-8)
+            ->values()
+            ->map(function (array $row, int $index): array {
+                unset($row['sort_key']);
+                $row['label'] = 'S' . ($index + 1);
+
+                return $row;
+            })
+            ->all();
+    }
+
+    /**
+     * Per-topic accuracy across every graded answer the cohort submitted --
+     * the class-wide counterpart to the student study plan, and the payoff
+     * for the per-item topic mapping.
+     *
+     * @param  Collection<int, int>  $attemptIds
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildCohortTopicPerformance(Collection $attemptIds): array
+    {
+        $rows = DB::table('exam_attempt_answers')
+            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
+            ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
+            ->whereIn('exam_attempt_answers.exam_attempt_id', $attemptIds->all())
+            ->selectRaw("
+                topics.id as topic_id,
+                topics.name as label,
+                COALESCE(NULLIF(question_bank_questions.subject, ''), topics.subject, 'Uncategorized') as subject,
+                COUNT(*) as attempted_count,
+                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count
+            ")
+            ->groupBy('topics.id', 'topics.name', 'topics.subject', 'question_bank_questions.subject')
+            ->get();
+
+        return collect($rows)
+            ->map(function ($row): array {
+                $attempted = (int) ($row->attempted_count ?? 0);
+                $correct = (int) ($row->correct_count ?? 0);
+
+                return [
+                    'topic_id' => (int) ($row->topic_id ?? 0),
+                    'label' => (string) ($row->label ?? 'Untitled Topic'),
+                    'subject' => (string) ($row->subject ?? 'Uncategorized'),
+                    'attempted_count' => $attempted,
+                    'correct_count' => $correct,
+                    'score' => $attempted > 0 ? round(($correct / $attempted) * 100, 2) : null,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['score'] !== null
+                && $row['attempted_count'] >= self::COHORT_TOPIC_MIN_ANSWERS)
+            ->sortBy('score')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Students ranked by their average across this teacher's sessions. `asc`
+     * additionally keeps only those below the passing mark, so the watchlist
+     * never pads itself with students who are doing fine.
+     *
+     * @param  Collection<int, ExamAttempt>  $attempts
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildStudentRanking(Collection $attempts, string $direction, int $limit): array
+    {
+        $rows = $attempts
+            ->groupBy('user_id')
+            ->map(function (Collection $studentAttempts): array {
+                $scores = $this->extractScores($studentAttempts);
+                $student = $studentAttempts->first()?->student;
+                $passing = $scores->filter(fn (float $score): bool => $score >= self::PASSING_SCORE)->count();
+
+                $weakestSubject = $studentAttempts
+                    ->groupBy(fn (ExamAttempt $attempt) => $this->normalizeSubjectLabel($attempt->exam?->subject))
+                    ->map(fn (Collection $subjectAttempts) => $this->extractScores($subjectAttempts)->avg())
+                    ->filter(fn ($average): bool => !is_null($average))
+                    ->sort()
+                    ->keys()
+                    ->first();
+
+                return [
+                    'id' => (int) ($student?->id ?? 0),
+                    'name' => (string) ($student?->name ?? 'Unknown student'),
+                    'student_id' => $student?->student_id,
+                    'average_score_percent' => $scores->isNotEmpty() ? round((float) $scores->avg(), 1) : null,
+                    'attempts_submitted' => $scores->count(),
+                    'pass_rate_percent' => $scores->isNotEmpty()
+                        ? round(($passing / $scores->count()) * 100, 1)
+                        : null,
+                    'weakest_subject' => $weakestSubject,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['average_score_percent'] !== null)
+            ->values();
+
+        // Both directions are gated on the passing mark, not just ranked: a
+        // top-N of a two-student cohort would otherwise list a 37% average
+        // under "top performers", and the bottom-N would pad itself with
+        // students who are doing fine. An empty list is the honest answer.
+        if ($direction === 'asc') {
+            $rows = $rows
+                ->filter(fn (array $row): bool => (float) $row['average_score_percent'] < self::PASSING_SCORE)
+                ->sortBy('average_score_percent');
+        } else {
+            $rows = $rows
+                ->filter(fn (array $row): bool => (float) $row['average_score_percent'] >= self::PASSING_SCORE)
+                ->sortByDesc('average_score_percent');
+        }
+
+        return $rows->take($limit)->values()->all();
+    }
+
+    /**
+     * Room-against-room comparison, strongest first -- the view that shows a
+     * section falling behind the others rather than an average hiding it.
+     *
+     * @param  Collection<int, ExamAttempt>  $attempts
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildRoomComparison(Collection $attempts): array
+    {
+        return $attempts
+            ->groupBy('room_id')
+            ->map(function (Collection $roomAttempts): array {
+                $scores = $this->extractScores($roomAttempts);
+                $room = $roomAttempts->first()?->room;
+                $passing = $scores->filter(fn (float $score): bool => $score >= self::PASSING_SCORE)->count();
+
+                return [
+                    'room_id' => (int) ($room?->id ?? 0),
+                    'room_name' => (string) ($room?->name ?? 'Room'),
+                    'room_code' => $room?->code,
+                    'students_graded' => (int) $roomAttempts->pluck('user_id')->unique()->count(),
+                    'graded_attempts' => $scores->count(),
+                    'average_score_percent' => $scores->isNotEmpty() ? round((float) $scores->avg(), 1) : null,
+                    'pass_rate_percent' => $scores->isNotEmpty()
+                        ? round(($passing / $scores->count()) * 100, 1)
+                        : null,
+                ];
+            })
+            ->filter(fn (array $row): bool => $row['average_score_percent'] !== null)
+            ->sortByDesc('average_score_percent')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Ranked "what should I study next" queue: the weakest mapped areas the
+     * student has actually answered questions in, worst first.
+     *
+     * Each entry resolves to the most specific level that has data -- a weak
+     * subtopic beats the topic it sits under, the same precedence
+     * buildWeakAreaRecommendation() uses -- so one soft spot is never listed
+     * twice at two different depths.
+     *
+     * topic_id/subtopic_id are the Review Bot link target, not just labels:
+     * an area whose own subtopic has no published practice questions but
+     * whose parent topic does is deliberately downgraded to a topic-level
+     * link, so the button still lands on something answerable instead of an
+     * empty session. review_ready is false only when neither level has any.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildStudyPlan(User $student, int $limit = 5): array
+    {
+        $subtopicRows = collect($this->buildSubtopicWeaknessPerformance($student));
+        $topicRows = collect($this->buildTopicWeaknessPerformance($student));
+
+        $subtopicCoveredTopicIds = $subtopicRows
+            ->pluck('topic_id')
+            ->map(fn ($topicId): int => (int) $topicId)
+            ->filter()
+            ->unique();
+
+        $entries = $subtopicRows
+            ->map(fn (array $row): array => [
+                'level' => 'subtopic',
+                'label' => (string) $row['label'],
+                'subject' => (string) $row['subject'],
+                'topic' => (string) $row['topic'],
+                'topic_id' => ((int) $row['topic_id']) ?: null,
+                'subtopic_id' => ((int) $row['subtopic_id']) ?: null,
+                'attempted_count' => (int) $row['attempted_count'],
+                'correct_count' => (int) $row['correct_count'],
+                'score' => $row['score'],
+            ])
+            ->concat(
+                $topicRows
+                    ->reject(fn (array $row): bool => $subtopicCoveredTopicIds->contains((int) $row['topic_id']))
+                    ->map(fn (array $row): array => [
+                        'level' => 'topic',
+                        'label' => (string) $row['label'],
+                        'subject' => (string) $row['subject'],
+                        'topic' => (string) $row['label'],
+                        'topic_id' => ((int) $row['topic_id']) ?: null,
+                        'subtopic_id' => null,
+                        'attempted_count' => (int) $row['attempted_count'],
+                        'correct_count' => (int) $row['correct_count'],
+                        'score' => $row['score'],
+                    ])
+            )
+            ->filter(fn (array $row): bool => $row['score'] !== null
+                && (float) $row['score'] < self::PASSING_SCORE
+                && $row['attempted_count'] > 0)
+            // Weakest first, and where two areas score the same the one with
+            // more answered items leads -- a 0% built on six questions is a
+            // firmer finding than a 0% built on one.
+            ->sort(function (array $left, array $right): int {
+                $byScore = (float) $left['score'] <=> (float) $right['score'];
+
+                return $byScore !== 0
+                    ? $byScore
+                    : $right['attempted_count'] <=> $left['attempted_count'];
+            })
+            ->take($limit)
+            ->values();
+
+        if ($entries->isEmpty()) {
+            return [];
+        }
+
+        $readyTopicIds = $this->publishedReviewBotIds('topic_id');
+        $readySubtopicIds = $this->publishedReviewBotIds('subtopic_id');
+
+        return $entries
+            ->map(function (array $row) use ($readyTopicIds, $readySubtopicIds): array {
+                $hasSubtopicSet = $row['subtopic_id'] !== null && $readySubtopicIds->contains($row['subtopic_id']);
+                $hasTopicSet = $row['topic_id'] !== null && $readyTopicIds->contains($row['topic_id']);
+
+                if (!$hasSubtopicSet) {
+                    $row['subtopic_id'] = null;
+                }
+
+                $row['review_ready'] = $hasSubtopicSet || $hasTopicSet;
+
+                return $row;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Distinct topic/subtopic ids that already have at least one published
+     * Review Bot question behind them.
+     *
+     * @return Collection<int, int>
+     */
+    private function publishedReviewBotIds(string $column): Collection
+    {
+        return DB::table('question_bank_questions')
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->whereNotNull($column)
+            ->distinct()
+            ->pluck($column)
+            ->map(fn ($id): int => (int) $id);
     }
 
     /**

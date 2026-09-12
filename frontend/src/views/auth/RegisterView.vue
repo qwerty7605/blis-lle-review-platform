@@ -843,30 +843,7 @@ async function handleSubmit() {
   font-weight: 700;
 }
 
-.submit-btn {
-  height: 44px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.submit-btn:hover:not(:disabled) {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
-  transform: translateY(-1px);
-}
-
-.submit-btn:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
+/* .submit-btn is shared globally, see style.css */
 
 .spinner {
   width: 16px;

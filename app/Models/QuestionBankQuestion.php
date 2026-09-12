@@ -23,6 +23,9 @@ class QuestionBankQuestion extends Model
     public const TAG_STATUS_CONFIRMED = 'confirmed';
     public const TAG_SOURCE_FACULTY = 'faculty';
     public const TAG_SOURCE_AI = 'ai';
+
+    /** Tagged by the free local keyword/heuristic classifier (see LocalQuestionClassifier), not by a real AI call. */
+    public const TAG_SOURCE_RULE_BASED = 'rule_based';
     public const STATUS_DRAFT = 'draft';
     public const STATUS_PUBLISHED = 'published';
 

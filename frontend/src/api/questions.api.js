@@ -23,8 +23,16 @@ class QuestionsApi {
     return http.delete(`/library/banks/${bankId}`)
   }
 
-  listTopics(subject) {
-    return http.get('/library/topics', { params: subject ? { subject } : {} })
+  updateBank(bankId, payload) {
+    return http.patch(`/library/banks/${bankId}`, payload)
+  }
+
+  listTopics(subject, topic) {
+    const params = {}
+    if (subject) params.subject = subject
+    if (topic) params.topic = topic
+
+    return http.get('/library/topics', { params })
   }
 
   queueMapping(bankId, mode) {
@@ -39,8 +47,8 @@ class QuestionsApi {
     return http.patch(`/library/banks/${bankId}/tags/status`)
   }
 
-  updateQuestionTags(questionId, payload) {
-    return http.patch(`/library/questions/${questionId}/tags`, payload)
+  updateQuestion(questionId, payload) {
+    return http.patch(`/library/questions/${questionId}`, payload)
   }
 }
 

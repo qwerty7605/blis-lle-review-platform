@@ -1045,8 +1045,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 18px;
-  margin-bottom: 24px;
+  padding: 12px 18px;
+  margin-bottom: 14px;
   border-bottom: 1px solid rgba(13, 21, 71, 0.12);
 }
 
@@ -1059,7 +1059,7 @@
 
 .room-page-title h3 {
   margin: 0;
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .add-room-btn {
@@ -1131,10 +1131,10 @@
 }
 
 .room-detail-panel {
-  padding: 24px;
+  padding: 18px 20px;
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 12px;
   background: transparent;
 }
 
@@ -1148,14 +1148,14 @@
 
 .room-detail-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   position: relative;
   border-radius: 14px;
   background: linear-gradient(132deg, #244a9e 0%, #1e3f88 100%);
   box-shadow: 0 4px 12px rgba(10, 25, 69, 0.14);
-  padding: 18px 24px;
+  padding: 12px 20px;
 }
 
 .room-detail-head-copy {
@@ -1166,7 +1166,7 @@
 
 .room-detail-head h4 {
   margin: 0;
-  font-size: clamp(24px, 3.2vw, 34px);
+  font-size: clamp(19px, 1.8vw, 24px);
   line-height: 1.2;
   font-weight: 700;
   color: #f4f7ff;
@@ -1256,13 +1256,9 @@
 }
 
 .room-detail-toolbar .danger-btn {
+  /* Only the border needs strengthening for contrast against the dark
+     toolbar -- background/color/hover already come from .danger-btn. */
   border-color: rgba(198, 40, 40, 0.42);
-  background: #ff4f52;
-  color: #fff;
-}
-
-.room-detail-toolbar .danger-btn:hover:not(:disabled) {
-  background: #ea4348;
 }
 
 .room-detail-toolbar .room-leave-btn {
@@ -1289,13 +1285,9 @@
 }
 
 .room-detail-head-actions .danger-btn {
+  /* Only the border needs strengthening for contrast against the dark
+     header -- background/color/hover already come from .danger-btn. */
   border-color: rgba(198, 40, 40, 0.42);
-  background: #ff4f52;
-  color: #fff;
-}
-
-.room-detail-head-actions .danger-btn:hover:not(:disabled) {
-  background: #ea4348;
 }
 
 .room-head-leave-btn {
@@ -1322,24 +1314,24 @@
   border-radius: 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(253, 252, 247, 0.96));
   box-shadow: 0 8px 18px rgba(13, 21, 71, 0.05);
-  padding: 16px;
+  padding: 14px;
 }
 
 .room-section-head h5 {
   margin: 0;
-  font-size: 21px;
+  font-size: 17px;
   line-height: 1.2;
   color: var(--lnu-navy-deep);
 }
 
 .room-section-head {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .exam-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
 }
 
 .exam-card {
@@ -1348,12 +1340,12 @@
   background: #ffffff;
   color: #3f3a3d;
   text-align: left;
-  padding: 24px;
-  min-height: 146px;
+  padding: 14px;
+  min-height: 116px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1375,16 +1367,16 @@
 
 .exam-card-title {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
   color: #3f3a3d;
 }
 
 .exam-card-meta,
 .exam-card-date {
-  margin: 8px 0 0;
-  font-size: 14px;
+  margin: 4px 0 0;
+  font-size: 12px;
   color: #666;
 }
 
@@ -1401,18 +1393,20 @@
 .exam-start-btn {
   width: 100%;
   justify-content: center;
+  height: 36px;
+  font-size: 13px;
 }
 
-.exam-start-btn.resume {
-  background: linear-gradient(135deg, #1b4fc0, #2b6ae0);
-}
-
+/* resume: the default action state, so it just takes .primary-btn's own
+   navy gradient -- no override needed. retake/review get their own on-
+   brand tones instead of the unrelated blue/teal/grey this used to be. */
 .exam-start-btn.retake {
-  background: linear-gradient(135deg, #174f44, #1f6f61);
+  background: linear-gradient(135deg, var(--lnu-gold), #b8923d);
+  color: var(--lnu-navy-deep);
 }
 
 .exam-start-btn.review {
-  background: linear-gradient(135deg, #5d647a, #4b5266);
+  background: linear-gradient(135deg, #6b7690, #545e78);
   color: rgba(255, 255, 255, 0.95);
 }
 
@@ -1733,7 +1727,7 @@
 }
 
 .exam-result-hero.is-passing {
-  background: linear-gradient(135deg, #1a237e, #2846af 72%, #d1a43c);
+  background: linear-gradient(135deg, var(--lnu-navy), #2846af 72%, #d1a43c);
 }
 
 .exam-result-hero.is-review {
@@ -1921,7 +1915,7 @@
 
 .exam-feedback-icon.is-strength {
   background: rgba(46, 125, 50, 0.14);
-  color: #2e7d32;
+  color: var(--lnu-success);
 }
 
 .exam-feedback-icon.is-readiness {
@@ -2093,11 +2087,11 @@
 }
 
 .exam-score-bar-fill.neutral {
-  background: #c9a84c;
+  background: var(--lnu-gold);
 }
 
 .exam-score-bar-fill.gold {
-  background: #c9a84c;
+  background: var(--lnu-gold);
 }
 
 .exam-score-bar-fill.danger {
@@ -2395,9 +2389,9 @@
   border: 1px solid rgba(13, 21, 71, 0.12);
   border-radius: 12px;
   background: #ffffff;
-  padding: 16px;
+  padding: 12px 14px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
@@ -2421,14 +2415,14 @@
 
 .room-roster-card-copy strong {
   display: block;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--lnu-navy-deep);
 }
 
 .room-roster-card-copy p {
   margin: 0;
   color: var(--lnu-text-muted);
-  font-size: 14px;
+  font-size: 13px;
   word-break: break-word;
 }
 
@@ -2446,7 +2440,7 @@
   border: 1px solid rgba(198, 40, 40, 0.28);
   border-radius: 8px;
   background: rgba(198, 40, 40, 0.1);
-  color: #c62828;
+  color: var(--lnu-danger);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2565,8 +2559,12 @@
   box-shadow: var(--focus-ring);
 }
 
+/* No font-family override here -- this input used to force 'Courier New'
+   monospace, the one place in the app not using the shared body font
+   (see style.css). letter-spacing/uppercase stay: spacing out the
+   characters is still useful for a code you're reading back digit by
+   digit, it just doesn't need a different typeface to do that. */
 .text-input.code {
-  font-family: 'Courier New', monospace;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -2617,7 +2615,7 @@
   height: 34px;
   border: 1px solid rgba(198, 40, 40, 0.3);
   border-radius: 9px;
-  background: #ff4f52;
+  background: var(--lnu-danger-strong);
   color: #fff;
   padding: 0 12px;
   display: inline-flex;
@@ -2627,7 +2625,7 @@
 }
 
 .danger-btn:hover:not(:disabled) {
-  background: #ec3e42;
+  background: var(--lnu-danger-strong-hover);
   border-color: rgba(198, 40, 40, 0.4);
 }
 
@@ -5136,5 +5134,1149 @@
 
   .legend-item {
     font-size: 12px;
+  }
+}
+
+/* =======================================================================
+   SHARED UI REFRESH
+   =======================================================================
+   Appended last on purpose: these rules re-style the shared primitives the
+   staff pages are almost entirely built from (LibraryView, ExamsView,
+   ReportsView, StudentsView and LicensureResultsView carry little or no CSS
+   of their own), so the staff side picks up the student side's visual
+   language without a single template change -- no behaviour touched.
+
+   Everything here is single-class specificity, so the contextual overrides
+   further up the file (`.modal-actions .ghost-btn`, `.report-action-grid
+   .ghost-btn`, and the responsive blocks) still win, and any page's own
+   `<style scoped>` still wins over all of it (dashboard.css is imported
+   before a component's own styles).
+
+   What it fixes:
+     - a gold wash sitting on every card, ghost button, pill and modal,
+       which was the whole of the "dated" feeling
+     - controls at three different heights (40 / 34 / 34) sitting in a row
+     - "neutral" pills rendering gold, so no pill read as neutral
+     - a 42px heading inside empty states
+     - table headers in a blue-grey gradient with no type hierarchy
+   ======================================================================= */
+
+/* ---- Surfaces ---- */
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  padding: 16px 17px;
+}
+
+.room-shell-card {
+  background: var(--surface);
+  border-color: var(--border-soft);
+  border-radius: 14px;
+}
+
+/* ---- Section heads ---- */
+.surface-head {
+  margin-bottom: 13px;
+}
+
+.surface-head h3,
+.surface-head-copy h3 {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.surface-head-copy p {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.room-page-head {
+  padding: 13px 16px;
+  border-bottom-color: var(--border-soft);
+}
+
+.room-page-title h3 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* ---- Controls: one height, one radius, one type size ---- */
+.primary-btn,
+.ghost-btn,
+.danger-btn {
+  height: var(--control-height);
+  border-radius: var(--control-radius);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* White, not gold: gold-on-navy read as a decorative badge rather than the
+   page's primary action, and the student side already uses white here. */
+.primary-btn {
+  color: #ffffff;
+  padding: 0 15px;
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.18);
+}
+
+.ghost-btn {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+  padding: 0 13px;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  background: #f2f5fd;
+  border-color: rgba(26, 35, 126, 0.34);
+  color: var(--lnu-navy);
+}
+
+.danger-btn {
+  padding: 0 13px;
+}
+
+.primary-btn:focus-visible,
+.ghost-btn:focus-visible,
+.danger-btn:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---- Forms ---- */
+.field-stack {
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+}
+
+.field-hint {
+  font-size: 11.5px;
+}
+
+.text-input {
+  height: var(--control-height);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--control-radius);
+  background: var(--surface);
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.text-input::placeholder {
+  color: #8b97ad;
+}
+
+.text-input:hover:not(:focus):not(:disabled) {
+  border-color: rgba(26, 35, 126, 0.34);
+}
+
+.text-input:focus {
+  border-color: var(--lnu-navy);
+  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.12);
+}
+
+/* Re-asserted after .text-input above, which would otherwise clamp every
+   textarea (they carry both classes) to the 36px control height. */
+.textarea-input {
+  height: auto;
+  padding: 10px 12px;
+  line-height: 1.55;
+}
+
+.check-item {
+  font-size: 12.5px;
+  gap: 7px;
+}
+
+.check-item input {
+  accent-color: var(--lnu-navy);
+}
+
+/* ---- Pills ---- */
+.pill {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* neutral was the same gold as .pill.gold, so a status row of "neutral" and
+   "gold" pills rendered as one indistinguishable tan block. */
+.pill.neutral {
+  background: rgba(13, 21, 71, 0.07);
+  color: #4a5570;
+}
+
+.pill.navy {
+  background: rgba(26, 35, 126, 0.12);
+  color: var(--lnu-navy-deep);
+}
+
+.pill.success {
+  background: rgba(46, 125, 50, 0.14);
+  color: #226b3f;
+}
+
+.pill.danger {
+  background: rgba(198, 40, 40, 0.12);
+  color: #a8302f;
+}
+
+.pill.gold {
+  background: rgba(201, 168, 76, 0.22);
+  color: #7a5512;
+}
+
+/* ---- Feedback banners ---- */
+.feedback {
+  align-items: flex-start;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---- Modals ---- */
+.modal-backdrop {
+  background: rgba(6, 10, 30, 0.5);
+  backdrop-filter: blur(2px);
+}
+
+.modal-card {
+  border-radius: 16px;
+  border-color: var(--border-soft);
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(13, 21, 71, 0.22);
+  padding: 18px;
+  gap: 13px;
+}
+
+.modal-head h4 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.modal-close {
+  width: 30px;
+  height: 30px;
+  border-color: var(--border-soft);
+}
+
+.modal-actions {
+  gap: 8px;
+}
+
+/* ---- Toolbars / list padding (aligned to one 16px gutter) ---- */
+.management-toolbar {
+  padding: 12px 16px;
+  gap: 8px;
+  background: var(--surface-muted);
+  border-bottom-color: var(--border-soft);
+}
+
+.management-list {
+  padding: 12px 16px;
+}
+
+/* ---- Data tables ---- */
+.directory-table-wrap {
+  margin: 12px 16px;
+  border-color: var(--border-soft);
+  border-radius: 12px;
+}
+
+.directory-table {
+  font-size: 12.5px;
+}
+
+.directory-table th,
+.directory-table td {
+  padding: 9px 12px;
+  vertical-align: middle;
+  border-bottom-color: var(--border-soft);
+}
+
+/* Flat muted header with real label typography, instead of a blue-grey
+   gradient carrying the same weight and size as the data under it. */
+.directory-table thead th {
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--ink-muted);
+}
+
+.directory-sort-btn {
+  padding: 9px 12px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.directory-table tbody tr:hover td {
+  background: rgba(26, 35, 126, 0.035);
+}
+
+.directory-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.directory-table-name-cell strong {
+  font-size: 13px;
+}
+
+/* ---- Empty states ---- */
+.room-empty-state {
+  min-height: 220px;
+}
+
+/* 42px was display-title size for what is a one-line "nothing here yet"
+   message, and it out-shouted every real heading on the page. */
+.room-empty-state h4 {
+  margin: 10px 0 4px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.room-empty-state p {
+  max-width: 42ch;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+/* ---- Key-metric tiles ----
+   The first thing a teacher reads on Reports, so the number leads: the
+   label becomes a small uppercase caption above a large figure, rather
+   than both sitting at the same weight inside a beige gradient. */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  padding: 13px 14px;
+  gap: 11px;
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.stat-label {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.stat-value {
+  margin: 2px 0 0;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+@media (max-width: 1100px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Section headers ----
+   The bare "label over loose cards" header the student pages use, promoted
+   to a shared primitive so both sides group content the same way instead of
+   each page inventing its own heading treatment. */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 2px;
+  margin-bottom: 10px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.section-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.section-head .ghost-btn {
+  margin-left: auto;
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+.section-count + .ghost-btn {
+  margin-left: 8px;
+}
+
+/* Two equal panels that collapse to one column on a laptop. */
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .insight-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =======================================================================
+   EXAM OVERLAY REFRESH
+   =======================================================================
+   Every .exam-* class below is used by exactly one template (the exam
+   attempt overlay teleported from student/RoomsView.vue), so these rules
+   refine the originals higher up the file rather than competing with any
+   other page.
+
+   Goal: under exam conditions the question and its choices are the only
+   things that should pull the eye. The original carried six gradients (a
+   gold radial on the backdrop, plus shell, head, sidebar, card and footer
+   washes), a 30px exam title sitting above the question, answer choices in
+   two columns, and a timer rendered as an ordinary pill among four
+   identical ones. All of that is corrected here.
+
+   Layout contract: the shell is a fixed-height grid and only two things
+   scroll, each inside its own container -- the question palette and the
+   question card. Header, footer and legend never move.
+   ======================================================================= */
+
+/* Plain scrim: a decorative gold wash behind a timed exam is noise. */
+.exam-attempt-backdrop {
+  background: rgba(9, 14, 40, 0.82);
+  backdrop-filter: blur(3px);
+}
+
+.exam-attempt-shell {
+  border-radius: 16px;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(4, 8, 26, 0.4);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* ---- Header: identity left, the two live numbers right ---- */
+.exam-attempt-head {
+  align-items: center;
+  gap: 14px;
+  padding: 11px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.exam-head-copy {
+  min-width: 0;
+}
+
+/* 30px for a title you read once, directly above the question you read
+   twenty times, was the wrong way round. */
+.exam-attempt-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-attempt-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-head-meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.exam-progress {
+  display: grid;
+  gap: 4px;
+  min-width: 124px;
+}
+
+.exam-progress-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exam-progress-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.exam-progress-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.exam-progress-value em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.exam-progress-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.1);
+  overflow: hidden;
+}
+
+.exam-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lnu-navy), var(--lnu-navy-light));
+  transition: width 0.3s ease;
+}
+
+/* ---- Timer: the one element that earns emphasis ---- */
+.exam-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 35, 126, 0.2);
+  background: rgba(26, 35, 126, 0.06);
+  color: var(--lnu-navy-deep);
+}
+
+/* tabular-nums stops the whole chip re-flowing every second as digit
+   widths change, which is distracting in peripheral vision. */
+.exam-timer-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.exam-timer.is-warning {
+  border-color: rgba(205, 151, 43, 0.45);
+  background: #fff6e2;
+  color: #8a6117;
+}
+
+.exam-timer.is-critical {
+  border-color: rgba(198, 40, 40, 0.45);
+  background: #fdecec;
+  color: #a8302f;
+  animation: exam-timer-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes exam-timer-pulse {
+  50% { border-color: rgba(198, 40, 40, 0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-timer.is-critical {
+    animation: none;
+  }
+}
+
+/* ---- Sidebar: legend pinned, palette scrolls on its own ---- */
+.exam-attempt-layout {
+  padding: 14px 16px 16px;
+  gap: 14px;
+  grid-template-columns: minmax(212px, 252px) minmax(0, 1fr);
+}
+
+.exam-attempt-sidebar {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  padding: 11px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.exam-status-legend {
+  flex-shrink: 0;
+  gap: 5px 9px;
+}
+
+.legend-item {
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.exam-question-jump.immersive {
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+/* ---- Palette states: current / answered / blank / pending / bookmarked ---- */
+.exam-jump-btn {
+  min-height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+/* Lifting each cell on hover made the whole grid twitch while scanning it. */
+.exam-jump-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.45);
+  background: #f2f5fd;
+}
+
+.exam-jump-btn.pre-current,
+.exam-jump-btn.is-current {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.22);
+}
+
+.exam-jump-btn.pre-answered {
+  background: #e8f6ee;
+  border-color: #93cfae;
+  color: #1e6943;
+}
+
+.exam-jump-btn.pre-blank {
+  background: #fdeeed;
+  border-color: #f0a9a7;
+  color: #a8302f;
+}
+
+.exam-jump-btn.pre-pending {
+  background: var(--surface);
+  border-color: var(--border-soft);
+  color: var(--ink-muted);
+}
+
+.exam-jump-btn.post-correct {
+  background: #e8f6ee;
+  border-color: #93cfae;
+  color: #1e6943;
+}
+
+.exam-jump-btn.post-incorrect {
+  background: #fdeeed;
+  border-color: #f0a9a7;
+  color: #a8302f;
+}
+
+.exam-jump-btn.post-missed {
+  background: #f1edef;
+  border-color: #cbb8bf;
+  color: #7e5964;
+}
+
+.exam-jump-btn.post-answered {
+  background: #eaf2fb;
+  border-color: #a6c6e4;
+  color: #225b8c;
+}
+
+/* A flat corner wedge instead of the previous clip-path ribbon plus a
+   separate 2px pseudo-element pin -- same signal, far less machinery. */
+.exam-jump-btn.has-bookmark::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 12px solid #e8a71c;
+  border-left: 12px solid transparent;
+  border-radius: 0;
+  clip-path: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.exam-jump-btn.has-bookmark::before {
+  content: none;
+}
+
+/* ---- Question card: the focus of the screen ---- */
+.exam-attempt-card.immersive {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  padding: 18px clamp(16px, 2vw, 26px);
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.exam-attempt-card.immersive .surface-head {
+  margin-bottom: 0;
+}
+
+.exam-attempt-question-text {
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.exam-question-list {
+  font-size: clamp(14px, 1.3vw, 16px);
+  line-height: 1.55;
+}
+
+/* ---- Answer choices ---- */
+/* One column. Two forced horizontal eye movement between choices and made
+   long options wrap against short ones, which is exactly the reading cost
+   you do not want under time pressure. */
+.exam-option-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  max-width: 860px;
+}
+
+.exam-option-card {
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  border-radius: 11px;
+  font-size: 14.5px;
+}
+
+.exam-option-card:hover {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.4);
+  background: #f7f9ff;
+}
+
+.exam-option-card:focus-within {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* The letter badge is the selection indicator, so the native control is
+   hidden visually but left in the tree -- keyboard, radio-group naming and
+   screen-reader semantics all still come from the real input. */
+.exam-option-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.exam-option-letter {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 21, 71, 0.06);
+  border: 1px solid var(--border-soft);
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.exam-option-text {
+  min-width: 0;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.exam-option-card.selected {
+  border-color: var(--lnu-navy);
+  background: rgba(26, 35, 126, 0.06);
+  box-shadow: inset 0 0 0 1px var(--lnu-navy);
+}
+
+.exam-option-card.selected .exam-option-letter {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+}
+
+.exam-option-card.submitted-correct {
+  border-color: #7bc99a;
+  background: #eaf8f0;
+  box-shadow: inset 0 0 0 1px #7bc99a;
+}
+
+.exam-option-card.submitted-correct .exam-option-letter {
+  background: #2f8a4f;
+  border-color: #2f8a4f;
+  color: #fff;
+}
+
+.exam-option-card.submitted-incorrect {
+  border-color: #e98d8a;
+  background: #fff1f0;
+  box-shadow: inset 0 0 0 1px #e98d8a;
+}
+
+.exam-option-card.submitted-incorrect .exam-option-letter {
+  background: #c9433d;
+  border-color: #c9433d;
+  color: #fff;
+}
+
+.exam-option-card.submitted-neutral {
+  background: var(--surface-muted);
+  box-shadow: none;
+}
+
+/* ---- Footer ---- */
+.exam-attempt-footer {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  padding: 9px 12px;
+  gap: 8px;
+}
+
+.exam-attempt-footer .bookmark-toggle-btn {
+  height: var(--control-height);
+  min-width: 0;
+  border-radius: var(--control-radius);
+  border-color: var(--border-strong);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.exam-attempt-footer .bookmark-toggle-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.46);
+}
+
+.exam-attempt-footer .ghost-btn,
+.exam-attempt-footer .primary-btn {
+  height: var(--control-height);
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 900px) {
+  .exam-attempt-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exam-head-meta {
+    gap: 8px;
+  }
+
+  .exam-progress {
+    min-width: 96px;
+  }
+
+  .exam-attempt-head h3 {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 620px) {
+  .exam-attempt-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .exam-head-meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .exam-attempt-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .exam-attempt-nav {
+    justify-content: space-between;
+  }
+
+  .exam-attempt-footer .primary-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Flex column, not a fixed-row grid. The shell renders two or three
+   children depending on whether the error banner and the loading box are
+   present, so any hardcoded track count mis-assigns the growing row: with
+   `auto auto 1fr` and no banner the layout landed in the second auto track
+   and stopped at content height, leaving dead space below it; with two
+   tracks and a banner showing, the banner would have taken the 1fr.
+
+   Flex has no row-count assumption -- header, banner and loading box each
+   take their natural height, and only .exam-attempt-layout is asked to
+   grow into whatever is left. Same fix already applied to the Review Bot
+   session panel for the same reason. */
+.exam-attempt-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.exam-attempt-head,
+.exam-attempt-shell > .feedback,
+.exam-attempt-loading {
+  flex-shrink: 0;
+}
+
+.exam-attempt-shell > .feedback {
+  margin: 10px 16px 0;
+}
+
+/* height:100% would resolve against the whole shell here (a definite
+   height), overshooting past the header; flex:1 is what should size it. */
+.exam-attempt-layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+/* =======================================================================
+   EXAM <-> ROOM ASSIGNMENT CHIPS
+   =======================================================================
+   One chip treatment used from both directions -- the Exams page lists the
+   rooms an exam runs in, the Rooms page links back to the exam setup -- so
+   the relationship reads as the same object wherever a teacher meets it.
+   ======================================================================= */
+
+.assignment-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 2px;
+}
+
+.assignment-label {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.assignment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assignment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 35, 126, 0.2);
+  background: rgba(26, 35, 126, 0.06);
+  color: var(--lnu-navy-deep);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+a.assignment-chip:hover {
+  background: rgba(26, 35, 126, 0.12);
+  border-color: rgba(26, 35, 126, 0.4);
+}
+
+a.assignment-chip:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* The room code rides along in the same chip, dimmed -- teachers identify
+   rooms by code as often as by name, and a second chip per room would
+   double the row length for the same one fact. */
+.assignment-chip em {
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.assignment-chip.is-archived {
+  border-color: var(--border-soft);
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+}
+
+.assignment-chip.is-link {
+  border-color: var(--border-soft);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+
+a.assignment-chip.is-link:hover {
+  border-color: rgba(26, 35, 126, 0.4);
+  background: #f2f5fd;
+  color: var(--lnu-navy);
+}
+
+/* Says "assigned nowhere" outright rather than leaving a blank slot that
+   reads as missing data. */
+.assignment-empty {
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* Target of the ?exam=<id> deep link from the Rooms page. */
+.management-item.is-highlighted {
+  border-color: rgba(26, 35, 126, 0.45);
+  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.16);
+}
+
+/* The Rooms page's exam rows put the schedule and the "Exam setup" link on
+   one line; keep them apart rather than letting the link crowd the date. */
+.rooms-exam-row-foot .assignment-chip.is-link {
+  margin-left: auto;
+}
+
+/* =======================================================================
+   EXAMS PAGE -- ROOM FILTER BAR
+   =======================================================================
+   Sits on the shared .management-toolbar primitive (the same strip the
+   Students and Users directories use), so it reads as part of the existing
+   page rather than a bolted-on control.
+   ======================================================================= */
+
+.exams-filter-bar {
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.exams-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.exams-filter-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.exams-filter-select {
+  flex: 0 0 auto;
+  min-width: 210px;
+  max-width: 100%;
+  font-weight: 700;
+}
+
+/* The live answer to "what am I looking at", next to the control that
+   changes it -- rather than a second heading row above the list. */
+.exams-filter-summary {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exams-filter-summary strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.exams-filter-summary span {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.exams-filter-clear {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .exams-filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exams-filter {
+    justify-content: space-between;
+  }
+
+  .exams-filter-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .exams-filter-clear {
+    margin-left: 0;
+    justify-content: center;
   }
 }

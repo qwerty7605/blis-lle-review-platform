@@ -297,7 +297,6 @@ class ReviewBotTest extends TestCase
 
     public function test_a_second_generation_for_the_same_file_is_not_dispatched(): void
     {
-        config()->set('services.openai.api_key', 'test-key');
         Queue::fake();
         Cache::flush();
 
@@ -319,7 +318,6 @@ class ReviewBotTest extends TestCase
 
     public function test_generation_can_be_queued_again_once_the_lock_is_released(): void
     {
-        config()->set('services.openai.api_key', 'test-key');
         Queue::fake();
         Cache::flush();
 

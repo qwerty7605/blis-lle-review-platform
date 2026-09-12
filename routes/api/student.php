@@ -489,6 +489,10 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         // here so "What To Review Next" can name the actual weakest
         // subtopic, not just the subject it lives under.
         'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($user),
+        // The same resolution widened into a ranked queue (worst first) for
+        // the Analytics page's study plan, with a Review Bot link target per
+        // row.
+        'study_plan' => $dashboardAnalyticsService->buildStudyPlan($user),
     ]);
 });
 

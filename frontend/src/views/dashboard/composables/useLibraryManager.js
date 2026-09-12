@@ -26,12 +26,15 @@ export function useLibraryManager({
   const showLibraryQuestionModal = ref(false)
   const showLibraryBankQuestionsModal = ref(false)
   const showDeleteLibraryBankModal = ref(false)
+  const showEditLibraryBankModal = ref(false)
 
   const libraryLoading = ref(false)
   const libraryBankQuestionsLoading = ref(false)
   const librarySaving = ref(false)
   const libraryDeleting = ref(false)
   const libraryMappingSaving = ref(false)
+  const libraryBankEditSaving = ref(false)
+  const questionEditSaving = ref(false)
   const libraryError = ref('')
   const libraryMessage = ref('')
 
@@ -43,9 +46,25 @@ export function useLibraryManager({
   const libraryQuestionBanks = ref([])
   const selectedLibraryBank = ref(null)
   const selectedLibraryQuestionBank = ref(null)
+  const editingLibraryBank = ref(null)
   const libraryPreviewWarnings = ref([])
   const digitalizedQuestions = ref([])
   const libraryBankQuestions = ref([])
+
+  const libraryBankEditForm = reactive({ title: '', subject: '' })
+
+  const editingQuestionId = ref(null)
+  const questionEditTopicOptions = ref([])
+  const questionEditSubtopicOptions = ref([])
+  const questionEditForm = reactive({
+    question_text: '',
+    question_type: 'multiple_choice',
+    options: [],
+    topic_name: '',
+    subtopic_name: '',
+    difficulty: '',
+    cognitive_level: '',
+  })
 
   const groupedLibraryPreviewWarnings = computed(() => {
     if (libraryPreviewWarnings.value.length === 0) return []
@@ -211,19 +230,30 @@ export function useLibraryManager({
   const libraryForm = reactive({
     questionName: '',
     subjectCategory: '',
-    aiTaggingMode: 'review',
     file: null,
   })
 
   const librarySubjectCategories = LIBRARY_SUBJECT_CATEGORIES
+  const libraryDifficultyOptions = ['easy', 'medium', 'hard']
+  const libraryCognitiveLevelOptions = ['recall', 'comprehension', 'application', 'analysis']
+  const libraryQuestionTypeOptions = ['multiple_choice', 'true_false', 'open_ended']
 
+  // Name/Subject are auto-filled (filename, detected content) so a teacher
+  // never has to type them, but the fields stay visible/editable in case a
+  // guess needs fixing before saving -- see handleLibraryDocxChange().
   const canSaveLibraryQuestionBank = computed(() => (
     !librarySaving.value
     && !libraryParsing.value
     && libraryForm.questionName.trim().length > 0
-    && libraryForm.subjectCategory.trim().length > 0
     && digitalizedQuestions.value.length > 0
   ))
+
+  function deriveQuestionNameFromFilename(filename) {
+    return String(filename ?? '')
+      .replace(/\.docx$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim()
+  }
 
   function resolveApiError(error, fallbackMessage) {
     if (typeof parseApiError === 'function') {
@@ -241,7 +271,6 @@ export function useLibraryManager({
   function resetLibraryQuestionState() {
     libraryForm.questionName = ''
     libraryForm.subjectCategory = ''
-    libraryForm.aiTaggingMode = 'review'
     libraryForm.file = null
     libraryDocxName.value = ''
     libraryParseError.value = ''
@@ -307,6 +336,7 @@ export function useLibraryManager({
 
   function closeLibraryBankQuestionsModal() {
     showLibraryBankQuestionsModal.value = false
+    cancelEditingQuestion()
     resetLibraryBankQuestionState()
   }
 
@@ -320,6 +350,164 @@ export function useLibraryManager({
   function closeDeleteLibraryBankModal() {
     showDeleteLibraryBankModal.value = false
     selectedLibraryBank.value = null
+  }
+
+  function openEditLibraryBankModal(bank) {
+    if (!bank?.id) return
+
+    editingLibraryBank.value = bank
+    libraryBankEditForm.title = bank.title || ''
+    libraryBankEditForm.subject = bank.subject || ''
+    showEditLibraryBankModal.value = true
+  }
+
+  function closeEditLibraryBankModal() {
+    showEditLibraryBankModal.value = false
+    editingLibraryBank.value = null
+  }
+
+  async function handleUpdateLibraryBank() {
+    if (!editingLibraryBank.value?.id || libraryBankEditSaving.value) return
+    if (!libraryBankEditForm.title.trim()) return
+
+    libraryBankEditSaving.value = true
+    libraryError.value = ''
+    libraryMessage.value = ''
+
+    try {
+      const { data } = await questionsApi.updateBank(editingLibraryBank.value.id, {
+        title: libraryBankEditForm.title.trim(),
+        subject: libraryBankEditForm.subject.trim() || null,
+      })
+      libraryMessage.value = data?.message ?? 'Question bank updated.'
+      closeEditLibraryBankModal()
+      await Promise.all([loadLibraryBanks(), notifyBanksChanged()])
+    } catch (error) {
+      libraryError.value = resolveApiError(error, 'Unable to update this question bank.')
+    } finally {
+      libraryBankEditSaving.value = false
+    }
+  }
+
+  function cancelEditingQuestion() {
+    editingQuestionId.value = null
+    questionEditTopicOptions.value = []
+    questionEditSubtopicOptions.value = []
+  }
+
+  async function loadQuestionEditTopicOptions(subject) {
+    if (!subject) {
+      questionEditTopicOptions.value = []
+      return
+    }
+
+    try {
+      const { data } = await questionsApi.listTopics(subject)
+      questionEditTopicOptions.value = data?.topics ?? []
+    } catch {
+      questionEditTopicOptions.value = []
+    }
+  }
+
+  async function loadQuestionEditSubtopicOptions(subject, topic) {
+    if (!subject || !topic) {
+      questionEditSubtopicOptions.value = []
+      return
+    }
+
+    try {
+      const { data } = await questionsApi.listTopics(subject, topic)
+      questionEditSubtopicOptions.value = data?.subtopics ?? []
+    } catch {
+      questionEditSubtopicOptions.value = []
+    }
+  }
+
+  async function startEditingQuestion(question) {
+    if (!question?.id) return
+
+    editingQuestionId.value = question.id
+    questionEditForm.question_text = question.question_text || ''
+    questionEditForm.question_type = question.question_type || 'multiple_choice'
+    questionEditForm.options = Array.isArray(question.options)
+      ? question.options.map((option) => ({
+          label: option.option_label,
+          text: option.option_text,
+          is_correct: Boolean(option.is_correct),
+        }))
+      : []
+    questionEditForm.topic_name = question.topic?.name || ''
+    questionEditForm.subtopic_name = question.subtopic?.name || ''
+    questionEditForm.difficulty = question.difficulty || ''
+    questionEditForm.cognitive_level = question.cognitive_level || ''
+
+    const subject = selectedLibraryQuestionBank.value?.subject
+    await loadQuestionEditTopicOptions(subject)
+    if (questionEditForm.topic_name) {
+      await loadQuestionEditSubtopicOptions(subject, questionEditForm.topic_name)
+    }
+  }
+
+  async function handleQuestionEditTopicChange() {
+    questionEditForm.subtopic_name = ''
+    await loadQuestionEditSubtopicOptions(selectedLibraryQuestionBank.value?.subject, questionEditForm.topic_name)
+  }
+
+  function addQuestionEditOption() {
+    if (questionEditForm.options.length >= 8) return
+
+    questionEditForm.options.push({
+      label: String.fromCharCode(65 + questionEditForm.options.length),
+      text: '',
+      is_correct: questionEditForm.options.length === 0,
+    })
+  }
+
+  function removeQuestionEditOption(index) {
+    questionEditForm.options.splice(index, 1)
+  }
+
+  function setQuestionEditCorrectOption(index) {
+    questionEditForm.options.forEach((option, optionIndex) => {
+      option.is_correct = optionIndex === index
+    })
+  }
+
+  async function saveEditingQuestion() {
+    if (!editingQuestionId.value || questionEditSaving.value) return
+
+    questionEditSaving.value = true
+    libraryError.value = ''
+    libraryMessage.value = ''
+
+    const isOpenEnded = questionEditForm.question_type === 'open_ended'
+
+    const payload = {
+      question_text: questionEditForm.question_text.trim(),
+      question_type: questionEditForm.question_type,
+      options: isOpenEnded
+        ? []
+        : questionEditForm.options.map((option) => ({
+            label: option.label,
+            text: (option.text || '').trim(),
+            is_correct: Boolean(option.is_correct),
+          })),
+      topic_name: questionEditForm.topic_name || null,
+      subtopic_name: questionEditForm.subtopic_name || null,
+      difficulty: questionEditForm.difficulty || null,
+      cognitive_level: questionEditForm.cognitive_level || null,
+    }
+
+    try {
+      const { data } = await questionsApi.updateQuestion(editingQuestionId.value, payload)
+      libraryMessage.value = data?.message ?? 'Question updated.'
+      cancelEditingQuestion()
+      await loadLibraryBankQuestions(selectedLibraryQuestionBank.value)
+    } catch (error) {
+      libraryError.value = resolveApiError(error, 'Unable to update this question.')
+    } finally {
+      questionEditSaving.value = false
+    }
   }
 
   async function handleLibraryDocxChange(event) {
@@ -348,6 +536,12 @@ export function useLibraryManager({
     libraryDocxName.value = file.name
     libraryParsing.value = true
 
+    // Auto-fill the name from the filename right away -- don't wait on the
+    // parse to finish, and never clobber a name the teacher already typed.
+    if (!libraryForm.questionName.trim()) {
+      libraryForm.questionName = deriveQuestionNameFromFilename(file.name)
+    }
+
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -360,6 +554,11 @@ export function useLibraryManager({
       if (previewQuestions.length === 0) {
         libraryParseError.value = 'No valid question pattern was detected in this DOCX file.'
         return
+      }
+
+      // Auto-fill the detected subject too, same "don't clobber" rule.
+      if (!libraryForm.subjectCategory.trim() && preview.suggested_subject) {
+        libraryForm.subjectCategory = preview.suggested_subject
       }
 
       digitalizedQuestions.value = previewQuestions.map((question, index) => {
@@ -418,8 +617,11 @@ export function useLibraryManager({
 
     const payload = {
       title: libraryForm.questionName.trim(),
-      subject: libraryForm.subjectCategory.trim(),
-      ai_tagging_mode: libraryForm.aiTaggingMode === 'auto' ? 'auto' : 'review',
+      subject: libraryForm.subjectCategory.trim() || null,
+      // Item mapping is always auto now -- the local classifier's own
+      // confidence gate already forces a weak guess into pending_review
+      // regardless of mode, so there's nothing left for a teacher to pick.
+      ai_tagging_mode: 'auto',
       source_filename: libraryDocxName.value || null,
       questions: digitalizedQuestions.value.map((question, questionIndex) => ({
         item_number: Number(question.item_number ?? (questionIndex + 1)),
@@ -519,11 +721,14 @@ export function useLibraryManager({
     showLibraryQuestionModal,
     showLibraryBankQuestionsModal,
     showDeleteLibraryBankModal,
+    showEditLibraryBankModal,
     libraryLoading,
     libraryBankQuestionsLoading,
     librarySaving,
     libraryDeleting,
     libraryMappingSaving,
+    libraryBankEditSaving,
+    questionEditSaving,
     libraryError,
     libraryMessage,
     libraryParsing,
@@ -533,24 +738,43 @@ export function useLibraryManager({
     libraryQuestionBanks,
     selectedLibraryBank,
     selectedLibraryQuestionBank,
+    editingLibraryBank,
     libraryPreviewWarnings,
     groupedLibraryPreviewWarnings,
     digitalizedQuestions,
     libraryBankQuestions,
     libraryForm,
+    libraryBankEditForm,
     librarySubjectCategories,
+    libraryDifficultyOptions,
+    libraryCognitiveLevelOptions,
+    libraryQuestionTypeOptions,
     canSaveLibraryQuestionBank,
+    editingQuestionId,
+    questionEditForm,
+    questionEditTopicOptions,
+    questionEditSubtopicOptions,
     openLibraryQuestionModal,
     closeLibraryQuestionModal,
     openLibraryBankQuestionsModal,
     closeLibraryBankQuestionsModal,
     openDeleteLibraryBankModal,
     closeDeleteLibraryBankModal,
+    openEditLibraryBankModal,
+    closeEditLibraryBankModal,
+    handleUpdateLibraryBank,
     handleLibraryDocxChange,
     loadLibraryBanks,
     handleSaveLibraryQuestionBank,
     handleDeleteLibraryBank,
     queueBankMapping,
     confirmBankTags,
+    startEditingQuestion,
+    cancelEditingQuestion,
+    handleQuestionEditTopicChange,
+    addQuestionEditOption,
+    removeQuestionEditOption,
+    setQuestionEditCorrectOption,
+    saveEditingQuestion,
   }
 }

@@ -211,6 +211,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   const roomName = ref('')
   const joinCode = ref('')
+  const roomSearchQuery = ref('')
   const rooms = ref([])
   const selectedRoomId = ref(null)
   const selectedRoom = ref(null)
@@ -312,6 +313,35 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const selectedRoomYearSummary = computed(() => (
     buildRoomYearSummary(selectedRoomCurrentMembers.value)
   ))
+
+  // Client-side filter over the room list the student already has (no new
+  // request) -- matches on name or code, same as how a room is found by code
+  // when joining.
+  const filteredRooms = computed(() => {
+    const query = roomSearchQuery.value.trim().toLowerCase()
+    if (!query) return rooms.value
+
+    return rooms.value.filter((room) => (
+      String(room.name ?? '').toLowerCase().includes(query)
+      || String(room.code ?? '').toLowerCase().includes(query)
+    ))
+  })
+
+  // A real "how much of this room have I finished" number -- every assigned
+  // exam (current + archived) counts once, and "completed" reuses the exact
+  // same submitted-attempt check the exam cards use for their own state, so
+  // this can never disagree with what's shown below it.
+  const selectedRoomExamSummary = computed(() => {
+    const allExams = [...selectedRoomActiveExams.value, ...selectedRoomArchivedExams.value]
+    const totalCount = allExams.length
+    const completedCount = allExams.filter((exam) => isStudentExamCompleted(exam)).length
+
+    return {
+      totalCount,
+      completedCount,
+      completionPercent: totalCount === 0 ? 0 : Math.round((completedCount / totalCount) * 100),
+    }
+  })
 
   const selectedRoomRosterCopy = computed(() => {
     if (!selectedRoom.value) return ''
@@ -1606,6 +1636,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     canViewExamResults,
     roomName,
     joinCode,
+    roomSearchQuery,
+    filteredRooms,
     rooms,
     selectedRoomId,
     selectedRoom,
@@ -1656,6 +1688,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     selectedRoomCurrentMembers,
     selectedRoomYearSummary,
     selectedRoomRosterCopy,
+    selectedRoomExamSummary,
     currentStudentExamQuestion,
     currentQuestionStem,
     isStudentExamSubmitted,

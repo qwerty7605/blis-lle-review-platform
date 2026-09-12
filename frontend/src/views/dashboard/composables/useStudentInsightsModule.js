@@ -58,6 +58,7 @@ export function useStudentInsightsModule() {
   const subjectRows = ref([])
   const historyRows = ref([])
   const recentAttemptRows = ref([])
+  const studyPlanRows = ref([])
   const weakAreaRaw = ref(null)
   const predictiveModel = ref({
     status: 'awaiting_ml_api',
@@ -112,6 +113,25 @@ export function useStudentInsightsModule() {
       scoreDisplay: attempt.score_percent === null ? 'N/A' : `${Number(attempt.score_percent).toFixed(1)}%`,
       scoreTone: scoreTone(attempt.score_percent),
       submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a',
+    }))
+  ))
+
+  // Ranked weakest-first study queue (see
+  // DashboardAnalyticsService::buildStudyPlan). reviewQuery is the deep link
+  // the Review Bot's own picker already understands -- see
+  // useReviewBotModule's onMounted, which preselects subject/topic/subtopic
+  // straight off the query string.
+  const studyPlan = computed(() => (
+    asList(studyPlanRows.value).map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      score: row.score === null || row.score === undefined ? null : Number(row.score),
+      scoreTone: scoreTone(row.score),
+      reviewQuery: {
+        subject: row.subject,
+        ...(row.topic_id ? { topic_id: String(row.topic_id) } : {}),
+        ...(row.subtopic_id ? { subtopic_id: String(row.subtopic_id) } : {}),
+      },
     }))
   ))
 
@@ -209,17 +229,20 @@ export function useStudentInsightsModule() {
       const score = roundPercent(isSubtopic ? area.subtopicScore : area.topicScore)
 
       headline = {
+        key: 'opportunity',
         label: 'Biggest opportunity',
         text: `${place}${score !== null ? ` — you're only scoring ${score}% there` : ''}. Start your next study session here.`,
       }
     } else if (area && area.basis === 'subject') {
       const score = roundPercent(area.subjectScore)
       headline = {
+        key: 'opportunity',
         label: 'Biggest opportunity',
         text: `${area.subject}${score !== null ? ` — averaging ${score}% so far` : ''}. Start your next study session here.`,
       }
     } else if (focusCount === 0) {
       headline = {
+        key: 'on_track',
         label: 'You are on track',
         text: 'Every subject you have attempted so far is already at 75% or higher.',
       }
@@ -235,6 +258,7 @@ export function useStudentInsightsModule() {
 
       if (others.length > 0) {
         points.push({
+          key: 'also_review',
           label: 'Also review',
           text: `${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} still below the 75% passing mark.`,
         })
@@ -251,8 +275,8 @@ export function useStudentInsightsModule() {
       // when the honest note is "still needs work, just less than the rest."
       points.push(
         strongSubject.performance_band === 'strong'
-          ? { label: 'Strongest subject', text: `${strongSubject.label}${scoreText}.` }
-          : { label: 'Relative strength', text: `${strongSubject.label}${scoreText} — your best so far, though still below passing.` },
+          ? { key: 'strength', label: 'Strongest subject', text: `${strongSubject.label}${scoreText}.` }
+          : { key: 'strength', label: 'Relative strength', text: `${strongSubject.label}${scoreText} — your best so far, though still below passing.` },
       )
     }
 
@@ -305,6 +329,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = asList(data?.subjects)
       historyRows.value = asList(data?.history)
       recentAttemptRows.value = asList(data?.recent_attempts)
+      studyPlanRows.value = asList(data?.study_plan)
       weakAreaRaw.value = data?.weak_area ?? null
       predictiveModel.value = {
         ...predictiveModel.value,
@@ -323,6 +348,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = []
       historyRows.value = []
       recentAttemptRows.value = []
+      studyPlanRows.value = []
       weakAreaRaw.value = null
     } finally {
       analyticsLoading.value = false
@@ -339,6 +365,7 @@ export function useStudentInsightsModule() {
     analyticsLoaded,
     analyticsError,
     hasAttemptData,
+    stats,
     statCards,
     subjects,
     averageScore,
@@ -347,6 +374,7 @@ export function useStudentInsightsModule() {
     strengths,
     scoreHistory,
     recentAttempts,
+    studyPlan,
     weakArea,
     reviewNarrative,
     predictivePanel,

@@ -2,7 +2,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { studentDashboardApi } from '@/api/studentDashboard.api'
 import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
-import { formatDateTime, parseDateTime } from './useDashboardFormatters'
+import { formatCompactDate, formatDateTime, parseDateTime } from './useDashboardFormatters'
 import {
   canStudentOpenExam,
   examHasQuestionSet,
@@ -197,9 +197,9 @@ function lastExamSuggestion(scorePercent, subject) {
 }
 
 function lastExamStatusLabel(tone) {
-  if (tone === 'success') return 'Doing Well'
-  if (tone === 'gold') return 'Needs Improvement'
-  return 'Weak Area'
+  if (tone === 'success') return 'Excellent'
+  if (tone === 'gold') return 'Good'
+  return 'Needs Improvement'
 }
 
 export function useStudentDashboardModule() {
@@ -211,6 +211,8 @@ export function useStudentDashboardModule() {
   const recentExams = ref([])
   const rooms = ref([])
   const predictiveModel = ref(null)
+  const insightStats = ref(null)
+  const weakAreaRaw = ref(null)
 
   const studentFirstName = computed(() => (
     auth.user?.first_name
@@ -285,23 +287,21 @@ export function useStudentDashboardModule() {
         scoreDisplay: `${scorePercent.toFixed(1)}%`,
         scoreTone: scoreTone(scorePercent),
         submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'Submission time unavailable',
+        submittedAtCompact: attempt.submitted_at ? formatCompactDate(attempt.submitted_at) : 'n/a',
       }
     })
   ))
 
-  // "Suggestion" — the student's most recently graded exam plus a short,
-  // score-driven nudge, so they see what to do about it without a trip
-  // to Analytics.
-  const lastExamResult = computed(() => {
-    const latest = recentExamCards.value[0]
-    if (!latest) return null
-
-    return {
-      ...latest,
-      suggestion: lastExamSuggestion(latest.score_percent, latest.subject),
-      statusLabel: lastExamStatusLabel(latest.scoreTone),
-    }
-  })
+  // "Performance feed" — every recent graded exam (not just the latest one),
+  // each with a short score-driven nudge, so a student sees a trend at a
+  // glance instead of a single data point.
+  const performanceFeed = computed(() => (
+    recentExamCards.value.map((attempt) => ({
+      ...attempt,
+      suggestion: lastExamSuggestion(attempt.score_percent, attempt.subject),
+      statusLabel: lastExamStatusLabel(attempt.scoreTone),
+    }))
+  ))
 
   // "Am I ready?" — the single most decision-relevant signal for a licensure
   // exam review app, surfaced here instead of requiring a trip to Analytics.
@@ -332,6 +332,72 @@ export function useStudentDashboardModule() {
     }
   })
 
+  // "How are you trending?" — real numbers from the same analytics summary
+  // the readiness prediction already comes from (routes/api/student.php's
+  // 'stats' block), for the outcome card's stat row.
+  const outcomeStats = computed(() => {
+    const stats = insightStats.value
+
+    return {
+      averageScoreDisplay: stats?.average_score_percent == null
+        ? 'N/A'
+        : `${Number(stats.average_score_percent).toFixed(1)}%`,
+      focusSubjectsCount: Number(stats?.focus_subjects_count ?? 0),
+    }
+  })
+
+  // A truthful "since your last attempt" delta — computed server-side from
+  // the two most recent submitted attempts (routes/api/student.php), not a
+  // fabricated trend. Split into parts (not one flat string) so the hero can
+  // bold just the number, the way it bolds every other real stat. Null until
+  // there are at least two attempts to compare.
+  const scoreTrendParts = computed(() => {
+    const delta = insightStats.value?.latest_score_delta
+    if (delta === null || delta === undefined) return null
+
+    const magnitude = Math.abs(Number(delta)).toFixed(1)
+    if (Number(delta) > 0) return { lead: 'You climbed ', bold: `${magnitude} points`, tail: ' since your last attempt. ' }
+    if (Number(delta) < 0) return { lead: 'You dropped ', bold: `${magnitude} points`, tail: ' since your last attempt. ' }
+    return { lead: 'Your score held steady', bold: '', tail: ' since your last attempt. ' }
+  })
+
+  // Hero badge #1 — the student's real cohort (admission_year, see the
+  // student-lifecycle migration), not a guessed "current academic period."
+  const cohortBadgeText = computed(() => {
+    const year = auth.user?.admission_year
+    return year ? `Cohort ${year}` : ''
+  })
+
+  // Hero badge #2 — the soonest real thing on this student's plate (same
+  // sort order as the notices list below), not a fabricated licensure date.
+  const nextUpcomingBadgeText = computed(() => {
+    const soonest = notifications.value[0]
+    if (!soonest?.whenText || soonest.whenText === 'n/a') return ''
+    return soonest.whenLabel ? `${soonest.whenLabel}: ${soonest.whenText}` : soonest.whenText
+  })
+
+  // Deep-links straight into Review Bot scoped to the student's actual
+  // weakest area, mirroring the same subject/topic_id/subtopic_id query
+  // convention StudentExamResultView.vue's "Review Your Weak Areas" uses --
+  // falls back to an unscoped Review Bot link when no weak area is known yet
+  // (e.g. no attempts, or every subject is already solid).
+  const weakAreaReviewLink = computed(() => {
+    const area = weakAreaRaw.value
+
+    if (!area?.subject) {
+      return { name: 'dashboard-review-bot' }
+    }
+
+    return {
+      name: 'dashboard-review-bot',
+      query: {
+        subject: area.subject,
+        ...(area.topic_id ? { topic_id: area.topic_id } : {}),
+        ...(area.basis === 'subtopic' && area.subtopic_id ? { subtopic_id: area.subtopic_id } : {}),
+      },
+    }
+  })
+
   async function loadDashboard() {
     dashboardLoading.value = true
     dashboardError.value = ''
@@ -356,8 +422,12 @@ export function useStudentDashboardModule() {
     try {
       const { data } = await studentAnalyticsApi.summary()
       predictiveModel.value = data?.predictive_model ?? null
+      insightStats.value = data?.stats ?? null
+      weakAreaRaw.value = data?.weak_area ?? null
     } catch {
       predictiveModel.value = null
+      insightStats.value = null
+      weakAreaRaw.value = null
     }
   }
 
@@ -371,8 +441,13 @@ export function useStudentDashboardModule() {
     dashboardLoaded,
     dashboardError,
     notifications,
-    lastExamResult,
+    performanceFeed,
     readiness,
+    outcomeStats,
+    scoreTrendParts,
+    cohortBadgeText,
+    nextUpcomingBadgeText,
+    weakAreaReviewLink,
     loadDashboard,
   }
 }
