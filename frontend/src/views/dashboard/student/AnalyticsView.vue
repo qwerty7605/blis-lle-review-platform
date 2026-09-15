@@ -286,7 +286,15 @@
           <p v-else-if="reviewNarrative.empty" class="guidance-empty">{{ reviewNarrative.emptyMessage }}</p>
 
           <template v-else>
-            <div v-if="reviewNarrative.headline" class="guidance-lead">
+            <!--
+              Moves, not readings. Each row names something to go and do, sized
+              to the practice that actually exists behind it, so every button
+              here lands on a session that can be built. The narrative lead
+              below is the fallback for when no action could be assembled.
+            -->
+            <ActionPlanList v-if="actionPlan.length > 0" :actions="actionPlan" />
+
+            <div v-else-if="reviewNarrative.headline" class="guidance-lead">
               <div class="guidance-lead-head">
                 <span class="guidance-lead-chip" aria-hidden="true">
                   <component :is="guidanceStyle(reviewNarrative.headline.key).icon" :size="15" />
@@ -294,6 +302,49 @@
                 <span class="guidance-kicker">{{ reviewNarrative.headline.label }}</span>
               </div>
               <p class="guidance-lead-text">{{ reviewNarrative.headline.text }}</p>
+
+              <!--
+                The knowledge-tracing estimate behind the recommendation. Shown
+                rather than hidden because it is the number the ranking is
+                actually made on, and because the denominator underneath it
+                tells the student how much the system has to go on.
+              -->
+              <div v-if="reviewNarrative.headline.mastery" class="mastery-readout">
+                <div class="mastery-head">
+                  <span class="mastery-label">Estimated grasp</span>
+                  <strong class="mastery-value" :class="`is-${reviewNarrative.headline.mastery.band}`">
+                    {{ reviewNarrative.headline.mastery.percent }}%
+                  </strong>
+                </div>
+
+                <div
+                  class="mastery-track"
+                  role="img"
+                  :aria-label="`Estimated grasp ${reviewNarrative.headline.mastery.percent} percent, based on ${reviewNarrative.headline.mastery.attempted} answers`"
+                >
+                  <span
+                    class="mastery-fill"
+                    :class="`is-${reviewNarrative.headline.mastery.band}`"
+                    :style="{ width: `${Math.max(reviewNarrative.headline.mastery.percent, 2)}%` }"
+                  />
+                </div>
+
+                <p class="mastery-foot">
+                  <component :is="trendStyle(reviewNarrative.headline.mastery.trend).icon" :size="12" />
+                  <span>{{ trendStyle(reviewNarrative.headline.mastery.trend).label }}</span>
+                  <span class="mastery-dot" aria-hidden="true">·</span>
+                  <span>from {{ reviewNarrative.headline.mastery.attempted }} answered {{ reviewNarrative.headline.mastery.attempted === 1 ? 'item' : 'items' }}</span>
+                </p>
+              </div>
+
+              <RouterLink
+                v-if="reviewNarrative.headline.reviewQuery"
+                class="guidance-cta"
+                :to="{ name: 'dashboard-review-bot', query: reviewNarrative.headline.reviewQuery }"
+              >
+                Start a review session
+                <ArrowRight :size="14" />
+              </RouterLink>
             </div>
 
             <ul v-if="reviewNarrative.points.length > 0" class="guidance-points">
@@ -320,7 +371,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   AlertCircle,
   AlertTriangle,
@@ -329,19 +380,24 @@ import {
   BookMarked,
   BookOpen,
   Building2,
+  ChevronDown,
   ClipboardList,
+  Clock,
   Info,
   Laptop,
   ListTree,
+  Minus,
   PackageSearch,
   RefreshCw,
   ShieldCheck,
   Sparkles,
   Target,
+  TrendingDown,
   TrendingUp,
 } from 'lucide-vue-next'
 import { useStudentInsightsModule } from '../composables/useStudentInsightsModule'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
+import ActionPlanList from '@/components/ActionPlanList.vue'
 
 const {
   analyticsLoading,
@@ -354,6 +410,7 @@ const {
   reviewNarrative,
   scoreHistory,
   studyPlan,
+  actionPlan,
   predictivePanel,
   loadAnalytics,
 } = useStudentInsightsModule()
@@ -401,6 +458,22 @@ const GUIDANCE_STYLES = {
 
 function guidanceStyle(key) {
   return GUIDANCE_STYLES[key] ?? { icon: Info, tone: 'neutral' }
+}
+
+/*
+ * Which way the knowledge-tracing estimate is moving. "unclear" is its own
+ * state on purpose -- below a handful of answers the model will not call a
+ * direction, and saying "holding steady" there would be inventing confidence
+ * it does not have.
+ */
+const TREND_STYLES = {
+  improving: { icon: TrendingUp, label: 'Trending up' },
+  slipping: { icon: TrendingDown, label: 'Slipping' },
+  steady: { icon: Minus, label: 'Holding steady' },
+}
+
+function trendStyle(trend) {
+  return TREND_STYLES[trend] ?? { icon: Minus, label: 'Too early to call a trend' }
 }
 
 const isOnTarget = computed(() => (
@@ -1223,6 +1296,103 @@ function trendToneClass(subject) {
   color: #1c2b4f;
   overflow-wrap: break-word;
 }
+
+/* ---- Knowledge-tracing readout ---- */
+
+.mastery-readout {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(47, 138, 79, 0.22);
+}
+
+.mastery-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.mastery-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #5c6b8a;
+}
+
+.mastery-value {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three bands rather than a continuous gradient: the estimate is not precise
+   enough to justify shading every percentage point differently. */
+.mastery-value.is-struggling { color: var(--lnu-danger); }
+.mastery-value.is-developing { color: #b07d1a; }
+.mastery-value.is-mastered { color: #1b6b41; }
+
+.mastery-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.09);
+  overflow: hidden;
+}
+
+.mastery-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.mastery-fill.is-struggling { background: linear-gradient(90deg, #d4574f, var(--lnu-danger)); }
+.mastery-fill.is-developing { background: linear-gradient(90deg, #e0b055, #b07d1a); }
+.mastery-fill.is-mastered { background: linear-gradient(90deg, #4fa86f, #1b6b41); }
+
+.mastery-foot {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 7px 0 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #5c6b8a;
+  flex-wrap: wrap;
+}
+
+.mastery-dot {
+  opacity: 0.5;
+}
+
+.guidance-cta {
+  margin-top: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--control-radius, 9px);
+  background: var(--lnu-navy);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.guidance-cta:hover {
+  background: var(--lnu-navy-light, #2a35a0);
+  box-shadow: 0 6px 14px rgba(26, 35, 126, 0.22);
+}
+
+.guidance-cta:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* Action-card styling lives in components/ActionPlanList.vue, shared with
+   the teacher Reports page. */
 
 .guidance-points {
   margin: 0;

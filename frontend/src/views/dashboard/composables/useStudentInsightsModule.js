@@ -59,6 +59,7 @@ export function useStudentInsightsModule() {
   const historyRows = ref([])
   const recentAttemptRows = ref([])
   const studyPlanRows = ref([])
+  const actionPlanRows = ref([])
   const weakAreaRaw = ref(null)
   const predictiveModel = ref({
     status: 'awaiting_ml_api',
@@ -135,6 +136,20 @@ export function useStudentInsightsModule() {
     }))
   ))
 
+  /*
+   * What to actually do next, worst-first (see StudyActionPlanner). Distinct
+   * from studyPlan above: that ranks *areas*, this names *moves* -- each one
+   * already sized to the practice that exists behind it, so a row either
+   * carries a link that works or openly says nothing is published yet.
+   */
+  const actionPlan = computed(() => (
+    asList(actionPlanRows.value).map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      hasCta: Boolean(row.review_query && row.cta_label),
+    }))
+  ))
+
   const averageScore = computed(() => (
     stats.value.average_score_percent === null ? null : Number(stats.value.average_score_percent)
   ))
@@ -188,6 +203,12 @@ export function useStudentInsightsModule() {
     const raw = weakAreaRaw.value
     if (!raw || !raw.basis) return null
 
+    // mastery is the Bayesian Knowledge Tracing estimate for this area (see
+    // KnowledgeTracingService): the probability the student actually knows it,
+    // read off the order their answers arrived in rather than the raw
+    // percentage. Null for an area the tracer had no sequence for.
+    const mastery = raw.mastery ?? null
+
     return {
       basis: raw.basis,
       subject: raw.subject ?? null,
@@ -196,8 +217,56 @@ export function useStudentInsightsModule() {
       topicScore: raw.topic_score === null || raw.topic_score === undefined ? null : Number(raw.topic_score),
       subtopic: raw.subtopic ?? null,
       subtopicScore: raw.subtopic_score === null || raw.subtopic_score === undefined ? null : Number(raw.subtopic_score),
+      attemptedCount: Number(raw.attempted_count ?? 0),
+      correctCount: Number(raw.correct_count ?? 0),
+      masteryPercent: mastery?.mastery_percent === undefined ? null : Number(mastery.mastery_percent),
+      trend: mastery?.trend ?? null,
+      band: mastery?.band ?? null,
+      // Same deep link the study plan and "Review Your Weak Areas" already use.
+      reviewQuery: {
+        subject: raw.subject,
+        ...(raw.topic_id ? { topic_id: String(raw.topic_id) } : {}),
+        ...(raw.subtopic_id ? { subtopic_id: String(raw.subtopic_id) } : {}),
+      },
     }
   })
+
+  /**
+   * How the traced mastery reads in a sentence. Trend is the part a percentage
+   * could never tell you -- two students on the same score can be moving in
+   * opposite directions -- so it leads when the model is confident enough to
+   * report one.
+   */
+  function masteryClause(area) {
+    if (area.trend === 'improving') return ', and it is starting to click'
+    if (area.trend === 'slipping') return ', and you were doing better on it earlier'
+    if (area.trend === 'steady') return ', and it has not shifted yet'
+
+    return ''
+  }
+
+  /**
+   * The evidence the recommendation rests on, stated plainly. Showing the
+   * denominator matters: "2 of 6 correct" is honest about how much the system
+   * actually has to go on, where a bare "33%" hides whether that came from six
+   * answers or one.
+   */
+  function evidenceText(area) {
+    if (!area.attemptedCount) return 'your weakest mapped area so far'
+
+    return `${area.correctCount} of ${area.attemptedCount} correct`
+  }
+
+  function masteryBadge(area) {
+    if (area.masteryPercent === null) return null
+
+    return {
+      percent: Math.round(area.masteryPercent),
+      band: area.band,
+      trend: area.trend,
+      attempted: area.attemptedCount,
+    }
+  }
 
   function roundPercent(value) {
     return value === null || value === undefined ? null : Math.round(Number(value))
@@ -226,19 +295,21 @@ export function useStudentInsightsModule() {
       const place = isSubtopic
         ? `"${area.subtopic}" (under ${area.topic}, in ${area.subject})`
         : `"${area.topic}" in ${area.subject}`
-      const score = roundPercent(isSubtopic ? area.subtopicScore : area.topicScore)
 
       headline = {
         key: 'opportunity',
         label: 'Biggest opportunity',
-        text: `${place}${score !== null ? ` — you're only scoring ${score}% there` : ''}. Start your next study session here.`,
+        text: `${place} — ${evidenceText(area)}${masteryClause(area)}. Start your next study session here.`,
+        mastery: masteryBadge(area),
+        reviewQuery: area.reviewQuery,
       }
     } else if (area && area.basis === 'subject') {
-      const score = roundPercent(area.subjectScore)
       headline = {
         key: 'opportunity',
         label: 'Biggest opportunity',
-        text: `${area.subject}${score !== null ? ` — averaging ${score}% so far` : ''}. Start your next study session here.`,
+        text: `${area.subject} — ${evidenceText(area)}${masteryClause(area)}. Start your next study session here.`,
+        mastery: masteryBadge(area),
+        reviewQuery: area.reviewQuery,
       }
     } else if (focusCount === 0) {
       headline = {
@@ -330,6 +401,7 @@ export function useStudentInsightsModule() {
       historyRows.value = asList(data?.history)
       recentAttemptRows.value = asList(data?.recent_attempts)
       studyPlanRows.value = asList(data?.study_plan)
+      actionPlanRows.value = asList(data?.action_plan)
       weakAreaRaw.value = data?.weak_area ?? null
       predictiveModel.value = {
         ...predictiveModel.value,
@@ -349,6 +421,7 @@ export function useStudentInsightsModule() {
       historyRows.value = []
       recentAttemptRows.value = []
       studyPlanRows.value = []
+      actionPlanRows.value = []
       weakAreaRaw.value = null
     } finally {
       analyticsLoading.value = false
@@ -375,6 +448,7 @@ export function useStudentInsightsModule() {
     scoreHistory,
     recentAttempts,
     studyPlan,
+    actionPlan,
     weakArea,
     reviewNarrative,
     predictivePanel,
