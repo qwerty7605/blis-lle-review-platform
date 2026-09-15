@@ -39,6 +39,21 @@
       </div>
     </section>
 
+    <!--
+      What to do about the numbers above. Placed directly under the overview
+      rather than at the end of the page: the metrics say what happened, and
+      this is the part a teacher can act on, so it should not sit below five
+      panels of breakdown.
+    -->
+    <section v-if="reportActionPlan.length > 0" aria-labelledby="rp-actions-heading">
+      <header class="section-head">
+        <h2 id="rp-actions-heading" class="section-title">What To Do Next</h2>
+        <span class="section-note">Ranked by who is blocked by what</span>
+      </header>
+
+      <ActionPlanList :actions="reportActionPlan" lead-kicker="Start here" />
+    </section>
+
     <!-- Distribution + trend -->
     <section aria-labelledby="rp-shape-heading">
       <header class="section-head">
@@ -649,6 +664,7 @@ import {
 } from 'lucide-vue-next'
 import { formatDateTime } from '../composables/useDashboardFormatters'
 import { useReportsModule } from '../composables/useReportsModule'
+import ActionPlanList from '@/components/ActionPlanList.vue'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 
 const {
@@ -660,6 +676,7 @@ const {
   reportAnalytics,
   reportTargetsLoading,
   reportStudentsLoading,
+  reportActionPlan,
   reportExportingKey,
   reportExportError,
   reportExportMessage,
@@ -800,6 +817,14 @@ const selectedReportStudent = computed(() => (
 <style scoped src="../dashboard.css"></style>
 
 <style scoped>
+/* Sits beside a section title, same muted register as the panel subheads. */
+.section-note {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #6b7793;
+}
+
 .reports-view {
   gap: 20px;
 }

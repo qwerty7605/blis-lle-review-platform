@@ -493,6 +493,10 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         // the Analytics page's study plan, with a Review Bot link target per
         // row.
         'study_plan' => $dashboardAnalyticsService->buildStudyPlan($user),
+        // The readings above turned into things to actually do -- sized,
+        // justified, and only ever offered when the practice behind them
+        // exists. See StudyActionPlanner.
+        'action_plan' => $dashboardAnalyticsService->buildActionPlan($user),
     ]);
 });
 

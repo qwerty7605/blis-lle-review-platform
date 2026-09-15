@@ -98,6 +98,7 @@ export function useReportsModule() {
   // from DashboardAnalyticsService::buildStaffAnalytics() and scoped the same
   // way as the metrics above, so the two never disagree.
   const reportAnalytics = ref({})
+  const reportActionRows = ref([])
   const reportTargetsLoading = ref(false)
   const reportStudentsLoading = ref(false)
 
@@ -373,6 +374,7 @@ export function useReportsModule() {
       reportSessionPerformance.value = data.session_performance ?? []
       reportSubjectPerformance.value = data.subject_performance ?? []
       reportAnalytics.value = data.analytics ?? {}
+      reportActionRows.value = Array.isArray(data.action_plan) ? data.action_plan : []
     } catch (error) {
       reportError.value = firstApiError(error, 'Unable to load report data.')
     } finally {
@@ -431,8 +433,18 @@ export function useReportsModule() {
     await refreshAll()
   })
 
+  /*
+   * What the teacher should do about the numbers above (see
+   * TeacherActionPlanner). Same shape the student Analytics page renders, so
+   * both go through the shared ActionPlanList component.
+   */
+  const reportActionPlan = computed(() => (
+    reportActionRows.value.map((row, index) => ({ ...row, rank: index + 1 }))
+  ))
+
   return {
     reportLoading,
+    reportActionPlan,
     reportError,
     reportMetrics,
     reportActivity,
