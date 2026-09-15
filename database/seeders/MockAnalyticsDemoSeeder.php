@@ -10,8 +10,10 @@ use App\Models\QuestionBank;
 use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
+use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Models\User;
+use App\Services\QuestionMappingService;
 use App\Services\ExamAttemptService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
@@ -100,103 +102,56 @@ class MockAnalyticsDemoSeeder extends Seeder
     }
 
     /**
-     * @return array<string, array{label: string, topics: list<string>}>
+     * Demo content is built from the same curated taxonomy real teacher uploads
+     * get classified into (QuestionMappingService::curatedTopics()), rather
+     * than a hand-written list of plausible-sounding labels.
+     *
+     * The hardcoded list this replaced invented its own names -- "MARC 245
+     * field review", "website evaluation" -- so demo history and real uploads
+     * landed on two different vocabularies for the same concepts, and every
+     * weak-area reading was split between them. The curated list is the one
+     * the classifier assigns to, so it is the one demo data has to speak.
+     *
+     * One item per curated subtopic, which also gives the demo data depth at
+     * the subtopic level the analytics already support.
+     *
+     * @return array<string, array{label: string, topics: list<array{topic: string, subtopic: string}>}>
      */
     private function subjectBlueprints(): array
     {
-        return [
-            'cataloging' => [
-                'label' => 'Cataloging and Classification',
-                'topics' => [
-                    'chief source of information',
-                    'main entry selection',
-                    'call number construction',
-                    'authority control',
-                    'subject heading verification',
-                    'MARC 245 field review',
-                    'edition statement handling',
-                    'series tracing',
-                    'copy cataloging review',
-                    'Cutter number assignment',
-                ],
-            ],
-            'indexing' => [
-                'label' => 'Indexing and Abstracting',
-                'topics' => [
-                    'keyword extraction',
-                    'descriptor selection',
-                    'scope note writing',
-                    'controlled vocabulary use',
-                    'broader and narrower terms',
-                    'indexing consistency',
-                    'precision and recall balance',
-                    'see and see also references',
-                    'depth indexing',
-                    'abstract opening sentence',
-                ],
-            ],
-            'information_technology' => [
-                'label' => 'Information Technology',
-                'topics' => [
-                    'database backup scheduling',
-                    'network troubleshooting',
-                    'metadata schema selection',
-                    'cybersecurity basics',
-                    'spreadsheet validation formulas',
-                    'data privacy handling',
-                    'hardware maintenance routines',
-                    'cloud storage planning',
-                    'systems analysis workflow',
-                    'file format preservation',
-                ],
-            ],
-            'reference_services' => [
-                'label' => 'Reference Services',
-                'topics' => [
-                    'reference interview opening',
-                    'print source selection',
-                    'database search strategy',
-                    'citation verification',
-                    'referral service handling',
-                    'reader advisory support',
-                    'website evaluation',
-                    'OPAC search refinement',
-                    'question clarification',
-                    'fact checking',
-                ],
-            ],
-            'library_management' => [
-                'label' => 'Library Management',
-                'topics' => [
-                    'staffing schedule review',
-                    'budget allocation',
-                    'collection policy updates',
-                    'circulation workflow',
-                    'facility planning',
-                    'service key performance indicators',
-                    'strategic planning',
-                    'project coordination',
-                    'service evaluation',
-                    'records management',
-                ],
-            ],
-            'selection_acquisition' => [
-                'label' => 'Selection and Acquisition',
-                'topics' => [
-                    'vendor evaluation',
-                    'selection tools',
-                    'gift policy screening',
-                    'acquisition workflow',
-                    'standing orders',
-                    'licensing terms review',
-                    'budget prioritization',
-                    'duplicate title checks',
-                    'request verification',
-                    'invoice matching',
-                ],
-            ],
+        // Stable keys, because examBlueprints() addresses banks by them.
+        $keysBySubject = [
+            'Cataloging and Classification' => 'cataloging',
+            'Indexing and Abstracting' => 'indexing',
+            'Information Technology' => 'information_technology',
+            'Reference Services' => 'reference_services',
+            'Library Management' => 'library_management',
+            'Selection and Acquisition' => 'selection_acquisition',
         ];
+
+        $blueprints = [];
+
+        foreach (app(QuestionMappingService::class)->curatedTopics() as $subject => $topics) {
+            $key = $keysBySubject[$subject] ?? null;
+
+            if ($key === null) {
+                continue;
+            }
+
+            $pairs = [];
+
+            foreach ($topics as $topic => $subtopics) {
+                foreach ($subtopics as $subtopic) {
+                    $pairs[] = ['topic' => $topic, 'subtopic' => $subtopic];
+                }
+            }
+
+            $blueprints[$key] = ['label' => $subject, 'topics' => $pairs];
+        }
+
+        return $blueprints;
     }
+
 
     /**
      * 8 exams covering all 6 subjects (cataloging and reference doubled up),
@@ -284,14 +239,23 @@ class MockAnalyticsDemoSeeder extends Seeder
             // same field populated directly so "What To Review Next" can
             // name an actual weak topic, not just fall back to "Uncategorized".
             $topicRow = Topic::query()->firstOrCreate(
-                ['subject' => $blueprint['label'], 'name' => ucwords($topic)],
+                ['subject' => $blueprint['label'], 'name' => $topic['topic']],
+                ['created_by' => $teacher->id],
+            );
+
+            // Resolved the same way QuestionMappingService resolves a real
+            // upload's mapping, so demo rows are indistinguishable in shape
+            // from classified ones.
+            $subtopicRow = Subtopic::query()->firstOrCreate(
+                ['topic_id' => $topicRow->id,
+                'subtopic_id' => $subtopicRow->id, 'name' => $topic['subtopic']],
                 ['created_by' => $teacher->id],
             );
 
             $optionTexts = [
                 'Skip the documented procedure and rely on memory alone.',
                 'Delay the review until after the output is already released.',
-                "Follow the standard procedure for {$topic} before finalizing the task.",
+                "Follow the standard procedure for {$topic['subtopic']} before finalizing the task.",
                 'Use a random shortcut instead of recording the required details.',
             ];
 
@@ -301,7 +265,7 @@ class MockAnalyticsDemoSeeder extends Seeder
             ], [
                 'subject' => $blueprint['label'],
                 'topic_id' => $topicRow->id,
-                'question_text' => "{$blueprint['label']} demo item {$itemNumber}: Which action best addresses {$topic}?",
+                'question_text' => "{$blueprint['label']} demo item {$itemNumber}: Which action best addresses {$topic['subtopic']}?",
                 'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
                 'answer_label' => $labels[$correctIndex],
                 'answer_text' => $optionTexts[2],
