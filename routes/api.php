@@ -301,7 +301,7 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
     ], 201);
 
     return $authTokenCookieService->attachTokenCookie($response, $token);
-});
+})->middleware('throttle:register');
 
 Route::post('/auth/login', function (Request $request) use ($authTokenCookieService) {
     $validated = $request->validate([
@@ -328,7 +328,7 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
     ]);
 
     return $authTokenCookieService->attachTokenCookie($response, $token);
-});
+})->middleware('throttle:login');
 
 Route::get('/settings/public/legal', function () use ($systemSettingDefaults) {
     $legalKeys = ['terms_of_use_text', 'privacy_policy_text'];

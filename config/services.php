@@ -35,16 +35,4 @@ return [
         ],
     ],
 
-    'openai' => [
-        'api_key' => env('OPENAI_API_KEY'),
-        'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
-        'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
-
-        // Review Bot question screening. The embedding model backs near-duplicate
-        // detection; 256 dimensions is plenty for same-subject similarity and keeps
-        // the stored vectors small (1 KB each, packed as float32).
-        'embedding_model' => env('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
-        'embedding_dimensions' => (int) env('OPENAI_EMBEDDING_DIMENSIONS', 256),
-    ],
-
 ];

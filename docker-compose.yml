@@ -32,7 +32,12 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot_password"]
+      # Actually authenticates as the application user and touches the app
+      # database, so "healthy" means "the app can connect" -- php and queue
+      # gate their startup on this. `mysqladmin ping` is not enough: it reports
+      # success even when the credentials are wrong, because the server still
+      # answered. "$$" is escaped so Compose passes a single "$" to the shell.
+      test: ["CMD-SHELL", "mysql -h localhost -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\" >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 20
