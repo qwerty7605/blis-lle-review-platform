@@ -97,6 +97,11 @@ class MockAnalyticsDemoSeeder extends Seeder
             $this->seedAttemptHistory($failingStudent, $exams, $questionBanks, $room, $this->failingStudentScores(), $attemptService);
             $this->seedAttemptHistory($averageStudent, $exams, $questionBanks, $room, $this->averageStudentScores(), $attemptService);
         }, 5);
+
+        // Seeded accounts are fixtures, not signups -- mark them verified so a
+        // freshly seeded environment can actually log in. Self-registration
+        // stays the only path that leaves email_verified_at null.
+        User::whereNull('email_verified_at')->update(['email_verified_at' => now()]);
     }
 
     /**

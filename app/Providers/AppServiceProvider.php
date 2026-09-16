@@ -69,6 +69,19 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Resending verification mail costs real money, and an open resend
+        // endpoint is a convenient way to use somebody else's inbox as a mail
+        // bomb. Capped far harder than ordinary traffic, per address as well
+        // as per origin.
+        RateLimiter::for('verification', function (Request $request): array {
+            $email = Str::lower(trim((string) $request->input('email')));
+
+            return [
+                Limit::perHour(6)->by($request->ip()),
+                Limit::perHour(3)->by($email !== '' ? $email : $request->ip()),
+            ];
+        });
+
         RateLimiter::for('api', function (Request $request): Limit {
             // The default guard is 'web' (session), which never resolves for
             // token traffic -- ask the sanctum guard explicitly instead.

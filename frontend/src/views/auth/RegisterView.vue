@@ -30,7 +30,18 @@
 
         <div v-if="apiError" class="alert alert-danger">{{ apiError }}</div>
 
-        <form class="auth-form" @submit.prevent="handleSubmit">
+        <div v-if="pendingEmail" class="alert alert-success">
+          <p><strong>Almost there.</strong></p>
+          <p>
+            We sent a verification link to <strong>{{ pendingEmail }}</strong>.
+            Open it to activate your account, then sign in.
+          </p>
+          <button type="button" class="submit-btn" @click="router.push('/login')">
+            Back to sign in
+          </button>
+        </div>
+
+        <form v-if="!pendingEmail" class="auth-form" @submit.prevent="handleSubmit">
           <div class="field-grid auth-form-grid">
             <label class="field-group">
               <span class="field-label">First name</span>
@@ -295,6 +306,7 @@ const showPassword = ref(false)
 const showPasswordConfirmation = ref(false)
 const isLoading = ref(false)
 const apiError = ref('')
+const pendingEmail = ref('')
 const activePolicy = ref('')
 const policyBodyRef = ref(null)
 const policyReadyToConfirm = ref(false)
@@ -507,7 +519,7 @@ async function handleSubmit() {
 
   isLoading.value = true
   try {
-    await auth.register(
+    const result = await auth.register(
       firstName,
       middleName,
       lastName,
@@ -518,7 +530,10 @@ async function handleSubmit() {
       form.password_confirmation,
       form.agreed,
     )
-    await router.push('/dashboard')
+
+    // Registration no longer signs anyone in -- the account is inert until the
+    // emailed link is opened, so send them to their inbox, not the dashboard.
+    pendingEmail.value = result?.email ?? email
   } catch (error) {
     apiError.value = error.response?.data?.message ?? 'Registration failed. Please try again.'
   } finally {
@@ -664,6 +679,14 @@ async function handleSubmit() {
   background: rgba(198, 40, 40, 0.12);
   color: var(--lnu-danger);
   border: 1px solid rgba(198, 40, 40, 0.2);
+}
+
+.alert-success {
+  background: rgba(46, 125, 50, 0.1);
+  color: var(--lnu-success);
+  border: 1px solid rgba(46, 125, 50, 0.22);
+  display: grid;
+  gap: 10px;
 }
 
 .auth-form {
