@@ -8,6 +8,7 @@ use App\Models\ExamAttempt;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\MachineLearning\MasteryProfileBuilder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +22,43 @@ class DashboardAnalyticsService
     private const STUDENT_ACTIVITY_LIMIT = 8;
     private const STAFF_ACTIVITY_LIMIT = 14;
     private const STAFF_SESSION_LIMIT = 8;
+
+    public function __construct(
+        private readonly MasteryProfileBuilder $masteryProfileBuilder,
+        private readonly StudyActionPlanner $studyActionPlanner,
+        private readonly TeacherActionPlanner $teacherActionPlanner,
+    ) {
+    }
+
+    /**
+     * What the teacher should do next about their cohort, ranked by who is
+     * blocked by what. See TeacherActionPlanner.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function buildTeacherActionPlan(User $staff): array
+    {
+        return $this->teacherActionPlanner->build($staff, $this->buildStaffAnalytics($staff));
+    }
+
+
+    /**
+     * What the student should actually go and do next, worst-first, each one
+     * sized and linked. See StudyActionPlanner for why this is separate from
+     * the readings it is built on.
+     *
+     * Scans deeper than the study plan renders, so a slipping area sitting
+     * fifth can still surface as the first thing to act on.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function buildActionPlan(User $student): array
+    {
+        return $this->studyActionPlanner->build(
+            $this->buildStudyPlan($student, 8),
+            $this->buildSubjectWeaknessPerformance($student),
+        );
+    }
 
     /**
      * @return array<string, mixed>
@@ -311,6 +349,8 @@ class DashboardAnalyticsService
             ->values()
             ->all();
 
+        $staffAnalytics = $this->buildStaffAnalytics($staff);
+
         return [
             'metrics' => [
                 'managed_rooms' => (int) $managedRooms->count(),
@@ -335,7 +375,11 @@ class DashboardAnalyticsService
             // Distribution, trend, cohort topic accuracy, watchlist and room
             // comparison -- the parts of the picture the flat averages above
             // cannot show. Same scoping, so the numbers agree with each other.
-            'analytics' => $this->buildStaffAnalytics($staff),
+            'analytics' => $staffAnalytics,
+            // Those same readings turned into moves. Built from the analytics
+            // already computed above rather than recomputing them, since
+            // buildStaffAnalytics walks every attempt this teacher owns.
+            'action_plan' => $this->teacherActionPlanner->build($staff, $staffAnalytics),
             'recent_activity' => AuditLog::query()
                 ->with('actor:id,name,role')
                 ->where('actor_id', $staff->id)
@@ -897,72 +941,172 @@ class DashboardAnalyticsService
     }
 
     /**
+     * Below this many answered items an area is one unlucky guess, not a
+     * finding worth sending a student to study. Matches
+     * ExamResultFeedbackService::TOPIC_MIN_ITEMS so the dashboard headline
+     * and the post-exam result page never name different weakest areas for
+     * the same student.
+     */
+    private const STUDENT_AREA_MIN_ANSWERS = 3;
+
+    /**
+     * The student's weakest mapped area, most specific level that has data.
+     *
+     * Ranked by Bayesian Knowledge Tracing rather than percent correct, so the
+     * area that surfaces is the one the student is least likely to actually
+     * know -- which is not the same as the one with the lowest score. See
+     * MasteryProfileBuilder and KnowledgeTracingService.
+     *
+     * Runs the subtopic -> topic -> subject cascade twice: first over areas
+     * backed by enough answered items to mean something, then, only if the
+     * student has not answered that many anywhere yet, over everything, so
+     * someone a week into the term still gets a recommendation instead of a
+     * blank panel. Without that first pass a single missed question outranks
+     * a sustained weakness, because one wrong answer drops mastery below where
+     * several mixed answers land.
+     *
      * @return array<string, mixed>|array{}
      */
     public function buildWeakAreaRecommendation(User $student): array
     {
-        $subjectPerformance = $this->buildSubjectWeaknessPerformance($student);
-        $topicPerformance = $this->buildTopicWeaknessPerformance($student);
-        $subtopicPerformance = $this->buildSubtopicWeaknessPerformance($student);
+        $mastery = $this->masteryProfileBuilder->build($student);
 
-        $weakSubject = collect($subjectPerformance)
-            ->sortBy(fn (array $subject): float => (float) ($subject['score'] ?? 100.0))
-            ->first();
+        $subjectPerformance = $this->attachMastery($this->buildSubjectWeaknessPerformance($student), $mastery['subjects'], 'label');
+        $topicPerformance = $this->attachMastery($this->buildTopicWeaknessPerformance($student), $mastery['topics'], 'topic_id');
+        $subtopicPerformance = $this->attachMastery($this->buildSubtopicWeaknessPerformance($student), $mastery['subtopics'], 'subtopic_id');
 
-        $weakTopic = collect($topicPerformance)
-            ->sortBy(fn (array $topic): float => (float) ($topic['score'] ?? 100.0))
-            ->first();
+        // Label-only, and deliberately unguarded: it just names a subject to
+        // fall back to when the area picked sits at a deeper level.
+        $fallbackSubject = $this->weakestArea($subjectPerformance, 1);
+        $fallbackSubjectLabel = is_array($fallbackSubject)
+            ? (string) ($fallbackSubject['label'] ?? '')
+            : null;
 
-        $weakSubtopic = collect($subtopicPerformance)
-            ->sortBy(fn (array $subtopic): float => (float) ($subtopic['score'] ?? 100.0))
-            ->first();
+        foreach ([self::STUDENT_AREA_MIN_ANSWERS, 1] as $minAnswers) {
+            $weakSubtopic = $this->weakestArea($subtopicPerformance, $minAnswers);
 
-        if (is_array($weakSubtopic)) {
-            return [
-                'basis' => 'subtopic',
-                'subject' => (string) ($weakSubtopic['subject'] ?? ''),
-                'subject_score' => $this->findSubjectScore($subjectPerformance, (string) ($weakSubtopic['subject'] ?? '')),
-                'topic_id' => (int) ($weakSubtopic['topic_id'] ?? 0),
-                'topic' => (string) ($weakSubtopic['topic'] ?? ''),
-                'topic_score' => null,
-                'subtopic_id' => (int) ($weakSubtopic['subtopic_id'] ?? 0),
-                'subtopic' => (string) ($weakSubtopic['label'] ?? ''),
-                'subtopic_score' => isset($weakSubtopic['score']) ? (float) $weakSubtopic['score'] : null,
-                'fallback_subject' => is_array($weakSubject) ? (string) ($weakSubject['label'] ?? '') : null,
-            ];
-        }
+            if (is_array($weakSubtopic)) {
+                return [
+                    'basis' => 'subtopic',
+                    'subject' => (string) ($weakSubtopic['subject'] ?? ''),
+                    'subject_score' => $this->findSubjectScore($subjectPerformance, (string) ($weakSubtopic['subject'] ?? '')),
+                    'topic_id' => (int) ($weakSubtopic['topic_id'] ?? 0),
+                    'topic' => (string) ($weakSubtopic['topic'] ?? ''),
+                    'topic_score' => null,
+                    'subtopic_id' => (int) ($weakSubtopic['subtopic_id'] ?? 0),
+                    'subtopic' => (string) ($weakSubtopic['label'] ?? ''),
+                    'subtopic_score' => isset($weakSubtopic['score']) ? (float) $weakSubtopic['score'] : null,
+                    'attempted_count' => (int) ($weakSubtopic['attempted_count'] ?? 0),
+                    'correct_count' => (int) ($weakSubtopic['correct_count'] ?? 0),
+                    'mastery' => $weakSubtopic['mastery'] ?? null,
+                    'fallback_subject' => $fallbackSubjectLabel,
+                ];
+            }
 
-        if (is_array($weakTopic)) {
-            return [
-                'basis' => 'topic',
-                'subject' => (string) ($weakTopic['subject'] ?? ''),
-                'subject_score' => $this->findSubjectScore($subjectPerformance, (string) ($weakTopic['subject'] ?? '')),
-                'topic_id' => (int) ($weakTopic['topic_id'] ?? 0),
-                'topic' => (string) ($weakTopic['label'] ?? ''),
-                'topic_score' => isset($weakTopic['score']) ? (float) $weakTopic['score'] : null,
-                'subtopic_id' => null,
-                'subtopic' => null,
-                'subtopic_score' => null,
-                'fallback_subject' => is_array($weakSubject) ? (string) ($weakSubject['label'] ?? '') : null,
-            ];
-        }
+            $weakTopic = $this->weakestArea($topicPerformance, $minAnswers);
 
-        if (is_array($weakSubject)) {
-            return [
-                'basis' => 'subject',
-                'subject' => (string) ($weakSubject['label'] ?? ''),
-                'subject_score' => isset($weakSubject['score']) ? (float) $weakSubject['score'] : null,
-                'topic_id' => null,
-                'topic' => null,
-                'topic_score' => null,
-                'subtopic_id' => null,
-                'subtopic' => null,
-                'subtopic_score' => null,
-                'fallback_subject' => null,
-            ];
+            if (is_array($weakTopic)) {
+                return [
+                    'basis' => 'topic',
+                    'subject' => (string) ($weakTopic['subject'] ?? ''),
+                    'subject_score' => $this->findSubjectScore($subjectPerformance, (string) ($weakTopic['subject'] ?? '')),
+                    'topic_id' => (int) ($weakTopic['topic_id'] ?? 0),
+                    'topic' => (string) ($weakTopic['label'] ?? ''),
+                    'topic_score' => isset($weakTopic['score']) ? (float) $weakTopic['score'] : null,
+                    'subtopic_id' => null,
+                    'subtopic' => null,
+                    'subtopic_score' => null,
+                    'attempted_count' => (int) ($weakTopic['attempted_count'] ?? 0),
+                    'correct_count' => (int) ($weakTopic['correct_count'] ?? 0),
+                    'mastery' => $weakTopic['mastery'] ?? null,
+                    'fallback_subject' => $fallbackSubjectLabel,
+                ];
+            }
+
+            $weakSubject = $this->weakestArea($subjectPerformance, $minAnswers);
+
+            if (is_array($weakSubject)) {
+                return [
+                    'basis' => 'subject',
+                    'subject' => (string) ($weakSubject['label'] ?? ''),
+                    'subject_score' => isset($weakSubject['score']) ? (float) $weakSubject['score'] : null,
+                    'topic_id' => null,
+                    'topic' => null,
+                    'topic_score' => null,
+                    'subtopic_id' => null,
+                    'subtopic' => null,
+                    'subtopic_score' => null,
+                    'attempted_count' => (int) ($weakSubject['attempted_count'] ?? 0),
+                    'correct_count' => (int) ($weakSubject['correct_count'] ?? 0),
+                    'mastery' => $weakSubject['mastery'] ?? null,
+                    'fallback_subject' => null,
+                ];
+            }
         }
 
         return [];
+    }
+
+    /**
+     * Weakest row in one performance list, or null when none of them carries
+     * at least $minAnswers answered items.
+     *
+     * Ordered by traced mastery -- least likely to be known first -- falling
+     * back to percent correct for any row the tracer produced no estimate for.
+     * Ties break toward the area with more evidence behind it, since a weak
+     * estimate built on six answers is a firmer finding than one built on a
+     * single answer.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>|null
+     */
+    private function weakestArea(array $rows, int $minAnswers): ?array
+    {
+        return collect($rows)
+            ->filter(fn (array $row): bool => ($row['score'] ?? null) !== null
+                && (int) ($row['attempted_count'] ?? 0) >= $minAnswers)
+            ->sort(function (array $left, array $right): int {
+                $byMastery = $this->rankingWeight($left) <=> $this->rankingWeight($right);
+
+                return $byMastery !== 0
+                    ? $byMastery
+                    : (int) $right['attempted_count'] <=> (int) $left['attempted_count'];
+            })
+            ->first();
+    }
+
+    /**
+     * What a row sorts on: its traced mastery when the model produced one,
+     * otherwise its raw score expressed on the same 0-1 scale so the two kinds
+     * of row can still be compared in one pass.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function rankingWeight(array $row): float
+    {
+        $mastery = $row['mastery']['mastery'] ?? null;
+
+        return $mastery !== null
+            ? (float) $mastery
+            : ((float) ($row['score'] ?? 100.0)) / 100.0;
+    }
+
+    /**
+     * Join traced mastery onto performance rows, matching on whichever field
+     * identifies the skill at that level (subject name, topic id, subtopic id).
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<array-key, array<string, mixed>>  $masteryByKey
+     * @return array<int, array<string, mixed>>
+     */
+    private function attachMastery(array $rows, array $masteryByKey, string $keyField): array
+    {
+        return array_map(function (array $row) use ($masteryByKey, $keyField): array {
+            $key = $row[$keyField] ?? null;
+            $row['mastery'] = $key !== null ? ($masteryByKey[$key] ?? null) : null;
+
+            return $row;
+        }, $rows);
     }
 
     /**
@@ -1411,8 +1555,10 @@ class DashboardAnalyticsService
      */
     public function buildStudyPlan(User $student, int $limit = 5): array
     {
-        $subtopicRows = collect($this->buildSubtopicWeaknessPerformance($student));
-        $topicRows = collect($this->buildTopicWeaknessPerformance($student));
+        $mastery = $this->masteryProfileBuilder->build($student);
+
+        $subtopicRows = collect($this->attachMastery($this->buildSubtopicWeaknessPerformance($student), $mastery['subtopics'], 'subtopic_id'));
+        $topicRows = collect($this->attachMastery($this->buildTopicWeaknessPerformance($student), $mastery['topics'], 'topic_id'));
 
         $subtopicCoveredTopicIds = $subtopicRows
             ->pluck('topic_id')
@@ -1431,6 +1577,7 @@ class DashboardAnalyticsService
                 'attempted_count' => (int) $row['attempted_count'],
                 'correct_count' => (int) $row['correct_count'],
                 'score' => $row['score'],
+                'mastery' => $row['mastery'] ?? null,
             ])
             ->concat(
                 $topicRows
@@ -1445,21 +1592,32 @@ class DashboardAnalyticsService
                         'attempted_count' => (int) $row['attempted_count'],
                         'correct_count' => (int) $row['correct_count'],
                         'score' => $row['score'],
+                        'mastery' => $row['mastery'] ?? null,
                     ])
             )
             ->filter(fn (array $row): bool => $row['score'] !== null
                 && (float) $row['score'] < self::PASSING_SCORE
                 && $row['attempted_count'] > 0)
-            // Weakest first, and where two areas score the same the one with
-            // more answered items leads -- a 0% built on six questions is a
-            // firmer finding than a 0% built on one.
+            // Least likely to be known first, and where two areas trace to the
+            // same mastery the one with more answered items leads -- an
+            // estimate built on six questions is a firmer finding than one
+            // built on a single answer.
             ->sort(function (array $left, array $right): int {
-                $byScore = (float) $left['score'] <=> (float) $right['score'];
+                $byMastery = $this->rankingWeight($left) <=> $this->rankingWeight($right);
 
-                return $byScore !== 0
-                    ? $byScore
+                return $byMastery !== 0
+                    ? $byMastery
                     : $right['attempted_count'] <=> $left['attempted_count'];
             })
+            ->values();
+
+        // Areas with enough evidence to act on lead the queue; a thin one is
+        // only worth listing when the student has nothing firmer yet.
+        $wellEvidenced = $entries
+            ->filter(fn (array $row): bool => (int) $row['attempted_count'] >= self::STUDENT_AREA_MIN_ANSWERS)
+            ->values();
+
+        $entries = ($wellEvidenced->isNotEmpty() ? $wellEvidenced : $entries)
             ->take($limit)
             ->values();
 
