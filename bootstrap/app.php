@@ -22,6 +22,13 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\HandleCors::class,
             \App\Http\Middleware\UseBearerTokenFromCookie::class,
         ]);
+
+        // Blanket ceiling for API traffic, keyed per authenticated user (see
+        // AppServiceProvider). Individual routes tighten this where it counts
+        // -- /auth/login and /auth/register carry much stricter limiters.
+        $middleware->api(append: [
+            'throttle:api',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (Throwable $e, Request $request) {
@@ -46,7 +53,14 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             if ($e instanceof HttpException) {
-                return response()->json(['message' => $e->getMessage() ?: 'HTTP error.'], $e->getStatusCode());
+                // Keep the exception's own headers -- a 429 from the rate
+                // limiter carries Retry-After, which the SPA needs to tell
+                // the user how long to wait.
+                return response()->json(
+                    ['message' => $e->getMessage() ?: 'HTTP error.'],
+                    $e->getStatusCode(),
+                    $e->getHeaders(),
+                );
             }
 
             $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;

@@ -47,7 +47,11 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Seven days, matching the auth cookie's lifetime. AuthTokenCookieService
+    // reads this same value to size the cookie, so the two stay in step: when
+    // the cookie dies in the browser, the token behind it is already dead
+    // server-side rather than lingering in personal_access_tokens forever.
+    'expiration' => (int) env('SANCTUM_EXPIRATION', 10080),
 
     /*
     |--------------------------------------------------------------------------
