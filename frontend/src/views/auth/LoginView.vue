@@ -30,6 +30,17 @@
 
         <div v-if="apiError" class="alert alert-danger">{{ apiError }}</div>
 
+        <div v-if="notice" class="alert alert-success">{{ notice }}</div>
+
+        <div v-if="unverifiedEmail" class="alert alert-info">
+          <p>Link expired or never arrived? We can send a new one.</p>
+          <button type="button" class="submit-btn" :disabled="isResending" @click="handleResend">
+            <span v-if="!isResending">Resend verification email</span>
+            <span v-else>Sending...</span>
+          </button>
+          <p v-if="resendMessage">{{ resendMessage }}</p>
+        </div>
+
         <form class="auth-form" @submit.prevent="handleSubmit">
           <label class="field-group">
             <span class="field-label">Email or Student ID</span>
@@ -87,8 +98,8 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
 import {
   BarChart3,
@@ -109,6 +120,39 @@ const apiError = ref('')
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+const notice = ref('')
+const unverifiedEmail = ref('')
+const isResending = ref(false)
+const resendMessage = ref('')
+
+// The verification endpoint redirects here with the outcome in the query
+// string, since the link is opened from an inbox with no session attached.
+const VERIFICATION_NOTICES = {
+  1: 'Email verified. You can sign in now.',
+  expired: 'That verification link has expired. Sign in to request a new one.',
+  invalid: 'That verification link is not valid. Sign in to request a new one.',
+}
+
+onMounted(() => {
+  notice.value = VERIFICATION_NOTICES[route.query.verified] ?? ''
+})
+
+async function handleResend() {
+  isResending.value = true
+  resendMessage.value = ''
+
+  try {
+    const data = await auth.resendVerification(unverifiedEmail.value)
+    resendMessage.value = data?.message ?? 'Check your inbox.'
+  } catch (error) {
+    resendMessage.value =
+      error.response?.data?.message ?? 'Could not send right now. Try again shortly.'
+  } finally {
+    isResending.value = false
+  }
+}
 
 const highlights = [
   { icon: ClipboardCheck, text: 'Practice tests and exam drills' },
@@ -130,6 +174,9 @@ async function handleSubmit() {
     await router.push('/dashboard')
   } catch (error) {
     apiError.value = error.response?.data?.message ?? 'Invalid credentials. Please try again.'
+    unverifiedEmail.value = error.response?.data?.unverified
+      ? (error.response.data.email ?? '')
+      : ''
   } finally {
     isLoading.value = false
   }
@@ -271,6 +318,19 @@ async function handleSubmit() {
   background: rgba(198, 40, 40, 0.12);
   color: var(--lnu-danger);
   border: 1px solid rgba(198, 40, 40, 0.2);
+}
+
+.alert-success {
+  background: rgba(46, 125, 50, 0.1);
+  color: var(--lnu-success);
+  border: 1px solid rgba(46, 125, 50, 0.22);
+}
+
+.alert-info {
+  background: rgba(21, 101, 192, 0.09);
+  border: 1px solid rgba(21, 101, 192, 0.2);
+  display: grid;
+  gap: 10px;
 }
 
 .auth-form {
