@@ -56,6 +56,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | Where the SPA is served from. The verification link lands on the API and
+    | then bounces the browser here. In production the two share an origin and
+    | this equals APP_URL; in local development Vite serves on :5173 while the
+    | API answers on :8080, so they differ.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

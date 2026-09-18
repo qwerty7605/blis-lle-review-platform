@@ -13,6 +13,22 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Self-Registration
+    |--------------------------------------------------------------------------
+    |
+    | Public registration (when enabled via the allow_public_registration
+    | setting) only accepts addresses on this exact domain. Pair it with email
+    | verification -- the domain check alone just filters what someone may
+    | type, while the verification link proves they can read the mailbox.
+    |
+    */
+
+    'registration' => [
+        'allowed_email_domain' => env('REGISTRATION_EMAIL_DOMAIN', 'lnu.edu.ph'),
+    ],
+
     'defaults' => [
         'guard' => env('AUTH_GUARD', 'web'),
         'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
