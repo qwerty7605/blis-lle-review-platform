@@ -27,8 +27,17 @@ export const useAuthStore = defineStore('auth', () => {
       password_confirmation,
       agreed,
     })
-    user.value = data.user
-    initialized.value = true
+
+    // Deliberately no session here. The account cannot be used until its
+    // verification link is clicked, so there is nothing to sign in yet --
+    // the caller shows a "check your inbox" state instead.
+    return data
+  }
+
+  async function resendVerification(email) {
+    const { data } = await authApi.resendVerification({ email })
+
+    return data
   }
 
   async function fetchMe(options = {}) {
@@ -66,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     login,
     register,
+    resendVerification,
     fetchMe,
     logout,
   }

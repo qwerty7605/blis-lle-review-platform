@@ -9,6 +9,10 @@ class AuthApi {
     return http.post('/auth/register', payload)
   }
 
+  resendVerification(payload) {
+    return http.post('/email/verification-notification', payload)
+  }
+
   me() {
     return http.get('/auth/me')
   }

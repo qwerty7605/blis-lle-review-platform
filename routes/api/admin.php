@@ -167,6 +167,12 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             $user->applyStudentStatus($studentStatus);
         }
 
+        // An administrator provisioning an account IS the verification: they
+        // are entering a known person's address, not asking a stranger to
+        // prove they can read one. Login refuses unverified accounts, so
+        // without this every admin-created user would be locked out.
+        $user->email_verified_at = now();
+
         $user->save();
 
         $recordAudit(

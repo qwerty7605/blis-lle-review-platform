@@ -21,6 +21,8 @@ use App\Services\ReviewBotService;
 use App\Services\ReviewBotAdminService;
 use App\Services\ReportExportService;
 use App\Services\RoleService;
+use App\Rules\InstitutionalEmail;
+use Illuminate\Auth\Events\Verified;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -259,7 +261,13 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
         'last_name' => ['required', 'string', 'max:255'],
         'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,20}$/', 'unique:users,student_id'],
         'year_level' => ['required', Rule::in(User::YEAR_LEVELS)],
-        'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+        'email' => [
+            'required',
+            'email',
+            'max:255',
+            'unique:users,email',
+            new InstitutionalEmail((string) config('auth.registration.allowed_email_domain')),
+        ],
         'password' => ['required', 'min:8', 'confirmed'],
         'agreed' => ['required', 'accepted'],
     ]);
@@ -284,23 +292,25 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
         'password' => $validated['password'],
     ]);
 
-    $token = $user->createToken('spa')->plainTextToken;
+    $user->sendEmailVerificationNotification();
 
     $recordAudit(
         $user,
         'auth.register',
         'user',
         $user->id,
-        'Student account self-registered',
+        'Student account self-registered, pending email verification',
         ['email' => $user->email, 'student_id' => $user->student_id, 'role' => $user->role],
         $request,
     );
 
-    $response = response()->json([
-        'user' => $user,
+    // No token and no cookie on purpose. Login refuses unverified accounts, so
+    // signing them in here would drop them into a dashboard where every
+    // request fails -- worse than telling them to go and check their inbox.
+    return response()->json([
+        'message' => 'Account created. Check your inbox for the verification link.',
+        'email' => $user->email,
     ], 201);
-
-    return $authTokenCookieService->attachTokenCookie($response, $token);
 })->middleware('throttle:register');
 
 Route::post('/auth/login', function (Request $request) use ($authTokenCookieService) {
@@ -321,6 +331,19 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
         return response()->json(['message' => 'Account is disabled. Contact an administrator.'], 403);
     }
 
+    // Reached only after the password checks out, so this reveals nothing to
+    // someone who does not already hold the credentials.
+    if (!$user->hasVerifiedEmail()) {
+        return response()->json([
+            'message' => 'Please verify your email address first. Check your inbox for the verification link.',
+            'unverified' => true,
+            // Safe to echo back: the password already matched, so the caller
+            // owns this account. Login also accepts a student ID, and the
+            // resend endpoint needs an address.
+            'email' => $user->email,
+        ], 403);
+    }
+
     $token = $user->createToken('spa')->plainTextToken;
 
     $response = response()->json([
@@ -329,6 +352,58 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
 
     return $authTokenCookieService->attachTokenCookie($response, $token);
 })->middleware('throttle:login');
+
+/*
+ * Target of the link in the verification email. Laravel's VerifyEmail
+ * notification builds that link with URL::temporarySignedRoute(), so this
+ * route's name must stay exactly "verification.verify" or the notification
+ * cannot resolve it.
+ *
+ * Failures redirect instead of returning JSON: someone clicking a link in
+ * their inbox arrives in a browser, where a raw 403 payload is a dead end.
+ */
+Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, string $hash) {
+    $frontend = rtrim((string) config('app.frontend_url'), '/');
+
+    // Covers tampering and expiry in one check.
+    if (!$request->hasValidSignature()) {
+        return redirect($frontend.'/login?verified=expired');
+    }
+
+    $user = User::find($id);
+
+    if (!$user || !hash_equals($hash, sha1($user->getEmailForVerification()))) {
+        return redirect($frontend.'/login?verified=invalid');
+    }
+
+    if (!$user->hasVerifiedEmail()) {
+        $user->markEmailAsVerified();
+        event(new Verified($user));
+    }
+
+    return redirect($frontend.'/login?verified=1');
+})->name('verification.verify');
+
+/*
+ * Resend a verification link. The reply is identical whether the address is
+ * unknown, already verified, or genuinely pending -- an unauthenticated caller
+ * should not be able to probe which addresses are registered here.
+ */
+Route::post('/email/verification-notification', function (Request $request) {
+    $validated = $request->validate([
+        'email' => ['required', 'email'],
+    ]);
+
+    $user = User::where('email', $validated['email'])->first();
+
+    if ($user && !$user->hasVerifiedEmail()) {
+        $user->sendEmailVerificationNotification();
+    }
+
+    return response()->json([
+        'message' => 'If that address still needs verifying, a new link is on its way.',
+    ]);
+})->middleware('throttle:verification');
 
 Route::get('/settings/public/legal', function () use ($systemSettingDefaults) {
     $legalKeys = ['terms_of_use_text', 'privacy_policy_text'];
