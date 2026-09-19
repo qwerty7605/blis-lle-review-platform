@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import LoginView from '../views/auth/LoginView.vue'
 import RegisterView from '../views/auth/RegisterView.vue'
 import ForgotPasswordView from '../views/auth/ForgotPasswordView.vue'
+import ResetPasswordView from '../views/auth/ResetPasswordView.vue'
 import DashboardLayout from '../views/dashboard/DashboardLayout.vue'
 import { useAuthStore } from '../store/auth.store'
 import {
@@ -40,6 +41,7 @@ const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: LoginView },
   { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
+  { path: '/reset-password', name: 'reset-password', component: ResetPasswordView },
   { path: '/register', name: 'register', component: RegisterView },
   {
     path: '/dashboard',
@@ -151,19 +153,28 @@ function normalizedRole(role) {
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
-  const isPublic = ['login', 'register', 'forgot-password'].includes(String(to.name))
+
+  // Signed-out visitors belong here; a signed-in one gets sent to their
+  // dashboard instead, since these pages are meaningless with a session.
+  const guestOnly = ['login', 'register', 'forgot-password'].includes(String(to.name))
+
+  // Reachable in either state. The reset link arrives by email and may well be
+  // opened in a browser that still holds a stale session -- bouncing that to
+  // the dashboard would strand someone who genuinely means to change their
+  // password, with no way to finish.
+  const alwaysOpen = ['reset-password'].includes(String(to.name))
 
   if (!auth.initialized) {
     await auth.fetchMe({ silent: true })
   }
 
-  if (!isPublic && !auth.isAuthenticated) {
+  if (!guestOnly && !alwaysOpen && !auth.isAuthenticated) {
     return { name: 'login' }
   }
 
   const role = normalizedRole(auth.user?.role)
 
-  if (isPublic && auth.isAuthenticated) {
+  if (guestOnly && auth.isAuthenticated) {
     return { name: dashboardDefaultRouteName(role) }
   }
 

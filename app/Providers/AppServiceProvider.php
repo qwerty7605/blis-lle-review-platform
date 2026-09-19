@@ -2,10 +2,14 @@
 
 namespace App\Providers;
 
+use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +28,77 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureRateLimiting();
+        $this->configureAccountMails();
+        $this->configurePasswordPolicy();
+    }
+
+    /**
+     * One definition of what counts as an acceptable password.
+     *
+     * Registered here rather than repeated at each call site: the rule is
+     * applied in six places (registration, reset, and four admin paths), and
+     * a policy copy-pasted six times is a policy that drifts. Every one of
+     * those now asks for PasswordRule::defaults().
+     *
+     * Existing passwords are untouched -- this governs what may be *set*, so
+     * nobody is locked out of an account they already have.
+     */
+    private function configurePasswordPolicy(): void
+    {
+        PasswordRule::defaults(static fn (): PasswordRule => PasswordRule::min(8)
+            ->mixedCase()
+            ->numbers()
+            ->symbols());
+    }
+
+    /**
+     * Shapes the two account emails Laravel sends on our behalf.
+     *
+     * Both ship as generic framework boilerplate otherwise -- a student
+     * receiving "Verify Email Address" from an unfamiliar domain has no way
+     * to tell it apart from phishing, which is exactly the instinct we want
+     * them to keep.
+     */
+    private function configureAccountMails(): void
+    {
+        VerifyEmail::toMailUsing(function (object $notifiable, string $url): MailMessage {
+            $hours = (int) round(((int) config('auth.verification.expire', 60)) / 60);
+
+            return (new MailMessage())
+                ->subject('Verify your '.config('app.name').' account')
+                ->greeting('Welcome to '.config('app.name').'.')
+                ->line('An account was created with this address. Confirm it is yours to finish signing up.')
+                ->action('Verify my account', $url)
+                ->line("This link stops working in {$hours} hours. You can request a new one from the sign-in page.")
+                ->line('If you did not create this account, ignore this email -- nothing was activated.');
+        });
+
+        // Unlike verification, a reset link has to land on the SPA rather than
+        // the API: the person still needs a form to type a new password into.
+        //
+        // Note the asymmetry in Laravel's own callbacks -- VerifyEmail hands
+        // toMailUsing a finished URL, while ResetPassword hands it the raw
+        // token. Building the URL here keeps both paths using one definition.
+        $resetUrl = static function (object $notifiable, string $token): string {
+            $frontend = rtrim((string) config('app.frontend_url'), '/');
+
+            return $frontend.'/reset-password?token='.$token
+                .'&email='.urlencode($notifiable->getEmailForPasswordReset());
+        };
+
+        ResetPassword::createUrlUsing($resetUrl);
+
+        ResetPassword::toMailUsing(function (object $notifiable, string $token) use ($resetUrl): MailMessage {
+            $minutes = (int) config('auth.passwords.users.expire', 60);
+
+            return (new MailMessage())
+                ->subject('Reset your '.config('app.name').' password')
+                ->greeting('Password reset requested.')
+                ->line('Use the button below to choose a new password.')
+                ->action('Choose a new password', $resetUrl($notifiable, $token))
+                ->line("This link stops working in {$minutes} minutes and can only be used once.")
+                ->line('If you did not ask for this, ignore this email -- your password has not changed.');
+        });
     }
 
     /**
@@ -80,6 +155,26 @@ class AppServiceProvider extends ServiceProvider
                 Limit::perHour(6)->by($request->ip()),
                 Limit::perHour(3)->by($email !== '' ? $email : $request->ip()),
             ];
+        });
+
+        // Asking for a reset link sends mail, so it is capped hard, per address
+        // as well as per origin. Kept separate from 'verification' so burning
+        // through one does not lock a student out of the other.
+        RateLimiter::for('password-reset-request', function (Request $request): array {
+            $email = Str::lower(trim((string) $request->input('email')));
+
+            return [
+                Limit::perHour(6)->by($request->ip()),
+                Limit::perHour(3)->by($email !== '' ? $email : $request->ip()),
+            ];
+        });
+
+        // Spending the token sends nothing, and the token is 60 random
+        // characters, so brute force is not the threat here -- a mistyped
+        // confirmation is. Loose enough that fumbling the form a few times
+        // never costs someone an hour's lockout.
+        RateLimiter::for('password-reset-confirm', function (Request $request): Limit {
+            return Limit::perHour(20)->by($request->ip());
         });
 
         RateLimiter::for('api', function (Request $request): Limit {

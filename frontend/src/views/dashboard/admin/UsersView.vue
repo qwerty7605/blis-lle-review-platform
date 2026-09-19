@@ -390,7 +390,7 @@
             <button
               type="button"
               class="primary-btn"
-              :disabled="usersSaving || !userForm.name.trim() || !userForm.email.trim() || (userForm.role === 'student' && (!userForm.student_id.trim() || (userForm.student_status === 'enrolled' && !userForm.year_level))) || (!userForm.id && userForm.password.length < 8)"
+              :disabled="usersSaving || !userForm.name.trim() || !userForm.email.trim() || (userForm.role === 'student' && (!userForm.student_id.trim() || (userForm.student_status === 'enrolled' && !userForm.year_level))) || (!userForm.id && !passwordIsValid(userForm.password))"
               @click="handleSaveUser"
             >
               <RefreshCw v-if="usersSaving" :size="14" class="spin-soft" />
@@ -457,7 +457,7 @@
             <button
               type="button"
               class="primary-btn"
-              :disabled="usersRecovering || !recoverForm.student_id.trim() || !recoverForm.email.trim() || recoverForm.password.length < 8"
+              :disabled="usersRecovering || !recoverForm.student_id.trim() || !recoverForm.email.trim() || !passwordIsValid(recoverForm.password)"
               @click="handleRecoverUserAccount"
             >
               <RefreshCw v-if="usersRecovering" :size="14" class="spin-soft" />
@@ -473,6 +473,7 @@
 <script setup>
 import { AlertCircle, ArchiveRestore, CheckCircle2, Pencil, Plus, RefreshCw, ShieldCheck, UserRound, X } from 'lucide-vue-next'
 import { useUsersModule } from '../composables/useUsersModule'
+import { passwordIsValid } from '@/utils/password'
 
 const {
   adminUsers,

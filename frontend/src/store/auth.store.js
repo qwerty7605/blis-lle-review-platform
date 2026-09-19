@@ -34,6 +34,17 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
+  async function forgotPassword(email) {
+    const { data } = await authApi.forgotPassword({ email })
+
+    return data
+  }
+
+  async function resetPassword(payload) {
+    const { data } = await authApi.resetPassword(payload)
+
+    return data
+  }
   async function resendVerification(email) {
     const { data } = await authApi.resendVerification({ email })
 
@@ -76,6 +87,8 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     register,
     resendVerification,
+    forgotPassword,
+    resetPassword,
     fetchMe,
     logout,
   }

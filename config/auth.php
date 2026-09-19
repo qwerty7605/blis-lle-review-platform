@@ -110,6 +110,25 @@ return [
     |
     */
 
+    /*
+    |--------------------------------------------------------------------------
+    | Email Verification Link Lifetime
+    |--------------------------------------------------------------------------
+    |
+    | Minutes a registration verification link stays valid. Laravel defaults
+    | this to 60, which is short for a verification link -- that number is
+    | really sized for password resets, where the link grants account access.
+    | A verification link only proves the holder can read the mailbox, and
+    | anyone able to intercept it could request a fresh one anyway, so the
+    | longer window costs little. 24 hours matches what most frameworks ship
+    | and survives a student registering in class and reading mail that night
+    | -- especially with delivery lag from a new sending domain.
+    |
+    */
+
+    'verification' => [
+        'expire' => (int) env('AUTH_VERIFICATION_EXPIRE', 1440),
+    ],
     'passwords' => [
         'users' => [
             'provider' => 'users',

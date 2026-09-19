@@ -186,6 +186,13 @@
               <div class="pw-fill" :style="{ width: `${pwStrength.pct}%`, background: pwStrength.color }" />
             </div>
             <span class="pw-label" :style="{ color: pwStrength.color }">{{ pwStrength.label }}</span>
+
+            <ul class="pw-rules">
+              <li v-for="rule in pwChecklist" :key="rule.key" :class="{ met: rule.met }">
+                <component :is="rule.met ? Check : X" :size="13" />
+                {{ rule.label }}
+              </li>
+            </ul>
           </div>
 
           <div class="terms-section">
@@ -277,8 +284,10 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
+import { firstPasswordProblem, passwordChecklist, passwordStrength } from '@/utils/password'
 import {
   BarChart3,
+  Check,
   ClipboardCheck,
   Eye,
   EyeOff,
@@ -288,6 +297,7 @@ import {
   Mail,
   ShieldCheck,
   UserRound,
+  X,
 } from 'lucide-vue-next'
 
 const form = reactive({
@@ -394,13 +404,10 @@ const legalUpdatedLabel = computed(() => {
   })}`
 })
 
-const pwStrength = computed(() => {
-  const pw = form.password
-  if (pw.length < 6) return { pct: 20, color: 'var(--lnu-danger)', label: 'Weak' }
-  if (pw.length < 10) return { pct: 55, color: 'var(--lnu-gold)', label: 'Fair' }
-  if (/[A-Z]/.test(pw) && /[0-9]/.test(pw)) return { pct: 100, color: 'var(--lnu-success)', label: 'Strong' }
-  return { pct: 75, color: 'var(--lnu-gold)', label: 'Good' }
-})
+// Tracks the requirements the server actually enforces rather than guessing
+// at entropy, so a full bar means the form will be accepted.
+const pwStrength = computed(() => passwordStrength(form.password))
+const pwChecklist = computed(() => passwordChecklist(form.password))
 
 function updatePolicyReadiness() {
   if (legalLoading.value) {
@@ -499,6 +506,13 @@ async function handleSubmit() {
 
   if (![1, 2, 3, 4].includes(yearLevel)) {
     apiError.value = 'Select a valid year level.'
+    return
+  }
+
+  const passwordProblem = firstPasswordProblem(form.password)
+
+  if (passwordProblem) {
+    apiError.value = passwordProblem
     return
   }
 
@@ -798,6 +812,26 @@ async function handleSubmit() {
 .field-error {
   font-size: 14px;
   color: var(--lnu-danger);
+}
+
+.pw-rules {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.pw-rules li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.pw-rules li.met {
+  color: var(--lnu-success);
 }
 
 .pw-strength {

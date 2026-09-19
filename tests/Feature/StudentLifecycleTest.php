@@ -169,7 +169,7 @@ class StudentLifecycleTest extends TestCase
             'role' => User::ROLE_STUDENT,
             'year_level' => 1,
             'admission_year' => 2026,
-            'password' => 'password123',
+            'password' => 'Password123!',
         ])->assertSuccessful();
 
         $created = User::where('email', 'new-lifecycle-student@example.com')->first();
@@ -189,7 +189,7 @@ class StudentLifecycleTest extends TestCase
             'name' => 'New Staff',
             'email' => 'new-lifecycle-staff@example.com',
             'role' => User::ROLE_STAFF_MASTER_EXAMINER,
-            'password' => 'password123',
+            'password' => 'Password123!',
         ])->assertSuccessful();
 
         $created = User::where('email', 'new-lifecycle-staff@example.com')->first();
