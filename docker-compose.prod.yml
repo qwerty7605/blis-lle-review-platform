@@ -1,0 +1,119 @@
+# Production stack. Differs from docker-compose.yml deliberately:
+#   - no phpMyAdmin (a database login form on a public IP)
+#   - no bind mounts (the image is self-contained; nothing comes from the host)
+#   - nginx on :80 rather than :8080
+#   - MySQL still unpublished, reachable only inside this network
+#
+# Bring it up with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Migrations are a deliberate step, never automatic:
+#   docker compose -f docker-compose.prod.yml run --rm php php artisan migrate --force
+
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: app
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      # Only writable state is mounted. Application code lives in the image so
+      # that what was built is what runs.
+      - app_storage:/var/www/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - appnet
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: web
+    restart: unless-stopped
+    ports:
+      - "${APP_HTTP_PORT:-80}:80"
+      # Uncomment once certbot has issued a certificate and the server block
+      # has a TLS listener.
+      # - "443:443"
+    depends_on:
+      - php
+    networks:
+      - appnet
+
+  db:
+    image: mysql:8.4.8
+    restart: unless-stopped
+    env_file:
+      - ./.env.docker
+    # Deliberately no `ports:` -- MySQL stays reachable only from this network.
+    # If you need a GUI, tunnel over SSH rather than publishing 3306.
+    command:
+      # Tuned down for a 1GB instance; the default buffer pool alone would
+      # claim most of the memory php-fpm and nginx need.
+      - --innodb-buffer-pool-size=128M
+      - --performance-schema=OFF
+      - --max-connections=40
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # Authenticates as the application user against the application database,
+      # so "healthy" means the app can genuinely connect. `mysqladmin ping`
+      # reports success even with wrong credentials, which makes it useless as
+      # a readiness gate.
+      test: ["CMD-SHELL", "mysql -h localhost -u\"$$MYSQL_USER\" -p\"$$MYSQL_PASSWORD\" -e 'SELECT 1' \"$$MYSQL_DATABASE\" >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - appnet
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: app
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=1 --tries=3 --timeout=300 --max-time=3600
+    env_file:
+      - ./.env
+    volumes:
+      - app_storage:/var/www/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - appnet
+
+  # Laravel's scheduler. Currently drives one job -- sanctum:prune-expired --
+  # which deletes expired API tokens so personal_access_tokens does not grow
+  # without bound as students log in each term.
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: app
+    restart: unless-stopped
+    command: php artisan schedule:work
+    env_file:
+      - ./.env
+    volumes:
+      - app_storage:/var/www/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - appnet
+
+volumes:
+  mysql_data:
+    name: blis_prod_mysql_data
+  app_storage:
+    name: blis_prod_storage
+
+networks:
+  appnet:
