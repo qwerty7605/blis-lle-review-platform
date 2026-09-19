@@ -83,7 +83,7 @@ class RegistrationEmailVerificationTest extends TestCase
 
         $this->postJson('/api/auth/login', [
             'identifier' => 'juan@lnu.edu.ph',
-            'password' => 'secret12345',
+            'password' => 'Secret12345!',
         ])
             ->assertStatus(403)
             ->assertJsonPath('unverified', true)
@@ -103,7 +103,7 @@ class RegistrationEmailVerificationTest extends TestCase
 
         $this->postJson('/api/auth/login', [
             'identifier' => 'juan@lnu.edu.ph',
-            'password' => 'secret12345',
+            'password' => 'Secret12345!',
         ])->assertStatus(200);
     }
 
@@ -178,7 +178,7 @@ class RegistrationEmailVerificationTest extends TestCase
             'role' => User::ROLE_STUDENT,
             'student_id' => '2301777',
             'year_level' => 2,
-            'password' => 'secret12345',
+            'password' => 'Secret12345!',
         ])->assertSuccessful();
 
         $created = User::firstWhere('email', 'maria.santos@lnu.edu.ph');
@@ -190,7 +190,7 @@ class RegistrationEmailVerificationTest extends TestCase
 
         $this->postJson('/api/auth/login', [
             'identifier' => 'maria.santos@lnu.edu.ph',
-            'password' => 'secret12345',
+            'password' => 'Secret12345!',
         ])->assertStatus(200);
     }
 
@@ -204,8 +204,8 @@ class RegistrationEmailVerificationTest extends TestCase
             'student_id' => '2300001',
             'year_level' => 1,
             'email' => 'juan@lnu.edu.ph',
-            'password' => 'secret12345',
-            'password_confirmation' => 'secret12345',
+            'password' => 'Secret12345!',
+            'password_confirmation' => 'Secret12345!',
             'agreed' => true,
         ], $overrides);
     }

@@ -22,6 +22,7 @@ use App\Services\ReviewBotAdminService;
 use App\Services\ReportExportService;
 use App\Services\RoleService;
 use App\Rules\InstitutionalEmail;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Verified;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -29,6 +30,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -268,7 +271,7 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
             'unique:users,email',
             new InstitutionalEmail((string) config('auth.registration.allowed_email_domain')),
         ],
-        'password' => ['required', 'min:8', 'confirmed'],
+        'password' => ['required', 'confirmed', PasswordRule::defaults()],
         'agreed' => ['required', 'accepted'],
     ]);
 
@@ -352,6 +355,72 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
 
     return $authTokenCookieService->attachTokenCookie($response, $token);
 })->middleware('throttle:login');
+
+/*
+ * Step one of a password reset: mail a single-use link. The reply is
+ * identical whether or not the address is on file -- anything else turns
+ * this endpoint into a way to test which addresses have accounts here.
+ */
+Route::post('/auth/forgot-password', function (Request $request) {
+    $validated = $request->validate([
+        'email' => ['required', 'email'],
+    ]);
+
+    Password::sendResetLink(['email' => $validated['email']]);
+
+    return response()->json([
+        'message' => 'If that address has an account, a reset link is on its way.',
+    ]);
+})->middleware('throttle:password-reset-request');
+
+/*
+ * Step two: spend the token and set the new password.
+ *
+ * Every existing API token is destroyed in the same transaction. People
+ * reset passwords precisely because they think somebody else got in, and
+ * leaving that person's session alive would defeat the entire exercise --
+ * this is the part that matters far more than how long the link lives.
+ */
+Route::post('/auth/reset-password', function (Request $request) use ($recordAudit) {
+    $validated = $request->validate([
+        'token' => ['required', 'string'],
+        'email' => ['required', 'email'],
+        'password' => ['required', 'confirmed', PasswordRule::defaults()],
+    ]);
+
+    $reset = null;
+
+    $status = Password::reset($validated, function (User $user, string $password) use (&$reset): void {
+        $user->password = $password;
+        $user->setRememberToken(Str::random(60));
+        $user->save();
+
+        // Sign every device out, including whoever prompted the reset.
+        $user->tokens()->delete();
+
+        $reset = $user;
+
+        event(new PasswordReset($user));
+    });
+
+    if ($status !== Password::PASSWORD_RESET) {
+        return response()->json([
+            'message' => 'That reset link is invalid or has already been used. Request a new one.',
+        ], 422);
+    }
+
+    $recordAudit(
+        $reset,
+        'auth.password_reset',
+        'user',
+        $reset->id,
+        'Password reset through emailed link; all sessions revoked',
+        ['email' => $reset->email],
+        $request,
+    );
+
+    return response()->json(['message' => 'Password updated. You can sign in now.']);
+})->middleware('throttle:password-reset-confirm');
 
 /*
  * Target of the link in the verification email. Laravel's VerifyEmail

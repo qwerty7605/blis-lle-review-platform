@@ -13,6 +13,14 @@ class AuthApi {
     return http.post('/email/verification-notification', payload)
   }
 
+  forgotPassword(payload) {
+    return http.post('/auth/forgot-password', payload)
+  }
+
+  resetPassword(payload) {
+    return http.post('/auth/reset-password', payload)
+  }
+
   me() {
     return http.get('/auth/me')
   }
