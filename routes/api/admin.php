@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 
 Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $isAdmin, $recordAudit) {
     Route::get('/users', function (Request $request) use ($ensureActive, $isAdmin) {
@@ -123,7 +124,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             ],
             'student_status' => ['nullable', Rule::in(User::STUDENT_STATUSES)],
             'admission_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string', PasswordRule::defaults()],
             'is_active' => ['nullable', 'boolean'],
             'archived' => ['nullable', 'boolean'],
         ]);
@@ -217,7 +218,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             'student_status' => ['sometimes', 'nullable', Rule::in(User::STUDENT_STATUSES)],
             'admission_year' => ['sometimes', 'nullable', 'integer', 'min:1900', 'max:2999'],
             'is_active' => ['sometimes', 'required', 'boolean'],
-            'password' => ['sometimes', 'required', 'string', 'min:8'],
+            'password' => ['sometimes', 'required', 'string', PasswordRule::defaults()],
             'archived' => ['sometimes', 'boolean'],
         ]);
 
@@ -363,7 +364,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $validated = $request->validate([
             'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,20}$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string', PasswordRule::defaults()],
         ]);
 
         $enteredStudentId = trim((string) $validated['student_id']);

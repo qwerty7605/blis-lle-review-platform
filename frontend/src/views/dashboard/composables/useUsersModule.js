@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { firstPasswordProblem, passwordIsValid } from '@/utils/password'
 
 const USERS_DEFAULT_PAGE_SIZE = 200
 
@@ -421,11 +422,23 @@ export function useUsersModule() {
 
     try {
       if (userForm.id) {
+        // A blank password on edit means "leave it alone"; only a typed one
+        // has to satisfy the policy.
+        const changeProblem = payload.password ? firstPasswordProblem(payload.password) : ''
+
+        if (changeProblem) {
+          usersError.value = changeProblem
+          usersSaving.value = false
+          return
+        }
+
         await services.updateUser(userForm.id, payload)
         usersMessage.value = 'User updated successfully.'
       } else {
-        if (!payload.password || payload.password.length < 8) {
-          usersError.value = 'Password must be at least 8 characters for new users.'
+        const passwordProblem = firstPasswordProblem(payload.password ?? '')
+
+        if (passwordProblem) {
+          usersError.value = passwordProblem
           usersSaving.value = false
           return
         }
@@ -454,7 +467,7 @@ export function useUsersModule() {
       return
     }
 
-    if (!recoverForm.email.trim() || recoverForm.password.length < 8) return
+    if (!recoverForm.email.trim() || !passwordIsValid(recoverForm.password)) return
 
     usersRecovering.value = true
     usersError.value = ''

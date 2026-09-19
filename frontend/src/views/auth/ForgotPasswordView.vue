@@ -7,7 +7,7 @@
 
       <h1>Forgot your password?</h1>
       <p>
-        Enter your account email and we will send a reset link once password recovery is enabled.
+        Enter your account email and we will send you a link to choose a new password.
       </p>
 
       <form class="forgot-form" @submit.prevent="handleSubmit">
@@ -25,10 +25,14 @@
           </div>
         </label>
 
-        <button type="submit" class="submit-btn">Request reset link</button>
+        <button type="submit" class="submit-btn" :disabled="isLoading">
+          <span v-if="!isLoading">Request reset link</span>
+          <span v-else>Sending...</span>
+        </button>
       </form>
 
       <p v-if="message" class="status-msg">{{ message }}</p>
+      <p v-if="errorMsg" class="status-msg status-error">{{ errorMsg }}</p>
 
       <router-link to="/login" class="back-link">
         <ArrowLeft :size="14" />
@@ -41,17 +45,38 @@
 <script setup>
 import { ref } from 'vue'
 import { ArrowLeft, Mail, ShieldCheck } from 'lucide-vue-next'
+import { useAuthStore } from '@/store/auth.store'
+
+const auth = useAuthStore()
 
 const email = ref('')
 const message = ref('')
+const errorMsg = ref('')
+const isLoading = ref(false)
 
-function handleSubmit() {
+async function handleSubmit() {
+  message.value = ''
+  errorMsg.value = ''
+
   if (!email.value.trim()) {
-    message.value = 'Please enter your email address first.'
+    errorMsg.value = 'Please enter your email address first.'
     return
   }
 
-  message.value = 'Reset request captured. This feature will be connected to backend email soon.'
+  isLoading.value = true
+
+  try {
+    const data = await auth.forgotPassword(email.value.trim())
+
+    // The reply is the same whether or not the address is on file, so there is
+    // nothing here to tell someone which addresses have accounts.
+    message.value = data?.message ?? 'If that address has an account, a reset link is on its way.'
+  } catch (error) {
+    errorMsg.value =
+      error.response?.data?.message ?? 'Could not send the reset link. Try again shortly.'
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
@@ -156,6 +181,12 @@ function handleSubmit() {
   background: rgba(46, 125, 50, 0.1);
   color: var(--lnu-success);
   font-size: 14px;
+}
+
+.status-error {
+  border-color: rgba(198, 40, 40, 0.24);
+  background: rgba(198, 40, 40, 0.1);
+  color: var(--lnu-danger);
 }
 
 .back-link {
