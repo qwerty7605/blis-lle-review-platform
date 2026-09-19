@@ -5,8 +5,11 @@ namespace App\Providers;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password as PasswordRule;
@@ -30,6 +33,25 @@ class AppServiceProvider extends ServiceProvider
         $this->configureRateLimiting();
         $this->configureAccountMails();
         $this->configurePasswordPolicy();
+        $this->configureHealthCheck();
+    }
+
+    /**
+     * Make /up prove the database is reachable, not just that PHP answered.
+     *
+     * Laravel's health route returns 200 as long as the framework boots, so
+     * out of the box it reports healthy while MySQL is down. That is worse
+     * than having no check: a load balancer believes it and keeps routing
+     * traffic to an instance that cannot serve a single request.
+     *
+     * Throwing here is the documented way to fail the check -- the exception
+     * propagates and /up answers 500.
+     */
+    private function configureHealthCheck(): void
+    {
+        Event::listen(static function (DiagnosingHealth $event): void {
+            DB::connection()->select('select 1');
+        });
     }
 
     /**
