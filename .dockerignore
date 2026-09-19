@@ -11,3 +11,29 @@ npm-debug.log
 yarn-error.log
 .env
 .env.*
+
+# Build artefacts and host-only state -- the image builds its own.
+frontend/node_modules
+frontend/dist
+public/build
+
+# Never needed at runtime.
+tests
+phpunit.xml
+.phpunit.result.cache
+
+# ml/tools is 9.4MB of Weka jar and Java sources used offline to regenerate
+# the PHP port of the decision tree. The app never loads them -- see
+# ml/README.md and LetPredictionService.
+ml/tools
+
+# Scratch files that accumulated in the repo root.
+tmp
+tmp_debug.php
+docx_debug
+test_docx.docx
+open.txt
+
+# Compose files and the dev image definition.
+docker-compose*.yml
+dockerfile
