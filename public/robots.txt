@@ -1,2 +1,11 @@
+# This is an institutional tool, not a public website. Nothing here belongs in
+# search results.
+#
+# Be clear about what this does: it asks well-behaved crawlers not to index.
+# It is not access control. Anyone holding the URL still reaches the login
+# page, this file is itself publicly readable, and the domain becomes public
+# anyway the moment a TLS certificate is issued, because every certificate is
+# published to Certificate Transparency logs. The login is what protects the
+# application; this only stops it being advertised.
 User-agent: *
-Disallow:
+Disallow: /
