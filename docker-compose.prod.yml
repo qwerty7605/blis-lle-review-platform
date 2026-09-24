@@ -36,9 +36,14 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_HTTP_PORT:-80}:80"
-      # Uncomment once certbot has issued a certificate and the server block
-      # has a TLS listener.
-      # - "443:443"
+      - "${APP_HTTPS_PORT:-443}:443"
+    volumes:
+      # Where certbot writes its challenge token; nginx serves it from here.
+      - /var/www/certbot:/var/www/certbot:ro
+      # The certificates themselves. Read-only: only certbot on the host
+      # should ever write here. live/ holds symlinks into archive/, so the
+      # whole tree has to be mounted, not just live/.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - php
     networks:
