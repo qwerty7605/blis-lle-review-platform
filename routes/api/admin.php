@@ -35,7 +35,11 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $perPage = (int) ($validated['per_page'] ?? 200);
 
         $users = User::query()
-            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'student_status', 'admission_year', 'is_active', 'archived_at', 'created_at', 'updated_at')
+            // email_verified_at is selected so the directory can distinguish an
+            // account staff disabled from one that never completed signup. Without
+            // it the UI can only render is_active, which shows a green "Active"
+            // badge for accounts that cannot log in at all.
+            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'student_status', 'admission_year', 'is_active', 'email_verified_at', 'archived_at', 'created_at', 'updated_at')
             ->when(
                 filled($validated['search'] ?? null),
                 fn ($query) => $query->where(function ($inner) use ($validated) {
