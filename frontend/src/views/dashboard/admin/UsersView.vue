@@ -105,8 +105,8 @@
 
                   <div class="management-inline">
                     <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
-                    <span class="pill" :class="user.is_active ? 'success' : 'neutral'">
-                      {{ user.is_active ? 'Active' : 'Inactive' }}
+                    <span class="pill" :class="accountState(user).tone">
+                      {{ accountState(user).label }}
                     </span>
                   </div>
 
@@ -175,8 +175,8 @@
                     <span class="pill neutral">Archived</span>
                     <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
                     <span class="pill neutral">{{ studentStatusLabel(user.student_status) }}</span>
-                    <span class="pill" :class="user.is_active ? 'success' : 'neutral'">
-                      {{ user.is_active ? 'Active' : 'Inactive' }}
+                    <span class="pill" :class="accountState(user).tone">
+                      {{ accountState(user).label }}
                     </span>
                   </div>
 
@@ -242,8 +242,8 @@
 
                   <div class="management-inline">
                     <span class="pill neutral">{{ displayMemberRole(user.role) }}</span>
-                    <span class="pill" :class="user.is_active ? 'success' : 'neutral'">
-                      {{ user.is_active ? 'Active' : 'Inactive' }}
+                    <span class="pill" :class="accountState(user).tone">
+                      {{ accountState(user).label }}
                     </span>
                   </div>
 
@@ -474,6 +474,23 @@
 import { AlertCircle, ArchiveRestore, CheckCircle2, Pencil, Plus, RefreshCw, ShieldCheck, UserRound, X } from 'lucide-vue-next'
 import { useUsersModule } from '../composables/useUsersModule'
 import { passwordIsValid } from '@/utils/password'
+
+/**
+ * Whether an account can actually be used, which needs BOTH gates open:
+ * is_active is the switch staff control, email_verified_at is the holder
+ * proving they can read the mailbox they signed up with.
+ *
+ * These were previously collapsed into one badge, so a registration with a
+ * plausible but non-existent institutional address appeared as a green
+ * "Active" 4th-year student while being unable to log in at all. Staff
+ * counting enrolled students were counting phantoms.
+ */
+function accountState(user) {
+  if (!user.is_active) return { label: 'Inactive', tone: 'neutral' }
+  if (!user.email_verified_at) return { label: 'Pending verification', tone: 'gold' }
+
+  return { label: 'Active', tone: 'success' }
+}
 
 const {
   adminUsers,
