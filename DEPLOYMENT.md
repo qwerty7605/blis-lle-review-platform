@@ -229,6 +229,52 @@ it is a real speed win on a small instance.
 
 ---
 
+## 9. Demo data
+
+`php artisan db:seed` builds a realistic demo: about 4,200 accounts, this
+term's exams with 20,000 attempts, Review Bot content, and ten graduated
+cohorts with board results. Every demo account is flagged `users.is_demo`,
+which is how `demo:purge` removes all of it without touching real accounts.
+
+Take a backup first (section 7), then:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm php php artisan db:seed --force
+```
+
+It signs in as follows (the seed output prints the same table):
+
+| Account | Sign in with | Password |
+|---|---|---|
+| Admin | `DEMO_ADMIN_EMAIL` (default in `app/Services/Demo/DemoData.php`) | `DEMO_ADMIN_PASSWORD` |
+| Teachers | `teacher1@lnu.edu.ph`, `teacher2@…`, `teacher3@…` | `DEMO_SEED_PASSWORD` |
+| Students | `…@blis.test` addresses listed in the output | `DEMO_SEED_PASSWORD` |
+
+Each password falls back to a default written in this repository; pass
+`-e DEMO_ADMIN_PASSWORD=… -e DEMO_SEED_PASSWORD=…` to `run` to use your own.
+If the admin or a teacher address already belongs to a real account, seeding
+stops without changing anything. Demo accounts cannot request password-reset
+emails. `SHOWCASE_COHORT_SIZE` (default 300) and `SHOWCASE_HISTORY_YEARS`
+(default 10) shrink the demo if needed.
+
+While it is loaded, real accounts share the site with it: dashboards count
+the demo students, and real students' Review Bot practice can draw the demo's
+published review questions. Take it out when you are done:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm php php artisan demo:purge --dry-run
+docker compose -f docker-compose.prod.yml run --rm php php artisan demo:purge --force
+```
+
+The dry run lists what will go, including any real activity on demo content.
+The demo admin and teacher accounts go too, so keep a real admin account of
+your own (section 4). A demo Library file that a real exam uses is kept and
+handed to that exam's author. If a real exam has attempts inside a demo
+section, the purge refuses and removes nothing; unassign that exam from the
+section first.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause |

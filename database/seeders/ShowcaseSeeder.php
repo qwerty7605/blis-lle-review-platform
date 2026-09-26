@@ -8,75 +8,61 @@ use App\Models\LleResult;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use App\Models\ReviewBotAttempt;
-use App\Models\Room;
 use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Models\User;
+use App\Services\Demo\DemoData;
+use App\Services\Demo\DemoDataPurger;
 use App\Services\QuestionMappingService;
+use App\Services\ReviewBotAdminService;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Demo\DemoNames;
+use Database\Seeders\Demo\DemoQuestions;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 /**
- * A walk-through of the whole system with every state populated.
+ * The demo: a BLIS programme that looks lived-in on every screen.
  *
- * Where MockAnalyticsDemoSeeder builds two hand-tuned students and
- * LoadTestDirectorySeeder builds volume, this one is for showing the system
- * working: every screen has something on it, and every branch a screen can take
- * has a record that reaches it. Concretely that means the awkward states as
- * well as the happy ones -- a Library upload whose mapping failed, an exam item
- * with a flagged answer key, a graduate whose board result was never recorded,
- * a review question a teacher declined, a student sitting an exam right now.
+ * At the defaults it builds:
+ *  - staff: an admin, three teachers (the first is the programme chair), and
+ *    a disabled former examiner (the login guard has a branch for that);
+ *  - ~1,200 enrolled students in sections of about 45 across four year
+ *    levels, irregular students, leavers of every kind, and three featured
+ *    fourth years to walk through by name (top, borderline, struggling);
+ *  - a Library of board-exam-style items, one per curated subtopic, plus a
+ *    file whose mapping failed and one nobody has mapped yet;
+ *  - this term's exams: a mock board exam per subject for fourth years (one
+ *    open right now, with students mid-attempt), quizzes for the lower years,
+ *    and a pre-board exam still to come;
+ *  - Review Bot questions made by the app's own generator from those items --
+ *    published, declined and awaiting review -- and students' practice on them;
+ *  - ten graduated cohorts of history, with their board exam results.
  *
- * Everything is namespaced to the `showcase.local` email domain and the
- * `SHOWCASE` code/title prefixes, and each run purges the last, so it cannot be
- * confused with demo or load-test records.
+ * Sign-ins (see DemoData): the admin is DEMO_ADMIN_EMAIL / DEMO_ADMIN_PASSWORD,
+ * the teachers are teacher1-3@lnu.edu.ph, and students are on the reserved
+ * blis.test domain; everyone but the admin uses DEMO_SEED_PASSWORD. Each falls
+ * back to the default in DemoData when its variable is unset.
  *
- *   php artisan db:seed --class=ShowcaseSeeder
- *   SHOWCASE_PURGE_ONLY=1 php artisan db:seed --class=ShowcaseSeeder
+ * Every account is marked users.is_demo, and nothing else marks the records
+ * as demo data: `php artisan demo:purge` finds all of it through those
+ * accounts, and running this seeder again replaces the previous demo. If a
+ * staff address already belongs to a real account, the seeder stops rather
+ * than take that account over.
  *
- * SHOWCASE_HISTORY_YEARS (default 10) controls how many graduating cohorts of
- * back-history to build. Set it to 0 for just the current intake.
- * SHOWCASE_COHORT_SIZE (default 300) is the intake per year level, which sets
- * both current enrolment and the size of each historical cohort. The default
- * reflects a real BLIS programme: four year levels of ~300 is ~1,200 enrolled
- * at any moment, and a decade of intake takes the total past 4,000.
+ *   php artisan db:seed           builds it (DatabaseSeeder runs this)
+ *   php artisan demo:purge        takes it all out again
  *
- * Sign in as any account below with the password `password`.
+ * SHOWCASE_COHORT_SIZE (default 300) is the intake per year level and
+ * SHOWCASE_HISTORY_YEARS (default 10) the number of graduated cohorts.
  */
 class ShowcaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    private const DOMAIN = 'showcase.local';
-    private const PREFIX = 'SHOWCASE';
-    private const STUDENT_ID_BASE = 8100000;
-
-    /** Historical accounts number from here, well clear of the current intake. */
-    private const HISTORY_STUDENT_ID_BASE = 8200000;
-
-    /**
-     * Board pass rates by cohort, oldest first, cycled if more years are asked
-     * for. Real programmes do not hold a flat rate -- a curriculum change or a
-     * strong batch moves it -- and a flat one would make the year-on-year
-     * outcome charts look synthetic.
-     *
-     * @var list<float>
-     */
-    private const HISTORIC_PASS_RATES = [0.58, 0.64, 0.61, 0.72, 0.69, 0.78, 0.74, 0.81, 0.77, 0.85];
-
-    /**
-     * Cohort sizes as a proportion of the base intake, cycled the same way. A
-     * programme's intake drifts year to year rather than holding steady, and
-     * identical cohorts would read as generated.
-     *
-     * @var list<float>
-     */
-    private const HISTORIC_COHORT_RATIOS = [0.74, 0.87, 0.80, 1.03, 0.93, 1.10, 1.00, 1.20, 1.13, 1.27];
-
-    /** Every subject the Review Bot and the predictor know about. */
     private const SUBJECTS = [
         'Cataloging and Classification',
         'Indexing and Abstracting',
@@ -86,157 +72,223 @@ class ShowcaseSeeder extends Seeder
         'Selection and Acquisition',
     ];
 
-    private string $password;
-    private CarbonImmutable $now;
+    /** Students per section; a year level gets as many sections as it needs. */
+    private const SECTION_SIZE = 45;
 
-    /** @var array<string, User> */
+    /** How a cohort thins by year level -- attrition, seen from enrolment. */
+    private const RETENTION = [1 => 1.0, 2 => 0.96, 3 => 0.92, 4 => 0.89];
+
+    /**
+     * Fourth years the demo can be walked through by name: the score each
+     * centres on, and the subjects that pull it down.
+     */
+    private const FEATURED = [
+        'top' => ['Angelica', 'Reyes', 'Dela Cruz', 90, []],
+        'borderline' => ['Mark Anthony', 'Santos', 'Villareal', 77, ['Cataloging and Classification', 'Indexing and Abstracting']],
+        'struggling' => ['Kristine Joy', 'Pacaña', 'Bacalso', 46, ['Cataloging and Classification', 'Information Technology', 'Selection and Acquisition']],
+    ];
+
+    /** Quizzes the lower years sat this term: year level => [subject, kind]. */
+    private const LOWER_YEAR_EXAMS = [
+        1 => [['Information Technology', 'Diagnostic Quiz'], ['Reference Services', 'Diagnostic Quiz']],
+        2 => [['Cataloging and Classification', 'Midterm Quiz'], ['Indexing and Abstracting', 'Midterm Quiz']],
+        3 => [['Library Management', 'Unit Test'], ['Selection and Acquisition', 'Unit Test']],
+    ];
+
+    /**
+     * Board pass rates by cohort, oldest first, cycled if more years are asked
+     * for. Real programmes do not hold a flat rate, and a flat one would make
+     * the year-on-year outcome charts look generated.
+     */
+    private const HISTORIC_PASS_RATES = [0.58, 0.64, 0.61, 0.72, 0.69, 0.78, 0.74, 0.81, 0.77, 0.85];
+
+    /** Cohort sizes relative to the base intake, cycled the same way. */
+    private const HISTORIC_COHORT_RATIOS = [0.74, 0.87, 0.80, 1.03, 0.93, 1.10, 1.00, 1.20, 1.13, 1.27];
+
+    private const DIFFICULTY_WEIGHT = [
+        QuestionBankQuestion::DIFFICULTY_EASY => 1.0,
+        QuestionBankQuestion::DIFFICULTY_MEDIUM => 0.7,
+        QuestionBankQuestion::DIFFICULTY_HARD => 0.45,
+    ];
+
+    private CarbonImmutable $now;
+    private CarbonImmutable $termStart;
+    private string $passwordHash;
+    private DemoNames $names;
+
+    /** @var array<string, int> role key => user id */
     private array $staff = [];
 
-    /** @var array<int, Room> year level => room */
-    private array $rooms = [];
+    /** @var array<string, array{label: string, name: string, email: string}> */
+    private array $logins = [];
 
-    /** @var array<string, array{topic: Topic, subtopics: list<Subtopic>}> */
+    /** @var array<int, list<int>> year level => this term's section room ids */
+    private array $sections = [];
+
+    /** @var array<string, array<string, array{id: int, subtopics: array<string, int>}>> */
     private array $taxonomy = [];
 
-    /** @var array<string, QuestionBank> subject => uploaded library file */
+    /** @var array<string, int> subject => core Library file id */
     private array $libraryBanks = [];
 
-    /** @var array<string, Exam> subject => exam */
+    /** @var array<int, list<array{id: int, difficulty: string, correct: int|null, wrong: list<int>}>> */
+    private array $bankItems = [];
+
+    /** @var array<string, array<string, mixed>> */
     private array $exams = [];
 
-    /** @var list<User> */
-    private array $predictionReady = [];
+    /** @var list<array{id: int, room_id: int, year_level: int, ability: float, featured: ?string, prediction_ready: bool}> */
+    private array $students = [];
+
+    /** @var array<int, array<string, int>> user id => subject => how far that subject sits from their norm */
+    private array $subjectOffsets = [];
+
+    /** @var list<array<string, mixed>> */
+    private array $pendingAttempts = [];
+
+    /** @var array<string, list<array<string, mixed>>> */
+    private array $buffers = [];
+
+    /** @var array<int, int> */
+    private array $studentIdSequence = [];
+
+    /** @var array<string, true> */
+    private array $takenStudentIds = [];
+
+    /** @var array<string, true> */
+    private array $takenRoomCodes = [];
 
     public function run(): void
     {
-        $this->password = Hash::make('password');
-        $this->now = CarbonImmutable::now();
+        $this->now = CarbonImmutable::now()->startOfMinute();
+        $this->termStart = CarbonImmutable::create($this->now->month >= 8 ? $this->now->year : $this->now->year - 1, 8, 1);
 
-        $this->purge();
+        $this->ensureStaffAddressesAreFree();
 
-        if ((bool) env('SHOWCASE_PURGE_ONLY', false)) {
-            $this->command?->info('Showcase data purged.');
+        // A rerun replaces the demo instead of stacking a second one on top.
+        // The load-test accounts belong to a separate tool and are left alone.
+        $this->command?->info('Removing the previous demo, if there is one...');
+        (new DemoDataPurger([DemoData::EMAIL_DOMAIN, 'showcase.local']))->purge();
 
-            return;
-        }
-
-        // Deterministic: the same run produces the same numbers, so a demo can
-        // be rehearsed and a screenshot stays accurate.
+        // Deterministic: every run produces the same people and numbers, so a
+        // walkthrough can be rehearsed and a screenshot stays accurate.
         mt_srand(20260906);
 
+        $this->passwordHash = Hash::make(DemoData::password());
+        $this->names = new DemoNames(DemoData::EMAIL_DOMAIN);
+        $this->takenStudentIds = array_fill_keys(
+            DB::table('users')->whereNotNull('student_id')->pluck('student_id')->map(fn ($id): string => (string) $id)->all(),
+            true,
+        );
+        $this->takenRoomCodes = array_fill_keys(DB::table('rooms')->pluck('code')->all(), true);
+
+        $this->command?->info('Building staff, students and the Library...');
         $this->seedStaff();
         $this->seedTaxonomy();
-        $this->seedRooms();
         $this->seedLibrary();
-        $this->seedStudents();
-        $this->seedLicensureResults();
-        $this->seedExams();
-        $this->seedExamAttempts();
+        $this->seedCurrentStudents();
+        $this->seedLeavers();
+
+        $this->command?->info("Building this term's exams and attempts...");
+        $this->seedCurrentExams();
+        $this->seedCurrentAttempts();
+
         $this->seedHistory();
-        $this->seedReviewBotBank();
+
+        $this->command?->info('Generating Review Bot questions and practice sessions...');
+        $this->seedReviewBot();
         $this->seedReviewBotSessions();
         $this->seedAuditTrail();
 
         $this->report();
     }
 
-    /**
-     * Order matters: exam_attempts, review_bot_attempts and lle_results all
-     * restrict on delete now, so the users row cannot go until they have.
-     */
-    private function purge(): void
-    {
-        $userIds = DB::table('users')->where('email', 'like', '%@' . self::DOMAIN)->pluck('id');
-        $roomIds = DB::table('rooms')->where('code', 'like', self::PREFIX . '%')->pluck('id');
-        $bankIds = DB::table('question_banks')
-            ->where('title', 'like', '[' . self::PREFIX . ']%')
-            // Matched by owner as well: the Review Bot banks this seeder makes
-            // carry the production title prefix, so matching on title alone
-            // would either miss them or delete a real teacher's bank.
-            ->orWhereIn('created_by', $userIds)
-            ->pluck('id');
-        $examIds = DB::table('exams')
-            ->where('title', 'like', '[' . self::PREFIX . ']%')
-            ->orWhereIn('created_by', $userIds)
-            ->pluck('id');
-
-        if ($userIds->isNotEmpty()) {
-            $attemptIds = DB::table('exam_attempts')->whereIn('user_id', $userIds)->pluck('id');
-            DB::table('exam_attempt_answers')->whereIn('exam_attempt_id', $attemptIds)->delete();
-            DB::table('exam_attempt_questions')->whereIn('exam_attempt_id', $attemptIds)->delete();
-            DB::table('exam_attempts')->whereIn('id', $attemptIds)->delete();
-
-            $reviewIds = DB::table('review_bot_attempts')->whereIn('user_id', $userIds)->pluck('id');
-            DB::table('review_bot_attempt_answers')->whereIn('review_bot_attempt_id', $reviewIds)->delete();
-            DB::table('review_bot_attempt_questions')->whereIn('review_bot_attempt_id', $reviewIds)->delete();
-            DB::table('review_bot_attempts')->whereIn('id', $reviewIds)->delete();
-
-            DB::table('review_bot_item_states')->whereIn('user_id', $userIds)->delete();
-            DB::table('lle_results')->whereIn('user_id', $userIds)->delete();
-            DB::table('audit_logs')->whereIn('actor_id', $userIds)->delete();
-            DB::table('room_user')->whereIn('user_id', $userIds)->delete();
-        }
-
-        if ($examIds->isNotEmpty()) {
-            DB::table('exam_room_pacing_states')->whereIn('exam_id', $examIds)->delete();
-            DB::table('exam_room')->whereIn('exam_id', $examIds)->delete();
-            DB::table('exam_question_bank')->whereIn('exam_id', $examIds)->delete();
-            DB::table('exams')->whereIn('id', $examIds)->delete();
-        }
-
-        if ($roomIds->isNotEmpty()) {
-            DB::table('exam_room')->whereIn('room_id', $roomIds)->delete();
-            DB::table('room_user')->whereIn('room_id', $roomIds)->delete();
-            DB::table('rooms')->whereIn('id', $roomIds)->delete();
-        }
-
-        if ($bankIds->isNotEmpty()) {
-            $questionIds = DB::table('question_bank_questions')->whereIn('question_bank_id', $bankIds)->pluck('id');
-            // Review Bot variants point back at their source item, so they have
-            // to go before the items they descend from.
-            DB::table('question_bank_questions')->whereIn('source_question_id', $questionIds)->update(['source_question_id' => null]);
-            DB::table('question_bank_options')->whereIn('question_bank_question_id', $questionIds)->delete();
-            DB::table('question_bank_questions')->whereIn('id', $questionIds)->delete();
-            DB::table('question_banks')->whereIn('id', $bankIds)->delete();
-        }
-
-        if ($userIds->isNotEmpty()) {
-            DB::table('users')->whereIn('id', $userIds)->delete();
-        }
-
-        DB::table('topics')->where('name', 'like', '%')->whereIn('subject', self::SUBJECTS)
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('question_bank_questions')
-                ->whereColumn('question_bank_questions.topic_id', 'topics.id'))
-            ->delete();
-    }
-
     // ------------------------------------------------------------------ staff
+
+    /**
+     * The admin and teachers sign in with addresses on the real domain. One
+     * that already belongs to a real account is someone's actual login, so
+     * stop before changing anything rather than take it over.
+     */
+    private function ensureStaffAddressesAreFree(): void
+    {
+        $taken = DB::table('users')
+            ->whereIn('email', [DemoData::adminEmail(), ...DemoData::TEACHER_EMAILS])
+            ->where('is_demo', false)
+            ->pluck('email')
+            ->all();
+
+        if ($taken !== []) {
+            throw new RuntimeException(sprintf(
+                'Nothing was seeded: %s already belongs to a real account, and the demo will not take it over. '
+                . 'Delete or change that account first, or choose another demo admin address with DEMO_ADMIN_EMAIL.',
+                implode(', ', $taken),
+            ));
+        }
+    }
 
     private function seedStaff(): void
     {
-        $this->staff['admin'] = $this->makeUser('admin', 'Showcase Admin', User::ROLE_ADMIN);
+        [$first, $second, $third] = DemoData::TEACHER_EMAILS;
 
-        // Two examiners so the Library shows files owned by different people
-        // and "my uploads" is a meaningful distinction.
-        $this->staff['examiner'] = $this->makeUser('examiner', 'Divine Reyes', User::ROLE_STAFF_MASTER_EXAMINER);
-        $this->staff['examiner2'] = $this->makeUser('examiner2', 'Marco Villanueva', User::ROLE_STAFF_MASTER_EXAMINER);
+        $this->staff['admin'] = $this->insertStaff(
+            'Admin',
+            ['name' => 'Admin', 'first_name' => 'Admin', 'middle_name' => null, 'last_name' => null, 'email' => DemoData::adminEmail()],
+            User::ROLE_ADMIN,
+            $this->termStart->subYears(2),
+            Hash::make(DemoData::adminPassword()),
+        );
+        $this->staff['chair'] = $this->insertStaff('Teacher 1 (programme chair)', $this->names->person('Maricel', 'Tan', 'Aquino', $first), User::ROLE_STAFF_MASTER_EXAMINER, $this->termStart->subYears(2)->addDays(2));
+        $this->staff['examiner'] = $this->insertStaff('Teacher 2', $this->names->person('Ramon', 'Bautista', 'Villanueva', $second), User::ROLE_STAFF_MASTER_EXAMINER, $this->termStart->subYear());
+        $this->staff['teacher3'] = $this->insertStaff('Teacher 3', $this->names->person('Liza', 'Cruz', 'Dimaano', $third), User::ROLE_STAFF_MASTER_EXAMINER, $this->termStart->subMonths(7));
 
-        // An account someone has disabled -- the login guard has a branch for it.
-        $this->makeUser('inactive-staff', 'Suspended Examiner', User::ROLE_STAFF_MASTER_EXAMINER, ['is_active' => false]);
+        // A former examiner whose account was disabled -- the login guard and
+        // the staff list both have a branch for it. Nobody signs in with it,
+        // so it keeps a demo-only address.
+        $this->insertStaff(null, $this->names->person('Jocelyn', 'Perez', 'Ramos'), User::ROLE_STAFF_MASTER_EXAMINER, $this->termStart->subYears(4), null, false);
     }
 
     /**
-     * @param  array<string, mixed>  $attributes
+     * @param  array{name: string, first_name: string, middle_name: ?string, last_name: ?string, email: string}  $person
      */
-    private function makeUser(string $handle, string $name, string $role, array $attributes = []): User
-    {
-        return User::query()->create(array_merge([
-            'name' => $name,
-            'email' => $handle . '@' . self::DOMAIN,
+    private function insertStaff(
+        ?string $label,
+        array $person,
+        string $role,
+        CarbonImmutable $createdAt,
+        ?string $passwordHash = null,
+        bool $active = true,
+    ): int {
+        if ($label !== null) {
+            $this->logins[$label] = [
+                'label' => $label,
+                'name' => $person['name'],
+                'email' => $person['email'],
+                'password' => $role === User::ROLE_ADMIN
+                    ? $this->passwordLabel('DEMO_ADMIN_PASSWORD', DemoData::adminPassword())
+                    : $this->passwordLabel('DEMO_SEED_PASSWORD', DemoData::password()),
+            ];
+        }
+
+        return (int) DB::table('users')->insertGetId([
+            ...$person,
             'role' => $role,
-            'is_active' => true,
-            'password' => $this->password,
-        ], $attributes));
+            'is_active' => $active,
+            'is_demo' => true,
+            'password' => $passwordHash ?? $this->passwordHash,
+            'email_verified_at' => $createdAt,
+            'created_at' => $createdAt,
+            'updated_at' => $active ? $createdAt : $this->now->subMonths(3),
+        ]);
+    }
+
+    /**
+     * What to print for a password: the value when it is the committed
+     * default, never one someone set in the environment.
+     */
+    private function passwordLabel(string $variable, string $password): string
+    {
+        return env($variable) ? "(the {$variable} you set)" : $password;
     }
 
     // --------------------------------------------------------------- taxonomy
@@ -247,1243 +299,1115 @@ class ShowcaseSeeder extends Seeder
 
         foreach (self::SUBJECTS as $subject) {
             foreach ($mapping->curatedTopicsForSubject($subject) as $topicName) {
+                // Only created when missing, so a topic real uploads already
+                // use is shared rather than duplicated -- and survives a purge.
                 $topic = Topic::query()->firstOrCreate(
                     ['subject' => $subject, 'name' => $topicName],
-                    ['created_by' => $this->staff['examiner']->id],
+                    ['created_by' => $this->staff['chair']],
                 );
 
                 $subtopics = [];
 
                 foreach ($mapping->curatedSubtopicsForTopic($subject, $topicName) as $subtopicName) {
-                    $subtopics[] = Subtopic::query()->firstOrCreate(
+                    $subtopics[$subtopicName] = (int) Subtopic::query()->firstOrCreate(
                         ['topic_id' => $topic->id, 'name' => $subtopicName],
-                        ['created_by' => $this->staff['examiner']->id],
-                    );
+                        ['created_by' => $this->staff['chair']],
+                    )->id;
                 }
 
-                // Keyed by subject so a question can be given a matching pair.
-                $this->taxonomy[$subject] ??= [];
-                $this->taxonomy[$subject][] = ['topic' => $topic, 'subtopics' => $subtopics];
+                $this->taxonomy[$subject][$topicName] = ['id' => (int) $topic->id, 'subtopics' => $subtopics];
             }
         }
-    }
-
-    // ------------------------------------------------------------------ rooms
-
-    private function seedRooms(): void
-    {
-        foreach ([1, 2, 3, 4] as $yearLevel) {
-            $this->rooms[$yearLevel] = Room::query()->create([
-                'name' => "BLIS {$yearLevel}A",
-                'code' => self::PREFIX . 'R' . $yearLevel,
-                'created_by' => $this->staff['examiner']->id,
-                'created_at' => $this->now->subYears(4 - $yearLevel + 1),
-                'updated_at' => $this->now,
-            ]);
-        }
-
-        // An archived section from a previous cycle: currentStudentMembers()
-        // and the currentRooms relation both have to exclude it.
-        Room::query()->create([
-            'name' => 'BLIS 4A (AY 2024-2025)',
-            'code' => self::PREFIX . 'RARC',
-            'created_by' => $this->staff['examiner']->id,
-            'archived_at' => $this->now->subMonths(8),
-            'created_at' => $this->now->subYears(2),
-            'updated_at' => $this->now->subMonths(8),
-        ]);
     }
 
     // ---------------------------------------------------------------- library
 
-    /**
-     * One uploaded file per subject, plus files parked in every mapping state
-     * the Library can display.
-     */
     private function seedLibrary(): void
     {
-        $states = [
-            QuestionBank::MAPPING_STATUS_COMPLETED,
-            QuestionBank::MAPPING_STATUS_COMPLETED,
-            QuestionBank::MAPPING_STATUS_COMPLETED,
-            QuestionBank::MAPPING_STATUS_QUEUED,
-            QuestionBank::MAPPING_STATUS_PROCESSING,
-            QuestionBank::MAPPING_STATUS_FAILED,
-        ];
-
         foreach (self::SUBJECTS as $index => $subject) {
-            $status = $states[$index] ?? QuestionBank::MAPPING_STATUS_COMPLETED;
-            $owner = $index % 3 === 2 ? $this->staff['examiner2'] : $this->staff['examiner'];
+            // Uploaded last year and reused every term since.
+            $uploadedAt = $this->termStart->subMonths(14)->addDays($index * 3)->setTime(10 + $index, 12);
+            $owner = $this->teacher($index);
 
-            $bank = QuestionBank::query()->create([
-                'title' => '[' . self::PREFIX . '] ' . $subject . ' Mock Set',
+            $bankId = $this->insertBank([
+                'title' => "{$subject} Mock Board Reviewer",
                 'subject' => $subject,
-                'source_filename' => strtoupper(str_replace(' ', '-', $subject)) . '.docx',
-                'total_items' => 10,
-                'mapping_status' => $status,
+                'source_filename' => str_replace(' ', '_', $subject) . '_Mock_Board_Reviewer.docx',
+                'mapping_status' => QuestionBank::MAPPING_STATUS_COMPLETED,
                 'mapping_mode' => QuestionBank::MAPPING_MODE_AUTO,
-                'mapping_message' => $status === QuestionBank::MAPPING_STATUS_FAILED
-                    ? 'The mapping run stopped after repeated timeouts from the provider.'
-                    : null,
-                'mapping_requested_at' => $this->now->subDays(6),
-                'mapping_completed_at' => $status === QuestionBank::MAPPING_STATUS_COMPLETED
-                    ? $this->now->subDays(6)->addMinutes(4)
-                    : null,
-                'created_by' => $owner->id,
-                'created_at' => $this->now->subDays(7 - $index),
-                'updated_at' => $this->now->subDays(6),
+                'mapping_message' => null,
+                'mapping_requested_at' => $uploadedAt,
+                'mapping_completed_at' => $uploadedAt->addMinutes(3),
+                'created_by' => $owner,
+                'created_at' => $uploadedAt,
+                'updated_at' => $uploadedAt->addMinutes(3),
             ]);
 
-            $this->libraryBanks[$subject] = $bank;
-            $this->seedAssessmentItems($bank, $subject, $status);
+            $this->insertItems($bankId, $subject, DemoQuestions::forSubject($subject), $uploadedAt, true);
+            $this->libraryBanks[$subject] = $bankId;
         }
 
-        // A file nobody has mapped yet -- the "Map Items with AI" call to action.
-        $idle = QuestionBank::query()->create([
-            'title' => '[' . self::PREFIX . '] Unmapped Archival Studies Set',
+        // A recent upload whose mapping stopped partway.
+        $failedAt = $this->now->subDays(3)->setTime(15, 12);
+        $failed = $this->insertBank([
+            'title' => 'Reference Services Quiz Set B',
+            'subject' => 'Reference Services',
+            'source_filename' => 'Reference_Services_Quiz_Set_B.docx',
+            'mapping_status' => QuestionBank::MAPPING_STATUS_FAILED,
+            'mapping_mode' => QuestionBank::MAPPING_MODE_AUTO,
+            'mapping_message' => 'Mapping stopped before it finished. Retry mapping to tag the remaining items.',
+            'mapping_requested_at' => $failedAt,
+            'mapping_completed_at' => null,
+            'created_by' => $this->staff['examiner'],
+            'created_at' => $failedAt,
+            'updated_at' => $failedAt->addMinutes(6),
+        ]);
+        $this->insertItems($failed, 'Reference Services', array_slice(DemoQuestions::forSubject('Reference Services'), 0, 6), $failedAt, false);
+
+        // A file nobody has mapped yet -- the "Map Items" call to action.
+        $idleAt = $this->now->subDay()->setTime(9, 40);
+        $idle = $this->insertBank([
+            'title' => 'Archival Studies Pre-Test',
             'subject' => 'Archival Studies',
-            'source_filename' => 'ARCHIVAL-STUDIES.docx',
-            'total_items' => 4,
+            'source_filename' => 'Archival_Studies_Pre-Test.docx',
             'mapping_status' => QuestionBank::MAPPING_STATUS_IDLE,
-            'created_by' => $this->staff['examiner']->id,
-            'created_at' => $this->now->subDay(),
-            'updated_at' => $this->now->subDay(),
+            'mapping_mode' => null,
+            'mapping_message' => null,
+            'mapping_requested_at' => null,
+            'mapping_completed_at' => null,
+            'created_by' => $this->staff['teacher3'],
+            'created_at' => $idleAt,
+            'updated_at' => $idleAt,
         ]);
-
-        $this->seedAssessmentItems($idle, 'Archival Studies', QuestionBank::MAPPING_STATUS_IDLE, 4);
-    }
-
-    private function seedAssessmentItems(QuestionBank $bank, string $subject, string $mappingStatus, int $count = 10): void
-    {
-        $mapped = $mappingStatus === QuestionBank::MAPPING_STATUS_COMPLETED;
-        $pairs = $this->taxonomy[$subject] ?? [];
-
-        for ($item = 1; $item <= $count; $item++) {
-            $pair = $pairs === [] ? null : $pairs[($item - 1) % count($pairs)];
-            $subtopics = $pair['subtopics'] ?? [];
-
-            // Item 4 of every mapped file is left untagged on purpose: the
-            // Library flags partially mapped files, and the Review Bot's
-            // coverage report marks untagged items separately.
-            $isTagged = $mapped && $item !== 4;
-
-            // Item 7 carries a flagged answer key -- the state the Library
-            // surfaces so a teacher can correct it before it seeds review
-            // questions from a wrong answer.
-            $flagged = $mapped && $item === 7;
-
-            $question = QuestionBankQuestion::query()->create([
-                'question_bank_id' => $bank->id,
-                'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
-                'subject' => $subject,
-                'topic_id' => $isTagged ? $pair['topic']->id : null,
-                'subtopic_id' => $isTagged && $subtopics !== [] ? $subtopics[0]->id : null,
-                'difficulty' => [
-                    QuestionBankQuestion::DIFFICULTY_EASY,
-                    QuestionBankQuestion::DIFFICULTY_MEDIUM,
-                    QuestionBankQuestion::DIFFICULTY_HARD,
-                ][$item % 3],
-                'tag_status' => $isTagged
-                    ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
-                    : QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW,
-                'tag_source' => $isTagged ? QuestionBankQuestion::TAG_SOURCE_AI : null,
-                'status' => QuestionBankQuestion::STATUS_PUBLISHED,
-                'item_number' => $item,
-                'question_text' => sprintf('%s — exam item %d: which statement is correct?', $subject, $item),
-                'question_type' => $item === 9
-                    ? QuestionBankQuestion::TYPE_TRUE_FALSE
-                    : QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
-                'answer_label' => 'A',
-                'answer_key_flagged' => $flagged,
-                'answer_key_note' => $flagged
-                    ? 'Students overwhelmingly chose C. The marked answer A may be wrong — please review.'
-                    : null,
-                'answer_key_checked_at' => $flagged ? $this->now->subDays(3) : null,
-                'created_at' => $bank->created_at,
-                'updated_at' => $bank->updated_at,
-            ]);
-
-            $this->attachOptions($question, $question->question_type);
-        }
-    }
-
-    private function attachOptions(QuestionBankQuestion $question, string $type): void
-    {
-        $labels = $type === QuestionBankQuestion::TYPE_TRUE_FALSE ? ['A', 'B'] : ['A', 'B', 'C', 'D'];
-        $texts = $type === QuestionBankQuestion::TYPE_TRUE_FALSE
-            ? ['True', 'False']
-            : ['The first option', 'The second option', 'The third option', 'The fourth option'];
-
-        foreach ($labels as $index => $label) {
-            DB::table('question_bank_options')->insert([
-                'question_bank_question_id' => $question->id,
-                'sort_order' => $index,
-                'option_label' => $label,
-                'option_text' => $texts[$index],
-                'is_correct' => $label === 'A',
-                'created_at' => $this->now,
-                'updated_at' => $this->now,
-            ]);
-        }
-    }
-
-    // --------------------------------------------------------------- students
-
-    /** Intake per year level, and the base each historical cohort scales from. */
-    private function cohortSize(): int
-    {
-        return max(1, (int) env('SHOWCASE_COHORT_SIZE', 300));
-    }
-
-    private function seedStudents(): void
-    {
-        $currentYear = (int) $this->now->format('Y');
-        $sequence = 0;
-
-        // Enrolled, one cohort per year level.
-        $perYear = $this->cohortSize();
-
-        // Year levels thin slightly as a cohort ages, which is what attrition
-        // looks like from the enrolment side rather than the alumni side.
-        foreach ([1 => 1.0, 2 => 0.96, 3 => 0.92, 4 => 0.89] as $yearLevel => $retention) {
-            $count = (int) round($perYear * $retention);
-
-            for ($i = 0; $i < $count; $i++) {
-                $student = $this->makeStudent(
-                    $sequence++,
-                    $yearLevel,
-                    $currentYear - ($yearLevel - 1),
-                    User::STUDENT_STATUS_ENROLLED,
-                );
-
-                $student->rooms()->syncWithoutDetaching([$this->rooms[$yearLevel]->id]);
-
-                // Most fourth years have sat enough of the six subjects for the
-                // predictor to score them; the rest keep a partial history so
-                // the "not enough history yet" branch is populated too.
-                if ($yearLevel === 4 && $i < (int) round($count * 0.6)) {
-                    $this->predictionReady[] = $student;
-                }
-            }
-        }
-
-        // Irregular students sitting beyond the standard ladder -- the case the
-        // old 1-4 year level enum could not represent at all.
-        foreach ([5, 6] as $index => $yearLevel) {
-            $student = $this->makeStudent(
-                $sequence++,
-                $yearLevel,
-                $currentYear - 5,
-                User::STUDENT_STATUS_ENROLLED,
-                ['name' => 'Irregular Student ' . ($index + 1)],
-            );
-            $student->rooms()->syncWithoutDetaching([$this->rooms[4]->id]);
-        }
-
-        // Graduates: the cohort the predictor is eventually retrained on.
-        for ($i = 0; $i < 8; $i++) {
-            $this->makeStudent($sequence++, null, $currentYear - 4, User::STUDENT_STATUS_GRADUATED, [
-                'name' => 'Graduate ' . ($i + 1),
-            ]);
-        }
-
-        // Everyone who left for a reason that is NOT a board-exam failure.
-        // Keeping these apart is the whole point of the status field.
-        for ($i = 0; $i < 3; $i++) {
-            $this->makeStudent($sequence++, null, $currentYear - 3, User::STUDENT_STATUS_DROPPED, [
-                'name' => 'Dropped Student ' . ($i + 1),
-            ]);
-        }
-
-        for ($i = 0; $i < 2; $i++) {
-            $this->makeStudent($sequence++, null, $currentYear - 2, User::STUDENT_STATUS_TRANSFERRED, [
-                'name' => 'Transferred Student ' . ($i + 1),
-            ]);
-        }
-
-        for ($i = 0; $i < 2; $i++) {
-            $this->makeStudent($sequence++, 3, $currentYear - 2, User::STUDENT_STATUS_ON_LEAVE, [
-                'name' => 'On Leave Student ' . ($i + 1),
-            ]);
-        }
-
-        // Archived before anyone recorded why -- the backlog the Students tab
-        // surfaces as "Reason not recorded" for a human to classify.
-        for ($i = 0; $i < 3; $i++) {
-            $this->makeStudent($sequence++, null, $currentYear - 5, User::STUDENT_STATUS_ARCHIVED_UNSPECIFIED, [
-                'name' => 'Unclassified Leaver ' . ($i + 1),
-            ]);
-        }
-
-        // A disabled account: still enrolled, but blocked at sign-in.
-        $this->makeStudent($sequence++, 2, $currentYear - 1, User::STUDENT_STATUS_ENROLLED, [
-            'name' => 'Deactivated Student',
-            'is_active' => false,
-        ]);
+        $this->insertItems($idle, 'Archival Studies', DemoQuestions::archivalStudies(), $idleAt, false);
     }
 
     /**
      * @param  array<string, mixed>  $attributes
      */
-    private function makeStudent(
-        int $sequence,
-        ?int $yearLevel,
-        int $admissionYear,
-        string $status,
-        array $attributes = [],
-    ): User {
-        $student = new User(array_merge([
-            'name' => 'Student ' . str_pad((string) ($sequence + 1), 2, '0', STR_PAD_LEFT),
-            'email' => 'student' . $sequence . '@' . self::DOMAIN,
-            'student_id' => (string) (self::STUDENT_ID_BASE + $sequence),
-            'role' => User::ROLE_STUDENT,
-            'year_level' => $yearLevel,
-            'admission_year' => $admissionYear,
-            'is_active' => true,
-            'password' => $this->password,
-        ], $attributes));
-
-        // Sets archived_at alongside the status so the two cannot disagree.
-        $student->applyStudentStatus($status);
-        $student->created_at = $this->now->subYears((int) $this->now->format('Y') - $admissionYear);
-        $student->save();
-
-        return $student;
+    private function insertBank(array $attributes): int
+    {
+        return (int) DB::table('question_banks')->insertGetId($attributes + ['total_items' => 0]);
     }
 
-    // -------------------------------------------------------------- licensure
-
     /**
-     * Every shape a board result comes in, including the absence of one.
+     * @param  list<array<string, mixed>>  $items
      */
-    private function seedLicensureResults(): void
+    private function insertItems(int $bankId, string $subject, array $items, CarbonImmutable $at, bool $mapped): void
     {
-        $graduates = User::query()
-            ->where('email', 'like', '%@' . self::DOMAIN)
-            ->where('student_status', User::STUDENT_STATUS_GRADUATED)
-            ->orderBy('id')
-            ->get();
+        $labels = ['A', 'B', 'C', 'D'];
+        $count = count($items);
 
-        $examYear = (int) $this->now->format('Y') - 1;
-        $recorder = $this->staff['examiner']->id;
+        foreach ($items as $index => $item) {
+            $pair = $this->taxonomy[$subject][$item['topic'] ?? ''] ?? null;
 
-        foreach ($graduates as $index => $graduate) {
-            // The last two are left with no result at all: a graduate whose
-            // outcome was never recorded is unusable as training data, and the
-            // Licensure screen exists to close exactly that gap.
-            if ($index >= count($graduates) - 2) {
-                continue;
+            // The classifier leaves an item it is unsure of for a teacher to
+            // confirm; the last item of each mapped file shows that state.
+            $tagged = $mapped && $pair !== null && $index !== $count - 1;
+            $isTrueFalse = ($item['type'] ?? null) === QuestionBankQuestion::TYPE_TRUE_FALSE;
+
+            if ($isTrueFalse) {
+                $texts = ['True', 'False'];
+                $correctIndex = $item['answer'] ? 0 : 1;
+            } else {
+                // The data lists the answer first; spread the key across A-D.
+                $order = array_keys($item['options']);
+                shuffle($order);
+                $texts = array_map(fn (int $i): string => $item['options'][$i], $order);
+                $correctIndex = (int) array_search(0, $order, true);
             }
 
-            $passed = $index % 3 !== 2;
-
-            LleResult::query()->create([
-                'user_id' => $graduate->id,
-                'exam_year' => $examYear,
-                'taken_at' => CarbonImmutable::create($examYear, 9, 15),
-                'result' => $passed ? LleResult::RESULT_PASS : LleResult::RESULT_FAIL,
-                // One passer has no published general average, which has to
-                // read as "not recorded" rather than as a zero.
-                'rating' => $passed && $index !== 1 ? round(mt_rand(7550, 8900) / 100, 2) : null,
-                'remarks' => $passed ? null : 'Below the 75% general average.',
-                'recorded_by' => $recorder,
+            $questionId = (int) DB::table('question_bank_questions')->insertGetId([
+                'question_bank_id' => $bankId,
+                'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
+                'subject' => $subject,
+                'topic_id' => $tagged ? $pair['id'] : null,
+                'subtopic_id' => $tagged ? ($pair['subtopics'][$item['subtopic']] ?? null) : null,
+                'difficulty' => $item['difficulty'],
+                'tag_status' => $tagged
+                    ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
+                    : QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW,
+                // Most tags come from the classifier; a few a teacher corrected.
+                'tag_source' => $tagged
+                    ? ($index % 7 === 3 ? QuestionBankQuestion::TAG_SOURCE_FACULTY : QuestionBankQuestion::TAG_SOURCE_RULE_BASED)
+                    : null,
+                'status' => QuestionBankQuestion::STATUS_PUBLISHED,
+                'item_number' => $index + 1,
+                'question_text' => $item['question'],
+                'question_type' => $isTrueFalse
+                    ? QuestionBankQuestion::TYPE_TRUE_FALSE
+                    : QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
+                'answer_label' => $labels[$correctIndex],
+                'answer_text' => $texts[$correctIndex],
+                'created_at' => $at,
+                'updated_at' => $at,
             ]);
 
-            // A retake the following year: the same student, a second sitting,
-            // which is why the unique key is (user, exam_year) and not (user).
-            if (!$passed) {
-                LleResult::query()->create([
-                    'user_id' => $graduate->id,
-                    'exam_year' => $examYear + 1,
-                    'taken_at' => CarbonImmutable::create($examYear + 1, 9, 14),
-                    'result' => LleResult::RESULT_PASS,
-                    'rating' => 78.25,
-                    'remarks' => 'Passed on retake.',
-                    'recorded_by' => $recorder,
-                ]);
+            DB::table('question_bank_options')->insert(array_map(fn (int $i): array => [
+                'question_bank_question_id' => $questionId,
+                'sort_order' => $i + 1,
+                'option_label' => $labels[$i],
+                'option_text' => $texts[$i],
+                'is_correct' => $i === $correctIndex,
+                'created_at' => $at,
+                'updated_at' => $at,
+            ], array_keys($texts)));
+
+            $optionIds = DB::table('question_bank_options')
+                ->where('question_bank_question_id', $questionId)
+                ->orderBy('sort_order')
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+
+            $wrong = $optionIds;
+            unset($wrong[$correctIndex]);
+
+            $this->bankItems[$bankId][] = [
+                'id' => $questionId,
+                'difficulty' => $item['difficulty'],
+                'correct' => $optionIds[$correctIndex] ?? null,
+                'wrong' => array_values($wrong),
+            ];
+        }
+
+        DB::table('question_banks')->where('id', $bankId)->update(['total_items' => $count]);
+    }
+
+    // --------------------------------------------------------------- students
+
+    private function seedCurrentStudents(): void
+    {
+        $termYear = $this->termStart->year;
+        $opened = $this->termStart->min($this->now->subDays(45));
+        $rows = [];
+        $placements = [];
+
+        foreach (self::RETENTION as $yearLevel => $retention) {
+            $count = max(1, (int) round($this->cohortSize() * $retention));
+            $sectionCount = (int) ceil($count / self::SECTION_SIZE);
+            $admissionYear = $termYear - ($yearLevel - 1);
+
+            for ($section = 0; $section < $sectionCount; $section++) {
+                $this->sections[$yearLevel][] = $this->insertRoom(
+                    sprintf('BLIS %d-%s', $yearLevel, chr(ord('A') + $section)),
+                    $this->yearLevelTeacher($yearLevel),
+                    $opened,
+                );
+            }
+
+            $featuredKeys = $yearLevel === 4 ? array_keys(self::FEATURED) : [];
+
+            for ($i = 0; $i < $count; $i++) {
+                $featured = $featuredKeys[$i] ?? null;
+
+                if ($featured !== null) {
+                    [$first, $middle, $last, $ability] = self::FEATURED[$featured];
+                    $person = $this->names->person($first, $middle, $last);
+                } else {
+                    $person = $this->names->next();
+                    $ability = $this->ability();
+                }
+
+                $rows[] = $this->studentRow($person, $admissionYear, $yearLevel, User::STUDENT_STATUS_ENROLLED);
+                $placements[$person['email']] = [
+                    'room_id' => $this->sections[$yearLevel][$i % $sectionCount],
+                    'year_level' => $yearLevel,
+                    'ability' => (float) $ability,
+                    'featured' => $featured,
+                    // Most fourth years have sat enough subjects for the LET
+                    // predictor to score them; the rest keep a partial history
+                    // so "not enough history yet" shows too.
+                    'prediction_ready' => $yearLevel === 4 && ($featured !== null || $i < (int) round($count * 0.6)),
+                ];
             }
         }
+
+        // Irregular students past the standard four years.
+        foreach ([5, 6] as $yearLevel) {
+            $person = $this->names->next();
+            $rows[] = $this->studentRow($person, $termYear - $yearLevel + 1, $yearLevel, User::STUDENT_STATUS_ENROLLED);
+            $placements[$person['email']] = [
+                'room_id' => $this->sections[4][0],
+                'year_level' => $yearLevel,
+                'ability' => $this->ability(64),
+                'featured' => null,
+                'prediction_ready' => false,
+            ];
+        }
+
+        // Enrolled, but the account is disabled, so sign-in is refused.
+        $person = $this->names->next();
+        $rows[] = ['is_active' => false] + $this->studentRow($person, $termYear - 1, 2, User::STUDENT_STATUS_ENROLLED);
+        $placements[$person['email']] = [
+            'room_id' => $this->sections[2][0],
+            'year_level' => 2,
+            'ability' => $this->ability(),
+            'featured' => null,
+            'prediction_ready' => false,
+        ];
+
+        $ids = $this->insertStudents($rows);
+        $memberships = [];
+
+        foreach ($placements as $email => $placement) {
+            $id = $ids[$email];
+            $this->students[] = ['id' => $id] + $placement;
+
+            $joinedAt = $opened->addDays(mt_rand(0, 6))->setTime(mt_rand(7, 18), mt_rand(0, 59));
+            $memberships[] = ['room_id' => $placement['room_id'], 'user_id' => $id, 'created_at' => $joinedAt, 'updated_at' => $joinedAt];
+
+            if ($placement['featured'] !== null) {
+                $labels = [
+                    'top' => 'Student, top of the class',
+                    'borderline' => 'Student, near the passing line',
+                    'struggling' => 'Student, struggling',
+                ];
+                $label = $labels[$placement['featured']];
+                $this->logins[$label] = [
+                    'label' => $label,
+                    'name' => $this->nameOf($rows, $email),
+                    'email' => $email,
+                    'password' => $this->passwordLabel('DEMO_SEED_PASSWORD', DemoData::password()),
+                ];
+            }
+        }
+
+        foreach (array_chunk($memberships, 1000) as $chunk) {
+            DB::table('room_user')->insert($chunk);
+        }
+    }
+
+    /**
+     * Students who have left, each for a different reason. Keeping graduates
+     * apart from dropouts and transferees is the reason student_status exists.
+     */
+    private function seedLeavers(): void
+    {
+        $termYear = $this->termStart->year;
+        $graduatedAt = CarbonImmutable::create($termYear, 6, 30);
+        $rows = [];
+        $graduates = [];
+
+        for ($i = 0; $i < 8; $i++) {
+            $person = $this->names->next();
+            $rows[] = $this->studentRow($person, $termYear - 4, null, User::STUDENT_STATUS_GRADUATED, $graduatedAt);
+            $graduates[$person['email']] = $this->ability(70);
+        }
+
+        foreach ([
+            [3, User::STUDENT_STATUS_DROPPED, $termYear - 2, 3, 3],
+            [2, User::STUDENT_STATUS_TRANSFERRED, $termYear - 1, 2, 2],
+            [2, User::STUDENT_STATUS_ON_LEAVE, $termYear - 2, 3, 1],
+            // Archived before anyone recorded why: the backlog the Students tab
+            // surfaces as "Reason not recorded".
+            [3, User::STUDENT_STATUS_ARCHIVED_UNSPECIFIED, $termYear - 6, null, 30],
+        ] as [$count, $status, $admissionYear, $yearLevel, $monthsAgo]) {
+            for ($i = 0; $i < $count; $i++) {
+                $rows[] = $this->studentRow(
+                    $this->names->next(),
+                    $admissionYear,
+                    $yearLevel,
+                    $status,
+                    $this->now->subMonths($monthsAgo + $i)->subDays(mt_rand(0, 20)),
+                );
+            }
+        }
+
+        $ids = $this->insertStudents($rows);
+
+        // Graduated in June; the board exam comes after, and results take about
+        // six weeks. Until then this batch has none. Once they are out, two
+        // are still left unrecorded -- the gap the Licensure screen closes.
+        $boardDate = CarbonImmutable::create($termYear, 9, 14);
+
+        if ($boardDate->addWeeks(6)->lessThan($this->now)) {
+            $graduateIds = [];
+
+            foreach ($graduates as $email => $ability) {
+                $graduateIds[$ids[$email]] = $ability;
+            }
+
+            $this->insertBoardResults(array_slice($graduateIds, 0, 6, true), $termYear, $boardDate, 0.7);
+        }
+    }
+
+    /**
+     * @param  array{name: string, first_name: string, middle_name: string, last_name: string, email: string}  $person
+     * @return array<string, mixed>
+     */
+    private function studentRow(array $person, int $admissionYear, ?int $yearLevel, string $status, ?CarbonImmutable $leftAt = null): array
+    {
+        $enrolledAt = CarbonImmutable::create($admissionYear, 8, 1)->addDays(mt_rand(0, 20))->setTime(mt_rand(8, 17), mt_rand(0, 59));
+        $archivedAt = User::isEnrolledStatus($status) ? null : ($leftAt ?? $this->now);
+
+        return [
+            ...$person,
+            'student_id' => $this->newStudentId($admissionYear),
+            'role' => User::ROLE_STUDENT,
+            'year_level' => $yearLevel,
+            'student_status' => $status,
+            'admission_year' => $admissionYear,
+            'is_active' => true,
+            'is_demo' => true,
+            // Same rule as User::applyStudentStatus(): only enrolled students
+            // are in circulation.
+            'archived_at' => $archivedAt,
+            'password' => $this->passwordHash,
+            'email_verified_at' => $enrolledAt,
+            'created_at' => $enrolledAt,
+            'updated_at' => $archivedAt ?? $enrolledAt,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     * @return array<string, int> email => id
+     */
+    private function insertStudents(array $rows): array
+    {
+        foreach (array_chunk($rows, 500) as $chunk) {
+            DB::table('users')->insert($chunk);
+        }
+
+        $ids = [];
+
+        foreach (array_chunk(array_column($rows, 'email'), 1000) as $emails) {
+            foreach (DB::table('users')->whereIn('email', $emails)->get(['id', 'email']) as $user) {
+                $ids[$user->email] = (int) $user->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Nine digits -- the admission year, then a running number. Real student
+     * numbers are seven digits, so a demo account can never take one a real
+     * student will need at registration.
+     */
+    private function newStudentId(int $admissionYear): string
+    {
+        $sequence = $this->studentIdSequence[$admissionYear] ??= mt_rand(120, 480);
+
+        do {
+            $id = sprintf('%d%05d', $admissionYear, ++$sequence);
+        } while (isset($this->takenStudentIds[$id]));
+
+        $this->studentIdSequence[$admissionYear] = $sequence;
+        $this->takenStudentIds[$id] = true;
+
+        return $id;
+    }
+
+    /**
+     * A student's typical score: most sit in the 60s and 70s, a few far out.
+     */
+    private function ability(float $mean = 70.0, float $spread = 11.0): float
+    {
+        $u = max(1e-9, mt_rand() / mt_getrandmax());
+        $v = mt_rand() / mt_getrandmax();
+
+        return max(30.0, min(97.0, $mean + sqrt(-2 * log($u)) * cos(2 * M_PI * $v) * $spread));
+    }
+
+    // ------------------------------------------------------------------ rooms
+
+    private function insertRoom(string $name, int $ownerId, CarbonImmutable $createdAt, ?CarbonImmutable $archivedAt = null): int
+    {
+        return (int) DB::table('rooms')->insertGetId([
+            'name' => $name,
+            'code' => $this->newRoomCode(),
+            'created_by' => $ownerId,
+            'archived_at' => $archivedAt,
+            'created_at' => $createdAt,
+            'updated_at' => $archivedAt ?? $createdAt,
+        ]);
+    }
+
+    /**
+     * Six characters, like the codes rooms get when a teacher creates one.
+     */
+    private function newRoomCode(): string
+    {
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+        do {
+            $code = '';
+
+            for ($i = 0; $i < 6; $i++) {
+                $code .= $alphabet[mt_rand(0, strlen($alphabet) - 1)];
+            }
+        } while (isset($this->takenRoomCodes[$code]));
+
+        $this->takenRoomCodes[$code] = true;
+
+        return $code;
     }
 
     // ------------------------------------------------------------------ exams
 
-    private function seedExams(): void
+    private function seedCurrentExams(): void
     {
         foreach (self::SUBJECTS as $index => $subject) {
-            $bank = $this->libraryBanks[$subject];
+            // One is open right now, so the live board has students mid-attempt;
+            // the rest have closed. None is upcoming: the predictor needs an
+            // average in every subject.
+            [$start, $end] = $index === 4
+                ? [$this->now->subHours(2), $this->now->addHours(6)]
+                : [$this->now->subDays(20 - $index)->setTime(8, 0), $this->now->subDays(13 - $index)->setTime(17, 0)];
 
-            // A spread of schedules so the exam list shows a closed exam, one
-            // open right now, and one still upcoming.
-            // All six are open or already closed: LetReadinessFeatureBuilder
-            // needs an average in every subject before it will score a student,
-            // so a subject with no sittings silently disables the predictor.
-            // The upcoming-exam state gets its own extra exam below instead.
-            $window = $index === 4
-                ? ['start' => $this->now->subHours(2), 'end' => $this->now->addHours(6)]
-                : ['start' => $this->now->subDays(20 - $index), 'end' => $this->now->subDays(13 - $index)];
-
-            $exam = Exam::query()->create([
-                'title' => '[' . self::PREFIX . '] ' . $subject . ' Mock Exam',
+            $this->exams["mock:{$subject}"] = $this->insertExam([
+                'title' => "{$subject} Mock Board Exam",
                 'subject' => $subject,
-                'description' => 'Mock board exam covering ' . $subject . '.',
-                'question_bank_id' => $bank->id,
-                'total_items' => 10,
-                'duration_minutes' => 60,
-                'scheduled_at' => $window['start'],
-                'schedule_start_at' => $window['start'],
-                'schedule_end_at' => $window['end'],
-                'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
-                // Results hidden on half of them: the student result page and
-                // the live board footer both branch on this.
-                'results_visibility_mode' => $index % 2 === 0 ? 'visible' : 'hidden',
+                'description' => $this->describe($subject),
+                'bank' => $this->libraryBanks[$subject],
+                'duration' => 60,
+                'start' => $start,
+                'end' => $end,
+                'results' => $index % 2 === 0 ? 'visible' : 'hidden',
                 'one_take_only' => $index === 3,
-                'shuffle_questions' => $index % 2 === 1,
-                'created_by' => $bank->created_by,
-                'created_at' => $window['start']->subDays(3),
-                'updated_at' => $window['start']->subDays(3),
-            ]);
-
-            $exam->syncQuestionBanks([$bank->id]);
-            $exam->rooms()->syncWithoutDetaching([
-                $this->rooms[4]->id => ['assigned_by' => $bank->created_by],
-            ]);
-
-            $this->exams[$subject] = $exam;
+                'shuffle' => $index % 2 === 1,
+                'owner' => $this->yearLevelTeacher(4),
+            ], $this->sections[4]);
         }
 
-        // A scheduled-but-not-yet-open exam, so the student exam list shows the
-        // upcoming state. Kept as a separate exam rather than by holding one
-        // subject back, which would starve the predictor.
-        $upcomingSubject = self::SUBJECTS[5];
-        $upcomingBank = $this->libraryBanks[$upcomingSubject];
-
-        $upcoming = Exam::query()->create([
-            'title' => '[' . self::PREFIX . '] ' . $upcomingSubject . ' Final Mock (upcoming)',
-            'subject' => $upcomingSubject,
-            'description' => 'Scheduled mock exam that has not opened yet.',
-            'question_bank_id' => $upcomingBank->id,
-            'total_items' => 10,
-            'duration_minutes' => 90,
-            'scheduled_at' => $this->now->addDays(5),
-            'schedule_start_at' => $this->now->addDays(5),
-            'schedule_end_at' => $this->now->addDays(7),
-            'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
-            'results_visibility_mode' => 'hidden',
+        // Scheduled, not yet open: the upcoming state on the student's list.
+        $this->exams['preboard'] = $this->insertExam([
+            'title' => 'Pre-Board Examination: Selection and Acquisition',
+            'subject' => 'Selection and Acquisition',
+            'description' => 'Final pre-board examination before the licensure review. ' . $this->describe('Selection and Acquisition'),
+            'bank' => $this->libraryBanks['Selection and Acquisition'],
+            'duration' => 90,
+            'start' => $this->now->addDays(5)->setTime(8, 0),
+            'end' => $this->now->addDays(7)->setTime(17, 0),
+            'results' => 'hidden',
             'one_take_only' => true,
-            'shuffle_questions' => true,
-            'created_by' => $upcomingBank->created_by,
-            'created_at' => $this->now->subDay(),
-            'updated_at' => $this->now->subDay(),
-        ]);
+            'shuffle' => true,
+            'owner' => $this->yearLevelTeacher(4),
+        ], $this->sections[4]);
 
-        $upcoming->syncQuestionBanks([$upcomingBank->id]);
-        $upcoming->rooms()->syncWithoutDetaching([
-            $this->rooms[4]->id => ['assigned_by' => $upcomingBank->created_by],
-        ]);
-
-        // An assignment a teacher has since archived, and a live pacing state
-        // for the exam that is currently open.
-        $archivedTarget = $this->exams[self::SUBJECTS[0]];
-        $archivedTarget->rooms()->syncWithoutDetaching([
-            $this->rooms[3]->id => [
-                'assigned_by' => $this->staff['examiner']->id,
-                'archived_at' => $this->now->subDays(5),
-                'archived_by' => $this->staff['examiner']->id,
-            ],
-        ]);
-
+        // The open exam is being paced live in one section.
+        $open = $this->exams['mock:' . self::SUBJECTS[4]];
         DB::table('exam_room_pacing_states')->insert([
-            'exam_id' => $this->exams[self::SUBJECTS[4]]->id,
-            'room_id' => $this->rooms[4]->id,
+            'exam_id' => $open['id'],
+            'room_id' => $this->sections[4][0],
             'is_active' => true,
-            'current_item_number' => 4,
-            'started_at' => $this->now->subHours(1),
-            'updated_by' => $this->staff['examiner']->id,
-            'created_at' => $this->now->subHours(1),
-            'updated_at' => $this->now->subMinutes(10),
+            'current_item_number' => 6,
+            'started_at' => $this->now->subMinutes(70),
+            'updated_by' => $open['owner'],
+            'created_at' => $this->now->subMinutes(70),
+            'updated_at' => $this->now->subMinutes(4),
         ]);
-    }
 
-    // ----------------------------------------------------------- exam history
+        foreach (self::LOWER_YEAR_EXAMS as $yearLevel => $exams) {
+            foreach ($exams as $n => [$subject, $kind]) {
+                $start = $this->termStart->addWeeks(2 + $n * 3 + $yearLevel)->setTime(9, 0);
 
-    private function seedExamAttempts(): void
-    {
-        $fourthYears = User::query()
-            ->where('email', 'like', '%@' . self::DOMAIN)
-            ->where('student_status', User::STUDENT_STATUS_ENROLLED)
-            ->where('year_level', '>=', 4)
-            ->orderBy('id')
-            ->get();
-
-        $predictionIds = array_flip(collect($this->predictionReady)->pluck('id')->all());
-        $specs = [];
-
-        foreach ($fourthYears as $position => $student) {
-            // Prediction needs at least eight scored attempts AND an average in
-            // every one of the six subjects, so these students sit all six --
-            // twice over, which also exercises the latest-attempt-per-session
-            // rule the analytics rely on.
-            $subjects = isset($predictionIds[$student->id])
-                ? array_merge(self::SUBJECTS, self::SUBJECTS)
-                : array_slice(self::SUBJECTS, 0, 2);
-
-            // A distinct ability per student so scores cluster rather than
-            // being uniform noise, and the pass/fail split means something.
-            $ability = 52 + (($position * 7) % 40);
-
-            foreach ($subjects as $round => $subject) {
-                $exam = $this->exams[$subject];
-                $opensAt = CarbonImmutable::instance(\Carbon\Carbon::instance($exam->schedule_start_at));
-
-                if ($opensAt->greaterThan($this->now)) {
-                    continue;
+                if ($start->greaterThan($this->now->subDays(4))) {
+                    $start = $this->now->subDays(4 + $n * 3)->setTime(9, 0);
                 }
 
-                $isRetake = $round >= count(self::SUBJECTS);
-
-                $specs[] = [
-                    'user_id' => (int) $student->id,
-                    'exam' => $exam,
-                    'status' => ExamAttempt::STATUS_SUBMITTED,
-                    'score' => max(5, min(100, $ability + ($isRetake ? 6 : 0) + mt_rand(-8, 8))),
-                    'started_at' => $opensAt->addHours($isRetake ? 30 : 1),
-                ];
+                $this->exams["{$yearLevel}:{$subject}"] = $this->insertExam([
+                    'title' => "{$subject} {$kind}",
+                    'subject' => $subject,
+                    'description' => $this->describe($subject),
+                    'bank' => $this->libraryBanks[$subject],
+                    'duration' => 45,
+                    'start' => $start,
+                    'end' => $start->addDays(2)->setTime(17, 0),
+                    'results' => 'visible',
+                    'one_take_only' => true,
+                    'shuffle' => true,
+                    'owner' => $this->yearLevelTeacher($yearLevel),
+                ], $this->sections[$yearLevel]);
             }
         }
 
-        // One student sitting the open exam right now, so the live board has
-        // something in progress to show.
-        $liveStudent = $fourthYears->first();
-
-        if ($liveStudent) {
-            $specs[] = [
-                'user_id' => (int) $liveStudent->id,
-                'exam' => $this->exams[self::SUBJECTS[4]],
-                'status' => ExamAttempt::STATUS_IN_PROGRESS,
-                'score' => null,
-                'started_at' => $this->now->subMinutes(25),
-            ];
-        }
-
-        $this->insertAttempts($specs);
+        // A quiz its teacher has since archived from one section, after the
+        // section sat it -- the archived-assignment state.
+        $archived = $this->exams['3:Library Management'];
+        DB::table('exam_room')
+            ->where('exam_id', $archived['id'])
+            ->where('room_id', $this->sections[3][0])
+            ->update([
+                'archived_at' => $this->now->subDays(2)->setTime(16, 2),
+                'archived_by' => $archived['owner'],
+                'updated_at' => $this->now->subDays(2)->setTime(16, 2),
+            ]);
     }
 
     /**
-     * Bulk-insert attempts and their per-item rows.
-     *
-     * Built as arrays and inserted in chunks rather than saved one model at a
-     * time: at a realistic intake this is a couple of thousand attempts and
-     * tens of thousands of answer rows, and per-row inserts turned a
-     * seconds-long seed into a minutes-long one.
-     *
-     * @param  list<array{user_id: int, exam: Exam, status: string, score: int|null, started_at: CarbonImmutable}>  $specs
+     * @param  array<string, mixed>  $exam
+     * @param  list<int>  $roomIds
+     * @return array<string, mixed>
      */
-    private function insertAttempts(array $specs): void
+    private function insertExam(array $exam, array $roomIds, ?CarbonImmutable $archivedAt = null): array
     {
-        if ($specs === []) {
-            return;
-        }
+        $createdAt = $exam['start']->subDays(mt_rand(3, 7))->setTime(mt_rand(8, 16), mt_rand(0, 59));
+        $total = count($this->bankItems[$exam['bank']]);
 
-        $questionsByBank = [];
-        $attemptRows = [];
+        $id = (int) DB::table('exams')->insertGetId([
+            'title' => $exam['title'],
+            'subject' => $exam['subject'],
+            'description' => $exam['description'],
+            'question_bank_id' => $exam['bank'],
+            'total_items' => $total,
+            'duration_minutes' => $exam['duration'],
+            'scheduled_at' => $exam['start'],
+            'schedule_start_at' => $exam['start'],
+            'schedule_end_at' => $exam['end'],
+            'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
+            'results_visibility_mode' => $exam['results'],
+            'one_take_only' => $exam['one_take_only'],
+            'shuffle_questions' => $exam['shuffle'],
+            'created_by' => $exam['owner'],
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
 
-        foreach ($specs as $spec) {
-            $exam = $spec['exam'];
-            $bankId = (int) $exam->question_bank_id;
+        DB::table('exam_question_bank')->insert([
+            'exam_id' => $id,
+            'question_bank_id' => $exam['bank'],
+            'position' => 1,
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
 
-            $questionsByBank[$bankId] ??= DB::table('question_bank_questions')
-                ->where('question_bank_id', $bankId)
-                ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
-                ->orderBy('item_number')
-                ->pluck('id')
-                ->all();
+        $this->assignExam($id, $roomIds, $exam['owner'], $createdAt->addHour(), $archivedAt);
 
-            $total = count($questionsByBank[$bankId]);
+        return ['id' => $id, 'total' => $total] + $exam;
+    }
 
-            if ($total === 0) {
+    /**
+     * @param  list<int>  $roomIds
+     */
+    private function assignExam(int $examId, array $roomIds, int $by, CarbonImmutable $at, ?CarbonImmutable $archivedAt = null): void
+    {
+        DB::table('exam_room')->insert(array_map(fn (int $roomId): array => [
+            'exam_id' => $examId,
+            'room_id' => $roomId,
+            'assigned_by' => $by,
+            'archived_at' => $archivedAt,
+            'archived_by' => $archivedAt ? $by : null,
+            'created_at' => $at,
+            'updated_at' => $archivedAt ?? $at,
+        ], $roomIds));
+    }
+
+    private function describe(string $subject): string
+    {
+        $topics = app(QuestionMappingService::class)->curatedTopicsForSubject($subject);
+        $last = array_pop($topics);
+
+        return $topics === []
+            ? "Covers {$last}."
+            : 'Covers ' . implode(', ', $topics) . ", and {$last}.";
+    }
+
+    // --------------------------------------------------------------- attempts
+
+    private function seedCurrentAttempts(): void
+    {
+        $open = $this->exams['mock:' . self::SUBJECTS[4]];
+        $live = 0;
+
+        foreach ($this->students as $student) {
+            if ($student['year_level'] < 4) {
                 continue;
             }
 
-            $submitted = $spec['status'] === ExamAttempt::STATUS_SUBMITTED;
-            $startedAt = $spec['started_at'];
+            $subjects = $student['prediction_ready'] ? self::SUBJECTS : array_slice(self::SUBJECTS, 0, 2);
 
-            $attemptRows[] = [
-                'exam_id' => (int) $exam->id,
-                'room_id' => $this->rooms[4]->id,
-                'user_id' => $spec['user_id'],
-                'status' => $spec['status'],
-                'total_items' => $total,
-                'duration_minutes' => (int) $exam->duration_minutes,
-                // Half answered on a live attempt, so the board shows progress.
-                'answered_count' => $submitted ? $total : (int) ceil($total / 2),
-                'correct_answers' => $submitted ? (int) round($total * ($spec['score'] / 100)) : 0,
-                'score_percent' => $submitted ? $spec['score'] : null,
-                'started_at' => $startedAt,
-                'expires_at' => $startedAt->addMinutes((int) $exam->duration_minutes),
-                'submitted_at' => $submitted ? $startedAt->addMinutes(mt_rand(18, 50)) : null,
-                'created_at' => $startedAt,
-                'updated_at' => $startedAt,
-            ];
-        }
+            foreach ($subjects as $subject) {
+                $exam = $this->exams["mock:{$subject}"];
+                $score = $this->scoreFor($student, $subject);
 
-        foreach (array_chunk($attemptRows, 1000) as $chunk) {
-            DB::table('exam_attempts')->insert($chunk);
-        }
+                $this->queueAttempt($student, $exam, $score, $this->sittingTime($exam));
 
-        $userIds = collect($specs)->pluck('user_id')->unique()->values()->all();
-        $examIds = collect($specs)->map(fn (array $spec): int => (int) $spec['exam']->id)->unique()->values()->all();
-
-        $attempts = DB::table('exam_attempts')
-            ->select('id', 'exam_id', 'status', 'total_items', 'answered_count', 'correct_answers', 'started_at')
-            ->whereIn('user_id', $userIds)
-            ->whereIn('exam_id', $examIds)
-            ->orderBy('id')
-            ->get();
-
-        $bankByExam = [];
-
-        foreach ($specs as $spec) {
-            $bankByExam[(int) $spec['exam']->id] = (int) $spec['exam']->question_bank_id;
-        }
-
-        $questionRows = [];
-        $answerRows = [];
-
-        foreach ($attempts as $attempt) {
-            $questionIds = $questionsByBank[$bankByExam[$attempt->exam_id] ?? 0] ?? [];
-            $answerCap = (int) $attempt->answered_count;
-            $correct = (int) $attempt->correct_answers;
-
-            foreach ($questionIds as $index => $questionId) {
-                $questionRows[] = [
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $questionId,
-                    'item_number' => $index + 1,
-                    'created_at' => $attempt->started_at,
-                    'updated_at' => $attempt->started_at,
-                ];
-
-                if ($index >= $answerCap) {
-                    continue;
+                // Most sat each mock exam a second time after reviewing -- the
+                // latest-attempt rule the analytics use needs that case.
+                if ($student['prediction_ready'] && !$exam['one_take_only'] && $exam['id'] !== $open['id']) {
+                    $this->queueAttempt($student, $exam, $score + mt_rand(2, 9), $this->sittingTime($exam, true));
                 }
+            }
 
-                $answerRows[] = [
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $questionId,
-                    'question_bank_option_id' => null,
-                    'answer_text' => null,
-                    'is_correct' => $index < $correct,
-                    'answered_at' => $attempt->started_at,
-                    'created_at' => $attempt->started_at,
-                    'updated_at' => $attempt->started_at,
-                ];
+            // A dozen students who have not sat it yet are mid-attempt on the
+            // open exam right now.
+            if (!$student['prediction_ready'] && $student['year_level'] === 4 && $live < 12) {
+                $minutesIn = mt_rand(6, 48);
+                $this->queueAttempt(
+                    $student,
+                    $open,
+                    $this->scoreFor($student, $open['subject']),
+                    $this->now->subMinutes($minutesIn)->subSeconds(mt_rand(0, 59)),
+                    false,
+                    min(0.95, $minutesIn / 55),
+                );
+                $live++;
             }
         }
 
-        foreach (array_chunk($questionRows, 2000) as $chunk) {
-            DB::table('exam_attempt_questions')->insert($chunk);
-        }
+        foreach (self::LOWER_YEAR_EXAMS as $yearLevel => $exams) {
+            foreach ($exams as [$subject]) {
+                $exam = $this->exams["{$yearLevel}:{$subject}"];
 
-        foreach (array_chunk($answerRows, 2000) as $chunk) {
-            DB::table('exam_attempt_answers')->insert($chunk);
-        }
-    }
-
-    // -------------------------------------------------------- review bot bank
-
-    /**
-     * Review questions in every state a teacher can put them in, with the
-     * cognitive ladder deliberately uneven so the coverage report has complete,
-     * partly covered and empty items to show.
-     */
-    private function seedReviewBotBank(): void
-    {
-        foreach (self::SUBJECTS as $subjectIndex => $subject) {
-            $bank = QuestionBank::query()->create([
-                'title' => QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX . $subject,
-                'subject' => $subject,
-                'total_items' => 0,
-                'mapping_status' => QuestionBank::MAPPING_STATUS_COMPLETED,
-                'created_by' => $this->staff['examiner']->id,
-                'created_at' => $this->now->subDays(5),
-                'updated_at' => $this->now->subDays(2),
-            ]);
-
-            $sources = QuestionBankQuestion::query()
-                ->where('question_bank_id', $this->libraryBanks[$subject]->id)
-                ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
-                ->orderBy('item_number')
-                ->get();
-
-            $itemNumber = 0;
-
-            foreach ($sources as $sourceIndex => $source) {
-                // Items 8 and 10 are left with nothing at all, so the coverage
-                // report shows the "produced nothing yet" case.
-                if (in_array($source->item_number, [8, 10], true)) {
-                    continue;
-                }
-
-                // A full ladder on the first item, thinning out after, so
-                // "complete" and "partly covered" both appear.
-                $levels = match (true) {
-                    $source->item_number === 1 => QuestionBankQuestion::COGNITIVE_LEVELS,
-                    $source->item_number <= 3 => ['recall', 'comprehension', 'application'],
-                    $source->item_number <= 6 => ['recall', 'comprehension'],
-                    default => ['recall'],
-                };
-
-                foreach ($levels as $levelIndex => $level) {
-                    $itemNumber++;
-
-                    // The first three subjects are published so students have a
-                    // working Review Bot; the rest sit as drafts awaiting review.
-                    $status = match (true) {
-                        $source->item_number === 5 && $levelIndex === 1 => QuestionBankQuestion::STATUS_REJECTED,
-                        $subjectIndex < 3 => QuestionBankQuestion::STATUS_PUBLISHED,
-                        default => QuestionBankQuestion::STATUS_DRAFT,
-                    };
-
-                    $flags = [];
-                    $verification = QuestionBankQuestion::VERIFICATION_AGREED;
-
-                    // One question per subject carries a screening flag and a
-                    // disagreeing verifier -- the states the review queue
-                    // renders as warnings.
-                    if ($source->item_number === 2 && $levelIndex === 0) {
-                        $flags = ['near_duplicate'];
-                        $verification = QuestionBankQuestion::VERIFICATION_DISAGREED;
+                foreach ($this->students as $student) {
+                    // A few are absent from any given quiz.
+                    if ($student['year_level'] !== $yearLevel || mt_rand(1, 100) > 92) {
+                        continue;
                     }
 
-                    $question = QuestionBankQuestion::query()->create([
-                        'question_bank_id' => $bank->id,
-                        'usage_type' => QuestionBankQuestion::USAGE_REVIEW_BOT,
-                        'source_question_id' => $source->id,
-                        'subject' => $subject,
-                        'topic_id' => $source->topic_id,
-                        'subtopic_id' => $source->subtopic_id,
-                        'difficulty' => [
-                            QuestionBankQuestion::DIFFICULTY_EASY,
-                            QuestionBankQuestion::DIFFICULTY_MEDIUM,
-                            QuestionBankQuestion::DIFFICULTY_HARD,
-                        ][$levelIndex % 3],
-                        'cognitive_level' => $level,
-                        'explanation' => 'The first option is correct because it matches the definition given in the source material.',
-                        'status' => $status,
-                        'verification_status' => $verification,
-                        'verifier_answer_label' => $verification === QuestionBankQuestion::VERIFICATION_DISAGREED ? 'C' : 'A',
-                        'validation_flags' => $flags === [] ? null : $flags,
-                        'tag_status' => QuestionBankQuestion::TAG_STATUS_CONFIRMED,
-                        'tag_source' => QuestionBankQuestion::TAG_SOURCE_AI,
-                        'item_number' => $itemNumber,
-                        'question_text' => sprintf(
-                            '%s (%s): review question generated from exam item %d.',
-                            $subject,
-                            $level,
-                            $source->item_number,
-                        ),
-                        'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
-                        'answer_label' => 'A',
-                        'created_at' => $this->now->subDays(5)->addMinutes($itemNumber),
-                        'updated_at' => $this->now->subDays(2),
-                    ]);
+                    $this->queueAttempt($student, $exam, $this->scoreFor($student, $subject) - 6, $this->sittingTime($exam));
+                }
+            }
+        }
 
-                    $this->attachOptions($question, QuestionBankQuestion::TYPE_MULTIPLE_CHOICE);
+        $this->flushAttempts(true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $student
+     */
+    private function scoreFor(array $student, string $subject): float
+    {
+        if ($student['featured'] !== null) {
+            $weak = self::FEATURED[$student['featured']][4];
+            $offset = in_array($subject, $weak, true) ? -11 : 3;
+        } else {
+            // Everyone has stronger and weaker subjects.
+            $offset = $this->subjectOffsets[$student['id']][$subject] ??= mt_rand(-9, 9);
+        }
+
+        return $student['ability'] + $offset + mt_rand(-6, 6);
+    }
+
+    /**
+     * @param  array<string, mixed>  $exam
+     */
+    private function sittingTime(array $exam, bool $retake = false): CarbonImmutable
+    {
+        // Open right now: sat within the last two hours, and already done.
+        if ($exam['end']->greaterThan($this->now)) {
+            return $exam['start']->addMinutes(mt_rand(0, 55))->addSeconds(mt_rand(0, 59));
+        }
+
+        $days = max(1, (int) $exam['start']->startOfDay()->diffInDays($exam['end']->startOfDay()));
+        $half = intdiv($days + 1, 2);
+        $day = $retake ? mt_rand($half, $days) : mt_rand(0, max(0, $half - 1));
+
+        return $exam['start']->startOfDay()->addDays($day)->setTime(mt_rand(8, 15), mt_rand(0, 59), mt_rand(0, 59));
+    }
+
+    /**
+     * @param  array<string, mixed>  $student  needs id and room_id
+     * @param  array<string, mixed>  $exam
+     */
+    private function queueAttempt(
+        array $student,
+        array $exam,
+        float $score,
+        CarbonImmutable $startedAt,
+        bool $submitted = true,
+        float $answeredShare = 1.0,
+    ): void {
+        $this->pendingAttempts[] = [
+            'user_id' => $student['id'],
+            'room_id' => $student['room_id'],
+            'exam' => $exam,
+            'score' => max(5.0, min(100.0, $score)),
+            'started_at' => $startedAt,
+            'submitted' => $submitted,
+            'answered_share' => $answeredShare,
+        ];
+    }
+
+    /**
+     * Writes the queued attempts, with their per-item rows when asked.
+     *
+     * Bulk inserts rather than models: at the default intake this is tens of
+     * thousands of attempts and a few hundred thousand item rows.
+     */
+    private function flushAttempts(bool $withItems): void
+    {
+        foreach (array_chunk($this->pendingAttempts, 500) as $chunk) {
+            $before = (int) DB::table('exam_attempts')->max('id');
+            $sheets = [];
+            $rows = [];
+
+            foreach ($chunk as $i => $spec) {
+                $sheets[$i] = $sheet = $this->answerSheet($spec);
+                $total = count($sheet['order']);
+                $submittedAt = $spec['submitted'] ? $spec['started_at']->addSeconds($sheet['seconds']) : null;
+
+                $rows[] = [
+                    'exam_id' => $spec['exam']['id'],
+                    'room_id' => $spec['room_id'],
+                    'user_id' => $spec['user_id'],
+                    'status' => $spec['submitted'] ? ExamAttempt::STATUS_SUBMITTED : ExamAttempt::STATUS_IN_PROGRESS,
+                    'total_items' => $total,
+                    'duration_minutes' => $spec['exam']['duration'],
+                    'answered_count' => count($sheet['answers']),
+                    'correct_answers' => $sheet['correct'],
+                    'score_percent' => $spec['submitted'] && $total > 0 ? round($sheet['correct'] / $total * 100, 2) : null,
+                    'started_at' => $spec['started_at'],
+                    'expires_at' => $spec['started_at']->addMinutes($spec['exam']['duration']),
+                    'submitted_at' => $submittedAt,
+                    'created_at' => $spec['started_at'],
+                    'updated_at' => $submittedAt ?? $this->now,
+                ];
+            }
+
+            DB::table('exam_attempts')->insert($rows);
+
+            if (!$withItems) {
+                continue;
+            }
+
+            // Looked back up by who, what and when; this seeder is the only
+            // writer of these accounts' attempts.
+            $ids = [];
+
+            foreach (DB::table('exam_attempts')
+                ->where('id', '>', $before)
+                ->whereIn('user_id', array_values(array_unique(array_column($chunk, 'user_id'))))
+                ->get(['id', 'user_id', 'exam_id', 'started_at']) as $row) {
+                $ids[$row->user_id . '|' . $row->exam_id . '|' . substr((string) $row->started_at, 0, 19)] = (int) $row->id;
+            }
+
+            foreach ($chunk as $i => $spec) {
+                $attemptId = $ids[$spec['user_id'] . '|' . $spec['exam']['id'] . '|' . $spec['started_at']->format('Y-m-d H:i:s')] ?? null;
+
+                if ($attemptId !== null) {
+                    $this->bufferSheet($attemptId, $spec, $sheets[$i]);
                 }
             }
 
-            $bank->update(['total_items' => $itemNumber]);
+            $this->flushBuffers();
+        }
+
+        $this->pendingAttempts = [];
+    }
+
+    /**
+     * How one sitting went, item by item: which items were answered, which
+     * of those were right (easier items more often), and what was chosen
+     * when wrong (most often the item's most tempting distractor).
+     *
+     * @param  array<string, mixed>  $spec
+     * @return array{order: list<int>, answers: array<int, array{0: ?int, 1: bool, 2: int}>, correct: int, seconds: int}
+     */
+    private function answerSheet(array $spec): array
+    {
+        $items = $this->bankItems[$spec['exam']['bank']];
+        $total = count($items);
+        $order = array_keys($items);
+
+        if ($spec['exam']['shuffle']) {
+            shuffle($order);
+        }
+
+        $reach = $spec['submitted'] ? $total : max(1, (int) floor($total * $spec['answered_share']));
+        $answered = [];
+
+        foreach (array_slice($order, 0, $reach, true) as $position => $itemIndex) {
+            // Now and then an item is left blank.
+            if ($spec['submitted'] && mt_rand(1, 100) <= 2) {
+                continue;
+            }
+
+            $weight = self::DIFFICULTY_WEIGHT[$items[$itemIndex]['difficulty']] ?? 0.7;
+            // Weighted sampling (Efraimidis-Spirakis): the highest keys win.
+            $answered[$position] = (mt_rand() / mt_getrandmax()) ** (1 / $weight);
+        }
+
+        $target = min(count($answered), (int) round($total * $spec['score'] / 100));
+        arsort($answered);
+        $right = array_flip(array_slice(array_keys($answered), 0, $target));
+        ksort($answered);
+
+        $seconds = 0;
+        $pace = max(20, (int) ($spec['exam']['duration'] * 60 * (mt_rand(40, 85) / 100) / max(1, $total)));
+        $answers = [];
+
+        foreach (array_keys($answered) as $position) {
+            $item = $items[$order[$position]];
+            $isRight = isset($right[$position]) && $item['correct'] !== null;
+            $seconds += (int) ($pace * (mt_rand(60, 140) / 100));
+
+            if ($isRight) {
+                $option = $item['correct'];
+            } elseif ($item['wrong'] === []) {
+                $option = null;
+            } else {
+                $option = mt_rand(1, 100) <= 60 ? $item['wrong'][0] : $item['wrong'][mt_rand(0, count($item['wrong']) - 1)];
+            }
+
+            $answers[$position] = [$option, $isRight, $seconds];
+        }
+
+        return [
+            'order' => $order,
+            'answers' => $answers,
+            'correct' => count(array_filter($answers, fn (array $answer): bool => $answer[1])),
+            'seconds' => min($spec['exam']['duration'] * 60 - 30, $seconds + mt_rand(30, 180)),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $spec
+     * @param  array<string, mixed>  $sheet
+     */
+    private function bufferSheet(int $attemptId, array $spec, array $sheet): void
+    {
+        $items = $this->bankItems[$spec['exam']['bank']];
+        $startedAt = $spec['started_at'];
+
+        foreach ($sheet['order'] as $position => $itemIndex) {
+            $this->buffer('exam_attempt_questions', [
+                'exam_attempt_id' => $attemptId,
+                'question_bank_question_id' => $items[$itemIndex]['id'],
+                'item_number' => $position + 1,
+                'is_bookmarked' => mt_rand(1, 100) <= 3,
+                'created_at' => $startedAt,
+                'updated_at' => $startedAt,
+            ]);
+
+            if (!isset($sheet['answers'][$position])) {
+                continue;
+            }
+
+            [$optionId, $isRight, $offset] = $sheet['answers'][$position];
+            $answeredAt = $startedAt->addSeconds($offset);
+
+            // Someone mid-attempt cannot have answered in the future.
+            if (!$spec['submitted']) {
+                $answeredAt = $answeredAt->min($this->now->subSeconds(20));
+            }
+
+            $this->buffer('exam_attempt_answers', [
+                'exam_attempt_id' => $attemptId,
+                'question_bank_question_id' => $items[$itemIndex]['id'],
+                'question_bank_option_id' => $optionId,
+                'answer_text' => null,
+                'is_correct' => $isRight,
+                'answered_at' => $answeredAt,
+                'created_at' => $answeredAt,
+                'updated_at' => $answeredAt,
+            ]);
         }
     }
 
-    // ---------------------------------------------------- review bot sessions
-
     /**
-     * Student-side Review Bot history, with mastery states spread across every
-     * bucket the adaptive queue reads: weak, learning and mastered. Items with
-     * no row at all are the fourth bucket, unseen.
+     * @param  array<string, mixed>  $row
      */
-    private function seedReviewBotSessions(): void
+    private function buffer(string $table, array $row): void
     {
-        $students = User::query()
-            ->where('email', 'like', '%@' . self::DOMAIN)
-            ->where('student_status', User::STUDENT_STATUS_ENROLLED)
-            ->whereNotNull('year_level')
-            ->orderBy('id')
-            ->limit(12)
-            ->get();
+        $this->buffers[$table][] = $row;
 
-        $published = QuestionBankQuestion::query()
-            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
-            ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
-            ->with('options')
-            ->orderBy('id')
-            ->get();
-
-        if ($published->isEmpty()) {
-            return;
+        if (count($this->buffers[$table]) >= 2000) {
+            DB::table($table)->insert($this->buffers[$table]);
+            $this->buffers[$table] = [];
         }
+    }
 
-        foreach ($students as $position => $student) {
-            $sessionCount = $position % 4;
-
-            for ($session = 0; $session < $sessionCount; $session++) {
-                $pool = $published->slice(($session * 5) % max(1, $published->count() - 5), 5)->values();
-
-                if ($pool->isEmpty()) {
-                    continue;
-                }
-
-                $startedAt = $this->now->subDays(($sessionCount - $session) * 3);
-                $correct = mt_rand(1, $pool->count());
-
-                $attempt = ReviewBotAttempt::query()->create([
-                    'user_id' => $student->id,
-                    'subject' => $pool->first()->subject,
-                    'topic_id' => $pool->first()->topic_id,
-                    'subtopic_id' => $pool->first()->subtopic_id,
-                    'difficulty' => null,
-                    'source' => $session % 2 === 0
-                        ? ReviewBotAttempt::SOURCE_MANUAL
-                        : ReviewBotAttempt::SOURCE_AUTO_WEAK_AREA,
-                    'status' => ReviewBotAttempt::STATUS_SUBMITTED,
-                    'total_items' => $pool->count(),
-                    'answered_count' => $pool->count(),
-                    'correct_answers' => $correct,
-                    'score_percent' => round(($correct / $pool->count()) * 100, 2),
-                    'started_at' => $startedAt,
-                    'submitted_at' => $startedAt->addMinutes(9),
-                ]);
-
-                foreach ($pool as $index => $question) {
-                    $isCorrect = $index < $correct;
-
-                    DB::table('review_bot_attempt_questions')->insert([
-                        'review_bot_attempt_id' => $attempt->id,
-                        'question_bank_question_id' => $question->id,
-                        'item_number' => $index + 1,
-                        'created_at' => $startedAt,
-                        'updated_at' => $startedAt,
-                    ]);
-
-                    $option = $question->options->first(fn ($o) => (bool) $o->is_correct === $isCorrect)
-                        ?? $question->options->first();
-
-                    DB::table('review_bot_attempt_answers')->insert([
-                        'review_bot_attempt_id' => $attempt->id,
-                        'question_bank_question_id' => $question->id,
-                        'question_bank_option_id' => $option?->id,
-                        'answer_text' => null,
-                        'is_correct' => $isCorrect,
-                        'answered_at' => $startedAt->addMinutes($index + 1),
-                        'created_at' => $startedAt,
-                        'updated_at' => $startedAt,
-                    ]);
-
-                    // consecutive_correct is what buckets the item: 0 is weak,
-                    // 1 is learning, 2 or more is mastered and drops out of
-                    // rotation. Spread across all three on purpose.
-                    $streak = $isCorrect ? ($index % 3) + 1 : 0;
-
-                    DB::table('review_bot_item_states')->updateOrInsert(
-                        [
-                            'user_id' => $student->id,
-                            'question_bank_question_id' => $question->id,
-                        ],
-                        [
-                            'times_seen' => $session + 1,
-                            'times_correct' => $isCorrect ? $session + 1 : 0,
-                            'consecutive_correct' => $streak,
-                            'last_seen_at' => $startedAt,
-                            'created_at' => $startedAt,
-                            'updated_at' => $startedAt,
-                        ],
-                    );
-                }
+    private function flushBuffers(): void
+    {
+        foreach ($this->buffers as $table => $rows) {
+            if ($rows !== []) {
+                DB::table($table)->insert($rows);
             }
-        }
 
-        // One session left open, so the "resume where you left off" path has a
-        // record behind it.
-        $resumeStudent = $students->first();
-
-        if ($resumeStudent) {
-            $pool = $published->take(5);
-
-            $attempt = ReviewBotAttempt::query()->create([
-                'user_id' => $resumeStudent->id,
-                'subject' => $pool->first()->subject,
-                'topic_id' => $pool->first()->topic_id,
-                'subtopic_id' => $pool->first()->subtopic_id,
-                'source' => ReviewBotAttempt::SOURCE_MANUAL,
-                'status' => ReviewBotAttempt::STATUS_IN_PROGRESS,
-                'total_items' => $pool->count(),
-                'answered_count' => 2,
-                'correct_answers' => 0,
-                'score_percent' => null,
-                'started_at' => $this->now->subMinutes(12),
-            ]);
-
-            foreach ($pool->values() as $index => $question) {
-                DB::table('review_bot_attempt_questions')->insert([
-                    'review_bot_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $question->id,
-                    'item_number' => $index + 1,
-                    'created_at' => $this->now->subMinutes(12),
-                    'updated_at' => $this->now->subMinutes(12),
-                ]);
-            }
+            $this->buffers[$table] = [];
         }
     }
 
     // ---------------------------------------------------------------- history
 
     /**
-     * Back-history: one graduating cohort per year, each with the exam record
-     * they built over four years and the board result they eventually got.
-     *
-     * This is what makes the retraining story real. LetPredictionService was
-     * trained on a single hand-labelled batch and its docblock asks for more;
-     * a decade of cohorts, each with a full feature history and a recorded
-     * outcome, is the shape that data has to arrive in. It is also the only way
-     * the archive views have anything in them -- rooms from closed academic
-     * years, exams nobody will sit again, alumni who left years ago.
-     *
-     * Written with bulk inserts rather than Eloquent: at ten cohorts this is
-     * tens of thousands of answer rows, and per-model saves would turn a
-     * seconds-long seed into a minutes-long one.
+     * One graduating cohort per past year, each with the exam record they
+     * built and the board result they got -- the shape the LET predictor's
+     * retraining data has to arrive in, and what fills the archive views.
      */
     private function seedHistory(): void
     {
-        $years = max(0, (int) env('SHOWCASE_HISTORY_YEARS', 10));
+        $years = $this->historyYears();
 
         if ($years === 0) {
             return;
         }
 
-        $currentYear = (int) $this->now->format('Y');
-        $sequence = 0;
-
-        $this->command?->info("Building {$years} year(s) of cohort history...");
+        $this->command?->info("Building {$years} graduated cohort(s) of history...");
+        $termYear = $this->termStart->year;
 
         for ($offset = $years; $offset >= 1; $offset--) {
-            $graduationYear = $currentYear - $offset;
+            $graduationYear = $termYear - $offset;
             $admissionYear = $graduationYear - 4;
             $index = ($years - $offset) % count(self::HISTORIC_COHORT_RATIOS);
-
             $size = max(1, (int) round($this->cohortSize() * self::HISTORIC_COHORT_RATIOS[$index]));
-            $passRate = self::HISTORIC_PASS_RATES[$index];
+            $closedAt = CarbonImmutable::create($graduationYear, 6, 30);
+            $academicYear = sprintf('AY %d-%d', $graduationYear - 1, $graduationYear);
 
-            $room = $this->seedHistoricRoom($graduationYear);
-            $exams = $this->seedHistoricExams($graduationYear, $room);
-            $cohort = $this->seedHistoricCohort($graduationYear, $admissionYear, $size, $sequence, $room);
-            $sequence += $size;
+            // Their fourth-year sections, archived when they graduated.
+            $sections = [];
 
-            // Per-item rows only for the two most recent cohorts. They exist
-            // for item-level views -- the live board footer, per-question
-            // breakdowns -- which nobody opens for a decade-old exam, and at
-            // full intake they would be ~380,000 rows of nothing anyone reads.
-            // Every analytics path that matters reads exam_attempts.score_percent,
-            // which every historical attempt still carries.
-            $this->seedHistoricAttempts($cohort, $exams, $offset <= 2);
-            $this->seedHistoricResults($cohort, $graduationYear, $passRate);
-        }
-    }
+            for ($section = 0; $section < (int) ceil($size / self::SECTION_SIZE); $section++) {
+                $sections[] = $this->insertRoom(
+                    sprintf('BLIS 4-%s (%s)', chr(ord('A') + $section), $academicYear),
+                    $this->staff['chair'],
+                    CarbonImmutable::create($graduationYear - 1, 8, 1),
+                    $closedAt,
+                );
+            }
 
-    private function seedHistoricRoom(int $graduationYear): Room
-    {
-        $closedAt = CarbonImmutable::create($graduationYear, 6, 30);
+            $exams = [];
 
-        return Room::query()->create([
-            'name' => sprintf('BLIS 4A (AY %d-%d)', $graduationYear - 1, $graduationYear),
-            // rooms.code is capped at 12 characters, and the 8-character
-            // prefix plus a 4-digit year uses exactly that.
-            'code' => self::PREFIX . $graduationYear,
-            'created_by' => $this->staff['examiner']->id,
-            // Archived the moment the cohort graduated, which is what keeps
-            // them out of currentStudentMembers() and the room_count column.
-            'archived_at' => $closedAt,
-            'created_at' => $closedAt->subYears(4),
-            'updated_at' => $closedAt,
-        ]);
-    }
+            foreach (self::SUBJECTS as $i => $subject) {
+                // Spread across the four years, so a student's history has a
+                // real chronology for the semester buckets to split.
+                $sat = CarbonImmutable::create($admissionYear + 1, 1, 12)->addMonths($i * 8)->setTime(8, 0);
 
-    /**
-     * @return array<string, int> subject => exam id
-     */
-    private function seedHistoricExams(int $graduationYear, Room $room): array
-    {
-        $rows = [];
-        $pivot = [];
-        $exams = [];
+                $exams[$subject] = $this->insertExam([
+                    'title' => "{$subject} Mock Board Exam ({$academicYear})",
+                    'subject' => $subject,
+                    'description' => $this->describe($subject),
+                    'bank' => $this->libraryBanks[$subject],
+                    'duration' => 60,
+                    'start' => $sat,
+                    'end' => $sat->addDays(2)->setTime(17, 0),
+                    'results' => 'visible',
+                    'one_take_only' => false,
+                    'shuffle' => false,
+                    'owner' => $this->staff['chair'],
+                ], $sections, $closedAt);
+            }
 
-        foreach (self::SUBJECTS as $index => $subject) {
-            // Spread across the cohort's four years, so a student's attempt
-            // history has a real chronology for the semester bucketing to
-            // split rather than everything landing on one date.
-            $sat = CarbonImmutable::create($graduationYear - 3, 1, 1)->addMonths($index * 8);
+            $rows = [];
+            $members = [];
 
-            $exam = Exam::query()->create([
-                'title' => sprintf('[%s] %s Mock (AY %d)', self::PREFIX, $subject, $graduationYear),
-                'subject' => $subject,
-                'description' => 'Historical mock exam retained for records.',
-                'question_bank_id' => $this->libraryBanks[$subject]->id,
-                'total_items' => 10,
-                'duration_minutes' => 60,
-                'scheduled_at' => $sat,
-                'schedule_start_at' => $sat,
-                'schedule_end_at' => $sat->addDays(2),
-                'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
-                'results_visibility_mode' => 'visible',
-                'one_take_only' => false,
-                'shuffle_questions' => false,
-                'created_by' => $this->staff['examiner']->id,
-                'created_at' => $sat->subWeek(),
-                'updated_at' => $sat,
-            ]);
+            for ($i = 0; $i < $size; $i++) {
+                // Roughly one in nine leaves before finishing. They are
+                // dropouts, not board failures; mixing the two would poison a
+                // model trained on this data.
+                $dropped = $i % 9 === 8;
+                $person = $this->names->next();
+                $leftAt = $dropped
+                    ? CarbonImmutable::create($admissionYear + 2, 1, 15)->addDays(mt_rand(0, 120))
+                    : $closedAt;
 
-            $pivot[] = [
-                'exam_id' => $exam->id,
-                'room_id' => $room->id,
-                'assigned_by' => $this->staff['examiner']->id,
-                'archived_at' => CarbonImmutable::create($graduationYear, 6, 30),
-                'archived_by' => $this->staff['examiner']->id,
-                'created_at' => $sat->subWeek(),
-                'updated_at' => $sat,
-            ];
+                $rows[] = ['is_active' => false] + $this->studentRow(
+                    $person,
+                    $admissionYear,
+                    null,
+                    $dropped ? User::STUDENT_STATUS_DROPPED : User::STUDENT_STATUS_GRADUATED,
+                    $leftAt,
+                );
 
-            $exams[$subject] = ['id' => (int) $exam->id, 'sat_at' => $sat];
-        }
-
-        DB::table('exam_room')->insert($pivot);
-
-        return $exams;
-    }
-
-    /**
-     * @return \Illuminate\Support\Collection<int, \stdClass>
-     */
-    private function seedHistoricCohort(int $graduationYear, int $admissionYear, int $size, int $sequence, Room $room)
-    {
-        $enrolledAt = CarbonImmutable::create($admissionYear, 8, 1);
-        $leftAt = CarbonImmutable::create($graduationYear, 6, 30);
-        $rows = [];
-
-        for ($i = 0; $i < $size; $i++) {
-            $n = $sequence + $i;
-
-            // Roughly one in nine leaves before finishing. They are dropouts,
-            // not board-exam failures -- keeping the two apart is the whole
-            // reason student_status exists, and mixing them would poison any
-            // model trained on this data.
-            $dropped = $i % 9 === 8;
-
-            $rows[] = [
-                'name' => sprintf('Alumnus %d-%02d', $graduationYear, $i + 1),
-                'email' => sprintf('alum%d-%d@%s', $graduationYear, $n, self::DOMAIN),
-                'student_id' => (string) (self::HISTORY_STUDENT_ID_BASE + $n),
-                'role' => User::ROLE_STUDENT,
-                'year_level' => null,
-                'student_status' => $dropped
-                    ? User::STUDENT_STATUS_DROPPED
-                    : User::STUDENT_STATUS_GRADUATED,
-                'admission_year' => $admissionYear,
-                'is_active' => false,
-                'archived_at' => $dropped ? $enrolledAt->addYears(2) : $leftAt,
-                'password' => $this->password,
-                'created_at' => $enrolledAt,
-                'updated_at' => $leftAt,
-            ];
-        }
-
-        foreach (array_chunk($rows, 500) as $chunk) {
-            DB::table('users')->insert($chunk);
-        }
-
-        $cohort = DB::table('users')
-            ->select('id', 'student_status', 'created_at')
-            ->where('email', 'like', sprintf('alum%d-%%@%s', $graduationYear, self::DOMAIN))
-            ->orderBy('id')
-            ->get();
-
-        DB::table('room_user')->insert($cohort->map(fn ($student): array => [
-            'room_id' => $room->id,
-            'user_id' => $student->id,
-            'created_at' => $enrolledAt,
-            'updated_at' => $enrolledAt,
-        ])->all());
-
-        return $cohort;
-    }
-
-    /**
-     * @param  \Illuminate\Support\Collection<int, \stdClass>  $cohort
-     * @param  array<string, array{id: int, sat_at: CarbonImmutable}>  $exams
-     */
-    private function seedHistoricAttempts($cohort, array $exams, bool $withItemDetail): void
-    {
-        // The item ids are the same for every exam in a cohort, since all six
-        // draw from the same per-subject Library file.
-        $questionsByBank = [];
-
-        foreach (self::SUBJECTS as $subject) {
-            $questionsByBank[$subject] = DB::table('question_bank_questions')
-                ->where('question_bank_id', $this->libraryBanks[$subject]->id)
-                ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
-                ->orderBy('item_number')
-                ->pluck('id')
-                ->all();
-        }
-
-        $attemptRows = [];
-
-        foreach ($cohort as $position => $student) {
-            // A dropout stops sitting exams partway through, which is what
-            // makes them censored rather than failed.
-            $isDropout = $student->student_status === User::STUDENT_STATUS_DROPPED;
-            $subjects = $isDropout ? array_slice(self::SUBJECTS, 0, 2) : self::SUBJECTS;
-
-            $ability = 48 + (($position * 11) % 42);
-
-            foreach ($subjects as $round => $subject) {
-                $exam = $exams[$subject];
-                $satAt = $exam['sat_at'];
-
-                // A gentle upward drift across the degree, so the semester
-                // buckets show improvement rather than noise.
-                $drift = (int) round(($round / max(1, count($subjects) - 1)) * 9);
-                $score = max(5, min(100, $ability + $drift + mt_rand(-7, 7)));
-
-                $attemptRows[] = [
-                    'exam_id' => $exam['id'],
-                    'room_id' => null,
-                    'user_id' => $student->id,
-                    'status' => ExamAttempt::STATUS_SUBMITTED,
-                    'total_items' => 10,
-                    'duration_minutes' => 60,
-                    'answered_count' => 10,
-                    'correct_answers' => (int) round($score / 10),
-                    'score_percent' => $score,
-                    'started_at' => $satAt->addHours(1),
-                    'expires_at' => $satAt->addHours(2),
-                    'submitted_at' => $satAt->addHours(1)->addMinutes(mt_rand(20, 55)),
-                    'created_at' => $satAt,
-                    'updated_at' => $satAt,
+                $members[$person['email']] = [
+                    'room_id' => $sections[$i % count($sections)],
+                    'ability' => $this->ability(66, 12),
+                    'dropped' => $dropped,
                 ];
             }
-        }
 
-        // room_id is NOT NULL, so point them at the cohort's own archived room.
-        $roomId = DB::table('room_user')->where('user_id', $cohort->first()->id)->value('room_id');
+            $ids = $this->insertStudents($rows);
+            $memberships = [];
+            $graduates = [];
 
-        foreach ($attemptRows as $index => $row) {
-            $attemptRows[$index]['room_id'] = $roomId;
-        }
+            foreach ($members as $email => $member) {
+                $student = ['id' => $ids[$email], 'room_id' => $member['room_id']];
+                $joinedAt = CarbonImmutable::create($graduationYear - 1, 8, 1)->addDays(mt_rand(0, 10));
+                $memberships[] = ['room_id' => $member['room_id'], 'user_id' => $student['id'], 'created_at' => $joinedAt, 'updated_at' => $joinedAt];
 
-        foreach (array_chunk($attemptRows, 1000) as $chunk) {
-            DB::table('exam_attempts')->insert($chunk);
-        }
+                // A dropout stops sitting exams partway -- censored, not failed.
+                $subjects = $member['dropped'] ? array_slice(self::SUBJECTS, 0, 2) : self::SUBJECTS;
 
-        if (!$withItemDetail) {
-            return;
-        }
+                foreach ($subjects as $round => $subject) {
+                    // A gentle climb across the degree.
+                    $drift = ($round / max(1, count($subjects) - 1)) * 9;
+                    $exam = $exams[$subject];
 
-        // Attempt items and answers, so per-question analytics and the live
-        // board footer have something behind the recent historical exams too.
-        $attempts = DB::table('exam_attempts')
-            ->select('id', 'exam_id', 'user_id', 'score_percent', 'started_at')
-            ->whereIn('user_id', $cohort->pluck('id'))
-            ->get();
+                    $this->queueAttempt(
+                        $student,
+                        $exam,
+                        $member['ability'] + $drift + mt_rand(-7, 7),
+                        $exam['start']->addDays(mt_rand(0, 1))->setTime(mt_rand(8, 15), mt_rand(0, 59), mt_rand(0, 59)),
+                    );
+                }
 
-        $examSubject = [];
-        foreach ($exams as $subject => $exam) {
-            $examSubject[$exam['id']] = $subject;
-        }
-
-        $questionRows = [];
-        $answerRows = [];
-
-        foreach ($attempts as $attempt) {
-            $subject = $examSubject[$attempt->exam_id] ?? null;
-            $questionIds = $subject ? $questionsByBank[$subject] : [];
-            $correct = (int) round(((float) $attempt->score_percent) / 10);
-
-            foreach ($questionIds as $index => $questionId) {
-                $questionRows[] = [
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $questionId,
-                    'item_number' => $index + 1,
-                    'created_at' => $attempt->started_at,
-                    'updated_at' => $attempt->started_at,
-                ];
-
-                $answerRows[] = [
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $questionId,
-                    'question_bank_option_id' => null,
-                    'answer_text' => null,
-                    'is_correct' => $index < $correct,
-                    'answered_at' => $attempt->started_at,
-                    'created_at' => $attempt->started_at,
-                    'updated_at' => $attempt->started_at,
-                ];
+                if (!$member['dropped']) {
+                    $graduates[$student['id']] = $member['ability'];
+                }
             }
-        }
 
-        foreach (array_chunk($questionRows, 2000) as $chunk) {
-            DB::table('exam_attempt_questions')->insert($chunk);
-        }
+            foreach (array_chunk($memberships, 1000) as $chunk) {
+                DB::table('room_user')->insert($chunk);
+            }
 
-        foreach (array_chunk($answerRows, 2000) as $chunk) {
-            DB::table('exam_attempt_answers')->insert($chunk);
+            // Per-item rows only for the two most recent cohorts: item-level
+            // views are all anyone opens an old exam for, and a decade of them
+            // would be hundreds of thousands of rows nobody reads. Every
+            // analytics path that matters reads the attempt's score, which all
+            // of them carry.
+            $this->flushAttempts($offset <= 2);
+
+            $boardDate = CarbonImmutable::create($graduationYear, 9, 14);
+            $this->insertBoardResults($graduates, $graduationYear, $boardDate, self::HISTORIC_PASS_RATES[$index]);
         }
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, \stdClass>  $cohort
+     * Board results that follow ability, loosely: the stronger students
+     * mostly pass, but not in strict rank order. Every thirteenth outcome is
+     * left unrecorded, and about a third of those who fail pass a year later.
+     *
+     * @param  array<int, float>  $graduates  user id => ability
      */
-    private function seedHistoricResults($cohort, int $graduationYear, float $passRate): void
+    private function insertBoardResults(array $graduates, int $examYear, CarbonImmutable $takenAt, float $passRate): void
     {
-        $rows = [];
-        $takenAt = CarbonImmutable::create($graduationYear, 9, 15);
-        $graduates = $cohort->where('student_status', User::STUDENT_STATUS_GRADUATED)->values();
+        $standing = [];
 
-        foreach ($graduates as $index => $graduate) {
-            // A couple per cohort are left unrecorded on purpose: in practice
-            // some outcomes never get transcribed, and the Licensure screen is
-            // where that backlog shows up.
-            if ($index % 13 === 12) {
+        foreach ($graduates as $userId => $ability) {
+            $standing[$userId] = $ability + mt_rand(-6, 6);
+        }
+
+        arsort($standing);
+        $passing = (int) round(count($standing) * $passRate);
+        $rows = [];
+        $position = 0;
+
+        foreach (array_keys($standing) as $userId) {
+            $passed = $position++ < $passing;
+
+            if ($position % 13 === 0) {
                 continue;
             }
 
-            $passed = ($index / max(1, $graduates->count())) < $passRate;
-
             $rows[] = [
-                'user_id' => $graduate->id,
-                'exam_year' => $graduationYear,
+                'user_id' => $userId,
+                'exam_year' => $examYear,
                 'taken_at' => $takenAt,
                 'result' => $passed ? LleResult::RESULT_PASS : LleResult::RESULT_FAIL,
                 'rating' => $passed ? round(mt_rand(7500, 9200) / 100, 2) : round(mt_rand(6200, 7490) / 100, 2),
                 'remarks' => null,
-                'recorded_by' => $this->staff['examiner']->id,
-                'created_at' => $takenAt,
-                'updated_at' => $takenAt,
+                'recorded_by' => $this->staff['chair'],
+                'created_at' => $takenAt->addWeeks(6),
+                'updated_at' => $takenAt->addWeeks(6),
             ];
 
-            // Roughly a third of those who fail sit it again the next year and
-            // pass -- two rows for one person, which is why the unique key is
-            // (user, exam_year).
-            if (!$passed && $index % 3 === 0) {
+            $retakeAt = $takenAt->addYear();
+
+            if (!$passed && $position % 3 === 0 && $retakeAt->addWeeks(6)->lessThan($this->now)) {
                 $rows[] = [
-                    'user_id' => $graduate->id,
-                    'exam_year' => $graduationYear + 1,
-                    'taken_at' => $takenAt->addYear(),
+                    'user_id' => $userId,
+                    'exam_year' => $examYear + 1,
+                    'taken_at' => $retakeAt,
                     'result' => LleResult::RESULT_PASS,
-                    'rating' => round(mt_rand(7500, 8200) / 100, 2),
+                    'rating' => round(mt_rand(7500, 8300) / 100, 2),
                     'remarks' => 'Passed on retake.',
-                    'recorded_by' => $this->staff['examiner']->id,
-                    'created_at' => $takenAt->addYear(),
-                    'updated_at' => $takenAt->addYear(),
+                    'recorded_by' => $this->staff['chair'],
+                    'created_at' => $retakeAt->addWeeks(6),
+                    'updated_at' => $retakeAt->addWeeks(6),
                 ];
             }
         }
@@ -1493,95 +1417,407 @@ class ShowcaseSeeder extends Seeder
         }
     }
 
+    // -------------------------------------------------------------- review bot
+
+    /**
+     * Review questions made the way a teacher makes them: the app's own
+     * generator, run over each subject's Library file. Four subjects have
+     * been reviewed (most published, a couple declined); the last two still
+     * wait in the queue. The final items of each file are left uncovered, so
+     * the coverage report has gaps to show.
+     */
+    private function seedReviewBot(): void
+    {
+        $service = app(ReviewBotAdminService::class);
+
+        foreach (self::SUBJECTS as $index => $subject) {
+            $sourceBank = $this->libraryBanks[$subject];
+            $sources = array_column($this->bankItems[$sourceBank], 'id');
+
+            $service->generate(
+                $service->reviewBotBankFor($subject, $this->staff['chair']),
+                $this->staff['chair'],
+                $subject,
+                null,
+                null,
+                max(1, count($sources) - 3),
+                $sourceBank,
+            );
+
+            $variants = DB::table('question_bank_questions')
+                ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+                ->whereIn('source_question_id', $sources)
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+
+            $generatedAt = $this->now->subDays(12 - $index)->setTime(14, 5);
+            DB::table('question_bank_questions')->whereIn('id', $variants)->update([
+                'created_at' => $generatedAt,
+                'updated_at' => $generatedAt,
+            ]);
+
+            $declined = array_values(array_filter($variants, fn (int $id, int $i): bool => $i % 11 === 5, ARRAY_FILTER_USE_BOTH));
+            $service->reject($declined);
+
+            if ($index < 4) {
+                $service->publish(array_values(array_diff($variants, $declined)), $this->staff['chair']);
+                DB::table('question_bank_questions')->whereIn('id', $variants)->update(['updated_at' => $generatedAt->addDays(2)]);
+            }
+        }
+    }
+
+    /**
+     * Students' practice on the published questions, in date order so the
+     * mastery streaks come out the way the adaptive queue would have built
+     * them: weak, learning, and mastered items all present.
+     */
+    private function seedReviewBotSessions(): void
+    {
+        $questions = DB::table('question_bank_questions')
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->whereIn('source_question_id', array_merge(...array_map(
+                fn (int $bankId): array => array_column($this->bankItems[$bankId], 'id'),
+                array_values($this->libraryBanks),
+            )))
+            ->get(['id', 'subject', 'topic_id', 'subtopic_id']);
+
+        if ($questions->isEmpty()) {
+            return;
+        }
+
+        $options = [];
+
+        foreach (DB::table('question_bank_options')->whereIn('question_bank_question_id', $questions->pluck('id'))->get() as $option) {
+            $key = $option->is_correct ? 'correct' : 'wrong';
+            $options[(int) $option->question_bank_question_id][$key][] = (int) $option->id;
+        }
+
+        $pools = $questions->groupBy('subject')->map(fn ($group) => $group->values()->all())->all();
+        $subjects = array_keys($pools);
+        $states = [];
+
+        foreach ($this->students as $student) {
+            if ($student['year_level'] < 3) {
+                continue;
+            }
+
+            $count = $student['featured'] !== null ? 6 : (mt_rand(1, 100) <= 45 ? mt_rand(1, 5) : 0);
+            $days = [];
+
+            for ($n = 0; $n < $count; $n++) {
+                $days[] = mt_rand(1, 40);
+            }
+
+            rsort($days);
+
+            foreach ($days as $n => $daysAgo) {
+                $subject = $subjects[mt_rand(0, count($subjects) - 1)];
+                $pool = $pools[$subject];
+                $picked = (array) array_rand($pool, min(count($pool), mt_rand(5, 10)));
+                shuffle($picked);
+                $first = $pool[$picked[0]];
+                $weakArea = $n % 2 === 1;
+                $startedAt = $this->now->subDays($daysAgo)->setTime(mt_rand(7, 22), mt_rand(0, 59));
+                $accuracy = max(0.2, min(0.97, ($student['ability'] + mt_rand(-10, 10)) / 100));
+
+                $answers = [];
+
+                foreach ($picked as $slot => $poolIndex) {
+                    $question = $pool[$poolIndex];
+                    $isRight = mt_rand() / mt_getrandmax() < $accuracy && isset($options[$question->id]['correct']);
+                    $choices = $options[$question->id][$isRight ? 'correct' : 'wrong'] ?? [null];
+                    $answers[] = [$question, $choices[mt_rand(0, count($choices) - 1)], $isRight];
+                }
+
+                $correct = count(array_filter($answers, fn (array $answer): bool => $answer[2]));
+                $submittedAt = $startedAt->addSeconds(count($answers) * mt_rand(35, 70));
+
+                $attemptId = (int) DB::table('review_bot_attempts')->insertGetId([
+                    'user_id' => $student['id'],
+                    'subject' => $subject,
+                    'topic_id' => $weakArea ? $first->topic_id : null,
+                    'subtopic_id' => $weakArea ? $first->subtopic_id : null,
+                    'difficulty' => null,
+                    'source' => $weakArea ? ReviewBotAttempt::SOURCE_AUTO_WEAK_AREA : ReviewBotAttempt::SOURCE_MANUAL,
+                    'status' => ReviewBotAttempt::STATUS_SUBMITTED,
+                    'total_items' => count($answers),
+                    'answered_count' => count($answers),
+                    'correct_answers' => $correct,
+                    'score_percent' => round($correct / count($answers) * 100, 2),
+                    'started_at' => $startedAt,
+                    'submitted_at' => $submittedAt,
+                    'created_at' => $startedAt,
+                    'updated_at' => $submittedAt,
+                ]);
+
+                foreach ($answers as $slot => [$question, $optionId, $isRight]) {
+                    $answeredAt = $startedAt->addSeconds(($slot + 1) * 50);
+
+                    $this->buffer('review_bot_attempt_questions', [
+                        'review_bot_attempt_id' => $attemptId,
+                        'question_bank_question_id' => $question->id,
+                        'item_number' => $slot + 1,
+                        'created_at' => $startedAt,
+                        'updated_at' => $startedAt,
+                    ]);
+
+                    $this->buffer('review_bot_attempt_answers', [
+                        'review_bot_attempt_id' => $attemptId,
+                        'question_bank_question_id' => $question->id,
+                        'question_bank_option_id' => $optionId,
+                        'answer_text' => null,
+                        'is_correct' => $isRight,
+                        'answered_at' => $answeredAt,
+                        'created_at' => $answeredAt,
+                        'updated_at' => $answeredAt,
+                    ]);
+
+                    // consecutive_correct buckets the item: 0 weak, 1 learning,
+                    // 2 or more mastered.
+                    $key = $student['id'] . '|' . $question->id;
+                    $state = $states[$key] ?? ['times_seen' => 0, 'times_correct' => 0, 'consecutive_correct' => 0];
+                    $states[$key] = [
+                        'user_id' => $student['id'],
+                        'question_bank_question_id' => (int) $question->id,
+                        'times_seen' => $state['times_seen'] + 1,
+                        'times_correct' => $state['times_correct'] + ($isRight ? 1 : 0),
+                        'consecutive_correct' => $isRight ? $state['consecutive_correct'] + 1 : 0,
+                        'last_seen_at' => $answeredAt,
+                        'created_at' => $state['created_at'] ?? $answeredAt,
+                        'updated_at' => $answeredAt,
+                    ];
+                }
+            }
+        }
+
+        $this->flushBuffers();
+
+        foreach (array_chunk(array_values($states), 1000) as $chunk) {
+            DB::table('review_bot_item_states')->insert($chunk);
+        }
+
+        // One session left open, so "resume where you left off" has a record.
+        $resuming = $this->featuredStudent('borderline');
+        $pool = $pools[$subjects[0]];
+        $picked = array_slice($pool, 0, min(5, count($pool)));
+        $startedAt = $this->now->subMinutes(12);
+
+        $attemptId = (int) DB::table('review_bot_attempts')->insertGetId([
+            'user_id' => $resuming['id'],
+            'subject' => $subjects[0],
+            'topic_id' => null,
+            'subtopic_id' => null,
+            'difficulty' => null,
+            'source' => ReviewBotAttempt::SOURCE_MANUAL,
+            'status' => ReviewBotAttempt::STATUS_IN_PROGRESS,
+            'total_items' => count($picked),
+            'answered_count' => 0,
+            'correct_answers' => 0,
+            'score_percent' => null,
+            'started_at' => $startedAt,
+            'submitted_at' => null,
+            'created_at' => $startedAt,
+            'updated_at' => $startedAt,
+        ]);
+
+        DB::table('review_bot_attempt_questions')->insert(array_map(fn (object $question, int $slot): array => [
+            'review_bot_attempt_id' => $attemptId,
+            'question_bank_question_id' => $question->id,
+            'item_number' => $slot + 1,
+            'created_at' => $startedAt,
+            'updated_at' => $startedAt,
+        ], $picked, array_keys($picked)));
+    }
+
     // ------------------------------------------------------------ audit trail
 
     private function seedAuditTrail(): void
     {
-        $entries = [
-            ['examiner', 'library.upload', 'question_bank', 'Uploaded a mock exam set'],
-            ['examiner', 'library.map', 'question_bank', 'Mapped items with AI'],
-            ['examiner', 'review-bot.admin.generate', 'question_bank', 'Queued Review Bot question generation'],
-            ['examiner', 'review-bot.admin.publish', 'question_bank_question', 'Published 12 Review Bot question(s)'],
-            ['examiner', 'review-bot.admin.reject', 'question_bank_question', 'Declined 1 Review Bot question(s)'],
-            ['examiner', 'lle-result.record', 'user', 'Recorded a licensure examination result'],
-            ['admin', 'admin.user.update', 'user', 'Admin updated user account'],
-        ];
+        $chair = $this->staff['chair'];
+        $examiner = $this->staff['examiner'];
+        $admin = $this->staff['admin'];
+        $entries = [];
 
-        foreach ($entries as $index => [$who, $action, $type, $description]) {
-            DB::table('audit_logs')->insert([
-                'actor_id' => $this->staff[$who]->id,
+        foreach ($this->libraryBanks as $subject => $bankId) {
+            $bank = DB::table('question_banks')->where('id', $bankId)->first(['created_by', 'title', 'created_at']);
+            $at = CarbonImmutable::parse($bank->created_at);
+            $entries[] = [(int) $bank->created_by, 'library.bank.create', 'question_bank', $bankId, 'Question bank created from parsed DOCX', ['title' => $bank->title, 'subject' => $subject], $at];
+            $entries[] = [(int) $bank->created_by, 'library.mapping.queue', 'question_bank', $bankId, 'Queued AI item mapping for a set', ['title' => $bank->title], $at->addMinute()];
+        }
+
+        foreach ($this->sections as $yearLevel => $roomIds) {
+            foreach ($roomIds as $roomId) {
+                $room = DB::table('rooms')->where('id', $roomId)->first(['name', 'code', 'created_by', 'created_at']);
+                $entries[] = [(int) $room->created_by, 'room.create', 'room', $roomId, 'Room created', ['name' => $room->name, 'code' => $room->code], CarbonImmutable::parse($room->created_at)];
+            }
+        }
+
+        foreach ($this->exams as $exam) {
+            $entries[] =[$exam['owner'], 'exam.create', 'exam', $exam['id'], 'Exam created', ['title' => $exam['title']], $exam['start']->subDays(4)->setTime(10, 20)];
+        }
+
+        $entries[] = [$examiner, 'room.exam.archive', 'exam', $this->exams['3:Library Management']['id'], 'Exam archived for room', ['room_id' => $this->sections[3][0]], $this->now->subDays(2)->setTime(16, 2)];
+        $entries[] = [$chair, 'library.mapping.bulk_confirm', 'question_bank', $this->libraryBanks['Cataloging and Classification'], 'Bulk confirmed AI-suggested item tags', ['confirmed' => 16], $this->now->subDays(15)->setTime(9, 12)];
+        $entries[] = [$chair, 'review-bot.admin.publish', 'question_bank_question', null, 'Published Review Bot question(s)', ['subject' => 'Cataloging and Classification'], $this->now->subDays(10)->setTime(15, 30)];
+        $entries[] = [$chair, 'review-bot.admin.reject', 'question_bank_question', null, 'Declined Review Bot question(s)', ['subject' => 'Indexing and Abstracting'], $this->now->subDays(9)->setTime(11, 5)];
+        $entries[] = [$chair, 'report.export.complete_results_xlsx', 'exam', $this->exams['mock:Indexing and Abstracting']['id'], 'Exported complete results (XLSX)', ['room_id' => $this->sections[4][0]], $this->now->subDays(6)->setTime(13, 44)];
+        $entries[] = [$examiner, 'report.export.summary_pdf', 'exam', $this->exams['2:Cataloging and Classification']['id'], 'Exported summary report (PDF)', ['room_id' => $this->sections[2][0]], $this->now->subDays(5)->setTime(10, 3)];
+        $entries[] = [$chair, 'prediction.let.run', 'room', $this->sections[4][0], 'Ran LET readiness prediction', ['students' => count(array_filter($this->students, fn (array $s): bool => $s['prediction_ready']))], $this->now->subDays(2)->setTime(14, 18)];
+        $entries[] = [$admin, 'admin.user.create', 'user', $examiner, 'Admin created user account', ['role' => User::ROLE_STAFF_MASTER_EXAMINER], $this->termStart->subYear()];
+        $entries[] = [$admin, 'admin.user.update', 'user', null, 'Admin updated user account', ['is_active' => false], $this->now->subMonths(3)];
+        $entries[] = [$admin, 'settings.update', 'system_settings', null, 'Updated system settings', [], $this->now->subDays(20)->setTime(8, 51)];
+
+        $rows = [];
+
+        foreach ($entries as [$actor, $action, $type, $targetId, $description, $metadata, $at]) {
+            $rows[] = [
+                'actor_id' => $actor,
                 'action' => $action,
                 'target_type' => $type,
-                'target_id' => null,
+                'target_id' => $targetId,
                 'description' => $description,
-                'metadata' => json_encode(['seeded' => true]),
-                'ip_address' => '127.0.0.1',
-                'created_at' => $this->now->subDays(7 - $index),
-                'updated_at' => $this->now->subDays(7 - $index),
-            ]);
+                'metadata' => json_encode($metadata),
+                // Documentation address ranges (RFC 5737): realistic, never anyone's.
+                'ip_address' => '203.0.113.' . mt_rand(10, 60),
+                'created_at' => $at,
+                'updated_at' => $at,
+            ];
+        }
+
+        // Students on the open exam, right now.
+        $open = $this->exams['mock:' . self::SUBJECTS[4]];
+
+        foreach (DB::table('exam_attempts')->where('exam_id', $open['id'])->get(['id', 'user_id', 'status', 'started_at', 'submitted_at']) as $attempt) {
+            $rows[] = $this->studentAudit((int) $attempt->user_id, 'exam.attempt.start', (int) $attempt->id, 'Exam attempt started', $attempt->started_at);
+
+            if ($attempt->status === ExamAttempt::STATUS_SUBMITTED) {
+                $rows[] = $this->studentAudit((int) $attempt->user_id, 'exam.attempt.submit', (int) $attempt->id, 'Exam attempt submitted', $attempt->submitted_at);
+            }
+        }
+
+        foreach (array_chunk($rows, 1000) as $chunk) {
+            DB::table('audit_logs')->insert($chunk);
         }
     }
 
-    private function historySummary(): string
+    /**
+     * @return array<string, mixed>
+     */
+    private function studentAudit(int $userId, string $action, int $attemptId, string $description, string $at): array
     {
-        $years = DB::table('lle_results')
-            ->join('users', 'users.id', '=', 'lle_results.user_id')
-            ->where('users.email', 'like', 'alum%@' . self::DOMAIN)
-            ->selectRaw('MIN(exam_year) as first_year, MAX(exam_year) as last_year, COUNT(*) as total')
-            ->first();
-
-        if (!$years || !$years->total) {
-            return 'none (SHOWCASE_HISTORY_YEARS=0)';
-        }
-
-        return sprintf(
-            '%d cohorts, board results %d-%d',
-            User::query()->where('email', 'like', 'alum%@' . self::DOMAIN)
-                ->distinct()->count('admission_year'),
-            $years->first_year,
-            $years->last_year,
-        );
+        return [
+            'actor_id' => $userId,
+            'action' => $action,
+            'target_type' => 'exam_attempt',
+            'target_id' => $attemptId,
+            'description' => $description,
+            'metadata' => json_encode([]),
+            'ip_address' => '198.51.100.' . mt_rand(2, 250),
+            'created_at' => $at,
+            'updated_at' => $at,
+        ];
     }
 
     // ----------------------------------------------------------------- report
 
     private function report(): void
     {
-        $students = User::query()->where('email', 'like', '%@' . self::DOMAIN)->where('role', User::ROLE_STUDENT);
+        if (!$this->command) {
+            return;
+        }
 
-        $byStatus = (clone $students)
-            ->selectRaw('student_status, COUNT(*) as total')
-            ->groupBy('student_status')
-            ->pluck('total', 'student_status');
+        $accounts = DB::table('users')->where('is_demo', true);
+        $accountIds = (clone $accounts)->select('id');
 
-        $showcaseBankIds = QuestionBank::query()
-            ->whereIn('created_by', User::query()->where('email', 'like', '%@' . self::DOMAIN)->select('id'))
-            ->pluck('id');
+        $this->command->table(['Demo data', 'Count'], [
+            ['Staff accounts', (clone $accounts)->where('role', '!=', User::ROLE_STUDENT)->count()],
+            ['Enrolled students', (clone $accounts)->where('role', User::ROLE_STUDENT)->where('student_status', User::STUDENT_STATUS_ENROLLED)->count()],
+            ['Graduates and other leavers', (clone $accounts)->where('role', User::ROLE_STUDENT)->where('student_status', '!=', User::STUDENT_STATUS_ENROLLED)->count()],
+            ['Rooms (sections)', DB::table('rooms')->whereIn('created_by', $accountIds)->count()],
+            ['Exams', DB::table('exams')->whereIn('created_by', $accountIds)->count()],
+            ['Exam attempts', DB::table('exam_attempts')->whereIn('user_id', $accountIds)->count()],
+            ['Library files', count($this->bankItems)],
+            ['Review Bot questions', DB::table('question_bank_questions')
+                ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+                ->whereIn('source_question_id', array_merge(...array_map(fn (array $items): array => array_column($items, 'id'), $this->bankItems)))
+                ->count()],
+            ['Review Bot sessions', DB::table('review_bot_attempts')->whereIn('user_id', $accountIds)->count()],
+            ['Board exam results', DB::table('lle_results')->whereIn('user_id', $accountIds)->count()],
+        ]);
 
-        $reviewBot = QuestionBankQuestion::query()
-            ->whereIn('question_bank_id', $showcaseBankIds)
-            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
-            ->selectRaw('status, COUNT(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        $this->command->table(['Sign in as', 'Name', 'Email', 'Password'], array_map(
+            fn (array $login): array => [$login['label'], $login['name'], $login['email'], $login['password']],
+            array_values($this->logins),
+        ));
 
-        $this->command?->info('Showcase data seeded. Sign in with password "password".');
-        $this->command?->table(
-            ['What', 'Count'],
-            [
-                ['Staff / admin accounts', 4],
-                ['Students', (clone $students)->count()],
-                ['  by status', $byStatus->map(fn ($n, $s) => "{$s}={$n}")->implode(', ')],
-                ['Licensure results', LleResult::query()->whereIn('user_id', (clone $students)->select('id'))->count()],
-                ['Library files', QuestionBank::query()->where('title', 'like', '[' . self::PREFIX . ']%')->count()],
-                ['Exams', Exam::query()->where('title', 'like', '[' . self::PREFIX . ']%')->count()],
-                ['Exam attempts', ExamAttempt::query()->whereIn('user_id', (clone $students)->select('id'))->count()],
-                ['Review Bot questions', $reviewBot->map(fn ($n, $s) => "{$s}={$n}")->implode(', ')],
-                ['Review Bot sessions', ReviewBotAttempt::query()->whereIn('user_id', (clone $students)->select('id'))->count()],
-                ['Cohort history', $this->historySummary()],
-                ['Archived rooms', Room::query()->where('code', 'like', self::PREFIX . '%')->whereNotNull('archived_at')->count()],
-                ['Sign in as', 'examiner@' . self::DOMAIN . ' / admin@' . self::DOMAIN . ' / student0@' . self::DOMAIN],
-            ],
-        );
+        $this->command->info('Every other demo student uses the same password as the teachers.');
+        $this->command->info('Remove all of it with: php artisan demo:purge');
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    /**
+     * The Library is shared by all staff, so its files are spread across the
+     * three teachers.
+     */
+    private function teacher(int $turn): int
+    {
+        return [$this->staff['chair'], $this->staff['examiner'], $this->staff['teacher3']][$turn % 3];
+    }
+
+    /**
+     * Who runs a year level: its sections and every exam given in them. A
+     * teacher can only see reports and the live board for an exam and room
+     * they both own, so the two always go together -- the chair has the
+     * fourth years and their mock boards.
+     */
+    private function yearLevelTeacher(int $yearLevel): int
+    {
+        return match (true) {
+            $yearLevel >= 4 => $this->staff['chair'],
+            $yearLevel >= 2 => $this->staff['examiner'],
+            default => $this->staff['teacher3'],
+        };
+    }
+
+    private function cohortSize(): int
+    {
+        return max(4, (int) env('SHOWCASE_COHORT_SIZE', 300));
+    }
+
+    private function historyYears(): int
+    {
+        return max(0, (int) env('SHOWCASE_HISTORY_YEARS', 10));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function featuredStudent(string $key): array
+    {
+        foreach ($this->students as $student) {
+            if ($student['featured'] === $key) {
+                return $student;
+            }
+        }
+
+        return $this->students[0];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function nameOf(array $rows, string $email): string
+    {
+        foreach ($rows as $row) {
+            if ($row['email'] === $email) {
+                return $row['name'];
+            }
+        }
+
+        return '';
     }
 }

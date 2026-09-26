@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Exam;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\Demo\DemoData;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
@@ -42,7 +43,9 @@ use Illuminate\Support\Facades\Hash;
  *
  * Everything it creates is namespaced to the `loadtest.local` email domain and
  * the LOADTEST- room/exam prefixes, and every run purges the previous one, so
- * it can never be confused with demo or real records.
+ * it can never be confused with demo or real records. `php artisan demo:purge`
+ * removes it along with the demo. Accounts use the demo password (see
+ * DemoData::password()).
  */
 class LoadTestDirectorySeeder extends Seeder
 {
@@ -172,7 +175,7 @@ class LoadTestDirectorySeeder extends Seeder
             'name' => 'Load Test Examiner',
             'role' => User::ROLE_STAFF_MASTER_EXAMINER,
             'is_active' => true,
-            'password' => Hash::make('pass'),
+            'password' => Hash::make(DemoData::password()),
         ]);
     }
 
@@ -251,7 +254,7 @@ class LoadTestDirectorySeeder extends Seeder
      */
     private function buildStudentRows(int $studentsPerYear, int $graduatedBatches): array
     {
-        $password = Hash::make('pass');
+        $password = Hash::make(DemoData::password());
         $now = CarbonImmutable::now();
         $rows = [];
         $sequence = 0;
