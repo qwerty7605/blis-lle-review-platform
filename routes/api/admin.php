@@ -89,6 +89,17 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                 'from' => $users->firstItem(),
                 'to' => $users->lastItem(),
             ],
+            // Directory-wide counts for the summary tiles: independent of the
+            // page and of the list's filters. Counted from the loaded page,
+            // they stopped at the page size once the directory outgrew it.
+            'summary' => [
+                'current_students' => User::query()->where('role', User::ROLE_STUDENT)->whereNull('archived_at')->count(),
+                'archived_students' => User::query()->where('role', User::ROLE_STUDENT)->whereNotNull('archived_at')->count(),
+                'staff_and_admin' => User::query()->where('role', '!=', User::ROLE_STUDENT)->count(),
+                // Disabled accounts still in circulation. Archived alumni are
+                // deactivated too, but they are counted as archived above.
+                'inactive' => User::query()->where('is_active', false)->whereNull('archived_at')->count(),
+            ],
         ]);
     });
 

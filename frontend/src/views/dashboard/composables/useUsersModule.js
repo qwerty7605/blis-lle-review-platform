@@ -56,7 +56,14 @@ export function useUsersModule() {
   const isAdminRole = computed(() => normalizedRole.value === 'admin')
 
   const adminUsers = ref([])
-  const archivedStudentsTotal = ref(0)
+  // Directory-wide counts from the server. The list is paged, so counting
+  // adminUsers would stop at the page size.
+  const usersSummary = ref({
+    current_students: 0,
+    archived_students: 0,
+    staff_and_admin: 0,
+    inactive: 0,
+  })
   const usersLoading = ref(false)
   const usersSaving = ref(false)
   const usersRecovering = ref(false)
@@ -212,32 +219,31 @@ export function useUsersModule() {
       users: managementUsers.value.filter((user) => String(user?.role ?? '').toLowerCase() === 'admin'),
     },
   ].filter((group) => group.users.length > 0)))
+  // Every tile counts the whole directory, whatever page or filter the list
+  // below is showing.
   const userDirectorySummary = computed(() => ([
     {
       key: 'current-students',
       label: 'Current Students',
-      value: currentStudentUsers.value.length,
+      value: usersSummary.value.current_students,
       tone: 'success',
     },
     {
       key: 'archived-students',
       label: 'Archived Records',
-      // Independent of the current list filter (userFilters.archive_state defaults to
-      // 'current', which excludes archived students from adminUsers entirely) — see
-      // refreshArchivedStudentsTotal().
-      value: archivedStudentsTotal.value,
+      value: usersSummary.value.archived_students,
       tone: 'neutral',
     },
     {
       key: 'staff-admin',
       label: 'Staff and Admin',
-      value: managementUsers.value.length,
+      value: usersSummary.value.staff_and_admin,
       tone: 'navy',
     },
     {
       key: 'inactive',
       label: 'Inactive Accounts',
-      value: sortedAdminUsers.value.filter((user) => !Boolean(user?.is_active)).length,
+      value: usersSummary.value.inactive,
       tone: 'danger',
     },
   ]))
@@ -307,33 +313,12 @@ export function useUsersModule() {
     resetRecoverForm()
   }
 
-  async function refreshArchivedStudentsTotal() {
-    if (!isAdminRole.value) return
-
-    try {
-      const { data } = await services.getUsers({
-        archive_state: 'archived',
-        role: 'student',
-        per_page: 1,
-        page: 1,
-      })
-
-      archivedStudentsTotal.value = Number(data?.meta?.total ?? 0)
-    } catch (error) {
-      // Non-critical background count — leave the previous value rather than surfacing an error.
-    }
-  }
-
   async function loadAdminUsers(options = {}) {
     if (!isAdminRole.value) return
 
     usersLoading.value = true
     usersError.value = ''
     usersMessage.value = ''
-
-    // Runs independently of the main (filtered) list fetch below so the summary tile stays
-    // accurate no matter which archive_state filter is currently applied.
-    refreshArchivedStudentsTotal()
 
     try {
       const requestedPage = Number(options.page ?? usersPagination.current_page ?? 1)
@@ -354,6 +339,15 @@ export function useUsersModule() {
 
       const { data } = await services.getUsers(params)
       adminUsers.value = data.users ?? []
+
+      if (data?.summary) {
+        usersSummary.value = {
+          current_students: Number(data.summary.current_students ?? 0),
+          archived_students: Number(data.summary.archived_students ?? 0),
+          staff_and_admin: Number(data.summary.staff_and_admin ?? 0),
+          inactive: Number(data.summary.inactive ?? 0),
+        }
+      }
 
       const meta = data?.meta ?? {}
       const currentPage = Number(meta.current_page ?? normalizedPage)
