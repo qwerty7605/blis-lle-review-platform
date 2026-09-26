@@ -6,6 +6,7 @@ use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\Demo\DemoData;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -357,6 +358,12 @@ Route::post('/reports/exams/{exam}/rooms/{room}/students/{student}/student-repor
         return response()->json(['message' => 'Student does not have a valid email address.'], 422);
     }
 
+    // Demo addresses cannot receive mail; sending would only bounce back to
+    // the school's own mailbox.
+    if (DemoData::isDemoEmail($recipientEmail)) {
+        return response()->json(['message' => 'This is a demo account, so its address cannot receive email.'], 422);
+    }
+
     if ($verifiedOnly && is_null($student->email_verified_at)) {
         return response()->json(['message' => 'Student email is not verified.'], 422);
     }
@@ -461,6 +468,17 @@ Route::post('/reports/exams/{exam}/rooms/{room}/student-reports.email', function
                 'student_name' => $student->name,
                 'student_number' => $student->student_id,
                 'reason' => 'invalid_email',
+            ];
+            continue;
+        }
+
+        // A demo room is dozens of demo addresses; each send would bounce.
+        if (DemoData::isDemoEmail($recipientEmail)) {
+            $issues[] = [
+                'student_id' => (int) $student->id,
+                'student_name' => $student->name,
+                'student_number' => $student->student_id,
+                'reason' => 'demo_account',
             ];
             continue;
         }

@@ -366,7 +366,14 @@ Route::post('/auth/forgot-password', function (Request $request) {
         'email' => ['required', 'email'],
     ]);
 
-    Password::sendResetLink(['email' => $validated['email']]);
+    // Demo accounts keep the password the seeder gave them, and the demo's
+    // staff sit on real-domain addresses that someone else could own -- a
+    // reset link there would hand them a staff login. Same reply either way.
+    $isDemoAccount = User::where('email', $validated['email'])->where('is_demo', true)->exists();
+
+    if (!$isDemoAccount) {
+        Password::sendResetLink(['email' => $validated['email']]);
+    }
 
     return response()->json([
         'message' => 'If that address has an account, a reset link is on its way.',
