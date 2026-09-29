@@ -1,8 +1,31 @@
 <template>
   <div class="layout-shell">
-    <aside class="layout-sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <!--
+      Up to 900px wide the sidebar is a drawer that slides over the page from
+      the app bar's menu button, instead of a panel that pushed the whole page
+      down. It stays in the DOM, off-screen and inert, so it can animate.
+    -->
+    <aside
+      id="dashboard-navigation"
+      class="layout-sidebar"
+      :class="{ collapsed: sidebarCollapsed && !isMobileViewport, 'is-open': drawerOpen }"
+      :inert="isMobileViewport && !drawerOpen"
+      :aria-label="isMobileViewport ? 'Navigation' : undefined"
+      @keydown.esc="closeMobileNav"
+    >
       <div class="layout-sidebar-top">
         <button
+          v-if="isMobileViewport"
+          ref="drawerCloseButton"
+          type="button"
+          class="layout-toggle layout-drawer-close"
+          aria-label="Close navigation"
+          @click="closeMobileNav"
+        >
+          <X :size="18" />
+        </button>
+        <button
+          v-else
           class="layout-toggle"
           :aria-expanded="(!sidebarCollapsed).toString()"
           aria-label="Toggle navigation"
@@ -16,7 +39,7 @@
           <span class="layout-brand-icon">
             <GraduationCap :size="20" />
           </span>
-          <span v-if="!sidebarCollapsed || isMobileViewport" class="layout-brand-text">
+          <span v-if="showSidebarLabels" class="layout-brand-text">
             <strong>LNU LLE</strong>
             <small>Review System</small>
           </span>
@@ -29,14 +52,15 @@
           :key="item.routeName"
           class="layout-nav-item"
           :class="{ active: currentRouteName === item.routeName }"
+          :aria-current="currentRouteName === item.routeName ? 'page' : undefined"
           @click="navigate(item.routeName)"
         >
           <component :is="item.icon" :size="18" class="layout-nav-icon" />
-          <span v-if="!sidebarCollapsed" class="layout-nav-label">{{ item.label }}</span>
+          <span v-if="showSidebarLabels" class="layout-nav-label">{{ item.label }}</span>
         </button>
       </nav>
 
-      <div class="layout-sidebar-footer" v-if="!sidebarCollapsed">
+      <div class="layout-sidebar-footer" v-if="showSidebarLabels">
         <div class="layout-user-tile">
           <span class="layout-avatar">{{ userInitials }}</span>
           <div>
@@ -52,12 +76,36 @@
       </div>
     </aside>
 
-    <section class="layout-main">
+    <div
+      v-if="isMobileViewport"
+      class="layout-scrim"
+      :class="{ 'is-visible': drawerOpen }"
+      aria-hidden="true"
+      @click="closeMobileNav"
+    ></div>
+
+    <section class="layout-main" :inert="drawerOpen">
       <header class="layout-topbar" :class="{ 'is-fill-screen': isFillScreenRoute }">
-        <div>
+        <button
+          v-if="isMobileViewport"
+          ref="menuButton"
+          type="button"
+          class="layout-menu-btn"
+          aria-label="Open navigation"
+          aria-controls="dashboard-navigation"
+          :aria-expanded="drawerOpen.toString()"
+          @click="openMobileNav"
+        >
+          <Menu :size="22" />
+        </button>
+
+        <div class="layout-topbar-copy">
           <h1>{{ pageTitle }}</h1>
           <p>{{ pageSubtitle }}</p>
         </div>
+
+        <!-- Pages move their main action up here on narrow screens. -->
+        <div id="layout-topbar-actions" class="layout-topbar-actions"></div>
       </header>
 
       <main class="layout-content" :class="{ 'is-fill-screen': isFillScreenRoute }">
@@ -68,24 +116,34 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
+import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import { getDashboardNavItems } from './config/dashboardNavigation'
+import { useCompactLayout } from './composables/useViewport'
 import {
   ChevronLeft,
   ChevronRight,
   GraduationCap,
   LogOut,
+  Menu,
+  X,
 } from 'lucide-vue-next'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
+// Desktop only: on narrow screens the sidebar is a drawer, open or closed.
 const sidebarCollapsed = ref(false)
-const isMobileViewport = ref(false)
-const mobileMediaQuery = '(max-width: 900px)'
+const isMobileViewport = useCompactLayout()
+const mobileNavOpen = ref(false)
+const menuButton = ref(null)
+const drawerCloseButton = ref(null)
+
+const drawerOpen = computed(() => isMobileViewport.value && mobileNavOpen.value)
+const showSidebarLabels = computed(() => isMobileViewport.value || !sidebarCollapsed.value)
 
 const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLowerCase())
 
@@ -122,17 +180,30 @@ const userInitials = computed(() => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 })
 
+async function openMobileNav() {
+  if (!isMobileViewport.value) return
+
+  mobileNavOpen.value = true
+  await nextTick()
+  drawerCloseButton.value?.focus()
+}
+
+function closeMobileNav({ restoreFocus = true } = {}) {
+  if (!mobileNavOpen.value) return
+
+  mobileNavOpen.value = false
+
+  if (restoreFocus) {
+    nextTick(() => menuButton.value?.focus())
+  }
+}
+
 function navigate(name) {
-  if (currentRouteName.value === name) {
-    if (isMobileViewport.value) {
-      sidebarCollapsed.value = true
-    }
-    return
+  if (currentRouteName.value !== name) {
+    router.push({ name })
   }
-  router.push({ name })
-  if (isMobileViewport.value) {
-    sidebarCollapsed.value = true
-  }
+
+  closeMobileNav({ restoreFocus: false })
 }
 
 async function handleLogout() {
@@ -140,28 +211,30 @@ async function handleLogout() {
   await router.push('/login')
 }
 
-function syncViewportState() {
-  if (typeof window === 'undefined') return
-
-  const mobile = window.matchMedia(mobileMediaQuery).matches
-  const wasMobile = isMobileViewport.value
-
-  isMobileViewport.value = mobile
-
-  if (mobile && !wasMobile) {
-    sidebarCollapsed.value = true
-  } else if (!mobile && wasMobile) {
-    sidebarCollapsed.value = false
+// The page behind an open drawer should not scroll under the reader's thumb.
+watch(drawerOpen, (open) => {
+  if (open) {
+    lockScroll()
+  } else {
+    unlockScroll()
   }
-}
-
-onMounted(() => {
-  syncViewportState()
-  window.addEventListener('resize', syncViewportState)
 })
 
+// Crossing the breakpoint either way starts from a closed drawer and, back on
+// desktop, an expanded sidebar -- as the resize handler here always did.
+watch(isMobileViewport, (mobile) => {
+  mobileNavOpen.value = false
+
+  if (!mobile) {
+    sidebarCollapsed.value = false
+  }
+})
+
+// Back/forward while the drawer is open should not leave it covering the page.
+watch(() => route.fullPath, () => closeMobileNav({ restoreFocus: false }))
+
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', syncViewportState)
+  if (drawerOpen.value) unlockScroll()
 })
 </script>
 
@@ -402,6 +475,44 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.82);
 }
 
+.layout-topbar-copy {
+  min-width: 0;
+}
+
+.layout-topbar-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.layout-topbar-actions:empty {
+  display: none;
+}
+
+.layout-menu-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--lnu-white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.layout-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.layout-menu-btn:focus-visible,
+.layout-drawer-close:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
 /* Fill-screen pages (dashboard home, rooms) carry their own more prominent
    heading already -- see DashboardHomeView.vue's hero and RoomsView.vue's
    own page head -- so this shared topbar is redundant there and shrinks
@@ -440,18 +551,38 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 
+/* Narrow screens: one sticky app bar (menu, title, the page's main action)
+   and the sidebar as a drawer over the page. The old layout stacked a brand
+   bar, a two-line title banner and, when opened, the whole menu above the
+   content -- about 180px before the page began, and 470px more with the
+   menu open. */
 @media (max-width: 900px) {
   .layout-shell {
-    display: flex;
-    flex-direction: column;
+    display: block;
   }
 
-  .layout-sidebar,
-  .layout-sidebar.collapsed {
-    width: 100%;
-    height: auto;
-    position: static;
-    padding: 10px 12px 8px;
+  .layout-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1100;
+    width: min(300px, 86vw);
+    height: 100vh;
+    height: 100dvh;
+    padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.24s;
+  }
+
+  .layout-sidebar.is-open {
+    transform: none;
+    visibility: visible;
+    box-shadow: 12px 0 40px rgba(6, 10, 30, 0.32);
+    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .layout-sidebar-top {
@@ -459,54 +590,96 @@ onBeforeUnmount(() => {
     gap: 10px;
   }
 
-  .layout-sidebar.collapsed {
-    padding-bottom: 10px;
+  .layout-drawer-close {
+    order: 2;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
   }
 
-  .layout-sidebar.collapsed .layout-sidebar-top {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+  .layout-nav-item {
+    height: 48px;
+    padding: 0 12px;
   }
 
-  .layout-sidebar.collapsed .layout-toggle {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
+  .layout-nav-label {
+    font-size: 15px;
   }
 
-  .layout-sidebar.collapsed .layout-brand {
-    width: auto;
-    height: auto;
-    padding: 4px;
-    justify-content: flex-start;
-    border-radius: 0;
+  .logout-btn {
+    height: 44px;
   }
 
-  .layout-sidebar.collapsed .layout-brand-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+  .layout-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    background: rgba(6, 10, 30, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
   }
 
-  .layout-sidebar.collapsed .layout-nav,
-  .layout-sidebar.collapsed .layout-sidebar-footer {
-    display: none;
+  .layout-scrim.is-visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .layout-main {
     height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .layout-topbar,
+  .layout-topbar.is-fill-screen {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    min-height: var(--appbar-height, 56px);
+    padding: 0 8px 0 4px;
+    gap: 4px;
+    justify-content: flex-start;
+  }
+
+  .layout-topbar-copy {
+    flex: 1;
+  }
+
+  .layout-topbar h1,
+  .layout-topbar.is-fill-screen h1 {
+    font-size: 18px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Each page's own header says what the page is for; the app bar only
+     needs to say where you are. */
+  .layout-topbar p {
+    display: none;
+  }
+
+  /* The document scrolls here, not this box. Left as a scroll container
+     (overflow: auto) it would also be what sticky headers inside the page
+     stick to -- a box that never scrolls, so they would never stick. */
   .layout-content {
     padding: 16px;
+    overflow: visible;
   }
 
   .layout-content.is-fill-screen {
     overflow: visible;
     display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-sidebar,
+  .layout-sidebar.is-open,
+  .layout-scrim {
+    transition: none;
   }
 }
 </style>
