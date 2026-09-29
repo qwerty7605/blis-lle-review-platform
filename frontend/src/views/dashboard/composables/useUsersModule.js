@@ -5,6 +5,20 @@ import { firstPasswordProblem, passwordIsValid } from '@/utils/password'
 
 const USERS_DEFAULT_PAGE_SIZE = 200
 
+// Phones show a short list that grows by this much per "Load more" instead of
+// 200-row pages: 200 cards was ~56 screens of scrolling before Next.
+const USERS_LOAD_MORE_STEP = 30
+// The server's per_page ceiling (routes/api/admin.php). Past it, the reader
+// is asked to search or filter rather than keep loading.
+const USERS_LOAD_MORE_CAP = 250
+
+const USER_FILTER_DEFAULTS = Object.freeze({
+  role: '',
+  year_level: '',
+  archive_state: 'current',
+  status: '',
+})
+
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
@@ -48,9 +62,16 @@ function compareUsersForDirectory(left, right) {
   return Number(left?.id ?? 0) - Number(right?.id ?? 0)
 }
 
-export function useUsersModule() {
+/**
+ * @param {{ loadMoreMode?: import('vue').Ref<boolean> }} [options]
+ *   loadMoreMode: when true (phones), the list is the first N matches and
+ *   grows with loadMoreUsers(); otherwise it pages 200 at a time.
+ */
+export function useUsersModule(options = {}) {
   const auth = useAuthStore()
   const services = useDashboardDataServices()
+
+  const loadMoreMode = options.loadMoreMode ?? ref(false)
 
   const normalizedRole = computed(() => String(auth.user?.role ?? 'student').toLowerCase())
   const isAdminRole = computed(() => normalizedRole.value === 'admin')
@@ -64,6 +85,17 @@ export function useUsersModule() {
     staff_and_admin: 0,
     inactive: 0,
   })
+  // How many matches each directory heading holds across the whole filtered
+  // list, so a heading can say "30 of 331 shown" instead of passing off the
+  // loaded rows as the total.
+  const groupTotals = ref({
+    current: {},
+    archived: {},
+    staff_master_examiner: 0,
+    admin: 0,
+  })
+  // Load-more mode: how many rows the list currently asks for.
+  const loadedWindow = ref(USERS_LOAD_MORE_STEP)
   const usersLoading = ref(false)
   const usersSaving = ref(false)
   const usersRecovering = ref(false)
@@ -74,10 +106,7 @@ export function useUsersModule() {
   const recoverTargetUser = ref(null)
   const userFilters = reactive({
     search: '',
-    role: '',
-    status: '',
-    year_level: '',
-    archive_state: 'current',
+    ...USER_FILTER_DEFAULTS,
   })
   const usersPagination = reactive({
     current_page: 1,
@@ -126,7 +155,72 @@ export function useUsersModule() {
     { value: '4', label: '4th Year' },
   ]
 
+  // One definition of the filter controls: inline selects on wide screens,
+  // labelled fields in the filter sheet on phones.
+  const userFilterFields = [
+    {
+      key: 'role',
+      label: 'Role',
+      chipPrefix: 'Role',
+      options: [
+        { value: '', label: 'All roles' },
+        { value: 'student', label: 'Student' },
+        { value: 'staff_master_examiner', label: 'Staff / Master Examiner' },
+        { value: 'admin', label: 'Admin' },
+      ],
+    },
+    {
+      key: 'year_level',
+      label: 'Year level',
+      options: [{ value: '', label: 'All year levels' }, ...yearLevelOptions],
+    },
+    {
+      key: 'archive_state',
+      label: 'Records',
+      options: [
+        { value: 'current', label: 'Current records' },
+        { value: 'archived', label: 'Archived records' },
+        { value: 'all', label: 'All records' },
+      ],
+    },
+    {
+      key: 'status',
+      label: 'Account status',
+      chipPrefix: 'Status',
+      options: [
+        { value: '', label: 'All status' },
+        { value: 'active', label: 'Active' },
+        { value: 'inactive', label: 'Inactive' },
+      ],
+    },
+  ]
+
+  // Filters moved off their defaults, as removable chips.
+  const activeUserFilters = computed(() => userFilterFields
+    .filter((field) => userFilters[field.key] !== USER_FILTER_DEFAULTS[field.key])
+    .map((field) => {
+      const optionLabel = field.options.find((option) => option.value === userFilters[field.key])?.label
+        ?? String(userFilters[field.key])
+
+      return {
+        key: field.key,
+        label: field.chipPrefix ? `${field.chipPrefix}: ${optionLabel}` : optionLabel,
+      }
+    }))
+
+  function clearUserFilter(key) {
+    if (!(key in USER_FILTER_DEFAULTS)) return
+    userFilters[key] = USER_FILTER_DEFAULTS[key]
+  }
+
+  function resetUserFilters() {
+    Object.assign(userFilters, USER_FILTER_DEFAULTS)
+  }
+
   let usersFilterSearchDebounce = null
+  // Only the newest request may write to the list: with typing, filters and
+  // "Load more" all refetching, a slow early response must not land last.
+  let usersRequestToken = 0
 
   const canGoToPreviousUsersPage = computed(() => usersPagination.current_page > 1)
   const canGoToNextUsersPage = computed(() => usersPagination.current_page < usersPagination.last_page)
@@ -141,6 +235,22 @@ export function useUsersModule() {
 
     return `Showing ${from}-${to} of ${total} users`
   })
+  const canLoadMoreUsers = computed(() => (
+    loadMoreMode.value
+    && adminUsers.value.length < usersPagination.total
+    && loadedWindow.value < USERS_LOAD_MORE_CAP
+  ))
+  const usersLoadCapReached = computed(() => (
+    loadMoreMode.value
+    && adminUsers.value.length < usersPagination.total
+    && loadedWindow.value >= USERS_LOAD_MORE_CAP
+  ))
+  const loadedUsersLabel = computed(() => {
+    const total = Number(usersPagination.total ?? 0)
+    if (!Number.isFinite(total) || total < 1) return 'No users found'
+
+    return `Showing ${adminUsers.value.length.toLocaleString()} of ${total.toLocaleString()} user${total === 1 ? '' : 's'}`
+  })
   const sortedAdminUsers = computed(() => (
     [...adminUsers.value].sort(compareUsersForDirectory)
   ))
@@ -153,72 +263,113 @@ export function useUsersModule() {
   const managementUsers = computed(() => (
     sortedAdminUsers.value.filter((user) => String(user?.role ?? '').toLowerCase() !== 'student')
   ))
-  const currentStudentYearGroups = computed(() => {
+  // The server's count for a heading, never less than what is already loaded
+  // (the two can briefly disagree while a newer response is in flight).
+  function groupTotalFor(total, loadedCount) {
+    const numeric = Number(total)
+    return Number.isFinite(numeric) && numeric >= loadedCount ? numeric : loadedCount
+  }
+
+  function studentYearGroups(users, section, keyPrefix) {
     const groups = yearLevelOptions
       .map((option) => {
-        const users = currentStudentUsers.value.filter((user) => String(user?.year_level ?? '') === option.value)
+        const groupUsers = users.filter((user) => String(user?.year_level ?? '') === option.value)
 
         return {
-          key: `year-${option.value}`,
+          key: `${keyPrefix}${option.value}`,
           label: option.label,
-          count: users.length,
-          users,
+          count: groupUsers.length,
+          total: groupTotalFor(groupTotals.value?.[section]?.[option.value], groupUsers.length),
+          users: groupUsers,
         }
       })
       .filter((group) => group.count > 0)
 
-    const unassignedUsers = currentStudentUsers.value.filter((user) => !['1', '2', '3', '4'].includes(String(user?.year_level ?? '')))
+    const unassignedUsers = users.filter((user) => !['1', '2', '3', '4'].includes(String(user?.year_level ?? '')))
 
     if (unassignedUsers.length > 0) {
       groups.push({
-        key: 'year-unassigned',
+        key: `${keyPrefix}unassigned`,
         label: 'Year Level Not Set',
         count: unassignedUsers.length,
+        total: groupTotalFor(groupTotals.value?.[section]?.unassigned, unassignedUsers.length),
         users: unassignedUsers,
       })
     }
 
     return groups
-  })
-  const archivedStudentYearGroups = computed(() => {
-    const groups = yearLevelOptions
-      .map((option) => {
-        const users = archivedStudentUsers.value.filter((user) => String(user?.year_level ?? '') === option.value)
+  }
 
-        return {
-          key: `archived-year-${option.value}`,
-          label: option.label,
-          count: users.length,
-          users,
-        }
-      })
-      .filter((group) => group.count > 0)
-
-    const unassignedUsers = archivedStudentUsers.value.filter((user) => !['1', '2', '3', '4'].includes(String(user?.year_level ?? '')))
-
-    if (unassignedUsers.length > 0) {
-      groups.push({
-        key: 'archived-year-unassigned',
-        label: 'Year Level Not Set',
-        count: unassignedUsers.length,
-        users: unassignedUsers,
-      })
-    }
-
-    return groups
-  })
+  const currentStudentYearGroups = computed(() => (
+    studentYearGroups(currentStudentUsers.value, 'current', 'year-')
+  ))
+  const archivedStudentYearGroups = computed(() => (
+    studentYearGroups(archivedStudentUsers.value, 'archived', 'archived-year-')
+  ))
   const managementAccountGroups = computed(() => ([
     {
       key: 'staff-accounts',
       label: 'Staff / Master Examiners',
-      users: managementUsers.value.filter((user) => String(user?.role ?? '').toLowerCase() === 'staff_master_examiner'),
+      role: 'staff_master_examiner',
     },
     {
       key: 'admin-accounts',
       label: 'Administrators',
-      users: managementUsers.value.filter((user) => String(user?.role ?? '').toLowerCase() === 'admin'),
+      role: 'admin',
     },
-  ].filter((group) => group.users.length > 0)))
+  ]
+    .map((group) => {
+      const users = managementUsers.value.filter((user) => String(user?.role ?? '').toLowerCase() === group.role)
+
+      return {
+        key: group.key,
+        label: group.label,
+        count: users.length,
+        total: groupTotalFor(groupTotals.value?.[group.role], users.length),
+        users,
+      }
+    })
+    .filter((group) => group.count > 0)))
+
+  // The directory's sections in reading order. The server returns rows in
+  // this same order, so a later page or "Load more" only ever continues the
+  // last group on screen or starts the next one.
+  const directorySections = computed(() => [
+    {
+      key: 'current',
+      title: 'Current Students',
+      description: 'Organized by year level for the active school records.',
+      noun: 'student',
+      countTone: 'navy',
+      groups: currentStudentYearGroups.value,
+    },
+    {
+      key: 'archived',
+      title: 'Archived Student Records',
+      description: 'Graduates and inactive academic records stay here for history and reporting.',
+      noun: 'archived record',
+      countTone: 'neutral',
+      groups: archivedStudentYearGroups.value,
+    },
+    {
+      key: 'management',
+      title: 'Staff and Admin Accounts',
+      description: 'Management accounts stay separate from the student directory.',
+      noun: 'account',
+      countTone: 'neutral',
+      groups: managementAccountGroups.value,
+    },
+  ].filter((section) => section.groups.length > 0))
+
+  function directoryGroupCountLabel(group, noun) {
+    const counted = (count) => `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`
+
+    if (group.count < group.total) {
+      return `${group.count.toLocaleString()} of ${counted(group.total)} shown`
+    }
+
+    return counted(group.total)
+  }
   // Every tile counts the whole directory, whatever page or filter the list
   // below is showing.
   const userDirectorySummary = computed(() => ([
@@ -313,12 +464,25 @@ export function useUsersModule() {
     resetRecoverForm()
   }
 
+  /**
+   * Desktop: fetches one 200-row page. Load-more mode: always fetches the
+   * first N rows, N growing with loadMoreUsers() -- refetching the whole
+   * window means an edit or archive mid-list can never leave a gap or a
+   * duplicate the way appending offset pages would.
+   *
+   * keepMessage leaves a success message from the action that triggered the
+   * reload on screen; every reload used to wipe it the moment it was set.
+   */
   async function loadAdminUsers(options = {}) {
     if (!isAdminRole.value) return
 
+    const token = ++usersRequestToken
     usersLoading.value = true
     usersError.value = ''
-    usersMessage.value = ''
+
+    if (!options.keepMessage) {
+      usersMessage.value = ''
+    }
 
     try {
       const requestedPage = Number(options.page ?? usersPagination.current_page ?? 1)
@@ -326,10 +490,9 @@ export function useUsersModule() {
         ? Math.trunc(requestedPage)
         : 1
 
-      const params = {
-        page: normalizedPage,
-        per_page: usersPagination.per_page || USERS_DEFAULT_PAGE_SIZE,
-      }
+      const params = loadMoreMode.value
+        ? { page: 1, per_page: Math.min(loadedWindow.value, USERS_LOAD_MORE_CAP) }
+        : { page: normalizedPage, per_page: USERS_DEFAULT_PAGE_SIZE }
 
       if (userFilters.search.trim()) params.search = userFilters.search.trim()
       if (userFilters.role) params.role = userFilters.role
@@ -338,6 +501,8 @@ export function useUsersModule() {
       if (userFilters.archive_state) params.archive_state = userFilters.archive_state
 
       const { data } = await services.getUsers(params)
+      if (token !== usersRequestToken) return
+
       adminUsers.value = data.users ?? []
 
       if (data?.summary) {
@@ -346,6 +511,15 @@ export function useUsersModule() {
           archived_students: Number(data.summary.archived_students ?? 0),
           staff_and_admin: Number(data.summary.staff_and_admin ?? 0),
           inactive: Number(data.summary.inactive ?? 0),
+        }
+      }
+
+      if (data?.group_totals) {
+        groupTotals.value = {
+          current: data.group_totals.current ?? {},
+          archived: data.group_totals.archived ?? {},
+          staff_master_examiner: Number(data.group_totals.staff_master_examiner ?? 0),
+          admin: Number(data.group_totals.admin ?? 0),
         }
       }
 
@@ -364,10 +538,24 @@ export function useUsersModule() {
       usersPagination.from = Number(meta.from ?? fallbackFrom)
       usersPagination.to = Number(meta.to ?? fallbackTo)
     } catch (error) {
+      if (token !== usersRequestToken) return
       usersError.value = firstApiError(error, 'Unable to load users.')
     } finally {
-      usersLoading.value = false
+      if (token === usersRequestToken) usersLoading.value = false
     }
+  }
+
+  function loadMoreUsers() {
+    if (!canLoadMoreUsers.value || usersLoading.value) return
+
+    loadedWindow.value = Math.min(loadedWindow.value + USERS_LOAD_MORE_STEP, USERS_LOAD_MORE_CAP)
+    return loadAdminUsers({ page: 1 })
+  }
+
+  // A new search or filter starts again from the top of a short list.
+  function reloadFromFirstPage() {
+    loadedWindow.value = USERS_LOAD_MORE_STEP
+    return loadAdminUsers({ page: 1 })
   }
 
   async function handleSaveUser() {
@@ -442,7 +630,7 @@ export function useUsersModule() {
       }
 
       closeUserModal()
-      await loadAdminUsers({ page: usersPagination.current_page })
+      await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
     } catch (error) {
       usersError.value = firstApiError(error, 'Unable to save user.')
     } finally {
@@ -476,7 +664,7 @@ export function useUsersModule() {
 
       usersMessage.value = data?.message ?? 'Student account recovered successfully.'
       closeRecoverUserModal()
-      await loadAdminUsers({ page: usersPagination.current_page })
+      await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
     } catch (error) {
       usersError.value = firstApiError(error, 'Unable to recover the student account.')
     } finally {
@@ -516,7 +704,7 @@ export function useUsersModule() {
         usersMessage.value = `${userName} restored to current student records.`
       }
 
-      await loadAdminUsers({ page: usersPagination.current_page })
+      await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
     } catch (error) {
       usersError.value = firstApiError(error, `Unable to ${actionLabel} the student record.`)
     } finally {
@@ -528,7 +716,7 @@ export function useUsersModule() {
     () => [userFilters.role, userFilters.status, userFilters.year_level, userFilters.archive_state],
     async () => {
       if (!isAdminRole.value) return
-      await loadAdminUsers({ page: 1 })
+      await reloadFromFirstPage()
     },
   )
 
@@ -545,10 +733,17 @@ export function useUsersModule() {
 
       usersFilterSearchDebounce = setTimeout(() => {
         if (!isAdminRole.value) return
-        loadAdminUsers({ page: 1 })
+        reloadFromFirstPage()
       }, 300)
     },
   )
+
+  // Turning a phone to landscape past the breakpoint (or back) swaps paged
+  // and load-more lists; either way the list restarts at the top.
+  watch(loadMoreMode, () => {
+    if (!isAdminRole.value) return
+    reloadFromFirstPage()
+  })
 
   onMounted(async () => {
     await loadAdminUsers({ page: 1 })
@@ -579,10 +774,19 @@ export function useUsersModule() {
     canGoToPreviousUsersPage,
     canGoToNextUsersPage,
     usersRangeLabel,
+    canLoadMoreUsers,
+    usersLoadCapReached,
+    loadedUsersLabel,
     currentStudentYearGroups,
     archivedStudentYearGroups,
     managementAccountGroups,
+    directorySections,
+    directoryGroupCountLabel,
     userDirectorySummary,
+    userFilterFields,
+    activeUserFilters,
+    clearUserFilter,
+    resetUserFilters,
     displayMemberRole,
     yearLevelLabel,
     yearLevelOptions,
@@ -593,6 +797,7 @@ export function useUsersModule() {
     openRecoverUserModal,
     closeRecoverUserModal,
     loadAdminUsers,
+    loadMoreUsers,
     handleSaveUser,
     handleToggleUserArchive,
     handleRecoverUserAccount,
