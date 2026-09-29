@@ -5,7 +5,7 @@
       <span>{{ resultsError }}</span>
     </div>
 
-    <article class="surface-card room-shell-card">
+    <article class="surface-card room-shell-card is-flush">
       <header class="room-page-head">
         <div class="room-page-title">
           <Award :size="18" />
@@ -116,8 +116,8 @@
       </div>
     </article>
 
-    <article class="surface-card room-shell-card">
-      <header class="room-page-head">
+    <article class="surface-card room-shell-card is-flush">
+      <header class="room-page-head is-inline">
         <div class="room-page-title">
           <ClipboardList :size="18" />
           <h3>Recorded results</h3>
@@ -129,10 +129,25 @@
       </header>
 
       <div class="management-toolbar">
-        <input v-model="filters.search" type="text" class="text-input" placeholder="Search name, student ID, or email" />
-        <div class="management-actions">
-          <input v-model="filters.exam_year" type="number" class="text-input narrow" placeholder="Year" />
-          <select v-model="filters.result" class="text-input narrow">
+        <input
+          v-model="filters.search"
+          type="text"
+          class="text-input"
+          inputmode="search"
+          enterkeyhint="search"
+          placeholder="Search name, student ID, or email"
+          aria-label="Search recorded results"
+        />
+        <div class="management-actions lle-filter-pair">
+          <input
+            v-model="filters.exam_year"
+            type="number"
+            inputmode="numeric"
+            class="text-input narrow"
+            placeholder="Year"
+            aria-label="Exam year"
+          />
+          <select v-model="filters.result" class="text-input narrow" aria-label="Outcome">
             <option value="">All outcomes</option>
             <option value="pass">Passed</option>
             <option value="fail">Failed</option>
@@ -151,7 +166,52 @@
       </div>
 
       <template v-else>
-        <div class="directory-table-wrap">
+        <!-- Phones: one row per result; Remove sits inside the opened row, so
+             a thumb scrolling past can't delete a result by accident. -->
+        <ul v-if="isPhone" class="directory-row-list is-in-card">
+          <li v-for="result in results" :key="result.id">
+            <details class="directory-row-details">
+              <summary class="directory-row">
+                <span class="directory-row-copy">
+                  <strong>{{ result.student?.name ?? 'Unknown student' }}</strong>
+                  <span>{{ resultRowMeta(result) }}</span>
+                </span>
+                <span class="pill" :class="result.result === 'pass' ? 'success' : 'danger'">
+                  {{ result.result === 'pass' ? 'Passed' : 'Failed' }}
+                </span>
+                <ChevronDown :size="18" class="directory-row-more directory-row-chevron" aria-hidden="true" />
+              </summary>
+
+              <dl class="directory-row-facts">
+                <div>
+                  <dt>Date taken</dt>
+                  <dd>{{ formatTakenAt(result.taken_at) }}</dd>
+                </div>
+                <div>
+                  <dt>Rating</dt>
+                  <dd>{{ formatRating(result.rating) }}</dd>
+                </div>
+                <div>
+                  <dt>Recorded by</dt>
+                  <dd>{{ result.recorder?.name ?? '—' }}</dd>
+                </div>
+                <div v-if="result.remarks" class="is-wide">
+                  <dt>Remarks</dt>
+                  <dd>{{ result.remarks }}</dd>
+                </div>
+              </dl>
+
+              <div class="directory-row-actions">
+                <button type="button" class="ghost-btn" @click="removeResult(result)">
+                  <Trash2 :size="15" />
+                  Remove result
+                </button>
+              </div>
+            </details>
+          </li>
+        </ul>
+
+        <div v-else class="directory-table-wrap">
           <table class="directory-table">
             <thead>
               <tr>
@@ -217,8 +277,11 @@
 </template>
 
 <script setup>
-import { AlertCircle, Award, CheckCircle2, ClipboardList, RefreshCw, Save } from 'lucide-vue-next'
+import { AlertCircle, Award, CheckCircle2, ChevronDown, ClipboardList, RefreshCw, Save, Trash2 } from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
+import { usePhoneLayout } from '../composables/useViewport'
+
+const isPhone = usePhoneLayout()
 
 function formatTakenAt(value) {
   if (!value) return '—'
@@ -229,6 +292,12 @@ function formatRating(value) {
   if (value === null || value === undefined || value === '') return '—'
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric.toFixed(2) : '—'
+}
+
+function resultRowMeta(result) {
+  return [result.student?.student_id, result.exam_year ? `${result.exam_year} exam` : null]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 const {

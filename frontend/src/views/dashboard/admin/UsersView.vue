@@ -9,42 +9,79 @@
       <span>{{ usersError }}</span>
     </div>
 
-    <article class="surface-card room-shell-card">
-      <header class="room-page-head">
+    <article class="surface-card room-shell-card is-flush">
+      <header class="room-page-head is-page-title">
         <div class="room-page-title">
           <UserRound :size="18" />
           <h3>Users</h3>
         </div>
-        <button type="button" class="primary-btn add-room-btn" @click="openCreateUserModal">
-          <Plus :size="16" />
-          Add User
-        </button>
+        <!-- Narrow screens: the app bar already names the page, so this header
+             hides and its one action moves up into the bar. -->
+        <Teleport to="#layout-topbar-actions" defer :disabled="!isCompact">
+          <button
+            type="button"
+            class="primary-btn"
+            :class="isCompact ? 'appbar-action' : 'add-room-btn'"
+            :aria-label="isCompact ? 'Add user' : undefined"
+            @click="openCreateUserModal"
+          >
+            <Plus :size="16" />
+            {{ isCompact ? 'Add' : 'Add User' }}
+          </button>
+        </Teleport>
       </header>
 
-      <div class="management-toolbar">
-        <input v-model.trim="userFilters.search" type="text" class="text-input" placeholder="Search name, email, or student ID" />
-        <select v-model="userFilters.role" class="text-input narrow">
-          <option value="">All roles</option>
-          <option value="student">Student</option>
-          <option value="staff_master_examiner">Staff / Master Examiner</option>
-          <option value="admin">Admin</option>
-        </select>
-        <select v-model="userFilters.year_level" class="text-input narrow">
-          <option value="">All year levels</option>
-          <option v-for="option in yearLevelOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
-          </option>
-        </select>
-        <select v-model="userFilters.archive_state" class="text-input narrow">
-          <option value="current">Current records</option>
-          <option value="archived">Archived records</option>
-          <option value="all">All records</option>
-        </select>
-        <select v-model="userFilters.status" class="text-input narrow">
-          <option value="">All status</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+      <div class="management-toolbar" :class="{ 'is-search-row': isPhone }">
+        <input
+          v-model.trim="userFilters.search"
+          type="text"
+          class="text-input"
+          inputmode="search"
+          enterkeyhint="search"
+          :placeholder="isPhone ? 'Search name, email, ID' : 'Search name, email, or student ID'"
+          aria-label="Search users"
+        />
+        <button
+          v-if="isPhone"
+          type="button"
+          class="ghost-btn filter-trigger"
+          aria-haspopup="dialog"
+          @click="filtersOpen = true"
+        >
+          <SlidersHorizontal :size="16" />
+          Filters
+          <span v-if="activeUserFilters.length > 0" class="filter-count">
+            {{ activeUserFilters.length }}
+            <span class="visually-hidden">active</span>
+          </span>
+        </button>
+        <template v-else>
+          <select
+            v-for="field in userFilterFields"
+            :key="field.key"
+            v-model="userFilters[field.key]"
+            class="text-input narrow"
+            :aria-label="field.label"
+          >
+            <option v-for="option in field.options" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </template>
+      </div>
+
+      <div v-if="isPhone && activeUserFilters.length > 0" class="filter-chip-row">
+        <button
+          v-for="chip in activeUserFilters"
+          :key="chip.key"
+          type="button"
+          class="filter-chip"
+          :aria-label="`Remove filter: ${chip.label}`"
+          @click="clearUserFilter(chip.key)"
+        >
+          {{ chip.label }}
+          <X :size="14" aria-hidden="true" />
+        </button>
       </div>
 
       <div v-if="usersLoading && adminUsers.length === 0" class="room-empty-state">
@@ -60,6 +97,8 @@
       </div>
 
       <div v-else class="user-directory-shell">
+        <!-- Whole-directory totals: they ignore the search and filters on
+             purpose (see the summary in routes/api/admin.php). -->
         <div class="user-directory-summary">
           <article
             v-for="card in userDirectorySummary"
@@ -68,43 +107,86 @@
             :class="`is-${card.tone}`"
           >
             <span>{{ card.label }}</span>
-            <strong>{{ card.value }}</strong>
-            <small>Displayed records</small>
+            <strong>{{ formatCount(card.value) }}</strong>
           </article>
         </div>
 
-        <section v-if="currentStudentYearGroups.length > 0" class="directory-section">
+        <section v-for="section in directorySections" :key="section.key" class="directory-section">
           <header class="directory-section-head">
             <div>
-              <h4>Current Students</h4>
-              <p>Organized by year level for the active school records.</p>
+              <h4>{{ section.title }}</h4>
+              <p>{{ section.description }}</p>
             </div>
           </header>
 
           <div class="directory-group-stack">
             <article
-              v-for="group in currentStudentYearGroups"
+              v-for="group in section.groups"
               :key="group.key"
               class="directory-group-card"
+              :class="{ archived: section.key === 'archived' }"
             >
               <div class="directory-group-head">
                 <div>
                   <strong>{{ group.label }}</strong>
-                  <p>{{ group.count }} student{{ group.count === 1 ? '' : 's' }}</p>
+                  <p>{{ directoryGroupCountLabel(group, section.noun) }}</p>
                 </div>
-                <span class="pill navy">{{ group.count }}</span>
+                <span class="pill" :class="section.countTone">{{ formatCount(group.total) }}</span>
               </div>
 
-              <div class="user-directory-grid">
-                <article v-for="user in group.users" :key="user.id" class="directory-user-card">
+              <!-- Phones: one compact row per person; everything you can do
+                   to them is one tap away in the action sheet. -->
+              <ul v-if="isPhone" class="directory-row-list">
+                <li v-for="user in group.users" :key="user.id">
+                  <button
+                    type="button"
+                    class="directory-row"
+                    aria-haspopup="dialog"
+                    @click="openUserActions(user)"
+                  >
+                    <span class="directory-row-copy">
+                      <strong>{{ user.name }}</strong>
+                      <span>{{ userRowMeta(user) }}</span>
+                    </span>
+                    <span
+                      v-if="accountState(user).label !== 'Active'"
+                      class="pill"
+                      :class="accountState(user).tone"
+                    >
+                      {{ accountState(user).short }}
+                    </span>
+                    <Ellipsis :size="18" class="directory-row-more" aria-hidden="true" />
+                  </button>
+                </li>
+              </ul>
+
+              <div v-else class="user-directory-grid">
+                <article
+                  v-for="user in group.users"
+                  :key="user.id"
+                  class="directory-user-card"
+                  :class="{ archived: section.key === 'archived' }"
+                >
                   <div class="directory-user-copy">
                     <strong>{{ user.name }}</strong>
-                    <p v-if="user.student_id">Student ID: {{ user.student_id }}</p>
+                    <p v-if="section.key === 'management'">{{ displayMemberRole(user.role) }}</p>
+                    <p v-else-if="user.student_id">Student ID: {{ user.student_id }}</p>
                     <p>{{ user.email }}</p>
+                    <p v-if="section.key === 'archived' && user.archived_at">
+                      Archived {{ new Date(user.archived_at).toLocaleDateString() }}
+                    </p>
                   </div>
 
                   <div class="management-inline">
-                    <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
+                    <span v-if="section.key === 'management'" class="pill neutral">
+                      {{ displayMemberRole(user.role) }}
+                    </span>
+                    <template v-else-if="section.key === 'archived'">
+                      <span class="pill neutral">Archived</span>
+                      <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
+                      <span class="pill neutral">{{ studentStatusLabel(user.student_status) }}</span>
+                    </template>
+                    <span v-else class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
                     <span class="pill" :class="accountState(user).tone">
                       {{ accountState(user).label }}
                     </span>
@@ -115,24 +197,26 @@
                       <Pencil :size="15" />
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="usersSaving"
-                      @click="handleToggleUserArchive(user, true)"
-                    >
-                      <ArchiveRestore :size="15" />
-                      Archive
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="usersRecovering"
-                      @click="openRecoverUserModal(user)"
-                    >
-                      <ShieldCheck :size="15" />
-                      Recover
-                    </button>
+                    <template v-if="section.key !== 'management'">
+                      <button
+                        type="button"
+                        class="ghost-btn"
+                        :disabled="usersSaving"
+                        @click="handleToggleUserArchive(user, section.key !== 'archived')"
+                      >
+                        <ArchiveRestore :size="15" />
+                        {{ section.key === 'archived' ? 'Restore' : 'Archive' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="ghost-btn"
+                        :disabled="usersRecovering"
+                        @click="openRecoverUserModal(user)"
+                      >
+                        <ShieldCheck :size="15" />
+                        Recover
+                      </button>
+                    </template>
                   </div>
                 </article>
               </div>
@@ -140,127 +224,25 @@
           </div>
         </section>
 
-        <section v-if="archivedStudentYearGroups.length > 0" class="directory-section">
-          <header class="directory-section-head">
-            <div>
-              <h4>Archived Student Records</h4>
-              <p>Graduates and inactive academic records stay here for history and reporting.</p>
-            </div>
-          </header>
-
-          <div class="directory-group-stack">
-            <article
-              v-for="group in archivedStudentYearGroups"
-              :key="group.key"
-              class="directory-group-card archived"
-            >
-              <div class="directory-group-head">
-                <div>
-                  <strong>{{ group.label }}</strong>
-                  <p>{{ group.count }} archived record{{ group.count === 1 ? '' : 's' }}</p>
-                </div>
-                <span class="pill neutral">{{ group.count }}</span>
-              </div>
-
-              <div class="user-directory-grid">
-                <article v-for="user in group.users" :key="user.id" class="directory-user-card archived">
-                  <div class="directory-user-copy">
-                    <strong>{{ user.name }}</strong>
-                    <p v-if="user.student_id">Student ID: {{ user.student_id }}</p>
-                    <p>{{ user.email }}</p>
-                    <p v-if="user.archived_at">Archived {{ new Date(user.archived_at).toLocaleDateString() }}</p>
-                  </div>
-
-                  <div class="management-inline">
-                    <span class="pill neutral">Archived</span>
-                    <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
-                    <span class="pill neutral">{{ studentStatusLabel(user.student_status) }}</span>
-                    <span class="pill" :class="accountState(user).tone">
-                      {{ accountState(user).label }}
-                    </span>
-                  </div>
-
-                  <div class="management-actions compact">
-                    <button type="button" class="ghost-btn" @click="openEditUserModal(user)">
-                      <Pencil :size="15" />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="usersSaving"
-                      @click="handleToggleUserArchive(user, false)"
-                    >
-                      <ArchiveRestore :size="15" />
-                      Restore
-                    </button>
-                    <button
-                      type="button"
-                      class="ghost-btn"
-                      :disabled="usersRecovering"
-                      @click="openRecoverUserModal(user)"
-                    >
-                      <ShieldCheck :size="15" />
-                      Recover
-                    </button>
-                  </div>
-                </article>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section v-if="managementAccountGroups.length > 0" class="directory-section">
-          <header class="directory-section-head">
-            <div>
-              <h4>Staff and Admin Accounts</h4>
-              <p>Management accounts stay separate from the student directory.</p>
-            </div>
-          </header>
-
-          <div class="directory-group-stack">
-            <article
-              v-for="group in managementAccountGroups"
-              :key="group.key"
-              class="directory-group-card"
-            >
-              <div class="directory-group-head">
-                <div>
-                  <strong>{{ group.label }}</strong>
-                  <p>{{ group.users.length }} account{{ group.users.length === 1 ? '' : 's' }}</p>
-                </div>
-                <span class="pill neutral">{{ group.users.length }}</span>
-              </div>
-
-              <div class="user-directory-grid">
-                <article v-for="user in group.users" :key="user.id" class="directory-user-card">
-                  <div class="directory-user-copy">
-                    <strong>{{ user.name }}</strong>
-                    <p>{{ displayMemberRole(user.role) }}</p>
-                    <p>{{ user.email }}</p>
-                  </div>
-
-                  <div class="management-inline">
-                    <span class="pill neutral">{{ displayMemberRole(user.role) }}</span>
-                    <span class="pill" :class="accountState(user).tone">
-                      {{ accountState(user).label }}
-                    </span>
-                  </div>
-
-                  <div class="management-actions compact">
-                    <button type="button" class="ghost-btn" @click="openEditUserModal(user)">
-                      <Pencil :size="15" />
-                      Edit
-                    </button>
-                  </div>
-                </article>
-              </div>
-            </article>
-          </div>
-        </section>
+        <div v-if="isPhone" class="directory-load-more">
+          <p class="muted">{{ loadedUsersLabel }}</p>
+          <button
+            v-if="canLoadMoreUsers"
+            type="button"
+            class="ghost-btn"
+            :disabled="usersLoading"
+            @click="loadMoreUsers"
+          >
+            <RefreshCw v-if="usersLoading" :size="14" class="spin-soft" />
+            {{ usersLoading ? 'Loading…' : 'Load more' }}
+          </button>
+          <p v-else-if="usersLoadCapReached" class="muted">
+            That's as far as this list goes. Search or use Filters to reach the rest.
+          </p>
+        </div>
       </div>
 
-      <div v-if="usersPagination.total > 0" class="management-toolbar users-pagination">
+      <div v-if="!isPhone && usersPagination.total > 0" class="management-toolbar users-pagination">
         <p class="muted">{{ usersRangeLabel }}</p>
         <div class="management-actions">
           <button
@@ -467,13 +449,102 @@
         </div>
       </div>
     </teleport>
+
+    <BottomSheet v-if="isPhone" v-model:open="filtersOpen" title="Filter users">
+      <label v-for="field in userFilterFields" :key="field.key" class="field-stack">
+        <span class="field-label">{{ field.label }}</span>
+        <select v-model="userFilters[field.key]" class="text-input">
+          <option v-for="option in field.options" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <template #footer>
+        <button
+          type="button"
+          class="ghost-btn"
+          :disabled="activeUserFilters.length === 0"
+          @click="resetUserFilters"
+        >
+          Reset
+        </button>
+        <button type="button" class="primary-btn" @click="filtersOpen = false">
+          {{ filterSheetDoneLabel }}
+        </button>
+      </template>
+    </BottomSheet>
+
+    <BottomSheet
+      v-model:open="userActionsOpen"
+      :title="actionUser?.name ?? 'User'"
+      :subtitle="actionUser?.email ?? ''"
+      @closed="actionUser = null"
+    >
+      <template v-if="actionUser">
+        <div class="management-inline user-action-tags">
+          <span v-if="actionUser.student_id" class="pill neutral">ID {{ actionUser.student_id }}</span>
+          <span v-if="isStudent(actionUser)" class="pill navy">{{ yearLevelLabel(actionUser.year_level) }}</span>
+          <span v-else class="pill neutral">{{ displayMemberRole(actionUser.role) }}</span>
+          <span v-if="isUserArchived(actionUser)" class="pill neutral">
+            Archived · {{ studentStatusLabel(actionUser.student_status) }}
+          </span>
+          <span class="pill" :class="accountState(actionUser).tone">{{ accountState(actionUser).label }}</span>
+        </div>
+
+        <div class="user-action-list">
+          <button type="button" class="user-action-item" @click="runUserAction(openEditUserModal)">
+            <Pencil :size="18" />
+            <span>Edit details</span>
+          </button>
+          <template v-if="isStudent(actionUser)">
+            <button
+              type="button"
+              class="user-action-item"
+              :disabled="usersSaving"
+              @click="runUserAction((user) => handleToggleUserArchive(user, !isUserArchived(user)))"
+            >
+              <ArchiveRestore :size="18" />
+              <span>{{ isUserArchived(actionUser) ? 'Restore to current records' : 'Archive record' }}</span>
+            </button>
+            <button
+              type="button"
+              class="user-action-item"
+              :disabled="usersRecovering"
+              @click="runUserAction(openRecoverUserModal)"
+            >
+              <ShieldCheck :size="18" />
+              <span>Recover account</span>
+            </button>
+          </template>
+        </div>
+      </template>
+    </BottomSheet>
   </section>
 </template>
 
 <script setup>
-import { AlertCircle, ArchiveRestore, CheckCircle2, Pencil, Plus, RefreshCw, ShieldCheck, UserRound, X } from 'lucide-vue-next'
+import { computed, ref, watch } from 'vue'
+import {
+  AlertCircle,
+  ArchiveRestore,
+  CheckCircle2,
+  Ellipsis,
+  Pencil,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  SlidersHorizontal,
+  UserRound,
+  X,
+} from 'lucide-vue-next'
+import BottomSheet from '@/components/BottomSheet.vue'
 import { useUsersModule } from '../composables/useUsersModule'
+import { useCompactLayout, usePhoneLayout } from '../composables/useViewport'
 import { passwordIsValid } from '@/utils/password'
+
+const isCompact = useCompactLayout()
+const isPhone = usePhoneLayout()
 
 /**
  * Whether an account can actually be used, which needs BOTH gates open:
@@ -486,10 +557,18 @@ import { passwordIsValid } from '@/utils/password'
  * counting enrolled students were counting phantoms.
  */
 function accountState(user) {
-  if (!user.is_active) return { label: 'Inactive', tone: 'neutral' }
-  if (!user.email_verified_at) return { label: 'Pending verification', tone: 'gold' }
+  if (!user.is_active) return { label: 'Inactive', short: 'Inactive', tone: 'neutral' }
+  if (!user.email_verified_at) return { label: 'Pending verification', short: 'Pending', tone: 'gold' }
 
-  return { label: 'Active', tone: 'success' }
+  return { label: 'Active', short: 'Active', tone: 'success' }
+}
+
+function isStudent(user) {
+  return String(user?.role ?? '').toLowerCase() === 'student'
+}
+
+function formatCount(value) {
+  return Number(value ?? 0).toLocaleString()
 }
 
 const {
@@ -509,10 +588,16 @@ const {
   canGoToPreviousUsersPage,
   canGoToNextUsersPage,
   usersRangeLabel,
-  currentStudentYearGroups,
-  archivedStudentYearGroups,
-  managementAccountGroups,
+  canLoadMoreUsers,
+  usersLoadCapReached,
+  loadedUsersLabel,
+  directorySections,
+  directoryGroupCountLabel,
   userDirectorySummary,
+  userFilterFields,
+  activeUserFilters,
+  clearUserFilter,
+  resetUserFilters,
   displayMemberRole,
   yearLevelLabel,
   studentStatusOptions,
@@ -525,10 +610,56 @@ const {
   openRecoverUserModal,
   closeRecoverUserModal,
   loadAdminUsers,
+  loadMoreUsers,
   handleSaveUser,
   handleToggleUserArchive,
   handleRecoverUserAccount,
-} = useUsersModule()
+} = useUsersModule({ loadMoreMode: isPhone })
+
+const filtersOpen = ref(false)
+const userActionsOpen = ref(false)
+const actionUser = ref(null)
+
+const filterSheetDoneLabel = computed(() => {
+  if (usersLoading.value) return 'Updating…'
+
+  const total = Number(usersPagination.total ?? 0)
+  if (total < 1) return 'No matching users'
+
+  return `Show ${formatCount(total)} user${total === 1 ? '' : 's'}`
+})
+
+// The second line of a phone row: enough to tell two people with the same
+// name apart without opening them.
+function userRowMeta(user) {
+  if (!isStudent(user)) return user.email
+
+  return [
+    user.student_id,
+    isUserArchived(user) ? studentStatusLabel(user.student_status) : null,
+    user.email,
+  ].filter(Boolean).join(' · ')
+}
+
+function openUserActions(user) {
+  actionUser.value = user
+  userActionsOpen.value = true
+}
+
+// The sheet closes first so the dialog or confirmation the action opens is
+// the only thing on screen.
+function runUserAction(action) {
+  const user = actionUser.value
+  userActionsOpen.value = false
+  if (user) action(user)
+}
+
+// Sheets belong to the phone layout; leaving it closes them rather than
+// leaving one to reopen the next time the screen narrows.
+watch(isPhone, () => {
+  filtersOpen.value = false
+  userActionsOpen.value = false
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
