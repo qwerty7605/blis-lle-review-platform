@@ -54,6 +54,28 @@
   --focus-ring: 0 0 0 3px rgba(26, 35, 126, 0.2);
 }
 
+/* Fingers, not cursors: every button and field built on --control-height
+   grows to the 44px touch target Apple and WCAG guidance use. */
+@media (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+  }
+}
+
+/* The dashboard's sticky app bar on narrow screens (DashboardLayout.vue);
+   anything else that sticks while scrolling sits just below it. */
+@media (max-width: 900px) {
+  :root {
+    --appbar-height: 56px;
+  }
+
+  /* Anything scrolled into view (a focused field, a link target) stops
+     below the sticky app bar instead of underneath it. */
+  html {
+    scroll-padding-top: var(--appbar-height);
+  }
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
