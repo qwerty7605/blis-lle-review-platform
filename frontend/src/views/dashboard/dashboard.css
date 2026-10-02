@@ -1030,6 +1030,9 @@
 
 .room-view {
   display: grid;
+  /* One column no wider than the page: an implicit auto column grows to fit
+     unbreakable content, which pushed phone layouts past the screen edge. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -4822,7 +4825,8 @@
     grid-template-columns: 1fr;
   }
 
-  .user-directory-summary,
+  /* .user-directory-summary is a 2x2 grid on phones -- see "Phone layouts"
+     at the end of this file. */
   .user-directory-grid,
   .room-roster-grid {
     grid-template-columns: 1fr;
@@ -6278,5 +6282,595 @@ a.assignment-chip.is-link:hover {
   .exams-filter-clear {
     margin-left: 0;
     justify-content: center;
+  }
+}
+
+/* =======================================================================
+   PHONE LAYOUTS
+   =======================================================================
+   The admin directory, student directory, licensure results and audit log
+   on narrow screens. What changed, and why:
+     - the page's action moves into the app bar (DashboardLayout.vue) and
+       the header that only repeated the page title hides
+     - lists are 64px rows instead of 217px cards, with actions one tap
+       away in a sheet (components/BottomSheet.vue)
+     - filters collapse into one search row plus a Filters sheet, active
+       filters showing as removable chips
+     - summary tiles sit two by two instead of one per row
+     - touch screens get 44px controls and 16px field text (iOS Safari
+       zooms the whole page into any field under 16px)
+   ======================================================================= */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Actions moved into the navy app bar ---- */
+.primary-btn.appbar-action {
+  height: 40px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  background: var(--lnu-gold-light);
+  color: var(--lnu-navy-deep);
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.primary-btn.appbar-action:hover:not(:disabled) {
+  background: #f5dc9c;
+}
+
+.primary-btn.appbar-action:focus-visible,
+.appbar-icon-action:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
+.appbar-icon-action {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appbar-icon-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.appbar-icon-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Filters: one trigger, a count, and removable chips ---- */
+.filter-trigger {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.filter-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--lnu-navy);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  scrollbar-width: none;
+}
+
+.filter-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-chip {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 10px 0 13px;
+  border: 1px solid rgba(26, 35, 126, 0.28);
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.07);
+  color: var(--lnu-navy-deep);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-chip:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---- Rows: the phone replacement for cards and tables ---- */
+.directory-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.directory-row-list > li + li {
+  border-top: 1px solid var(--border-soft);
+}
+
+.directory-row {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.directory-row:hover {
+  background: rgba(26, 35, 126, 0.04);
+}
+
+.directory-row:active {
+  background: rgba(26, 35, 126, 0.08);
+}
+
+.directory-row:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.directory-row-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.directory-row-copy strong,
+.directory-row-copy span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-row-copy strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--lnu-navy-deep);
+}
+
+.directory-row-copy span {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.directory-row > .pill {
+  flex-shrink: 0;
+}
+
+.directory-row-more {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+}
+
+/* Rows that open in place to show the rest of the record. */
+.directory-row-details > summary {
+  list-style: none;
+}
+
+.directory-row-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.directory-row-chevron {
+  transition: transform 0.2s ease;
+}
+
+.directory-row-details[open] .directory-row-chevron {
+  transform: rotate(180deg);
+}
+
+.directory-row-details[open] > summary,
+.directory-row-facts,
+.directory-row-actions {
+  background: var(--surface-muted);
+}
+
+.directory-row-details.is-archived .directory-row-copy strong {
+  color: var(--ink-muted);
+}
+
+.directory-row-facts {
+  margin: 0;
+  padding: 4px 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.directory-row-facts > div {
+  min-width: 0;
+}
+
+.directory-row-facts > .is-wide {
+  grid-column: 1 / -1;
+}
+
+.directory-row-facts dt {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.directory-row-facts dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.directory-row-facts dd small {
+  display: block;
+  font-size: 12px;
+}
+
+.directory-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 14px;
+}
+
+/* ---- "Load more" / range footer ---- */
+.directory-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.directory-load-more .muted {
+  font-size: 13px;
+}
+
+/* ---- Per-user action sheet ---- */
+.user-action-tags {
+  gap: 6px;
+}
+
+.user-action-list {
+  display: grid;
+  gap: 2px;
+  margin: 0 -8px;
+}
+
+.user-action-item {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.user-action-item svg {
+  flex-shrink: 0;
+  color: var(--lnu-navy);
+}
+
+.user-action-item:hover:not(:disabled),
+.user-action-item:active:not(:disabled) {
+  background: rgba(26, 35, 126, 0.06);
+}
+
+.user-action-item:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.user-action-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Up to 900px: the app bar names the page ---- */
+@media (max-width: 900px) {
+  .room-page-head.is-page-title {
+    display: none;
+  }
+}
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  /* The shell card was meant to have no padding (its header and toolbar
+     are full-width bands with their own), but .surface-card's padding in
+     the refresh block above comes later and wins. On a phone that was 34px
+     of a 390px screen, so the pages rebuilt for phones opt back out. clip
+     rather than hidden keeps the rounded corners without stopping the
+     directory's year headings from sticking. */
+  .room-shell-card.is-flush {
+    padding: 0;
+    overflow: hidden;
+    overflow: clip;
+  }
+
+  .room-shell-card.is-flush > .feedback {
+    margin: 0 16px 14px;
+  }
+
+  .room-shell-card.is-flush > .user-directory-summary {
+    padding: 12px 12px 0;
+    margin-bottom: 12px;
+  }
+
+  .room-page-head.is-inline {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .room-shell-card.is-flush > .room-page-head.is-inline + .management-toolbar {
+    margin-top: -14px;
+  }
+
+  /* In a column, flex: 1 sizes the height, not the width: the basis of 0
+     overrode every control's height and squashed them to 18-20px. */
+  .management-toolbar > .text-input,
+  .management-toolbar > .narrow,
+  .management-toolbar > .management-actions {
+    flex: 0 0 auto;
+  }
+
+  .management-toolbar.is-search-row {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 10px 12px;
+  }
+
+  .management-toolbar.is-search-row > .text-input {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .user-directory-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .user-directory-summary-card {
+    padding: 10px 12px;
+    gap: 2px;
+    border-radius: 12px;
+  }
+
+  .user-directory-summary-card span {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .user-directory-summary-card strong {
+    font-size: 20px;
+  }
+
+  .user-directory-summary-card small {
+    font-size: 11px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The directory flattens from card-in-card-in-card to one list, with
+     each year heading sticking under the app bar while its rows scroll. */
+  .user-directory-shell {
+    padding: 12px 0 0;
+    gap: 16px;
+  }
+
+  .user-directory-shell > .user-directory-summary {
+    padding: 0 12px;
+  }
+
+  .directory-section {
+    gap: 0;
+  }
+
+  .directory-section-head {
+    padding: 0 12px 8px;
+  }
+
+  .directory-section-head h4 {
+    font-size: 16px;
+  }
+
+  .directory-section-head p {
+    display: none;
+  }
+
+  .directory-group-stack {
+    gap: 0;
+  }
+
+  .directory-group-card,
+  .directory-group-card.archived {
+    padding: 0;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .directory-group-head {
+    position: sticky;
+    top: var(--appbar-height, 0px);
+    z-index: 2;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--surface-muted);
+  }
+
+  .directory-group-head strong {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .directory-group-head p {
+    margin: 1px 0 0;
+    font-size: 12px;
+  }
+
+  /* "30 of 331 students shown" already carries the total. */
+  .directory-group-head > .pill {
+    display: none;
+  }
+
+  .directory-load-more {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 14px 12px 16px;
+  }
+
+  .directory-load-more .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Audit log: a divided list rather than a stack of 158px cards. */
+  .audit-list {
+    padding: 0;
+    gap: 0;
+  }
+
+  .audit-list .management-item {
+    padding: 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border-soft);
+    border-radius: 0;
+  }
+
+  .audit-list .management-item:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .audit-list .management-item-main strong {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .audit-list .management-item-main p {
+    font-size: 12px;
+  }
+
+  .audit-list .pill {
+    padding: 3px 8px;
+    font-size: 10.5px;
+  }
+
+  /* Dialogs had no height limit, so a long form (Create User is ~1,140px)
+     ran off both ends of an 844px screen: no title, no buttons, no way to
+     scroll to them. On phones they rise from the bottom like the sheets,
+     scroll inside, and keep their buttons pinned in reach. The exam and
+     library dialogs have their own phone layouts and are left alone. */
+  .modal-backdrop:not(.exam-modal-backdrop) {
+    align-items: flex-end;
+    padding: 12px 0 0;
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) {
+    width: 100%;
+    max-height: calc(100dvh - 12px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal):has(> .modal-actions:last-child) {
+    padding-bottom: 0;
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 -18px;
+    padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
+  }
+}
+
+/* ---- Touch screens ---- */
+@media (pointer: coarse) {
+  .text-input,
+  .textarea-input {
+    font-size: 16px;
+  }
+
+  .member-kick-icon-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+}
+
+/* Tablets: the 16px text above no longer fits a 160px filter select
+   ("Current record…"). Phones already give them the full width. */
+@media (pointer: coarse) and (min-width: 641px) {
+  .narrow {
+    width: 180px;
+    min-width: 180px;
+    flex-basis: 180px;
   }
 }

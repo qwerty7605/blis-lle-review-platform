@@ -34,12 +34,9 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $page = (int) ($validated['page'] ?? 1);
         $perPage = (int) ($validated['per_page'] ?? 200);
 
-        $users = User::query()
-            // email_verified_at is selected so the directory can distinguish an
-            // account staff disabled from one that never completed signup. Without
-            // it the UI can only render is_active, which shows a green "Active"
-            // badge for accounts that cannot log in at all.
-            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'student_status', 'admission_year', 'is_active', 'email_verified_at', 'archived_at', 'created_at', 'updated_at')
+        // One filtered query, used twice: once for the page of rows and once
+        // for the per-group totals the directory headings show.
+        $filtered = fn () => User::query()
             ->when(
                 filled($validated['search'] ?? null),
                 fn ($query) => $query->where(function ($inner) use ($validated) {
@@ -75,9 +72,66 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                 fn ($query) => $validated['archive_state'] === 'archived'
                     ? $query->whereNotNull('archived_at')
                     : $query->whereNull('archived_at')
+            );
+
+        // The directory is shown in sections -- current students by year,
+        // archived students by year, then staff and admins -- so the rows are
+        // returned in that same order. Newest-first scattered every year
+        // across every page, so a page could not be read as one stretch of
+        // the directory and "load more" had nowhere sensible to append to.
+        $users = $filtered()
+            // email_verified_at is selected so the directory can distinguish an
+            // account staff disabled from one that never completed signup. Without
+            // it the UI can only render is_active, which shows a green "Active"
+            // badge for accounts that cannot log in at all.
+            ->select('id', 'name', 'email', 'student_id', 'role', 'year_level', 'student_status', 'admission_year', 'is_active', 'email_verified_at', 'archived_at', 'created_at', 'updated_at')
+            ->orderByRaw(
+                'CASE WHEN role = ? AND archived_at IS NULL THEN 0 WHEN role = ? THEN 1 WHEN role = ? THEN 2 WHEN role = ? THEN 3 ELSE 4 END',
+                [User::ROLE_STUDENT, User::ROLE_STUDENT, User::ROLE_STAFF_MASTER_EXAMINER, User::ROLE_ADMIN]
             )
-            ->orderByDesc('id')
+            ->orderByRaw('CASE WHEN year_level BETWEEN 1 AND 4 THEN year_level ELSE 5 END')
+            ->orderBy('name')
+            ->orderBy('student_id')
+            ->orderBy('id')
             ->paginate($perPage, ['*'], 'page', $page);
+
+        // How many rows each directory heading holds across the whole filtered
+        // list, not just the loaded page -- "4th Year · 197" used to mean "197
+        // of them happen to be on this page".
+        $groupTotals = [
+            'current' => [],
+            'archived' => [],
+            User::ROLE_STAFF_MASTER_EXAMINER => 0,
+            User::ROLE_ADMIN => 0,
+        ];
+
+        $groupRows = $filtered()
+            ->selectRaw(
+                "CASE WHEN role = ? AND archived_at IS NULL THEN 'current' WHEN role = ? THEN 'archived' ELSE role END AS directory_section",
+                [User::ROLE_STUDENT, User::ROLE_STUDENT]
+            )
+            ->selectRaw('CASE WHEN year_level BETWEEN 1 AND 4 THEN year_level ELSE 0 END AS year_bucket')
+            ->selectRaw('COUNT(*) AS total')
+            ->groupBy('directory_section', 'year_bucket')
+            ->get();
+
+        foreach ($groupRows as $row) {
+            $section = (string) $row->directory_section;
+            $count = (int) $row->total;
+
+            if ($section === 'current' || $section === 'archived') {
+                $yearKey = (int) $row->year_bucket > 0 ? (string) (int) $row->year_bucket : 'unassigned';
+                $groupTotals[$section][$yearKey] = ($groupTotals[$section][$yearKey] ?? 0) + $count;
+
+                continue;
+            }
+
+            $groupTotals[$section] = ($groupTotals[$section] ?? 0) + $count;
+        }
+
+        // Objects even when empty, so the client never has to tell [] from {}.
+        $groupTotals['current'] = (object) $groupTotals['current'];
+        $groupTotals['archived'] = (object) $groupTotals['archived'];
 
         return response()->json([
             'users' => $users->items(),
@@ -89,6 +143,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                 'from' => $users->firstItem(),
                 'to' => $users->lastItem(),
             ],
+            'group_totals' => $groupTotals,
             // Directory-wide counts for the summary tiles: independent of the
             // page and of the list's filters. Counted from the loaded page,
             // they stopped at the page size once the directory outgrew it.
@@ -450,17 +505,33 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $limit = (int) $request->query('limit', 80);
-        $limit = max(1, min(200, $limit));
+        $validated = $request->validate([
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
+            // The old name for per_page, still honoured.
+            'limit' => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $perPage = (int) ($validated['per_page'] ?? $validated['limit'] ?? 80);
+        $perPage = max(1, min(200, $perPage));
 
         $logs = AuditLog::query()
             ->with('actor:id,name,email,role')
             ->latest()
-            ->limit($limit)
-            ->get();
+            // Seeded and imported entries can share a timestamp; without a
+            // tie-breaker the order between pages is undefined and "load
+            // more" can skip or repeat rows.
+            ->orderByDesc('id')
+            ->paginate($perPage, ['*'], 'page', (int) ($validated['page'] ?? 1));
 
         return response()->json([
-            'logs' => $logs,
+            'logs' => $logs->items(),
+            'meta' => [
+                'current_page' => $logs->currentPage(),
+                'last_page' => $logs->lastPage(),
+                'per_page' => $logs->perPage(),
+                'total' => $logs->total(),
+            ],
         ]);
     });
 });

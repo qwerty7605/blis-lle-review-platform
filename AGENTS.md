@@ -76,6 +76,14 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - `teacher2@example.com` gets `BLIS 4A` (`B4A26`) with `Information Technology Quiz`.
 - `student@example.com` is enrolled in `BLIS 1A` and has both submitted and in-progress attempts, so student dashboard analytics are non-empty immediately after reseeding.
 
+## Phone and Tablet Layout
+
+- Breakpoints live in `frontend/src/views/dashboard/composables/useViewport.js`: `useCompactLayout()` (≤900px: sticky app bar + slide-over nav drawer in `DashboardLayout.vue`) and `usePhoneLayout()` (≤640px: rows instead of cards/tables).
+- A page moves its main action into the app bar with `<Teleport to="#layout-topbar-actions" defer :disabled="!isCompact">`; its duplicate title header carries `.room-page-head.is-page-title` so it hides at ≤900px.
+- Phone filters and per-row actions use `frontend/src/components/BottomSheet.vue`; rows use `.directory-row` / `.directory-row-details` from the "Phone layouts" section at the end of `dashboard.css`.
+- Touch screens (`pointer: coarse`) get 44px controls via `--control-height` and 16px field text (iOS zooms into smaller fields).
+- `GET /api/admin/users` returns rows in directory order (current students by year, archived by year, staff, admins; then name) plus `group_totals` for the headings; phones grow the list with `per_page` instead of paging. `GET /api/admin/audit-logs` pages with `page`/`per_page` (legacy `limit` still works) and returns `meta`.
+
 ## Docker/Runtime Notes
 
 - Service ports:

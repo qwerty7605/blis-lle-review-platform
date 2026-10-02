@@ -138,7 +138,14 @@
         </button>
       </div>
 
-      <div v-else class="rooms-grid">
+      <!-- Phones show the list and the open room one at a time (list screen,
+           then detail screen with a way back) -- stacked, a tapped room
+           opened below all 30-odd room cards, out of sight. -->
+      <div
+        v-else
+        class="rooms-grid"
+        :class="{ 'is-phone-list': isPhone && phonePane === 'list', 'is-phone-detail': isPhone && phonePane === 'detail' }"
+      >
         <aside class="surface-card rooms-list-card">
           <div class="rooms-list-head">
             <span class="rooms-list-label">{{ roomCollectionLabel }}</span>
@@ -162,7 +169,7 @@
               type="button"
               class="rooms-list-item"
               :class="{ active: selectedRoomId === room.id }"
-              @click="selectRoom(room.id)"
+              @click="openRoomFromList(room.id)"
             >
               <div class="rooms-list-item-head">
                 <strong>{{ room.name }}</strong>
@@ -180,6 +187,11 @@
         </aside>
 
         <section class="room-detail-column">
+          <button v-if="isPhone" type="button" class="ghost-btn rooms-back-btn" @click="phonePane = 'list'">
+            <ChevronLeft :size="16" />
+            All rooms
+          </button>
+
           <div v-if="roomDetailsLoading" class="surface-card rooms-detail-loading">
             <RefreshCw :size="18" class="spin-soft" />
             <span>Loading room details...</span>
@@ -518,7 +530,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   AlertCircle,
   Archive,
@@ -543,6 +555,7 @@ import {
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatExamSchedule } from '../composables/useDashboardFormatters'
 import { useRoomsModule } from '../composables/useRoomsModule'
+import { usePhoneLayout } from '../composables/useViewport'
 
 // Local, not composable state -- mirrors the same "reveal archived exams
 // inline" toggle the student Rooms page uses (see RoomsView.vue), reset per
@@ -615,6 +628,32 @@ const {
   liveBoardItemSummaryText,
   exportRoomGrades,
 } = useRoomsModule({ mode: 'management' })
+
+const isPhone = usePhoneLayout()
+const phonePane = ref('list')
+let phoneOpenedRoomId = null
+
+function openRoomFromList(roomId) {
+  selectRoom(roomId)
+
+  if (isPhone.value) {
+    phoneOpenedRoomId = roomId
+    phonePane.value = 'detail'
+    window.scrollTo({ top: 0 })
+  }
+}
+
+// A room that changes under the detail screen (deleted, say) sends the
+// phone back to the list rather than quietly showing a different room.
+watch(selectedRoomId, (roomId) => {
+  if (isPhone.value && phonePane.value === 'detail' && roomId !== phoneOpenedRoomId) {
+    phonePane.value = 'list'
+  }
+})
+
+watch(isPhone, (phone) => {
+  if (!phone) phonePane.value = 'list'
+})
 
 // Read-only "how much of this room's assigned exam list is still live" --
 // same shape as the student page's completion-rate summary (a percent bar
@@ -1353,6 +1392,71 @@ const roomExamCoveragePercent = computed(() => {
   .room-banner-action-btn {
     flex: 1;
     justify-content: center;
+  }
+}
+
+.rooms-back-btn {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .rooms-grid.is-phone-list .room-detail-column,
+  .rooms-grid.is-phone-list .room-side-column,
+  .rooms-grid.is-phone-detail .rooms-list-card {
+    display: none;
+  }
+
+  .rooms-back-btn {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 4px;
+    padding-left: 8px;
+  }
+
+  /* Two-line rows: name, then code, members and owner on one line. */
+  .rooms-list-item {
+    min-height: 64px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 10px 12px;
+  }
+
+  .rooms-list-item-head {
+    width: 100%;
+  }
+
+  .rooms-list-item strong {
+    font-size: 15px;
+  }
+
+  .rooms-list-meta {
+    margin-top: 0;
+  }
+
+  .rooms-list-by {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (pointer: coarse) {
+  .rooms-search {
+    height: var(--control-height);
+  }
+
+  /* iOS Safari zooms the page into any field under 16px. */
+  .rooms-search input {
+    font-size: 16px;
+  }
+
+  .rooms-join-btn,
+  .room-banner-action-btn {
+    height: var(--control-height);
   }
 }
 </style>
