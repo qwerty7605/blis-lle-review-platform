@@ -497,6 +497,23 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     await openReviewDeepLinkIfRequested()
   })
 
+  /*
+   * ?room= is also how the phone nav drawer switches rooms, and that happens
+   * while this view is already mounted -- onMounted has long since run. Without
+   * this watcher the URL changed and the page kept showing the previous room.
+   */
+  watch(
+    () => route.query?.room,
+    async (rawRoomId) => {
+      const roomId = Number(rawRoomId)
+      if (!Number.isFinite(roomId) || roomId < 1) return
+      if (roomId === selectedRoomId.value) return
+      if (!rooms.value.some((room) => room.id === roomId)) return
+
+      await selectRoom(roomId)
+    },
+  )
+
   onBeforeUnmount(() => {
     clearStudentExamTimer()
     stopStudentExamAutoSync()

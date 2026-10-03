@@ -3,6 +3,7 @@
 use App\Models\AuditLog;
 use App\Models\Room;
 use App\Models\User;
+use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
@@ -39,13 +40,11 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $filtered = fn () => User::query()
             ->when(
                 filled($validated['search'] ?? null),
-                fn ($query) => $query->where(function ($inner) use ($validated) {
-                    $search = trim((string) $validated['search']);
-
-                    $inner->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('student_id', 'like', "%{$search}%");
-                })
+                fn ($query) => Search::whereAnyContains(
+                    $query,
+                    ['name', 'email', 'student_id'],
+                    trim((string) $validated['search']),
+                )
             )
             ->when(
                 filled($validated['role'] ?? null),

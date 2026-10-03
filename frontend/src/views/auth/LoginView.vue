@@ -479,6 +479,30 @@ async function handleSubmit() {
     min-height: 0;
   }
 
+  /*
+   * The form column scrolls on its own, and the card is placed with
+   * `margin: auto` rather than `align-items: center`.
+   *
+   * Centred, a flex item taller than its container overflows equally in BOTH
+   * directions -- and with the shell clipping at `overflow: hidden`, the half
+   * above the top edge could not be scrolled back to. On a 768px-tall laptop
+   * this registration form is already taller than the viewport, and it grows
+   * another ~120px the moment the password checklist appears, so the heading
+   * and the Create Account button were simply cut off.
+   */
+  .auth-brand {
+    overflow-y: auto;
+  }
+
+  .auth-main {
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .auth-card {
+    margin: auto;
+  }
+
   .auth-brand {
     padding: clamp(28px, 3vw, 42px) clamp(24px, 2.6vw, 34px);
   }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -154,6 +155,54 @@ class Exam extends Model
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * When the exam opens -- schedule_start_at, falling back to the older
+     * single-field scheduled_at that some rows still carry.
+     */
+    public function scheduleOpensAt(): ?CarbonInterface
+    {
+        return $this->schedule_start_at ?? $this->scheduled_at;
+    }
+
+    /**
+     * Whether "now" sits inside the exam's schedule window.
+     *
+     * Either end may be absent, which means unbounded on that side.
+     */
+    public function isWithinScheduleWindow(): bool
+    {
+        $opensAt = $this->scheduleOpensAt();
+        $closesAt = $this->schedule_end_at;
+
+        if ($opensAt && now()->lt($opensAt)) {
+            return false;
+        }
+
+        return !($closesAt && now()->gt($closesAt));
+    }
+
+    public function hasQuestionSet(): bool
+    {
+        return $this->resolvedQuestionBankIds() !== [];
+    }
+
+    /**
+     * Whether a student with $remainingAttempts left could actually start now.
+     *
+     * The three conditions are the same ones the start endpoint rejects on, in
+     * the same order: having attempts left says nothing about whether the
+     * window is open or a question set was ever linked. Reporting "can start"
+     * off the attempt count alone hands the UI an enabled button that answers
+     * 422 -- which is exactly what it used to do.
+     */
+    public function studentCanStartAttempt(int $remainingAttempts, bool $assignmentArchived = false): bool
+    {
+        return !$assignmentArchived
+            && $remainingAttempts > 0
+            && $this->isWithinScheduleWindow()
+            && $this->hasQuestionSet();
     }
 
     /**

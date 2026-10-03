@@ -194,7 +194,7 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                     $assignedExam->student_submitted_attempts = $submittedAttemptCount;
                     $assignedExam->student_max_attempts = $maxAllowedAttempts;
                     $assignedExam->student_attempts_remaining = $remainingAttempts;
-                    $assignedExam->student_can_start_attempt = !$archivedAssignment && $remainingAttempts > 0;
+                    $assignedExam->student_can_start_attempt = $assignedExam->studentCanStartAttempt($remainingAttempts, $archivedAssignment);
                     $assignedExam->room_assignment_archived = $archivedAssignment;
 
                     return $assignedExam;

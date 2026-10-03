@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use App\Support\SystemSettings;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Support\Str;
 
@@ -22,7 +23,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Scoped, not a singleton: the maintenance lookup is memoised for the
+        // life of one request and thrown away after it, so a persistent worker
+        // never serves the next request yesterday's answer.
+        $this->app->scoped(SystemSettings::class);
     }
 
     /**
