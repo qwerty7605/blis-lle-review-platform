@@ -47,17 +47,72 @@
       </div>
 
       <nav class="layout-nav">
-        <button
-          v-for="item in navItems"
-          :key="item.routeName"
-          class="layout-nav-item"
-          :class="{ active: currentRouteName === item.routeName }"
-          :aria-current="currentRouteName === item.routeName ? 'page' : undefined"
-          @click="navigate(item.routeName)"
-        >
-          <component :is="item.icon" :size="18" class="layout-nav-icon" />
-          <span v-if="showSidebarLabels" class="layout-nav-label">{{ item.label }}</span>
-        </button>
+        <template v-for="item in navItems" :key="item.routeName">
+          <!--
+            On a phone a student's rooms live here rather than as a list on the
+            Rooms page itself: the page had to spend its first screenful on a
+            room picker before showing any room. Desktop keeps the plain link,
+            where the page has width for a sidebar of its own.
+          -->
+          <div v-if="showRoomsSubnav(item)" class="layout-nav-group">
+            <button
+              type="button"
+              class="layout-nav-item layout-nav-parent"
+              :class="{ active: currentRouteName === item.routeName }"
+              :aria-expanded="roomsExpanded.toString()"
+              aria-controls="layout-nav-rooms"
+              @click="toggleRoomsSubnav"
+            >
+              <component :is="item.icon" :size="18" class="layout-nav-icon" />
+              <span class="layout-nav-label">{{ item.label }}</span>
+              <ChevronDown
+                :size="16"
+                class="layout-nav-caret"
+                :class="{ 'is-open': roomsExpanded }"
+              />
+            </button>
+
+            <div v-show="roomsExpanded" id="layout-nav-rooms" class="layout-nav-rooms">
+              <p v-if="navRoomsLoading" class="layout-nav-rooms-note">Loading rooms...</p>
+
+              <!-- With no rooms the only useful action is reaching the page
+                   that can join one, so the empty state is that link. -->
+              <button
+                v-else-if="navRooms.length === 0"
+                type="button"
+                class="layout-nav-room layout-nav-rooms-empty"
+                @click="navigate(item.routeName)"
+              >
+                <span class="layout-nav-room-name">No rooms joined yet</span>
+                <span class="layout-nav-room-code">Tap to join a room</span>
+              </button>
+
+              <button
+                v-for="room in navRooms"
+                :key="room.id"
+                type="button"
+                class="layout-nav-room"
+                :class="{ active: isActiveRoom(room.id) }"
+                :aria-current="isActiveRoom(room.id) ? 'page' : undefined"
+                @click="openRoom(room.id)"
+              >
+                <span class="layout-nav-room-name">{{ room.name }}</span>
+                <span class="layout-nav-room-code">{{ room.code }}</span>
+              </button>
+            </div>
+          </div>
+
+          <button
+            v-else
+            class="layout-nav-item"
+            :class="{ active: currentRouteName === item.routeName }"
+            :aria-current="currentRouteName === item.routeName ? 'page' : undefined"
+            @click="navigate(item.routeName)"
+          >
+            <component :is="item.icon" :size="18" class="layout-nav-icon" />
+            <span v-if="showSidebarLabels" class="layout-nav-label">{{ item.label }}</span>
+          </button>
+        </template>
       </nav>
 
       <div class="layout-sidebar-footer" v-if="showSidebarLabels">
@@ -108,6 +163,24 @@
         <div id="layout-topbar-actions" class="layout-topbar-actions"></div>
       </header>
 
+      <!--
+        An announcement an administrator wrote is addressed to everyone, so it
+        sits above the page content on every dashboard screen rather than only
+        on the settings form that produced it.
+      -->
+      <div v-if="announcement" class="layout-announcement" role="status">
+        <Megaphone :size="16" class="layout-announcement-icon" />
+        <p>{{ announcement }}</p>
+        <button
+          type="button"
+          class="layout-announcement-dismiss"
+          aria-label="Dismiss announcement"
+          @click="dismissAnnouncement"
+        >
+          <X :size="15" />
+        </button>
+      </div>
+
       <main class="layout-content" :class="{ 'is-fill-screen': isFillScreenRoute }">
         <RouterView />
       </main>
@@ -116,17 +189,21 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import { roomsApi } from '@/api/rooms.api'
+import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import { getDashboardNavItems } from './config/dashboardNavigation'
 import { useCompactLayout } from './composables/useViewport'
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   GraduationCap,
   LogOut,
+  Megaphone,
   Menu,
   X,
 } from 'lucide-vue-next'
@@ -180,6 +257,69 @@ const userInitials = computed(() => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 })
 
+/*
+ * The student's rooms, listed inside the phone nav under the Rooms item.
+ *
+ * Fetched here rather than shared with the Rooms page's module: /rooms is a
+ * small payload, and reaching into that module's state would couple the shell
+ * to a view it otherwise knows nothing about. Re-fetched each time the drawer
+ * opens, which is both the moment the list is about to be read and the cheapest
+ * point to notice a room was joined or left since last time.
+ */
+const navRooms = ref([])
+const navRoomsLoading = ref(false)
+const roomsExpanded = ref(false)
+
+const isStudent = computed(() => normalizedRole.value === 'student')
+const activeRoomId = computed(() => {
+  const roomId = Number(route.query?.room)
+  return Number.isFinite(roomId) && roomId > 0 ? roomId : null
+})
+
+function showRoomsSubnav(item) {
+  return isMobileViewport.value && isStudent.value && item.routeName === 'dashboard-rooms'
+}
+
+function isActiveRoom(roomId) {
+  return currentRouteName.value === 'dashboard-rooms' && activeRoomId.value === roomId
+}
+
+async function loadNavRooms() {
+  if (!isStudent.value) return
+
+  navRoomsLoading.value = true
+
+  try {
+    const { data } = await roomsApi.list()
+    navRooms.value = data?.rooms ?? []
+  } catch {
+    // The nav still works without the list; the Rooms page reports the error.
+    navRooms.value = []
+  } finally {
+    navRoomsLoading.value = false
+  }
+}
+
+function toggleRoomsSubnav() {
+  roomsExpanded.value = !roomsExpanded.value
+
+  if (roomsExpanded.value) loadNavRooms()
+}
+
+function openRoom(roomId) {
+  router.push({ name: 'dashboard-rooms', query: { room: String(roomId) } })
+  closeMobileNav({ restoreFocus: false })
+}
+
+// Opening the drawer while already on Rooms shows the list expanded, so the
+// room you are in is visible without an extra tap.
+watch(drawerOpen, (open) => {
+  if (!open || !isStudent.value) return
+
+  if (currentRouteName.value === 'dashboard-rooms') roomsExpanded.value = true
+  if (roomsExpanded.value) loadNavRooms()
+})
+
 async function openMobileNav() {
   if (!isMobileViewport.value) return
 
@@ -205,6 +345,49 @@ function navigate(name) {
 
   closeMobileNav({ restoreFocus: false })
 }
+
+/*
+ * The administrator's announcement banner. Dismissal is remembered per text,
+ * so clearing one notice does not also hide the next one an admin posts --
+ * and it is per browser, which is all localStorage can honestly offer.
+ */
+const announcementText = ref('')
+const dismissedAnnouncement = ref(readDismissedAnnouncement())
+
+const announcement = computed(() =>
+  announcementText.value && announcementText.value !== dismissedAnnouncement.value
+    ? announcementText.value
+    : '',
+)
+
+function readDismissedAnnouncement() {
+  try {
+    return localStorage.getItem('lle.dismissedAnnouncement') ?? ''
+  } catch {
+    // Private windows and blocked site data both throw here; a banner that
+    // reappears is a far smaller problem than a layout that fails to render.
+    return ''
+  }
+}
+
+function dismissAnnouncement() {
+  dismissedAnnouncement.value = announcementText.value
+
+  try {
+    localStorage.setItem('lle.dismissedAnnouncement', announcementText.value)
+  } catch {
+    // Not persisted; it stays dismissed for this page view either way.
+  }
+}
+
+onMounted(async () => {
+  try {
+    const { data } = await settingsApi.getPublicNotice()
+    announcementText.value = String(data?.announcement_banner ?? '').trim()
+  } catch {
+    // A missing notice is not worth an error state on every dashboard page.
+  }
+})
 
 async function handleLogout() {
   await auth.logout()
@@ -556,38 +739,101 @@ onBeforeUnmount(() => {
    bar, a two-line title banner and, when opened, the whole menu above the
    content -- about 180px before the page began, and 470px more with the
    menu open. */
+.layout-announcement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 24px;
+  margin-top: 16px;
+  padding: 11px 12px;
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(240, 208, 128, 0.16);
+  color: var(--lnu-text, #1b1f3b);
+}
+
+.layout-announcement-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--lnu-navy, #1a237e);
+}
+
+.layout-announcement p {
+  margin: 0;
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.45;
+  /* An admin can paste a long unbroken string; it must not widen the page. */
+  overflow-wrap: anywhere;
+}
+
+.layout-announcement-dismiss {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--lnu-text-muted, #5b6079);
+  cursor: pointer;
+}
+
+.layout-announcement-dismiss:hover {
+  background: rgba(13, 21, 71, 0.08);
+  color: var(--lnu-text, #1b1f3b);
+}
+
 @media (max-width: 900px) {
   .layout-shell {
     display: block;
   }
 
+  .layout-announcement {
+    margin: 12px 16px 0;
+  }
+
+  /* Full-screen overlay navigation: the menu is the whole screen while it is
+     open, sliding in from the left. A part-width drawer left a strip of the
+     page showing beside it, which on a phone reads as a rendering glitch
+     rather than a menu -- and gave the nav items barely half the width they
+     needed, so labels wrapped. */
   .layout-sidebar {
     position: fixed;
     top: 0;
     bottom: 0;
     left: 0;
     z-index: 1100;
-    width: min(300px, 86vw);
+    width: 100%;
+    max-width: 100%;
     height: 100vh;
     height: 100dvh;
-    padding: 14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+    padding:
+      calc(14px + env(safe-area-inset-top, 0px))
+      calc(16px + env(safe-area-inset-right, 0px))
+      calc(14px + env(safe-area-inset-bottom, 0px))
+      calc(16px + env(safe-area-inset-left, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
     transform: translateX(-100%);
     visibility: hidden;
-    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.24s;
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.26s;
   }
 
   .layout-sidebar.is-open {
     transform: none;
     visibility: visible;
-    box-shadow: 12px 0 40px rgba(6, 10, 30, 0.32);
-    transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
   .layout-sidebar-top {
     justify-content: space-between;
     gap: 10px;
+    padding-bottom: 14px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(240, 208, 128, 0.18);
   }
 
   .layout-drawer-close {
@@ -597,17 +843,124 @@ onBeforeUnmount(() => {
     border-radius: 12px;
   }
 
+  /* Full width means the list can breathe: bigger hit areas, and the nav
+     fills the space instead of sitting in a narrow column. */
+  .layout-nav {
+    gap: 6px;
+    padding-top: 10px;
+  }
+
   .layout-nav-item {
-    height: 48px;
-    padding: 0 12px;
+    min-height: 52px;
+    padding: 0 14px;
+    border-radius: 12px;
+    font-size: 16px;
   }
 
   .layout-nav-label {
+    font-size: 16px;
+  }
+
+  /* ---- Rooms sub-navigation (phone only) ---- */
+  .layout-nav-group {
+    display: grid;
+    gap: 4px;
+  }
+
+  .layout-nav-parent .layout-nav-label {
+    flex: 1;
+    text-align: left;
+  }
+
+  .layout-nav-caret {
+    flex-shrink: 0;
+    opacity: 0.75;
+    transition: transform 0.2s ease;
+  }
+
+  .layout-nav-caret.is-open {
+    transform: rotate(180deg);
+  }
+
+  /*
+   * Capped and scrollable: a student in a dozen rooms would otherwise push
+   * Review Bot and Analytics off the bottom of the menu. The cap is in vh so
+   * it stays proportionate on a short phone in landscape.
+   */
+  .layout-nav-rooms {
+    max-height: min(46vh, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    display: grid;
+    gap: 4px;
+    margin: 2px 0 6px;
+    padding: 6px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.16);
+    border: 1px solid rgba(240, 208, 128, 0.14);
+  }
+
+  .layout-nav-room {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    min-height: 48px;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.86);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .layout-nav-room:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .layout-nav-room.active {
+    background: rgba(240, 208, 128, 0.17);
+    color: var(--lnu-gold-light);
+  }
+
+  .layout-nav-room-name {
     font-size: 15px;
+    font-weight: 600;
+    /* A long room name truncates rather than wrapping to three lines. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .layout-nav-room-code {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    opacity: 0.68;
+  }
+
+  .layout-nav-rooms-note {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.64);
+  }
+
+  .layout-nav-rooms-empty .layout-nav-room-name {
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  /* Pinned to the bottom of the overlay rather than floating under a short
+     nav list. */
+  .layout-sidebar-footer {
+    margin-top: auto;
+    padding-top: 16px;
   }
 
   .logout-btn {
-    height: 44px;
+    height: 48px;
   }
 
   .layout-scrim {

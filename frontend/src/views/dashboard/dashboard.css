@@ -2735,9 +2735,23 @@
   z-index: 50;
   background: rgba(6, 10, 30, 0.58);
   display: flex;
-  align-items: center;
+  /*
+   * flex-start here with `margin: auto` on the card below, rather than
+   * align-items: center. A centred flex item that grows taller than its
+   * container overflows equally in BOTH directions, and the half that goes
+   * past the top edge cannot be scrolled back to -- so a long form lost its
+   * heading off the top and its Save button off the bottom, with no way to
+   * reach either. `margin: auto` still centres it whenever it does fit.
+   */
+  align-items: flex-start;
   justify-content: center;
-  padding: 16px;
+  padding:
+    calc(16px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .exam-attempt-modal-backdrop {
@@ -2752,6 +2766,9 @@
 
 .modal-card {
   width: min(520px, 100%);
+  /* Centres while there is room, and simply sits at the top (scrollable)
+     once there is not -- see the note on .modal-backdrop. */
+  margin: auto;
   border-radius: 14px;
   border: 1px solid rgba(26, 35, 126, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(253, 246, 227, 0.94));
@@ -3779,46 +3796,6 @@
   font-size: 13px;
 }
 
-.user-directory-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-}
-
-.directory-user-card {
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(246, 247, 251, 0.96));
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.directory-user-card.archived {
-  border-style: dashed;
-  background: linear-gradient(180deg, rgba(242, 244, 248, 0.98), rgba(236, 239, 245, 0.96));
-}
-
-.directory-user-copy {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.directory-user-copy strong {
-  display: block;
-  font-size: 15px;
-  color: var(--lnu-navy-deep);
-}
-
-.directory-user-copy p {
-  margin: 0;
-  color: var(--lnu-text-muted);
-  font-size: 13px;
-  word-break: break-word;
-}
-
 .directory-table-wrap {
   margin: 14px 18px;
   border: 1px solid rgba(13, 21, 71, 0.12);
@@ -3852,6 +3829,70 @@
   padding: 0;
   background: linear-gradient(180deg, #e4e5f0, #fbfbfd);
   color: var(--lnu-navy-deep);
+}
+
+/*
+ * The admin Users table. Narrower than the Students table above because it
+ * carries eight columns rather than twelve, but it reuses every other
+ * .directory-table rule so the two user lists in this system read the same.
+ */
+.users-directory-table {
+  min-width: 1060px;
+}
+
+/* thead cells carry no padding (the sort button supplies it on the Students
+   table); this one has plain text headers, so the padding goes back. */
+.users-directory-table thead th {
+  padding: 11px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * One line per person. The shared .directory-table rule aligns cells to the
+ * top, which is right for the Students table (its cells stack a value over a
+ * caption) but leaves a row of single-line chips looking unbalanced here.
+ */
+.users-directory-table tbody td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  vertical-align: middle;
+}
+
+.users-directory-table tbody tr:hover {
+  background: rgba(26, 35, 126, 0.035);
+}
+
+/* An address is the one cell that can be arbitrarily long; it truncates and
+   keeps its full value in a title attribute rather than widening the row. */
+.directory-table-email-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-table-actions-col {
+  text-align: right;
+}
+
+/*
+ * Specificity is deliberate: .management-actions sets flex-wrap: wrap and is
+ * defined further down this file, so a single-class rule here lost to it and
+ * the three buttons wrapped onto a second line -- which is what made every
+ * row of this table about 120px tall instead of about 48px.
+ */
+.users-directory-table .directory-table-actions.management-actions {
+  width: auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.directory-table-actions .ghost-btn {
+  white-space: nowrap;
+  padding: 0 9px;
 }
 
 /* The identity column stays pinned so scrolling right never leaves a row anonymous. */
@@ -4376,8 +4417,7 @@
     grid-template-columns: 1fr;
   }
 
-  .room-roster-grid,
-  .user-directory-grid {
+  .room-roster-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -4827,7 +4867,6 @@
 
   /* .user-directory-summary is a 2x2 grid on phones -- see "Phone layouts"
      at the end of this file. */
-  .user-directory-grid,
   .room-roster-grid {
     grid-template-columns: 1fr;
   }

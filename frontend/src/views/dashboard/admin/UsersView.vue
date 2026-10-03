@@ -117,9 +117,17 @@
               <h4>{{ section.title }}</h4>
               <p>{{ section.description }}</p>
             </div>
+            <!-- The per-year group cards used to carry these counts. -->
+            <span class="pill" :class="section.countTone">{{ formatCount(sectionTotal(section)) }}</span>
           </header>
 
-          <div class="directory-group-stack">
+          <!--
+            Phones keep the per-year groups: their headings stick to the app
+            bar while you scroll, which is the only wayfinding a long list has
+            on a small screen. One compact row per person, with everything you
+            can do to them one tap away in the action sheet.
+          -->
+          <div v-if="isPhone" class="directory-group-stack">
             <article
               v-for="group in section.groups"
               :key="group.key"
@@ -134,9 +142,7 @@
                 <span class="pill" :class="section.countTone">{{ formatCount(group.total) }}</span>
               </div>
 
-              <!-- Phones: one compact row per person; everything you can do
-                   to them is one tap away in the action sheet. -->
-              <ul v-if="isPhone" class="directory-row-list">
+              <ul class="directory-row-list">
                 <li v-for="user in group.users" :key="user.id">
                   <button
                     type="button"
@@ -159,69 +165,101 @@
                   </button>
                 </li>
               </ul>
-
-              <div v-else class="user-directory-grid">
-                <article
-                  v-for="user in group.users"
-                  :key="user.id"
-                  class="directory-user-card"
-                  :class="{ archived: section.key === 'archived' }"
-                >
-                  <div class="directory-user-copy">
-                    <strong>{{ user.name }}</strong>
-                    <p v-if="section.key === 'management'">{{ displayMemberRole(user.role) }}</p>
-                    <p v-else-if="user.student_id">Student ID: {{ user.student_id }}</p>
-                    <p>{{ user.email }}</p>
-                    <p v-if="section.key === 'archived' && user.archived_at">
-                      Archived {{ new Date(user.archived_at).toLocaleDateString() }}
-                    </p>
-                  </div>
-
-                  <div class="management-inline">
-                    <span v-if="section.key === 'management'" class="pill neutral">
-                      {{ displayMemberRole(user.role) }}
-                    </span>
-                    <template v-else-if="section.key === 'archived'">
-                      <span class="pill neutral">Archived</span>
-                      <span class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
-                      <span class="pill neutral">{{ studentStatusLabel(user.student_status) }}</span>
-                    </template>
-                    <span v-else class="pill navy">{{ yearLevelLabel(user.year_level) }}</span>
-                    <span class="pill" :class="accountState(user).tone">
-                      {{ accountState(user).label }}
-                    </span>
-                  </div>
-
-                  <div class="management-actions compact">
-                    <button type="button" class="ghost-btn" @click="openEditUserModal(user)">
-                      <Pencil :size="15" />
-                      Edit
-                    </button>
-                    <template v-if="section.key !== 'management'">
-                      <button
-                        type="button"
-                        class="ghost-btn"
-                        :disabled="usersSaving"
-                        @click="handleToggleUserArchive(user, section.key !== 'archived')"
-                      >
-                        <ArchiveRestore :size="15" />
-                        {{ section.key === 'archived' ? 'Restore' : 'Archive' }}
-                      </button>
-                      <button
-                        type="button"
-                        class="ghost-btn"
-                        :disabled="usersRecovering"
-                        @click="openRecoverUserModal(user)"
-                      >
-                        <ShieldCheck :size="15" />
-                        Recover
-                      </button>
-                    </template>
-                  </div>
-                </article>
-              </div>
             </article>
           </div>
+
+          <!--
+            Everything wider: the same directory table the Students screen
+            uses, so the two user lists in this system read the same way. Year
+            becomes a column rather than a heading, which is what replaced the
+            per-year card stacks this used to render at this width.
+          -->
+          <div v-else class="directory-table-wrap">
+            <table class="directory-table users-directory-table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <!-- Role is a column only where it actually varies: in the
+                       student sections every row would read "Student". -->
+                  <th v-if="section.key === 'management'" scope="col">Role</th>
+                  <template v-else>
+                    <th scope="col">Student ID</th>
+                    <th scope="col">Year</th>
+                    <th scope="col">Status</th>
+                  </template>
+                  <th scope="col">Account</th>
+                  <th scope="col">Email</th>
+                  <th scope="col" class="directory-table-actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="user in sectionRows(section)"
+                  :key="user.id"
+                  :class="{ 'is-archived': section.key === 'archived' }"
+                >
+                  <td class="directory-table-name-cell">
+                    <strong>{{ user.name }}</strong>
+                    <span v-if="section.key === 'archived' && user.archived_at" class="pill danger">
+                      Archived {{ new Date(user.archived_at).toLocaleDateString() }}
+                    </span>
+                  </td>
+                  <td v-if="section.key === 'management'">
+                    <span class="pill neutral">{{ displayMemberRole(user.role) }}</span>
+                  </td>
+                  <template v-else>
+                    <td>{{ user.student_id || '—' }}</td>
+                    <td>
+                      <span class="pill navy">{{ yearLevelShortLabel(user.year_level) }}</span>
+                    </td>
+                    <td>
+                      <span
+                        class="pill"
+                        :class="user.student_status === 'enrolled' ? 'success' : 'neutral'"
+                      >{{ studentStatusLabel(user.student_status) }}</span>
+                    </td>
+                  </template>
+                  <td>
+                    <!-- The short form ("Pending", not "Pending verification"):
+                         this column is a status chip, not a sentence. -->
+                    <span class="pill" :class="accountState(user).tone" :title="accountState(user).label">
+                      {{ accountState(user).short }}
+                    </span>
+                  </td>
+                  <td class="directory-table-email-cell" :title="user.email">{{ user.email }}</td>
+                  <td>
+                    <div class="management-actions compact directory-table-actions">
+                      <button type="button" class="ghost-btn" @click="openEditUserModal(user)">
+                        <Pencil :size="15" />
+                        Edit
+                      </button>
+                      <template v-if="section.key !== 'management'">
+                        <button
+                          type="button"
+                          class="ghost-btn"
+                          :disabled="usersSaving"
+                          @click="handleToggleUserArchive(user, section.key !== 'archived')"
+                        >
+                          <ArchiveRestore :size="15" />
+                          {{ section.key === 'archived' ? 'Restore' : 'Archive' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="ghost-btn"
+                          :disabled="usersRecovering"
+                          @click="openRecoverUserModal(user)"
+                        >
+                          <ShieldCheck :size="15" />
+                          Recover
+                        </button>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
         </section>
 
         <div v-if="isPhone" class="directory-load-more">
@@ -567,8 +605,40 @@ function isStudent(user) {
   return String(user?.role ?? '').toLowerCase() === 'student'
 }
 
+/**
+ * "1st" / "--" rather than "1st Year" / "Year level not set".
+ *
+ * The long form is right on a card, where it stands alone; in a table column
+ * headed "Year" it just makes every row wider than its content needs. Matches
+ * the Students screen, which already renders the short form.
+ */
+function yearLevelShortLabel(value) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric) || numeric < 1) return '--'
+
+  const suffixes = ['th', 'st', 'nd', 'rd']
+  return `${numeric}${suffixes[numeric] ?? 'th'}`
+}
+
 function formatCount(value) {
   return Number(value ?? 0).toLocaleString()
+}
+
+/**
+ * Every user in a section, flattened out of its per-year groups.
+ *
+ * The API still returns the directory grouped by year level (and the group
+ * totals still drive the section headings), but once Year is a column of the
+ * table those stacks were a second, redundant level of nesting around what is
+ * really one list.
+ */
+function sectionRows(section) {
+  return (section?.groups ?? []).flatMap((group) => group.users ?? [])
+}
+
+/** Whole-directory total for a section, not just the page being shown. */
+function sectionTotal(section) {
+  return (section?.groups ?? []).reduce((sum, group) => sum + Number(group.total ?? 0), 0)
 }
 
 const {

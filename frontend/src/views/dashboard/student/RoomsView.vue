@@ -26,6 +26,19 @@
     </div>
 
     <div v-else class="rooms-grid">
+      <Teleport to="#layout-topbar-actions" defer :disabled="!isCompact">
+        <button
+          v-if="isCompact"
+          type="button"
+          class="appbar-icon-action"
+          aria-label="Join room"
+          :disabled="roomLoading"
+          @click="openJoinRoomModal"
+        >
+          <DoorOpen :size="20" />
+        </button>
+      </Teleport>
+
       <aside class="surface-card rooms-list-card">
         <div class="rooms-list-head">
           <span class="rooms-list-label">My Rooms</span>
@@ -679,6 +692,13 @@ import {
 import { examDeliveryModeLabel, formatLongDate, formatRemainingDuration, formatTimeOnly } from '../composables/useDashboardFormatters'
 import { examScheduleEnd, isStudentExamEnded } from '../composables/studentExamAvailability'
 import { useRoomsModule } from '../composables/useRoomsModule'
+import { useCompactLayout } from '../composables/useViewport'
+
+// The room picker lives in the nav drawer at this width (see
+// DashboardLayout), so the page's Join Room action moves to the app bar --
+// otherwise hiding the picker would take the only way to join a second room
+// with it.
+const isCompact = useCompactLayout()
 
 // Local, not composable state -- purely a "show me the archived exams in
 // this room too" reveal, reset per page load like every other UI-only toggle
@@ -1518,6 +1538,17 @@ const examTimerTone = computed(() => {
 @media (max-width: 900px) {
   .rooms-grid {
     grid-template-columns: 1fr;
+  }
+
+  /*
+   * The room picker moves into the nav drawer on phones (see the Rooms
+   * sub-navigation in DashboardLayout), so the page no longer spends its
+   * first screenful on a list before showing the room you are actually in.
+   * The join action moves with it -- the empty state above still offers
+   * "Join Room" for someone with no rooms yet.
+   */
+  .rooms-list-card {
+    display: none;
   }
 
   .room-side-column {

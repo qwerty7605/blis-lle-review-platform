@@ -76,6 +76,39 @@ class RegistrationEmailVerificationTest extends TestCase
         Notification::assertSentTo($user, VerifyEmail::class);
     }
 
+    public function test_a_self_registered_student_lands_in_the_enrolled_cohort(): void
+    {
+        // A null student_status reads as "--" in the staff directory and
+        // matches no student_status filter, so the students who just signed up
+        // would be the ones staff cannot find. admission_year is derived the
+        // way the lifecycle migration backfilled it: a second year signing up
+        // this year was admitted last year.
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload(['year_level' => 2]))
+            ->assertStatus(201);
+
+        $user = User::firstWhere('email', 'juan@lnu.edu.ph');
+
+        $this->assertSame(User::STUDENT_STATUS_ENROLLED, $user->student_status);
+        $this->assertNull($user->archived_at, 'an enrolled student is not archived');
+        $this->assertSame(now()->year - 1, $user->admission_year);
+    }
+
+    public function test_a_self_registered_student_is_visible_under_the_enrolled_filter(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload())->assertStatus(201);
+
+        $staff = User::factory()->create(['role' => User::ROLE_STAFF_MASTER_EXAMINER]);
+        Sanctum::actingAs($staff);
+
+        $this->getJson('/api/students/directory?student_status=enrolled')
+            ->assertOk()
+            ->assertJsonPath('students.0.email', 'juan@lnu.edu.ph');
+    }
+
     public function test_login_is_refused_while_the_address_is_unverified(): void
     {
         Notification::fake();

@@ -143,7 +143,7 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
                         'student_submitted_attempts' => $submittedAttemptCount,
                         'student_max_attempts' => $maxAllowedAttempts,
                         'student_attempts_remaining' => $remainingAttempts,
-                        'student_can_start_attempt' => $remainingAttempts > 0,
+                        'student_can_start_attempt' => $assignedExam->studentCanStartAttempt($remainingAttempts),
                     ];
                 })
                 ->values();
@@ -488,7 +488,7 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         // Weak Areas" already uses (see DashboardAnalyticsService), reused
         // here so "What To Review Next" can name the actual weakest
         // subtopic, not just the subject it lives under.
-        'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($user),
+        'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($user) ?: null,
         // The same resolution widened into a ranked queue (worst first) for
         // the Analytics page's study plan, with a Review Bot link target per
         // row.

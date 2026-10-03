@@ -2,6 +2,7 @@
 
 use App\Models\LleResult;
 use App\Models\User;
+use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
@@ -44,13 +45,11 @@ Route::middleware([])->group(function () use ($ensureActive, $canManageRooms, $r
             )
             ->when(
                 filled($validated['search'] ?? null),
-                fn ($query) => $query->whereHas('student', function ($student) use ($validated) {
-                    $search = trim((string) $validated['search']);
-
-                    $student->where('name', 'like', "%{$search}%")
-                        ->orWhere('student_id', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
-                }),
+                fn ($query) => $query->whereHas('student', fn ($student) => Search::whereAnyContains(
+                    $student,
+                    ['name', 'student_id', 'email'],
+                    trim((string) $validated['search']),
+                )),
             )
             ->orderByDesc('exam_year')
             ->orderBy('id')
