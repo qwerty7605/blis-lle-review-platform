@@ -9,6 +9,7 @@ use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\MachineLearning\MasteryProfileBuilder;
+use App\Support\Search;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -172,7 +173,11 @@ class DashboardAnalyticsService
                 ->filter(fn (array $subject) => (float) ($subject['score'] ?? 0) < self::PASSING_SCORE)
                 ->values()
                 ->all(),
-            'weak_area' => $weakArea,
+            // An object or null, never []: an empty PHP array serialises to a
+            // JSON array, and [] is truthy in JavaScript, so a caller testing
+            // `if (weak_area)` would render a recommendation block with
+            // nothing in it.
+            'weak_area' => $weakArea ?: null,
             'score_history' => $scoreHistory,
             'recent_activity' => $recentActivity,
             'generated_at' => now(),
@@ -620,11 +625,11 @@ class DashboardAnalyticsService
 
         return $query
             ->where('users.role', User::ROLE_STUDENT)
-            ->when($search !== '', fn ($outer) => $outer->where(function ($inner) use ($search) {
-                $inner->where('users.name', 'like', "%{$search}%")
-                    ->orWhere('users.email', 'like', "%{$search}%")
-                    ->orWhere('users.student_id', 'like', "%{$search}%");
-            }))
+            ->when($search !== '', fn ($outer) => Search::whereAnyContains(
+                $outer,
+                ['users.name', 'users.email', 'users.student_id'],
+                $search,
+            ))
             ->when(
                 filled($filters['year_level'] ?? null),
                 fn ($q) => $q->where('users.year_level', (int) $filters['year_level']),

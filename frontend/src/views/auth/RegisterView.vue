@@ -28,7 +28,7 @@
           <p class="subtitle">Complete your details to start using the platform.</p>
         </header>
 
-        <div v-if="apiError" class="alert alert-danger">{{ apiError }}</div>
+        <div v-if="apiError" class="alert alert-danger" role="alert">{{ apiError }}</div>
 
         <div v-if="pendingEmail" class="alert alert-success">
           <p><strong>Almost there.</strong></p>
@@ -43,25 +43,34 @@
 
         <form v-if="!pendingEmail" class="auth-form" @submit.prevent="handleSubmit">
           <div class="field-grid auth-form-grid">
-            <label class="field-group">
-              <span class="field-label">First name</span>
+            <div class="field-group">
+              <label class="field-label" :for="'register-first_name'">First name</label>
               <div class="field-wrap">
                 <UserRound :size="17" class="field-icon" />
                 <input
+                  id="register-first_name"
                   v-model="form.first_name"
                   type="text"
                   class="field-input"
+                  :class="{ 'field-input-error': fieldErrors.first_name }"
                   placeholder="e.g. Juan"
                   autocomplete="given-name"
+                  :aria-invalid="Boolean(fieldErrors.first_name)"
+                  :aria-describedby="fieldErrors.first_name ? 'register-first_name-error' : undefined"
+                  @input="clearFieldError('first_name')"
                 />
               </div>
-            </label>
+              <p v-if="fieldErrors.first_name" :id="'register-first_name-error'" class="field-error" role="alert">
+                {{ fieldErrors.first_name }}
+              </p>
+            </div>
 
-            <label class="field-group">
-              <span class="field-label">Middle name (optional)</span>
+            <div class="field-group">
+              <label class="field-label" for="register-middle_name">Middle name (optional)</label>
               <div class="field-wrap">
                 <UserRound :size="17" class="field-icon" />
                 <input
+                  id="register-middle_name"
                   v-model="form.middle_name"
                   type="text"
                   class="field-input"
@@ -69,116 +78,176 @@
                   autocomplete="additional-name"
                 />
               </div>
-            </label>
+            </div>
           </div>
 
           <div class="field-grid auth-form-grid">
-            <label class="field-group">
-              <span class="field-label">Last name</span>
+            <div class="field-group">
+              <label class="field-label" :for="'register-last_name'">Last name</label>
               <div class="field-wrap">
                 <UserRound :size="17" class="field-icon" />
                 <input
+                  id="register-last_name"
                   v-model="form.last_name"
                   type="text"
                   class="field-input"
+                  :class="{ 'field-input-error': fieldErrors.last_name }"
                   placeholder="e.g. Dela Cruz"
                   autocomplete="family-name"
+                  :aria-invalid="Boolean(fieldErrors.last_name)"
+                  :aria-describedby="fieldErrors.last_name ? 'register-last_name-error' : undefined"
+                  @input="clearFieldError('last_name')"
                 />
               </div>
-            </label>
+              <p v-if="fieldErrors.last_name" :id="'register-last_name-error'" class="field-error" role="alert">
+                {{ fieldErrors.last_name }}
+              </p>
+            </div>
 
-            <label class="field-group">
-              <span class="field-label">Student ID</span>
+            <div class="field-group">
+              <label class="field-label" :for="'register-student_id'">Student ID</label>
               <div class="field-wrap">
                 <Hash :size="17" class="field-icon" />
                 <input
+                  id="register-student_id"
                   v-model="form.student_id"
                   type="text"
                   class="field-input"
+                  :class="{ 'field-input-error': fieldErrors.student_id }"
                   placeholder="e.g. 2300001"
+                  autocomplete="off"
+                  :aria-invalid="Boolean(fieldErrors.student_id)"
+                  :aria-describedby="fieldErrors.student_id ? 'register-student_id-error' : undefined"
                   inputmode="numeric"
                   pattern="[0-9]*"
-                  autocomplete="off"
+                  @input="clearFieldError('student_id')"
                 />
               </div>
-            </label>
+              <p v-if="fieldErrors.student_id" :id="'register-student_id-error'" class="field-error" role="alert">
+                {{ fieldErrors.student_id }}
+              </p>
+            </div>
           </div>
 
-          <label class="field-group">
-            <span class="field-label">Current year level</span>
+          <div class="field-group">
+            <label class="field-label" for="register-year_level">Current year level</label>
             <div class="field-wrap field-wrap-select">
               <GraduationCap :size="17" class="field-icon" />
-              <select v-model="form.year_level" class="field-input field-select">
+              <select
+                id="register-year_level"
+                v-model="form.year_level"
+                class="field-input field-select"
+                :class="{ 'field-input-error': fieldErrors.year_level }"
+                :aria-invalid="Boolean(fieldErrors.year_level)"
+                :aria-describedby="fieldErrors.year_level ? 'register-year_level-error' : undefined"
+                @change="clearFieldError('year_level')"
+              >
                 <option value="">Select year level</option>
                 <option v-for="level in yearLevelOptions" :key="level.value" :value="level.value">
                   {{ level.label }}
                 </option>
               </select>
             </div>
-          </label>
+            <p v-if="fieldErrors.year_level" id="register-year_level-error" class="field-error" role="alert">
+              {{ fieldErrors.year_level }}
+            </p>
+          </div>
 
-          <label class="field-group">
-            <span class="field-label">Email address</span>
+          <div class="field-group">
+            <label class="field-label" for="register-email">Email address</label>
             <div class="field-wrap">
               <Mail :size="17" class="field-icon" />
               <input
+                id="register-email"
                 v-model="form.email"
                 type="email"
                 class="field-input"
+                :class="{ 'field-input-error': fieldErrors.email }"
                 placeholder="you@lnu.edu.ph"
                 autocomplete="email"
+                :aria-invalid="Boolean(fieldErrors.email)"
+                :aria-describedby="fieldErrors.email ? 'register-email-error' : undefined"
+                @input="clearFieldError('email')"
               />
             </div>
-          </label>
+            <p v-if="fieldErrors.email" id="register-email-error" class="field-error" role="alert">
+              {{ fieldErrors.email }}
+            </p>
+          </div>
 
           <div class="field-grid">
-            <label class="field-group">
-              <span class="field-label">Password</span>
+            <div class="field-group">
+              <label class="field-label" for="register-password">Password</label>
               <div class="field-wrap">
                 <LockKeyhole :size="17" class="field-icon" />
                 <input
+                  id="register-password"
                   v-model="form.password"
                   :type="showPassword ? 'text' : 'password'"
                   class="field-input field-input-with-toggle"
+                  :class="{ 'field-input-error': fieldErrors.password }"
                   placeholder="Min. 8 characters"
                   autocomplete="new-password"
+                  :aria-invalid="Boolean(fieldErrors.password)"
+                  :aria-describedby="fieldErrors.password ? 'register-password-error' : undefined"
+                  @input="clearFieldError('password')"
                 />
                 <button
                   type="button"
                   class="field-toggle"
-                  aria-label="Toggle password visibility"
+                  :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                  :aria-pressed="showPassword"
                   @click="showPassword = !showPassword"
                 >
                   <EyeOff v-if="showPassword" :size="16" />
                   <Eye v-else :size="16" />
                 </button>
               </div>
-            </label>
+              <p v-if="fieldErrors.password" id="register-password-error" class="field-error" role="alert">
+                {{ fieldErrors.password }}
+              </p>
+            </div>
 
-            <label class="field-group">
-              <span class="field-label">Confirm password</span>
+            <div class="field-group">
+              <label class="field-label" for="register-password_confirmation">Confirm password</label>
               <div class="field-wrap">
                 <LockKeyhole :size="17" class="field-icon" />
                 <input
+                  id="register-password_confirmation"
                   v-model="form.password_confirmation"
                   :type="showPasswordConfirmation ? 'text' : 'password'"
                   class="field-input field-input-with-toggle"
-                  :class="{ 'field-input-error': pwMismatch }"
+                  :class="{ 'field-input-error': pwMismatch || fieldErrors.password_confirmation }"
                   placeholder="Re-enter password"
                   autocomplete="new-password"
+                  :aria-invalid="Boolean(pwMismatch || fieldErrors.password_confirmation)"
+                  :aria-describedby="
+                    pwMismatch || fieldErrors.password_confirmation
+                      ? 'register-password_confirmation-error'
+                      : undefined
+                  "
+                  @input="clearFieldError('password_confirmation')"
                 />
                 <button
                   type="button"
                   class="field-toggle"
-                  aria-label="Toggle confirm password visibility"
+                  :aria-label="showPasswordConfirmation ? 'Hide password' : 'Show password'"
+                  :aria-pressed="showPasswordConfirmation"
                   @click="showPasswordConfirmation = !showPasswordConfirmation"
                 >
                   <EyeOff v-if="showPasswordConfirmation" :size="16" />
                   <Eye v-else :size="16" />
                 </button>
               </div>
-              <span v-if="pwMismatch" class="field-error">Passwords do not match.</span>
-            </label>
+              <p
+                v-if="pwMismatch || fieldErrors.password_confirmation"
+                id="register-password_confirmation-error"
+                class="field-error"
+                role="alert"
+              >
+                {{ pwMismatch ? 'Passwords do not match.' : fieldErrors.password_confirmation }}
+              </p>
+            </div>
           </div>
 
           <div class="pw-strength" v-if="form.password">
@@ -197,7 +266,14 @@
 
           <div class="terms-section">
             <label class="terms-wrap">
-              <input type="checkbox" v-model="form.agreed" :disabled="!canAgree" />
+              <input
+                id="register-agreed"
+                type="checkbox"
+                v-model="form.agreed"
+                :disabled="!canAgree"
+                :aria-invalid="Boolean(fieldErrors.agreed)"
+                @change="clearFieldError('agreed')"
+              />
               <span>
                 I agree to the
                 <a
@@ -218,11 +294,12 @@
               </span>
             </label>
             <span v-if="!canAgree" class="terms-helper">Open and read both documents before agreeing.</span>
+            <p v-if="fieldErrors.agreed" class="field-error" role="alert">{{ fieldErrors.agreed }}</p>
           </div>
 
-          <button type="submit" class="submit-btn" :disabled="isLoading">
-            <span v-if="!isLoading">Create Account</span>
-            <span v-else class="spinner" />
+          <button type="submit" class="submit-btn" :disabled="isLoading" :aria-busy="isLoading">
+            <span v-if="isLoading" class="spinner" aria-hidden="true" />
+            <span>{{ isLoading ? 'Creating account...' : 'Create Account' }}</span>
           </button>
         </form>
 
@@ -316,6 +393,75 @@ const showPassword = ref(false)
 const showPasswordConfirmation = ref(false)
 const isLoading = ref(false)
 const apiError = ref('')
+
+/*
+ * One message per field instead of a single "Please complete all required
+ * fields." above a nine-field form. That banner could not say *which* field
+ * was wrong, so a too-short student ID looked identical to an empty one -- and
+ * the server's own field-level errors ("that student ID is already taken")
+ * were being collapsed into the bare word "Validation failed." on the way in.
+ */
+const fieldErrors = reactive({
+  first_name: '',
+  last_name: '',
+  student_id: '',
+  year_level: '',
+  email: '',
+  password: '',
+  password_confirmation: '',
+  agreed: '',
+})
+
+// Order matters: the first error in this list is the one focused, so the
+// reader lands on the topmost problem rather than an arbitrary one.
+const FIELD_ORDER = [
+  'first_name',
+  'last_name',
+  'student_id',
+  'year_level',
+  'email',
+  'password',
+  'password_confirmation',
+  'agreed',
+]
+
+const hasFieldErrors = computed(() => FIELD_ORDER.some((field) => fieldErrors[field]))
+
+function clearFieldError(field) {
+  fieldErrors[field] = ''
+}
+
+function resetFieldErrors() {
+  FIELD_ORDER.forEach((field) => {
+    fieldErrors[field] = ''
+  })
+}
+
+/*
+ * Laravel answers 422 with { errors: { student_id: ["..."], ... } }. Dropping
+ * that on the floor and showing only `message` is what made every server-side
+ * rejection read as "Validation failed."
+ */
+function applyServerErrors(errors) {
+  let matched = false
+
+  Object.entries(errors ?? {}).forEach(([field, messages]) => {
+    if (!(field in fieldErrors)) return
+
+    fieldErrors[field] = Array.isArray(messages) ? String(messages[0]) : String(messages)
+    matched = true
+  })
+
+  return matched
+}
+
+async function focusFirstError() {
+  const firstField = FIELD_ORDER.find((field) => fieldErrors[field])
+  if (!firstField) return
+
+  await nextTick()
+  document.getElementById(`register-${firstField}`)?.focus()
+}
 const pendingEmail = ref('')
 const activePolicy = ref('')
 const policyBodyRef = ref(null)
@@ -487,6 +633,8 @@ onMounted(() => {
 
 async function handleSubmit() {
   apiError.value = ''
+  resetFieldErrors()
+
   const firstName = form.first_name.trim()
   const middleName = form.middle_name.trim()
   const lastName = form.last_name.trim()
@@ -494,40 +642,57 @@ async function handleSubmit() {
   const yearLevel = Number(form.year_level)
   const email = form.email.trim()
 
-  if (!firstName || !lastName || !studentId || !email || !form.password || !form.password_confirmation || !form.year_level) {
-    apiError.value = 'Please complete all required fields.'
-    return
+  if (!firstName) {
+    fieldErrors.first_name = 'Enter your first name.'
   }
 
-  if (!/^\d{7,20}$/.test(studentId)) {
-    apiError.value = 'Student ID must be 7 to 20 digits.'
-    return
+  if (!lastName) {
+    fieldErrors.last_name = 'Enter your last name.'
   }
 
-  if (![1, 2, 3, 4].includes(yearLevel)) {
-    apiError.value = 'Select a valid year level.'
-    return
+  if (!studentId) {
+    fieldErrors.student_id = 'Enter your student ID.'
+  } else if (!/^\d{7,20}$/.test(studentId)) {
+    // Says both the rule and what was actually typed, because "invalid
+    // format" leaves someone staring at a number that looks fine to them.
+    fieldErrors.student_id = `Student ID must be 7 to 20 digits -- you entered ${studentId.length}.`
   }
 
-  const passwordProblem = firstPasswordProblem(form.password)
-
-  if (passwordProblem) {
-    apiError.value = passwordProblem
-    return
+  if (!form.year_level) {
+    fieldErrors.year_level = 'Select your year level.'
+  } else if (![1, 2, 3, 4].includes(yearLevel)) {
+    fieldErrors.year_level = 'Select a valid year level.'
   }
 
-  if (pwMismatch.value) {
-    apiError.value = 'Passwords do not match.'
-    return
+  if (!email) {
+    fieldErrors.email = 'Enter your email address.'
+  }
+
+  if (!form.password) {
+    fieldErrors.password = 'Choose a password.'
+  } else {
+    const passwordProblem = firstPasswordProblem(form.password)
+
+    if (passwordProblem) {
+      fieldErrors.password = passwordProblem
+    }
+  }
+
+  if (!form.password_confirmation) {
+    fieldErrors.password_confirmation = 'Re-enter your password.'
+  } else if (pwMismatch.value) {
+    fieldErrors.password_confirmation = 'Passwords do not match.'
   }
 
   if (!canAgree.value) {
-    apiError.value = 'Please open and read the Terms of Service and Privacy Policy first.'
-    return
+    fieldErrors.agreed = 'Open and read both documents before agreeing.'
+  } else if (!form.agreed) {
+    fieldErrors.agreed = 'Confirm your agreement to continue.'
   }
 
-  if (!form.agreed) {
-    apiError.value = 'Please confirm your agreement to the Terms of Service and Privacy Policy.'
+  if (hasFieldErrors.value) {
+    apiError.value = 'Check the highlighted fields and try again.'
+    focusFirstError()
     return
   }
 
@@ -549,7 +714,17 @@ async function handleSubmit() {
     // emailed link is opened, so send them to their inbox, not the dashboard.
     pendingEmail.value = result?.email ?? email
   } catch (error) {
-    apiError.value = error.response?.data?.message ?? 'Registration failed. Please try again.'
+    const payload = error.response?.data
+
+    // Server-side rules the form cannot know about -- an address or student ID
+    // already registered, a domain that is not the institution's -- come back
+    // per field and are shown against that field, not as "Validation failed."
+    if (applyServerErrors(payload?.errors)) {
+      apiError.value = 'Check the highlighted fields and try again.'
+      focusFirstError()
+    } else {
+      apiError.value = payload?.message ?? 'Registration failed. Please try again.'
+    }
   } finally {
     isLoading.value = false
   }
@@ -809,9 +984,19 @@ async function handleSubmit() {
   border-color: var(--lnu-danger);
 }
 
+.field-input-error:focus {
+  border-color: var(--lnu-danger);
+  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.18);
+}
+
 .field-error {
-  font-size: 14px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--lnu-danger);
+  /* A server message can be long ("The student id has already been taken.");
+     it wraps rather than stretching the grid column it sits in. */
+  overflow-wrap: anywhere;
 }
 
 .pw-rules {
@@ -1044,6 +1229,30 @@ async function handleSubmit() {
   .auth-brand,
   .auth-main {
     min-height: 0;
+  }
+
+  /*
+   * The form column scrolls on its own, and the card is placed with
+   * `margin: auto` rather than `align-items: center`.
+   *
+   * Centred, a flex item taller than its container overflows equally in BOTH
+   * directions -- and with the shell clipping at `overflow: hidden`, the half
+   * above the top edge could not be scrolled back to. On a 768px-tall laptop
+   * this registration form is already taller than the viewport, and it grows
+   * another ~120px the moment the password checklist appears, so the heading
+   * and the Create Account button were simply cut off.
+   */
+  .auth-brand {
+    overflow-y: auto;
+  }
+
+  .auth-main {
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .auth-card {
+    margin: auto;
   }
 
   .auth-brand {

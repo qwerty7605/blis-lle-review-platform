@@ -9,6 +9,12 @@ class SettingsApi {
     return http.get('/settings/public/legal')
   }
 
+  // The announcement banner and maintenance flag, on an endpoint every role
+  // can reach -- /settings/system is staff-and-admin only.
+  getPublicNotice() {
+    return http.get('/settings/public/notice')
+  }
+
   updateSystem(payload) {
     return http.put('/settings/system', payload)
   }

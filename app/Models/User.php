@@ -281,6 +281,10 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'is_active' => 'boolean',
+            // Without this the column -- a real boolean in the schema -- comes
+            // back as 0/1 while is_active beside it comes back as true/false,
+            // so `$user->is_demo === true` is silently always false.
+            'is_demo' => 'boolean',
             'year_level' => 'integer',
             'archived_at' => 'datetime',
             'admission_year' => 'integer',
