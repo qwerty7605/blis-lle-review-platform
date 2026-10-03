@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\SystemSetting;
+use App\Support\SystemSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -84,6 +85,10 @@ Route::put('/settings/system', function (Request $request) use (
             ],
         );
     }
+
+    // The maintenance middleware memoises its read per request; drop it so the
+    // response to the request that just flipped the switch already reflects it.
+    app(SystemSettings::class)->forget();
 
     $recordAudit(
         $user,

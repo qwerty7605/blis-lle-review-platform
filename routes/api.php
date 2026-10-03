@@ -22,6 +22,7 @@ use App\Services\ReviewBotAdminService;
 use App\Services\ReportExportService;
 use App\Services\RoleService;
 use App\Rules\InstitutionalEmail;
+use App\Support\SystemSettings;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Auth\Events\Verified;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -282,18 +283,31 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
     $lastName = Str::squish((string) $validated['last_name']);
     $fullName = trim(implode(' ', array_filter([$firstName, $middleName, $lastName])));
 
-    $user = User::create([
+    $yearLevel = (int) $validated['year_level'];
+
+    $user = new User([
         'name' => $fullName,
         'first_name' => $firstName,
         'middle_name' => $middleName !== '' ? $middleName : null,
         'last_name' => $lastName,
         'student_id' => trim((string) $validated['student_id']),
-        'year_level' => (int) $validated['year_level'],
+        'year_level' => $yearLevel,
+        // The cohort anchor. Nobody is asked for it at registration, so it is
+        // derived the same way the lifecycle migration backfilled existing
+        // rows: a second year signing up this year was admitted last year.
+        'admission_year' => (int) now()->year - ($yearLevel - 1),
         'email' => $validated['email'],
         'role' => User::ROLE_STUDENT,
         'is_active' => true,
         'password' => $validated['password'],
     ]);
+
+    // Without this a self-registered student is left with a null status, which
+    // reads as "--" in the staff directory and matches no student_status
+    // filter -- so the people who just signed up are the ones staff cannot
+    // find. Admin-provisioned accounts already default to enrolled.
+    $user->applyStudentStatus(User::STUDENT_STATUS_ENROLLED);
+    $user->save();
 
     $user->sendEmailVerificationNotification();
 
@@ -505,6 +519,21 @@ Route::get('/settings/public/legal', function () use ($systemSettingDefaults) {
     return response()->json([
         'settings' => $settings,
         'last_updated_at' => $lastUpdatedAt,
+    ]);
+});
+
+/*
+ * The two settings every signed-in user has to see, on an endpoint they can
+ * actually reach: /settings/system is staff-and-admin only, so until this
+ * existed an announcement written by an administrator was readable by nobody
+ * but the person who typed it. Public and unauthenticated on purpose -- it
+ * carries no private data, and the login screen needs the maintenance notice
+ * before anyone has signed in.
+ */
+Route::get('/settings/public/notice', function (SystemSettings $settings) {
+    return response()->json([
+        'announcement_banner' => $settings->announcementBanner(),
+        'maintenance_mode' => $settings->maintenanceMode(),
     ]);
 });
 

@@ -19,7 +19,7 @@ Route::get('/student/review-bot/catalog', function (Request $request) use ($ensu
 
     return response()->json([
         'subjects' => $reviewBotService->catalog(),
-        'weak_area' => $reviewBotService->resolveWeakArea($user),
+        'weak_area' => $reviewBotService->resolveWeakArea($user) ?: null,
     ]);
 });
 
