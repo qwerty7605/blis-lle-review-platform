@@ -1,0 +1,576 @@
+/*
+ * Student dashboard home (DashboardHomeView.vue).
+ *
+ * Same visual language as the signed-out pages (views/auth/auth.css): the
+ * display font, a rounded navy panel with soft highlights, and white cards
+ * with large radii on the cream page.
+ *
+ * The page scrolls normally. It used to be squeezed into exactly one screen,
+ * which is what forced the 10-13px type and the lists scrolling inside cards.
+ */
+.student-home {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-family: var(--font-display);
+}
+
+/* ---------- Hero ---------- */
+
+.home-hero {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-radius: 22px;
+  padding: 28px 30px;
+  color: #fff;
+  background: var(--panel-navy);
+  box-shadow: var(--shadow-md);
+}
+
+.home-hero-content {
+  min-width: 0;
+  flex: 1 1 380px;
+  max-width: 62ch;
+}
+
+.home-badge-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.home-badge-row:empty {
+  display: none;
+}
+
+.home-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+}
+
+.home-badge svg {
+  color: var(--lnu-gold-light);
+}
+
+.home-hero-title {
+  margin: 0;
+  font-size: clamp(22px, 2.3vw, 28px);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.home-hero-body {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.home-hero-body strong {
+  color: var(--lnu-gold-light);
+  font-weight: 600;
+}
+
+.home-hero-side {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.home-hero-btn {
+  height: 44px;
+  border-radius: 10px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-hero-btn:hover {
+  transform: translateY(-1px);
+}
+
+.home-hero-btn-solid {
+  border: none;
+  background: var(--lnu-gold-light);
+  color: var(--lnu-navy-deep);
+}
+
+.home-hero-btn-solid:hover {
+  background: #f6dc9a;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+}
+
+.home-hero-btn-outline {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.home-hero-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.home-hero-refresh {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.home-hero-refresh:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.home-hero-refresh:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.home-hero-btn:focus-visible,
+.home-hero-refresh:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
+/* ---------- Cards ---------- */
+
+.home-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.home-side-col {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.home-main-grid .surface-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding: 22px;
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.home-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.home-block-title-group {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.home-block-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--lnu-navy);
+}
+
+.home-block-title h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.home-block-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lnu-text-muted);
+}
+
+/* ---------- Notice filter ---------- */
+
+.notice-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+}
+
+.notice-filter-tab {
+  height: 32px;
+  border: none;
+  border-radius: 9px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.notice-filter-tab:hover:not(.active) {
+  color: var(--lnu-navy);
+}
+
+.notice-filter-tab.active {
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  font-weight: 600;
+}
+
+.notice-filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notice-filter-tab.active .notice-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ---------- Loading / empty ---------- */
+
+.home-state-box {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  text-align: center;
+  gap: 10px;
+  min-height: 220px;
+  padding: 28px 20px;
+  border-radius: 20px;
+  border: 1px dashed rgba(26, 35, 126, 0.16);
+  background: var(--surface-muted);
+  color: var(--lnu-text-muted);
+}
+
+.outcome-card .home-state-box {
+  min-height: 150px;
+}
+
+.home-state-box strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.home-state-box p {
+  margin: 0;
+  max-width: 340px;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.home-state-icon-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+.home-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.home-state-btn-outline,
+.home-state-link {
+  height: 40px;
+  border-radius: 10px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.home-state-btn-outline {
+  border: none;
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+}
+
+.home-state-btn-outline:hover {
+  background: var(--lnu-navy-light);
+}
+
+.home-state-link {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--lnu-navy);
+}
+
+.home-state-link:hover {
+  border-color: var(--lnu-navy);
+}
+
+/* ---------- Notice list ---------- */
+
+/* minmax(0, 1fr), not the implicit auto column: a long one-line title would
+   otherwise set the column's minimum width and push the row out of its card. */
+.notice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.notice-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.notice-item:hover,
+.notice-item:focus-visible {
+  border-color: rgba(26, 35, 126, 0.3);
+  background: #f5f7ff;
+}
+
+.notice-item:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+.notice-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notice-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice-item-body > strong {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #0b0d17;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.notice-tag {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tag-due { background: rgba(201, 168, 76, 0.24); color: #6b5310; }
+.tag-retake { background: rgba(198, 40, 40, 0.1); color: var(--lnu-danger); }
+.tag-new { background: rgba(46, 125, 50, 0.12); color: var(--lnu-success); }
+.tag-other { background: rgba(26, 35, 126, 0.08); color: var(--lnu-text-muted); }
+
+.notice-meta-text {
+  font-size: 12.5px;
+  color: var(--lnu-text-muted);
+}
+
+.notice-meta-room {
+  margin-left: auto;
+}
+
+/* ---------- Two-column screens: fill the screen, cards level ----------
+   The page takes at least the full height under the title, the grid takes
+   whatever the hero leaves, and both cards stretch to that same height. It
+   is a minimum, not a fixed height: a long notice list still grows the page
+   rather than scrolling inside its card. */
+@media (min-width: 1101px) {
+  .student-home {
+    min-height: 100%;
+  }
+
+  .home-main-grid {
+    flex: 1;
+    align-items: stretch;
+  }
+
+  .home-side-col {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  /* The empty/loading box and the gauge take the spare height and centre
+     in it, so neither card ends in a blank strip. */
+  .home-main-grid .home-state-box {
+    flex: 1;
+  }
+
+  .outcome-body {
+    flex: 1;
+    align-content: center;
+  }
+
+  /* The gauge grows with the card instead of sitting small in a tall one;
+     capped by height too, so a short laptop screen still fits everything.
+     (--gauge-max is read by ConfidenceGauge.vue.) */
+  .outcome-body {
+    --gauge-max: clamp(230px, 34vh, 340px);
+  }
+}
+
+/* ---------- Narrower screens ---------- */
+
+@media (max-width: 1100px) {
+  .home-main-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .student-home,
+  .home-main-grid,
+  .home-side-col {
+    gap: 14px;
+  }
+
+  .home-hero {
+    padding: 22px 18px;
+    border-radius: 20px;
+    gap: 18px;
+  }
+
+  /* The main action takes a full row; analytics and refresh share the next.
+     `display: contents` lets all three wrap as one group. */
+  .home-hero-side {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .home-hero-actions {
+    display: contents;
+  }
+
+  .home-hero-btn-solid {
+    flex: 1 1 100%;
+  }
+
+  .home-hero-btn-outline {
+    flex: 1;
+  }
+
+  .home-main-grid .surface-card {
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .notice-filter-tabs {
+    width: 100%;
+  }
+
+  .notice-filter-tab {
+    flex: 1;
+    justify-content: center;
+    height: 36px;
+    padding: 0 6px;
+  }
+
+  .notice-meta-room {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  .home-state-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .home-state-btn-outline,
+  .home-state-link {
+    width: 100%;
+    height: 44px;
+  }
+
+}

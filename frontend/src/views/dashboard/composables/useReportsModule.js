@@ -436,7 +436,7 @@ export function useReportsModule() {
   /*
    * What the teacher should do about the numbers above (see
    * TeacherActionPlanner). Same shape the student Analytics page renders, so
-   * both go through the shared ActionPlanList component.
+   * both go through the shared NextStepsList component.
    */
   const reportActionPlan = computed(() => (
     reportActionRows.value.map((row, index) => ({ ...row, rank: index + 1 }))

@@ -240,19 +240,16 @@ Route::get('/student/analytics/overview', function (Request $request) use ($canM
     return response()->json($dashboardAnalyticsService->buildStudentOverview($user));
 });
 
-Route::get('/student/analytics', function (Request $request) use ($canManageRooms, $ensureActive, $dashboardAnalyticsService) {
-    if ($inactiveResponse = $ensureActive($request)) {
-        return $inactiveResponse;
-    }
-
-    $user = $request->user();
-
-    if ($canManageRooms($user)) {
-        return response()->json([
-            'message' => 'Only student accounts can access analytics.',
-        ], 403);
-    }
-
+/**
+ * A student's full analytics payload: scores by subject, history, the LET
+ * readiness estimate, and the weak-area readings.
+ *
+ * A closure rather than inline in the route because two routes serve it: the
+ * student reading their own (/student/analytics) and staff or an admin reading
+ * a student's (/students/{student}/analytics). One builder means the teacher
+ * sees exactly the numbers the student does.
+ */
+$buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsService): array {
     $canonicalSubjects = [
         'Cataloging and Classification',
         'Indexing and Abstracting',
@@ -303,7 +300,7 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
             'exam.questionBanks:id,subject',
             'room:id,name,code',
         ])
-        ->where('user_id', $user->id)
+        ->where('user_id', $student->id)
         ->where('status', ExamAttempt::STATUS_SUBMITTED)
         ->orderByDesc('submitted_at')
         ->orderByDesc('id')
@@ -467,7 +464,7 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         ];
     }
 
-    return response()->json([
+    return [
         'stats' => [
             'completed_attempts' => $attempts->count(),
             'average_score_percent' => $scoreValues->isNotEmpty()
@@ -488,16 +485,32 @@ Route::get('/student/analytics', function (Request $request) use ($canManageRoom
         // Weak Areas" already uses (see DashboardAnalyticsService), reused
         // here so "What To Review Next" can name the actual weakest
         // subtopic, not just the subject it lives under.
-        'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($user) ?: null,
+        'weak_area' => $dashboardAnalyticsService->buildWeakAreaRecommendation($student) ?: null,
         // The same resolution widened into a ranked queue (worst first) for
         // the Analytics page's study plan, with a Review Bot link target per
         // row.
-        'study_plan' => $dashboardAnalyticsService->buildStudyPlan($user),
+        'study_plan' => $dashboardAnalyticsService->buildStudyPlan($student),
         // The readings above turned into things to actually do -- sized,
         // justified, and only ever offered when the practice behind them
         // exists. See StudyActionPlanner.
-        'action_plan' => $dashboardAnalyticsService->buildActionPlan($user),
-    ]);
+        'action_plan' => $dashboardAnalyticsService->buildActionPlan($student),
+    ];
+};
+
+Route::get('/student/analytics', function (Request $request) use ($canManageRooms, $ensureActive, $buildStudentAnalytics) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if ($canManageRooms($user)) {
+        return response()->json([
+            'message' => 'Only student accounts can access analytics.',
+        ], 403);
+    }
+
+    return response()->json($buildStudentAnalytics($user));
 });
 
 Route::post('/student/exams/{exam}/start', function (
@@ -1038,3 +1051,50 @@ Route::get('/students/directory', function (Request $request) use ($canManageRoo
 
     return response()->json($dashboardAnalyticsService->paginateStudentDirectory($validated));
 });
+
+/**
+ * A student's profile for staff and administrators: who they are, plus the
+ * same analytics the student sees on their own Analytics page.
+ */
+Route::get('/students/{student}/analytics', function (Request $request, User $student) use ($canManageRooms, $ensureActive, $buildStudentAnalytics) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    if (!$canManageRooms($request->user())) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Only student accounts have a profile; a teacher's or an admin's id here
+    // is treated as not found rather than answered with an empty one.
+    if ($canManageRooms($student)) {
+        return response()->json(['message' => 'Student not found.'], 404);
+    }
+
+    $rooms = $student->rooms()
+        ->select('rooms.id', 'rooms.name', 'rooms.code')
+        ->orderBy('rooms.name')
+        ->get()
+        ->map(fn ($room) => [
+            'id' => (int) $room->id,
+            'name' => $room->name,
+            'code' => $room->code,
+        ])
+        ->values();
+
+    return response()->json([
+        'student' => [
+            'id' => (int) $student->id,
+            'name' => $student->name,
+            'email' => $student->email,
+            'student_id' => $student->student_id,
+            'year_level' => $student->year_level,
+            'student_status' => $student->student_status,
+            'admission_year' => $student->admission_year,
+            'is_active' => (bool) $student->is_active,
+            'archived_at' => $student->archived_at,
+            'rooms' => $rooms,
+        ],
+        ...$buildStudentAnalytics($student),
+    ]);
+})->whereNumber('student');

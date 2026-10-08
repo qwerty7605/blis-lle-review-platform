@@ -5,13 +5,36 @@
       <span>{{ analyticsError }}</span>
     </div>
 
-    <!-- Row 1 -- brand panel + the one number this page is really about -->
+    <!-- Row 1 -- brand panel with the section tabs under it, beside the one
+         number this page is really about -->
     <div class="analytics-hero-row">
-      <article class="analytics-hero-card">
-        <h1 class="analytics-hero-title">Analytics</h1>
-        <p class="analytics-hero-subtitle">Track Your Performance</p>
-        <p class="analytics-hero-body">Deep dive into your scores and subject mastery across all examinations.</p>
-      </article>
+      <div class="analytics-hero-col">
+        <article class="analytics-hero-card">
+          <h1 class="analytics-hero-title">Analytics</h1>
+          <p class="analytics-hero-subtitle">Track Your Performance</p>
+          <p class="analytics-hero-body">Deep dive into your scores and subject mastery across all examinations.</p>
+        </article>
+
+        <!-- One section of the page at a time, instead of all three stacked
+             down a long scroll. -->
+        <div class="analytics-tabs" role="tablist" aria-label="Analytics sections">
+          <button
+            v-for="tab in tabs"
+            :id="`analytics-tab-${tab.key}`"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="analytics-tab"
+            :class="{ active: activeTab === tab.key }"
+            :aria-selected="activeTab === tab.key"
+            aria-controls="analytics-panel"
+            @click="activeTab = tab.key"
+          >
+            <component :is="tab.icon" :size="15" />
+            <span>{{ tab.label }}</span>
+          </button>
+        </div>
+      </div>
 
       <article class="analytics-overview-card">
         <div class="analytics-overview-body">
@@ -80,10 +103,9 @@
       </article>
     </div>
 
-    <div class="analytics-main-grid">
-      <div class="analytics-col">
+    <div id="analytics-panel" class="analytics-panel" role="tabpanel" :aria-labelledby="`analytics-tab-${activeTab}`">
         <!-- Subjects -->
-        <section class="analytics-section" aria-labelledby="analytics-subjects-heading">
+        <section v-show="activeTab === 'subjects'" class="analytics-section" aria-labelledby="analytics-subjects-heading">
           <header class="analytics-section-head">
             <h2 id="analytics-subjects-heading" class="analytics-section-title">Subjects</h2>
             <span class="info-hint" tabindex="0" :aria-label="subjectsDescription">
@@ -142,7 +164,7 @@
         </section>
 
         <!-- Study plan -->
-        <section class="analytics-section" aria-labelledby="analytics-plan-heading">
+        <section v-show="activeTab === 'plan'" class="analytics-section" aria-labelledby="analytics-plan-heading">
           <header class="analytics-section-head">
             <h2 id="analytics-plan-heading" class="analytics-section-title">Your Study Plan</h2>
             <span class="info-hint" tabindex="0" :aria-label="studyPlanDescription">
@@ -197,41 +219,23 @@
             </li>
           </ol>
         </section>
-      </div>
 
-      <div class="analytics-col analytics-side-col">
-        <!-- LET readiness -->
+      <!-- LET readiness beside what to review next -->
+      <div v-show="activeTab === 'readiness'" class="analytics-readiness-grid">
+        <!-- Estimated outcome: the same card as the dashboard's -->
         <article class="analytics-card analytics-prediction-card" aria-labelledby="analytics-let-heading">
-          <header class="analytics-card-head">
-            <h2 id="analytics-let-heading" class="analytics-card-title">LET Readiness</h2>
-            <span class="status-pill" :class="predictivePanel.isConnected ? 'is-connected' : 'is-pending'">
-              <span class="status-pill-dot" aria-hidden="true"></span>{{ predictivePanel.statusLabel }}
-            </span>
+          <header class="analytics-card-head is-stacked">
+            <h2 id="analytics-let-heading" class="analytics-card-title">Estimated Outcome</h2>
+            <p class="analytics-card-sub">Based on recent exam performance</p>
           </header>
 
+          <EstimatedOutcome
+            :readiness="readiness"
+            :average-score-display="averageScore === null ? 'N/A' : `${averageScore.toFixed(1)}%`"
+            :focus-subjects-count="stats.focus_subjects_count"
+          />
+
           <template v-if="predictivePanel.isConnected">
-            <div class="prediction-panel">
-              <span class="prediction-icon" :class="`tone-${predictivePanel.predictionTone}`" aria-hidden="true">
-                <ShieldCheck v-if="predictivePanel.prediction === 'PASS'" :size="20" />
-                <AlertCircle v-else :size="20" />
-              </span>
-
-              <div class="prediction-copy">
-                <strong class="prediction-headline">
-                  {{ predictivePanel.prediction === 'PASS' ? 'Likely to pass the LET' : 'At risk of not passing the LET' }}
-                </strong>
-
-                <p class="prediction-confidence">
-                  <span>Confidence Score:</span>
-                  <strong>{{ predictivePanel.probability_percent }}%</strong>
-                </p>
-
-                <div class="score-track prediction-track" aria-hidden="true">
-                  <div class="score-track-fill gold" :style="{ width: `${clampPercent(predictivePanel.probability_percent)}%` }" />
-                </div>
-              </div>
-            </div>
-
             <details v-if="predictivePanel.decision_rules?.length > 0" class="prediction-reasoning">
               <summary>Why this estimate?</summary>
               <ul>
@@ -241,32 +245,6 @@
 
             <p class="prediction-note">
               Treat this as a rough signal<template v-if="predictivePanel.support">, based on {{ predictivePanel.support }} similar past cases</template>.
-              Use subject scores above to focus study efforts.
-            </p>
-          </template>
-
-          <template v-else>
-            <div class="prediction-panel is-placeholder">
-              <span class="prediction-icon" aria-hidden="true">
-                <Sparkles :size="20" />
-              </span>
-
-              <div class="prediction-copy">
-                <strong class="prediction-headline">
-                  {{ predictivePanel.isInsufficientHistory ? 'Not enough exam history yet' : 'Readiness estimate is not connected yet' }}
-                </strong>
-                <p class="prediction-placeholder-text">
-                  {{
-                    predictivePanel.isInsufficientHistory
-                      ? predictivePanel.description
-                      : 'Once connected, this will flag the subject areas to strengthen before your LET exam.'
-                  }}
-                </p>
-              </div>
-            </div>
-
-            <p class="prediction-note">
-              For now, use your subject scores and recent results to decide what to focus on before the LET.
             </p>
           </template>
         </article>
@@ -275,7 +253,7 @@
         <article class="analytics-card analytics-guidance-card" aria-labelledby="analytics-review-heading">
           <header class="analytics-card-head is-stacked">
             <h2 id="analytics-review-heading" class="analytics-card-title">What To Review Next</h2>
-            <p class="analytics-card-sub">Focus recommendations based on your exam results.</p>
+            <p class="analytics-card-sub">Do these in order. Each one opens a short practice set on that topic.</p>
           </header>
 
           <div v-if="isInitialLoading" class="analytics-empty is-inline">
@@ -287,12 +265,11 @@
 
           <template v-else>
             <!--
-              Moves, not readings. Each row names something to go and do, sized
-              to the practice that actually exists behind it, so every button
-              here lands on a session that can be built. The narrative lead
-              below is the fallback for when no action could be assembled.
+              Numbered steps, each one a topic with a one-line reason and a
+              button into a practice set that exists. The narrative lead below
+              is the fallback for when no step could be assembled.
             -->
-            <ActionPlanList v-if="actionPlan.length > 0" :actions="actionPlan" />
+            <NextStepsList v-if="actionPlan.length > 0" :actions="actionPlan" cta-label="Practice now" />
 
             <div v-else-if="reviewNarrative.headline" class="guidance-lead">
               <div class="guidance-lead-head">
@@ -385,19 +362,22 @@ import {
   Clock,
   Info,
   Laptop,
+  LayoutGrid,
+  ListOrdered,
   ListTree,
   Minus,
   PackageSearch,
   RefreshCw,
   ShieldCheck,
-  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
 } from 'lucide-vue-next'
 import { useStudentInsightsModule } from '../composables/useStudentInsightsModule'
+import { describeReadiness } from '../composables/readiness'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
-import ActionPlanList from '@/components/ActionPlanList.vue'
+import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
+import NextStepsList from '@/components/NextStepsList.vue'
 
 const {
   analyticsLoading,
@@ -505,6 +485,17 @@ const trendPoints = computed(() => (
 
 const isInitialLoading = computed(() => analyticsLoading.value && !analyticsLoaded.value)
 
+// Same wording as the dashboard's Estimated Outcome card.
+const readiness = computed(() => describeReadiness(predictivePanel.value))
+
+// The three sections of the page, shown one at a time.
+const tabs = [
+  { key: 'subjects', label: 'Subjects', icon: LayoutGrid },
+  { key: 'plan', label: 'Study Plan', icon: ListOrdered },
+  { key: 'readiness', label: 'Readiness', icon: ShieldCheck },
+]
+const activeTab = ref('subjects')
+
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value ?? 0)))
 }
@@ -582,19 +573,121 @@ function trendToneClass(subject) {
 /* ---- Row 1: brand panel + overall average ---- */
 .analytics-hero-row {
   display: grid;
-  grid-template-columns: minmax(230px, 0.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
 
+/* The brand panel with the tabs under it; together they match the height of
+   the overall-average card beside them. */
+.analytics-hero-col {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+}
+
+.analytics-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 5px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-tab {
+  min-width: 0;
+  height: 40px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.analytics-tab svg {
+  flex-shrink: 0;
+}
+
+.analytics-tab:hover:not(.active) {
+  background: var(--surface-muted);
+  color: var(--lnu-navy);
+}
+
+.analytics-tab.active {
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  font-weight: 600;
+}
+
+.analytics-tab:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---- The selected section ---- */
+.analytics-panel {
+  min-width: 0;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.analytics-readiness-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+  /* stretch: LET Readiness and What To Review Next end on the same line. */
+  align-items: stretch;
+}
+
+/* Wide screens: the page takes at least the full height under the title and
+   the selected section fills whatever the top row leaves, so the white panel
+   always reaches the bottom of the screen. A minimum, not a fixed height --
+   a long section still grows the page and scrolls normally. */
+@media (min-width: 1201px) {
+  .analytics-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
+  .analytics-hero-row {
+    flex-shrink: 0;
+  }
+
+  .analytics-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .analytics-panel > * {
+    flex: 1;
+  }
+}
+
 .analytics-hero-card {
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 24px 26px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 6px;
-  background: linear-gradient(135deg, var(--lnu-navy-deep), var(--lnu-navy) 70%, var(--lnu-navy-light));
+  background: var(--panel-navy);
   color: #fff;
   box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
 }
@@ -715,7 +808,7 @@ function trendToneClass(subject) {
   gap: 6px;
   min-height: 118px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px dashed rgba(13, 21, 71, 0.16);
   color: var(--a-muted);
   text-align: center;
@@ -775,25 +868,6 @@ function trendToneClass(subject) {
 .analytics-overview-footnote strong.metric-success { color: #226b3f; }
 .analytics-overview-footnote strong.metric-danger { color: #b03a33; }
 
-/* ---- Two-column body ---- */
-.analytics-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.analytics-col {
-  display: grid;
-  gap: 18px;
-  align-content: start;
-  min-width: 0;
-}
-
-.analytics-side-col {
-  gap: 16px;
-}
-
 /* A bare section label over loose cards (not another card wrapper) -- one
    less nested box between the page and the data, and it keeps the two
    tinted cards in the right column reading as the only "panels" here. */
@@ -843,7 +917,7 @@ function trendToneClass(subject) {
 /* ---- Subjects ---- */
 .subject-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   /* start (not the stretch default) -- two subjects side by side can have
      different name lengths/wrap heights, and stretch would force the
      shorter card to match the taller one's height. */
@@ -1063,8 +1137,10 @@ function trendToneClass(subject) {
 }
 
 .analytics-prediction-card {
-  background: linear-gradient(165deg, #fff5e0 0%, #fffaef 55%, #fffdf8 100%);
-  border: 1px solid rgba(205, 151, 43, 0.26);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  /* Lets the gauge grow a little in the wide two-column layout. */
+  --gauge-max: 260px;
 }
 
 .analytics-guidance-card {
@@ -1098,119 +1174,15 @@ function trendToneClass(subject) {
   color: var(--a-muted);
 }
 
-.status-pill {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.status-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.status-pill.is-connected {
-  background: #f0b23d;
-  color: #4a3208;
-}
-
-.status-pill.is-pending {
-  background: rgba(13, 21, 71, 0.08);
-  color: #4a5570;
-}
-
 /* ---- LET readiness ---- */
-.prediction-panel {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 12px;
-  background: #fffdf7;
-  border: 1px solid rgba(205, 151, 43, 0.22);
-  box-shadow: var(--a-card-shadow);
-}
-
-.prediction-panel.is-placeholder {
-  border-style: dashed;
-  background: rgba(255, 253, 247, 0.7);
-  box-shadow: none;
-}
-
-.prediction-icon {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(140deg, rgba(240, 178, 61, 0.34), rgba(255, 220, 150, 0.5));
-  color: #8a6117;
-}
-
-.prediction-icon.tone-success {
-  background: linear-gradient(140deg, rgba(47, 138, 79, 0.24), rgba(150, 220, 175, 0.42));
-  color: #226b3f;
-}
-
-.prediction-copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.prediction-headline {
-  display: block;
-  font-size: 14px;
-  font-weight: 800;
-  line-height: 1.35;
-  color: var(--a-ink);
-}
-
-.prediction-confidence {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--a-muted);
-}
-
 /* Amber regardless of the PASS/FAIL call -- this is a "how sure is the
    model" number, and colouring it red/green makes it read as a second
    verdict competing with the headline right above it. */
-.prediction-confidence strong {
-  font-size: 15px;
-  font-weight: 800;
-  color: #a9711a;
-}
-
-.prediction-track {
-  margin-top: 8px;
-}
-
-.prediction-placeholder-text {
-  margin: 5px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--a-muted);
-}
-
 .prediction-reasoning summary {
   cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #8a6117;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lnu-navy);
 }
 
 .prediction-reasoning ul {
@@ -1218,17 +1190,16 @@ function trendToneClass(subject) {
   padding-left: 18px;
   display: grid;
   gap: 5px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--a-muted);
 }
 
 .prediction-note {
   margin: 0;
-  font-size: 11.5px;
-  font-style: italic;
+  font-size: 12.5px;
   line-height: 1.5;
-  color: #7a6134;
+  color: var(--lnu-text-muted);
 }
 
 /* ---- What to review next ---- */
@@ -1243,7 +1214,7 @@ function trendToneClass(subject) {
 .guidance-lead {
   position: relative;
   padding: 14px 15px 15px 18px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   border: 1px solid rgba(47, 138, 79, 0.2);
   box-shadow: 0 2px 6px rgba(13, 21, 71, 0.05);
@@ -1391,15 +1362,14 @@ function trendToneClass(subject) {
   outline-offset: 2px;
 }
 
-/* Action-card styling lives in components/ActionPlanList.vue, shared with
-   the teacher Reports page. */
+/* The numbered steps are styled in components/NextStepsList.vue. */
 
 .guidance-points {
   margin: 0;
   padding: 0;
   list-style: none;
   display: grid;
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.62);
   border: 1px solid rgba(47, 138, 79, 0.14);
   overflow: hidden;
@@ -1473,7 +1443,7 @@ function trendToneClass(subject) {
 .guidance-empty {
   margin: 0;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   border: 1px dashed rgba(47, 138, 79, 0.3);
   font-size: 12.5px;
@@ -1579,9 +1549,28 @@ function trendToneClass(subject) {
 
 /* ---- Responsive ---- */
 @media (max-width: 1200px) {
-  .analytics-hero-row,
-  .analytics-main-grid {
-    grid-template-columns: 1fr;
+  .analytics-hero-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Stacked, the tabs belong directly above the section they switch, so the
+     order becomes brand panel, overall average, tabs. */
+  .analytics-hero-col {
+    display: contents;
+  }
+
+  .analytics-hero-card { order: 1; }
+  .analytics-overview-card { order: 2; }
+  .analytics-tabs { order: 3; }
+
+  .subject-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .analytics-readiness-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -1599,6 +1588,15 @@ function trendToneClass(subject) {
 @media (max-width: 720px) {
   .subject-grid {
     grid-template-columns: 1fr;
+  }
+
+  .analytics-panel {
+    padding: 16px 14px;
+    border-radius: 18px;
+  }
+
+  .analytics-tab {
+    height: 44px;
   }
 
   .analytics-overview-body {

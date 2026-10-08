@@ -37,11 +37,11 @@
 
         <button class="layout-brand" @click="sidebarCollapsed = false">
           <span class="layout-brand-icon">
-            <GraduationCap :size="20" />
+            <img :src="blisLogoWhite" alt="" />
           </span>
           <span v-if="showSidebarLabels" class="layout-brand-text">
-            <strong>LNU LLE</strong>
-            <small>Review System</small>
+            <strong>BLIS</strong>
+            <small>LNU LLE Platform</small>
           </span>
         </button>
       </div>
@@ -58,7 +58,7 @@
             <button
               type="button"
               class="layout-nav-item layout-nav-parent"
-              :class="{ active: currentRouteName === item.routeName }"
+              :class="{ active: activeNavRoute === item.routeName }"
               :aria-expanded="roomsExpanded.toString()"
               aria-controls="layout-nav-rooms"
               @click="toggleRoomsSubnav"
@@ -105,8 +105,8 @@
           <button
             v-else
             class="layout-nav-item"
-            :class="{ active: currentRouteName === item.routeName }"
-            :aria-current="currentRouteName === item.routeName ? 'page' : undefined"
+            :class="{ active: activeNavRoute === item.routeName }"
+            :aria-current="activeNavRoute === item.routeName ? 'page' : undefined"
             @click="navigate(item.routeName)"
           >
             <component :is="item.icon" :size="18" class="layout-nav-icon" />
@@ -194,6 +194,7 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { roomsApi } from '@/api/rooms.api'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
+import blisLogoWhite from '@/assets/blis-logo-white.png'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import { getDashboardNavItems } from './config/dashboardNavigation'
 import { useCompactLayout } from './composables/useViewport'
@@ -201,7 +202,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  GraduationCap,
   LogOut,
   Megaphone,
   Menu,
@@ -233,12 +233,18 @@ const currentRouteName = computed(() => String(route.name ?? ''))
 // prominent heading, so the shared topbar above shrinks rather than
 // repeating that weight twice.
 const FILL_SCREEN_ROUTES = [
-  'dashboard-home',
   'dashboard-rooms',
   'dashboard-room-management',
   'dashboard-review-bot',
 ]
 const isFillScreenRoute = computed(() => FILL_SCREEN_ROUTES.includes(currentRouteName.value))
+
+// Pages reached from a sidebar page keep that page's item lit, so the menu
+// still says where you are.
+const NAV_PARENTS = {
+  'dashboard-student-profile': 'dashboard-students',
+}
+const activeNavRoute = computed(() => NAV_PARENTS[currentRouteName.value] ?? currentRouteName.value)
 
 const pageTitle = computed(() => String(route.meta?.title ?? 'Dashboard'))
 const pageSubtitle = computed(() => String(route.meta?.sub ?? 'Manage your modules and workflows.'))
@@ -428,24 +434,31 @@ onBeforeUnmount(() => {
   min-height: 100dvh;
   display: grid;
   grid-template-columns: auto 1fr;
-  background: var(--lnu-bg, #f4f6f8);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(26, 35, 126, 0.07), transparent 34%),
+    radial-gradient(circle at 88% 92%, rgba(201, 168, 76, 0.16), transparent 36%),
+    var(--lnu-bg, #f4f6f8);
 }
 
+/* A rounded navy panel set in from the page edge, the same panel the
+   signed-out pages use (see .auth-panel in views/auth/auth.css). */
 .layout-sidebar {
-  width: 260px;
-  height: 100vh;
-  height: 100dvh;
+  width: 264px;
+  height: calc(100vh - 16px);
+  height: calc(100dvh - 16px);
+  margin: 8px 0 8px 8px;
   position: sticky;
-  top: 0;
+  top: 8px;
   align-self: start;
   overflow-x: hidden;
-  border-right: 1px solid rgba(240, 208, 128, 0.24);
-  background: linear-gradient(180deg, var(--lnu-navy-deep), var(--lnu-navy));
-  padding: 16px 12px;
+  border-radius: 22px;
+  background: var(--panel-navy);
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
   transition: width 0.2s ease;
   color: rgba(255, 255, 255, 0.92);
+  font-family: var(--font-display);
 }
 
 .layout-sidebar.collapsed {
@@ -463,7 +476,7 @@ onBeforeUnmount(() => {
 .layout-sidebar.collapsed .layout-toggle {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .layout-sidebar.collapsed .layout-brand {
@@ -471,13 +484,13 @@ onBeforeUnmount(() => {
   height: 44px;
   padding: 0;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .layout-sidebar.collapsed .layout-brand-icon {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .layout-sidebar.collapsed .layout-nav {
@@ -490,7 +503,7 @@ onBeforeUnmount(() => {
   height: 44px;
   padding: 0;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .layout-sidebar-top {
@@ -523,64 +536,74 @@ onBeforeUnmount(() => {
 }
 
 .layout-brand-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(240, 208, 128, 0.18);
-  color: var(--lnu-gold-light);
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
+.layout-brand-icon img {
+  width: 40px;
+  height: 40px;
+  display: block;
+}
+
 .layout-brand-text {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .layout-brand-text strong {
-  font-size: 15px;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .layout-brand-text small {
-  font-size: 13px;
-  color: rgba(240, 208, 128, 0.92);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: rgba(240, 208, 128, 0.9);
 }
 
 .layout-nav {
-  margin-top: 18px;
+  margin-top: 22px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
 }
 
 .layout-nav-item {
-  height: 40px;
-  border: none;
-  border-radius: 10px;
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: 14px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.86);
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  gap: 12px;
+  padding: 0 13px;
   text-align: left;
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 .layout-nav-item:hover:not(.active) {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
 
 .layout-nav-item.active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
   color: var(--lnu-gold-light);
-  box-shadow: inset 4px 0 0 var(--lnu-gold-light);
 }
 
 .layout-nav-label {
   font-size: 14px;
+  font-weight: 500;
+}
+
+.layout-nav-item.active .layout-nav-label {
   font-weight: 600;
 }
 
@@ -641,21 +664,25 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  border-bottom: 1px solid rgba(240, 208, 128, 0.3);
-  background: linear-gradient(120deg, var(--lnu-navy), var(--lnu-navy-light));
-  padding: 14px 24px;
-  color: var(--lnu-white);
+  padding: 20px 22px 6px;
+  color: var(--lnu-text);
+  font-family: var(--font-display);
 }
 
+/* On desktop the title sits straight on the page; the navy lives in the
+   sidebar panel. Narrow screens turn this into the navy app bar (below). */
 .layout-topbar h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #0b0d17;
 }
 
 .layout-topbar p {
   margin: 4px 0 0;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.82);
+  font-size: 13.5px;
+  color: var(--lnu-text-muted);
 }
 
 .layout-topbar-copy {
@@ -678,7 +705,7 @@ onBeforeUnmount(() => {
   width: 44px;
   height: 44px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: var(--lnu-white);
   display: inline-flex;
@@ -718,7 +745,7 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 18px 22px;
+  padding: 14px 22px 24px;
   background: transparent;
 }
 
@@ -810,6 +837,8 @@ onBeforeUnmount(() => {
     max-width: 100%;
     height: 100vh;
     height: 100dvh;
+    margin: 0;
+    border-radius: 0;
     padding:
       calc(14px + env(safe-area-inset-top, 0px))
       calc(16px + env(safe-area-inset-right, 0px))
@@ -840,7 +869,7 @@ onBeforeUnmount(() => {
     order: 2;
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: 14px;
   }
 
   /* Full width means the list can breathe: bigger hit areas, and the nav
@@ -853,7 +882,7 @@ onBeforeUnmount(() => {
   .layout-nav-item {
     min-height: 52px;
     padding: 0 14px;
-    border-radius: 12px;
+    border-radius: 14px;
     font-size: 16px;
   }
 
@@ -896,7 +925,7 @@ onBeforeUnmount(() => {
     gap: 4px;
     margin: 2px 0 6px;
     padding: 6px;
-    border-radius: 12px;
+    border-radius: 14px;
     background: rgba(0, 0, 0, 0.16);
     border: 1px solid rgba(240, 208, 128, 0.14);
   }
@@ -993,6 +1022,8 @@ onBeforeUnmount(() => {
     padding: 0 8px 0 4px;
     gap: 4px;
     justify-content: flex-start;
+    background: var(--lnu-navy);
+    color: var(--lnu-white);
   }
 
   .layout-topbar-copy {
@@ -1001,6 +1032,7 @@ onBeforeUnmount(() => {
 
   .layout-topbar h1,
   .layout-topbar.is-fill-screen h1 {
+    color: var(--lnu-white);
     font-size: 18px;
     line-height: 1.25;
     white-space: nowrap;

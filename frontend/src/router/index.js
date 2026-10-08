@@ -21,6 +21,7 @@ const RoomManagementView = () => import('../views/dashboard/shared/RoomManagemen
 const LibraryView = () => import('../views/dashboard/staff/LibraryView.vue')
 const ReviewBotGeneratorView = () => import('../views/dashboard/staff/ReviewBotGeneratorView.vue')
 const StudentsView = () => import('../views/dashboard/staff/StudentsView.vue')
+const StudentProfileView = () => import('../views/dashboard/staff/StudentProfileView.vue')
 const LicensureResultsView = () => import('../views/dashboard/staff/LicensureResultsView.vue')
 const ExamsView = () => import('../views/dashboard/staff/ExamsView.vue')
 const ReportsView = () => import('../views/dashboard/staff/ReportsView.vue')
@@ -101,6 +102,12 @@ const routes = [
         name: 'dashboard-students',
         component: StudentsView,
         meta: dashboardRouteMeta('students'),
+      },
+      {
+        path: 'students/:studentId',
+        name: 'dashboard-student-profile',
+        component: StudentProfileView,
+        meta: dashboardRouteMeta('studentProfile'),
       },
       {
         path: 'licensure',

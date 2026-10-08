@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  *
  * Alongside the advice each action carries:
  *
+ *   title   -- the topic or subject by name, with `subject` saying where a
+ *              topic belongs (empty when the title is itself a subject)
+ *   summary -- one plain sentence on why it is listed; the student page shows
+ *              this in place of the full breakdown
  *   effort  -- what it costs, because "4 items" means nothing without "3 min"
  *   cta     -- somewhere to click, or null when the honest answer is that
  *              nothing is available yet
@@ -112,6 +116,9 @@ class StudyActionPlanner
                 'key' => 'reverse_slide',
                 'tone' => 'urgent',
                 'area_key' => $this->areaKey($row),
+                'title' => (string) $row['label'],
+                'subject' => (string) ($row['subject'] ?? ''),
+                'summary' => 'You used to answer these correctly, but your recent answers were wrong.',
                 'advice' => $this->advice(
                     "You are losing ground on {$row['label']}.",
                     [
@@ -167,6 +174,14 @@ class StudyActionPlanner
                 'key' => 'drill_weak_area',
                 'tone' => 'primary',
                 'area_key' => $this->areaKey($row),
+                'title' => (string) $row['label'],
+                'subject' => (string) ($row['subject'] ?? ''),
+                'summary' => sprintf(
+                    'You got %d of %d %s right. This is your lowest-scoring topic.',
+                    $correct,
+                    $attempted,
+                    $attempted === 1 ? 'question' : 'questions',
+                ),
                 'advice' => $this->advice(
                     "{$row['label']} is the weakest area in your results.",
                     [
@@ -241,6 +256,13 @@ class StudyActionPlanner
             'key' => 'close_the_gap',
             'tone' => 'opportunity',
             'area_key' => "subject:{$subject}",
+            'title' => $subject,
+            'subject' => '',
+            'summary' => sprintf(
+                'You average %s%% here, %s points below the 75%% passing mark. It is the subject you are closest to passing.',
+                $this->percent($closest['score']),
+                $gap,
+            ),
             'advice' => $this->advice(
                 "{$subject} is the closest you are to passing a subject.",
                 [
@@ -292,6 +314,11 @@ class StudyActionPlanner
                 'key' => 'fill_blind_spot',
                 'tone' => 'info',
                 'area_key' => "subject:{$subject}",
+                'title' => (string) $subject,
+                'subject' => '',
+                'summary' => $hasPractice
+                    ? 'You have not answered any questions in this subject yet, so there is no score for it.'
+                    : 'You have not answered any questions in this subject yet, and no practice is published for it. Ask your teacher when it will be covered.',
                 'advice' => $this->advice(
                     "You have no results at all in {$subject}.",
                     [
@@ -341,6 +368,9 @@ class StudyActionPlanner
             'key' => 'practice_not_published',
             'tone' => 'info',
             'area_key' => $this->areaKey($weakest),
+            'title' => (string) $weakest['label'],
+            'subject' => (string) ($weakest['subject'] ?? ''),
+            'summary' => 'This is your weakest topic, but there are no practice questions for it yet. Go over your marked exam and tell your teacher.',
             'advice' => $this->advice(
                 "Your weakest area has no practice set yet.",
                 [

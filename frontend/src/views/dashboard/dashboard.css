@@ -59,19 +59,19 @@
   height: 44px;
   padding: 0;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .sidebar.collapsed .brand-icon-wrap {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .sidebar.collapsed .sidebar-toggle {
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .sidebar.collapsed .sidebar-nav {
@@ -84,7 +84,7 @@
   height: 44px;
   padding: 0;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .sidebar-top {
@@ -644,7 +644,7 @@
 
 .overview-meter-panel {
   border: 1px solid rgba(26, 35, 126, 0.14);
-  border-radius: 16px;
+  border-radius: 20px;
   background:
     radial-gradient(circle at top left, rgba(201, 168, 76, 0.18), transparent 38%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 244, 235, 0.96));
@@ -678,7 +678,7 @@
 .overview-note {
   margin-top: 14px;
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(13, 21, 71, 0.03);
   padding: 12px 14px;
 }
@@ -980,7 +980,7 @@
 
 .session-item {
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.88);
   padding: 12px;
   display: flex;
@@ -1155,7 +1155,7 @@
   justify-content: space-between;
   gap: 12px;
   position: relative;
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(132deg, #244a9e 0%, #1e3f88 100%);
   box-shadow: 0 4px 12px rgba(10, 25, 69, 0.14);
   padding: 12px 20px;
@@ -1206,7 +1206,7 @@
   justify-content: space-between;
   gap: 12px;
   border: 1px solid rgba(40, 79, 167, 0.42);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(136deg, rgba(20, 43, 96, 0.95), rgba(31, 60, 126, 0.92));
   box-shadow: 0 10px 20px rgba(9, 22, 59, 0.22);
   padding: 10px 12px;
@@ -1314,7 +1314,7 @@
 
 .detail-card {
   border: 1px solid rgba(13, 21, 71, 0.14);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(253, 252, 247, 0.96));
   box-shadow: 0 8px 18px rgba(13, 21, 71, 0.05);
   padding: 14px;
@@ -1339,7 +1339,7 @@
 
 .exam-card {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #ffffff;
   color: #3f3a3d;
   text-align: left;
@@ -1479,7 +1479,7 @@
   margin: 14px clamp(14px, 2vw, 22px);
   min-height: 180px;
   border: 1px dashed rgba(13, 21, 71, 0.18);
-  border-radius: 14px;
+  border-radius: 18px;
 }
 
 .exam-attempt-layout {
@@ -1503,7 +1503,7 @@
 .exam-attempt-sidebar {
   min-height: 0;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(243, 244, 247, 0.94));
   padding: 12px;
   display: grid;
@@ -1692,7 +1692,7 @@
   min-height: 0;
   flex: 1 1 auto;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.995), rgba(246, 246, 243, 0.96));
   padding: clamp(14px, 2.2vw, 24px);
   display: grid;
@@ -1838,7 +1838,7 @@
 
 .exam-result-stat {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(241, 243, 247, 0.95));
   padding: 14px 15px;
   display: grid;
@@ -1880,7 +1880,7 @@
 }
 
 .exam-feedback-card {
-  border-radius: 14px;
+  border-radius: 18px;
   border: 1px solid rgba(13, 21, 71, 0.12);
   padding: 14px 16px;
   background: #ffffff;
@@ -1958,7 +1958,7 @@
 }
 
 .exam-feedback-panel {
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid rgba(13, 21, 71, 0.1);
   background: linear-gradient(180deg, rgba(247, 249, 253, 0.98), rgba(241, 245, 251, 0.94));
   padding: 16px 18px;
@@ -2033,7 +2033,7 @@
   display: grid;
   gap: 8px;
   padding: 14px 16px;
-  border-radius: 14px;
+  border-radius: 18px;
   border: 1px solid rgba(13, 21, 71, 0.1);
   background: #fff;
 }
@@ -2184,7 +2184,7 @@
 
 .exam-option-card {
   border: 1px solid rgba(13, 21, 71, 0.2);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #fff;
   padding: 12px 13px;
   display: flex;
@@ -2236,7 +2236,7 @@
 
 .exam-question-review-panel {
   border: 1px solid rgba(13, 21, 71, 0.14);
-  border-radius: 14px;
+  border-radius: 18px;
   padding: 14px 16px;
   display: grid;
   gap: 8px;
@@ -2288,7 +2288,7 @@
 .exam-attempt-footer {
   flex: 0 0 auto;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 246, 249, 0.92));
   padding: 10px 12px;
   display: flex;
@@ -2368,7 +2368,7 @@
 .room-roster-shell {
   margin-top: 14px;
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(247, 249, 253, 0.94), rgba(242, 245, 251, 0.92));
 }
 
@@ -2390,7 +2390,7 @@
 
 .room-roster-card {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #ffffff;
   padding: 12px 14px;
   display: grid;
@@ -2468,7 +2468,7 @@
 .room-detail-empty {
   min-height: 260px;
   border: 1px dashed rgba(13, 21, 71, 0.2);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--lnu-text-muted);
   display: grid;
   place-items: center;
@@ -2671,7 +2671,7 @@
 .room-item {
   width: 100%;
   border: 1px solid rgba(26, 35, 126, 0.16);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px 13px;
   display: flex;
   align-items: center;
@@ -2769,7 +2769,7 @@
   /* Centres while there is room, and simply sits at the top (scrollable)
      once there is not -- see the note on .modal-backdrop. */
   margin: auto;
-  border-radius: 14px;
+  border-radius: 18px;
   border: 1px solid rgba(26, 35, 126, 0.16);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(253, 246, 227, 0.94));
   box-shadow: var(--shadow-md);
@@ -2862,7 +2862,7 @@
 .exam-modal-panel,
 .exam-modal-summary {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 16px;
+  border-radius: 20px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 248, 244, 0.95));
   box-shadow: 0 8px 24px rgba(16, 24, 40, 0.04);
 }
@@ -2916,7 +2916,7 @@
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(247, 248, 252, 0.88);
 }
 
@@ -2927,7 +2927,7 @@
 .exam-bank-trigger {
   width: 100%;
   border: 1px solid rgba(13, 21, 71, 0.14);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 248, 252, 0.95));
   padding: 12px 14px;
   display: flex;
@@ -3010,7 +3010,7 @@
   right: 0;
   z-index: 5;
   border: 1px solid rgba(13, 21, 71, 0.14);
-  border-radius: 16px;
+  border-radius: 20px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 248, 244, 0.97));
   box-shadow: 0 18px 40px rgba(10, 16, 52, 0.16);
   overflow: hidden;
@@ -3091,7 +3091,7 @@
 .exam-policy-item,
 .exam-room-choice {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   padding: 10px 12px;
   min-height: 0;
@@ -3139,7 +3139,7 @@
   display: grid;
   gap: 8px;
   padding: 14px;
-  border-radius: 14px;
+  border-radius: 18px;
   color: #fff;
   background: linear-gradient(135deg, #142173, #2842aa 72%, #d2a73d);
 }
@@ -3165,7 +3165,7 @@
 
 .exam-summary-stat {
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(248, 249, 252, 0.92);
   padding: 12px;
   display: grid;
@@ -3216,7 +3216,7 @@
 
 .exam-summary-chip {
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   padding: 10px 12px;
   display: grid;
@@ -3240,7 +3240,7 @@
 .exam-summary-empty {
   padding: 10px 12px;
   border: 1px dashed rgba(13, 21, 71, 0.18);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(249, 249, 245, 0.85);
   color: var(--lnu-text-muted);
   font-size: 13px;
@@ -3359,7 +3359,7 @@
 
 .action-section {
   border: 1px solid rgba(13, 21, 71, 0.1);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 248, 244, 0.94));
   padding: 14px;
   display: grid;
@@ -3426,7 +3426,7 @@
 
 .library-form-panel {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(249, 248, 244, 0.95));
   padding: 12px;
   display: grid;
@@ -3503,7 +3503,7 @@
 
 .digitalized-preview {
   border: 1px solid rgba(13, 21, 71, 0.14);
-  border-radius: 12px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 248, 244, 0.94));
   padding: 12px;
   display: flex;
@@ -3649,7 +3649,7 @@
 
 .library-empty-canvas {
   min-height: 420px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(13, 21, 71, 0.12);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(249, 248, 244, 0.88));
 }
@@ -3695,7 +3695,7 @@
 
 .user-directory-summary-card {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: #ffffff;
   padding: 24px;
   display: grid;
@@ -3766,7 +3766,7 @@
 
 .directory-group-card {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 248, 244, 0.95));
   padding: 12px;
   display: grid;
@@ -3799,7 +3799,7 @@
 .directory-table-wrap {
   margin: 14px 18px;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
   background: #ffffff;
   max-height: min(62vh, 660px);
   overflow: auto;
@@ -3987,7 +3987,7 @@
 
 .management-item {
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #ffffff;
   padding: 16px;
   display: flex;
@@ -4111,7 +4111,7 @@
 .exam-bank-choice {
   align-items: flex-start;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   padding: 10px 12px;
   min-height: 0;
@@ -4176,7 +4176,7 @@
 .live-board-toolbar {
   padding: 12px;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -4287,7 +4287,7 @@
   min-height: 200px;
   margin: 0 16px 16px;
   border: 1px dashed rgba(13, 21, 71, 0.2);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .settings-grid {
@@ -4901,7 +4901,7 @@
 
   .room-detail-head {
     padding: 13px 14px;
-    border-radius: 14px;
+    border-radius: 18px;
     flex-direction: column;
     align-items: flex-start;
   }
@@ -5103,13 +5103,13 @@
   .exam-result-card {
     padding: 14px;
     gap: 14px;
-    border-radius: 12px;
+    border-radius: 14px;
   }
 
   .exam-result-hero {
     gap: 14px;
     padding: 16px;
-    border-radius: 14px;
+    border-radius: 18px;
   }
 
   .exam-result-copy h4 {
@@ -5133,7 +5133,7 @@
   .exam-attempt-card.immersive {
     padding: 14px;
     gap: 12px;
-    border-radius: 12px;
+    border-radius: 14px;
   }
 
   .exam-attempt-question-text {
@@ -5161,7 +5161,7 @@
     padding: 10px;
     gap: 9px;
     max-height: 200px;
-    border-radius: 12px;
+    border-radius: 14px;
   }
 
   .exam-question-jump.immersive {
@@ -5208,7 +5208,7 @@
 .surface-card {
   background: var(--surface);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: 18px;
   box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
   padding: 16px 17px;
 }
@@ -5216,7 +5216,7 @@
 .room-shell-card {
   background: var(--surface);
   border-color: var(--border-soft);
-  border-radius: 14px;
+  border-radius: 18px;
 }
 
 /* ---- Section heads ---- */
@@ -5396,7 +5396,7 @@
 }
 
 .modal-card {
-  border-radius: 16px;
+  border-radius: 20px;
   border-color: var(--border-soft);
   background: var(--surface);
   box-shadow: 0 24px 60px rgba(13, 21, 71, 0.22);
@@ -5435,7 +5435,7 @@
 .directory-table-wrap {
   margin: 12px 16px;
   border-color: var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
 }
 
 .directory-table {
@@ -5504,7 +5504,7 @@
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border-soft);
-  border-radius: 14px;
+  border-radius: 18px;
   box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
   padding: 13px 14px;
   gap: 11px;
@@ -5599,6 +5599,257 @@
 }
 
 /* =======================================================================
+   BRAND LAYER
+   =======================================================================
+   The visual language of the signed-out pages (views/auth/auth.css) applied
+   to the shared primitives every dashboard page is built from: the display
+   font's lighter weights, larger radii, soft card shadows, and the navy
+   button with gold text.
+
+   Same rules as the block above it: single-class specificity, so contextual
+   overrides, the responsive blocks further down, and each page's own
+   `<style scoped>` all still win.
+   ======================================================================= */
+
+/* ---- Page root ----
+   minmax(0, 1fr) rather than the implicit auto column, so one long unbroken
+   line deep in the page cannot widen the whole page past the screen. */
+.dashboard-view {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---- Surfaces ---- */
+.surface-card {
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.room-shell-card {
+  border-radius: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- Section heads ---- */
+.surface-head h3,
+.surface-head-copy h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.surface-head-copy p {
+  font-size: 13px;
+  color: var(--lnu-text-muted);
+}
+
+.room-page-head {
+  padding: 14px 16px;
+}
+
+.room-page-title h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+/* ---- Controls ---- */
+.primary-btn,
+.ghost-btn,
+.danger-btn {
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* Navy with gold text: the Sign In button, so the primary action looks the
+   same before and after signing in. */
+.primary-btn {
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  padding: 0 16px;
+  box-shadow: none;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: var(--lnu-navy-light);
+  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
+}
+
+.ghost-btn {
+  padding: 0 14px;
+}
+
+/* ---- Forms ---- */
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lnu-text);
+}
+
+.field-hint {
+  font-size: 12px;
+}
+
+.text-input {
+  border-radius: 10px;
+  font-size: 13.5px;
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+}
+
+.text-input::placeholder {
+  color: rgba(13, 21, 71, 0.5);
+}
+
+.text-input:focus {
+  box-shadow: var(--focus-ring);
+}
+
+.check-item {
+  font-size: 13px;
+}
+
+/* ---- Pills ---- */
+.pill {
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* ---- Feedback banners ---- */
+.feedback {
+  border-radius: 14px;
+  padding: 10px 13px;
+  font-size: 13px;
+}
+
+/* ---- Modals ---- */
+.modal-card {
+  border-radius: 22px;
+  padding: 24px;
+  gap: 16px;
+}
+
+.modal-head h4 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.modal-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+/* ---- Toolbars / lists ---- */
+.management-toolbar {
+  padding: 12px 16px;
+  gap: 8px;
+}
+
+.management-list {
+  padding: 14px 16px;
+}
+
+/* ---- Data tables ---- */
+.directory-table-wrap {
+  margin: 14px 4px;
+  border-radius: 16px;
+}
+
+/* Row actions stay compact so the last column fits a 1366px laptop. */
+.directory-table .ghost-btn,
+.directory-table .danger-btn,
+.directory-table .primary-btn {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+
+.directory-table {
+  font-size: 13px;
+}
+
+.directory-table th,
+.directory-table td {
+  padding: 10px 12px;
+}
+
+.directory-sort-btn {
+  padding: 10px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.directory-table-name-cell strong {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* ---- Empty states ---- */
+.room-empty-state h4 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.room-empty-state p {
+  font-size: 13.5px;
+  color: var(--lnu-text-muted);
+}
+
+/* ---- Key-metric tiles ---- */
+.stat-card {
+  border-radius: 18px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px 18px;
+  gap: 13px;
+}
+
+.stat-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+.stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--lnu-text-muted);
+}
+
+.stat-value {
+  margin-top: 3px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+/* ---- Section headers ---- */
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #0b0d17;
+}
+
+.section-count {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--lnu-text-muted);
+}
+
+.section-head .ghost-btn {
+  height: 32px;
+}
+
+/* =======================================================================
    EXAM OVERLAY REFRESH
    =======================================================================
    Every .exam-* class below is used by exactly one template (the exam
@@ -5625,7 +5876,7 @@
 }
 
 .exam-attempt-shell {
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid rgba(13, 21, 71, 0.14);
   background: var(--surface);
   box-shadow: 0 24px 60px rgba(4, 8, 26, 0.4);
@@ -5777,7 +6028,7 @@
 
 .exam-attempt-sidebar {
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-muted);
   padding: 11px;
   gap: 10px;
@@ -5897,7 +6148,7 @@
 /* ---- Question card: the focus of the screen ---- */
 .exam-attempt-card.immersive {
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface);
   box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
   padding: 18px clamp(16px, 2vw, 26px);
@@ -6030,7 +6281,7 @@
 /* ---- Footer ---- */
 .exam-attempt-footer {
   border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-muted);
   padding: 9px 12px;
   gap: 8px;
@@ -6377,7 +6628,7 @@ a.assignment-chip.is-link:hover {
   width: 44px;
   height: 44px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: #ffffff;
   display: inline-flex;
@@ -6721,7 +6972,7 @@ a.assignment-chip.is-link:hover {
   .user-directory-summary-card {
     padding: 10px 12px;
     gap: 2px;
-    border-radius: 12px;
+    border-radius: 14px;
   }
 
   .user-directory-summary-card span {

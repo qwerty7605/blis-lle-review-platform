@@ -1041,9 +1041,9 @@ const examTimerTone = computed(() => {
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 18px 22px;
-  background: linear-gradient(120deg, var(--lnu-navy-deep), var(--lnu-navy) 70%, var(--lnu-navy-light));
+  background: var(--panel-navy);
   color: #fff;
   box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
 }
@@ -1154,7 +1154,7 @@ const examTimerTone = computed(() => {
 .rooms-exam-row {
   flex-shrink: 0;
   border: 1px solid rgba(26, 35, 126, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
