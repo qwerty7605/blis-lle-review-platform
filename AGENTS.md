@@ -84,6 +84,14 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - Touch screens (`pointer: coarse`) get 44px controls via `--control-height` and 16px field text (iOS zooms into smaller fields).
 - `GET /api/admin/users` returns rows in directory order (current students by year, archived by year, staff, admins; then name) plus `group_totals` for the headings; phones grow the list with `per_page` instead of paging. `GET /api/admin/audit-logs` pages with `page`/`per_page` (legacy `limit` still works) and returns `meta`.
 
+## Visual Design
+
+- One look for the whole app, set by the signed-out pages: Poppins (`--font-display`), the navy panel (`--panel-navy`), large radii (`--radius-sm/md/lg` = 10/16/22px), white cards on the cream page, and navy buttons with gold text. Tokens live in `frontend/src/style.css`.
+- Signed-out pages share `frontend/src/views/auth/AuthLayout.vue` + `auth.css`; logos are in `frontend/src/assets/`.
+- Dashboard pages get the look from the "BRAND LAYER" block in `dashboard.css` (shared primitives: `.surface-card`, `.primary-btn`, `.text-input`, `.pill`, tables, modals). Restyle there before adding per-page CSS.
+- Charts: `frontend/src/components/charts/JsChart.vue` wraps Chart.js (bar and line, pass-mark line, value labels, tooltips) and is used on the teacher dashboard. Below-passing is amber `#c98a1e` and passing is indigo `#3949ab`, a pair checked for colour-blind separation; do not swap in red/green. `ConfidenceGauge.vue` is a hand-built SVG gauge.
+- Any `display: grid` list that can hold a long one-line string needs `grid-template-columns: minmax(0, 1fr)`, or the row widens the page on phones.
+
 ## Docker/Runtime Notes
 
 - Service ports:
@@ -117,6 +125,7 @@ Defined in `database/seeders/DatabaseSeeder.php`:
   - Check `docker ps` and remove conflicting containers before `up -d`.
 - New backend modules (API-backed):
   - Staff student directory: `/api/students/directory`
+  - Student profile (staff and admin only): `GET /api/students/{student}/analytics` returns `student` plus the same payload as `/api/student/analytics` (both built by `$buildStudentAnalytics` in `routes/api/student.php`). Page: `frontend/src/views/dashboard/staff/StudentProfileView.vue` at `/dashboard/students/:studentId`, opened by clicking a name in the Students directory; it is a hidden nav module (`studentProfile`).
   - Exams: `/api/exams` (CRUD + room assignment + optional `scheduled_at` datetime)
     - Exams now support optional `question_bank_id`.
     - Room assignments can be archived/restored without deleting the historical exam-session link.
@@ -125,7 +134,7 @@ Defined in `database/seeders/DatabaseSeeder.php`:
     - `GET /api/student/exam-attempts/{attempt}`
     - `PATCH /api/student/exam-attempts/{attempt}/answers`
     - `POST /api/student/exam-attempts/{attempt}/submit`
-  - Reports: `/api/reports/overview`
+  - Reports: `/api/reports/overview`. In the UI this page is the teacher's **Dashboard**: first in the staff sidebar and the page staff land on after signing in. The nav key, route (`/dashboard/reports`, `dashboard-reports`) and `ReportsView.vue` keep the name "reports".
   - System settings: `/api/settings/system` (admin can update)
   - Student room details (`GET /api/rooms/{room}`) expose active rosters for room pages and current/archived exams separately; attempt availability is enforced by `scheduled_at`, archive state, and question set presence.
 

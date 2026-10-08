@@ -371,7 +371,7 @@ const {
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   background: #ffffff;
 }
 
@@ -385,7 +385,7 @@ const {
   margin: 0;
   padding: 0;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   background: #ffffff;
 }

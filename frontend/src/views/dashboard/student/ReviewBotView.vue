@@ -875,7 +875,7 @@ function recommendationHeading(action) {
   gap: 14px;
   margin: 12px 15px 0;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
@@ -976,7 +976,7 @@ function recommendationHeading(action) {
   display: grid;
   gap: 9px;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   border: 1px solid rgba(13, 21, 71, 0.1);
   background: #fff;
 }

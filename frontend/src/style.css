@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 :root {
   --lnu-navy: #1A237E;
@@ -30,9 +30,9 @@
   --lnu-info: #1F418F;
   --lnu-info-rgb: 31, 65, 143;
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
 
   --shadow-sm: 0 8px 24px rgba(13, 21, 71, 0.08);
   --shadow-md: 0 18px 42px rgba(13, 21, 71, 0.12);
@@ -48,10 +48,21 @@
   --ink: #102149;
   --ink-muted: #5d6b86;
   --ink-soft: #66738c;
-  --control-height: 36px;
-  --control-radius: 9px;
+  --control-height: 38px;
+  --control-radius: 10px;
 
   --focus-ring: 0 0 0 3px rgba(26, 35, 126, 0.2);
+
+  /* The navy panel: sidebar, page banners, and the signed-out pages' left
+     side all use this one background. */
+  --panel-navy:
+    radial-gradient(circle at 100% 0%, rgba(240, 208, 128, 0.18), transparent 44%),
+    radial-gradient(circle at 0% 100%, rgba(255, 255, 255, 0.08), transparent 46%),
+    var(--lnu-navy);
+
+  /* One typeface for the whole app. Only weights 400-700 are loaded, so a
+     rule asking for 800 renders at 700. */
+  --font-display: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
 /* Fingers, not cursors: every button and field built on --control-height
@@ -89,7 +100,7 @@ body,
 }
 
 body {
-  font-family: 'Plus Jakarta Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-display);
   background:
     radial-gradient(circle at 8% 4%, rgba(26, 35, 126, 0.1), transparent 28%),
     radial-gradient(circle at 92% 0%, rgba(201, 168, 76, 0.16), transparent 30%),

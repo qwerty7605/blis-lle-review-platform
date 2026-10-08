@@ -19,7 +19,7 @@ export const dashboardModules = {
     routeName: 'dashboard-home',
     label: 'Dashboard',
     title: 'Dashboard',
-    sub: 'See recent exams, active notices, and your current rooms in one place',
+    sub: 'See your exam notices and where you stand',
     icon: LayoutDashboard,
   },
   rooms: {
@@ -90,6 +90,16 @@ export const dashboardModules = {
     sub: 'Browse enrolled students and their performance history',
     icon: Users,
   },
+  studentProfile: {
+    key: 'studentProfile',
+    routeName: 'dashboard-student-profile',
+    label: 'Student Profile',
+    title: 'Student Profile',
+    sub: 'One student and how they are doing',
+    icon: UserRound,
+    // Reached by clicking a student in the directory, never from the sidebar.
+    hidden: true,
+  },
   licensure: {
     key: 'licensure',
     routeName: 'dashboard-licensure',
@@ -108,11 +118,13 @@ export const dashboardModules = {
   },
   reports: {
     key: 'reports',
+    // The teacher dashboard: first in the sidebar, so it is also where staff
+    // land after signing in. The key and route keep the name "reports".
     routeName: 'dashboard-reports',
-    label: 'Reports',
-    title: 'Reports',
-    sub: 'Review aggregate and student-level insights',
-    icon: BarChart3,
+    label: 'Dashboard',
+    title: 'Dashboard',
+    sub: 'How your classes are doing and what to do next',
+    icon: LayoutDashboard,
   },
   settings: {
     key: 'settings',
@@ -142,9 +154,9 @@ export const dashboardModules = {
 
 const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult'],
-  staff_master_examiner: ['library', 'reviewBotGenerator', 'room', 'students', 'licensure', 'exams', 'reports', 'settings'],
-  faculty: ['library', 'reviewBotGenerator', 'room', 'students', 'licensure', 'exams', 'reports', 'settings'],
-  admin: ['users', 'room', 'students', 'licensure', 'settings', 'audit'],
+  staff_master_examiner: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
+  faculty: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
+  admin: ['users', 'room', 'students', 'studentProfile', 'licensure', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {
