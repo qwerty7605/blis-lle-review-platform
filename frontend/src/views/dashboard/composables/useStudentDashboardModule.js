@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { studentDashboardApi } from '@/api/studentDashboard.api'
 import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
 import { formatCompactDate, formatDateTime, parseDateTime } from './useDashboardFormatters'
+import { describeReadiness } from './readiness'
 import {
   canStudentOpenExam,
   examHasQuestionSet,
@@ -305,32 +306,7 @@ export function useStudentDashboardModule() {
 
   // "Am I ready?" — the single most decision-relevant signal for a licensure
   // exam review app, surfaced here instead of requiring a trip to Analytics.
-  const readiness = computed(() => {
-    const model = predictiveModel.value
-
-    if (!model || model.status !== 'connected') {
-      return {
-        ready: false,
-        label: 'Building Readiness Profile',
-        tone: 'neutral',
-        confidence: null,
-        detail: model?.description ?? 'Take exams across all 6 core subjects to unlock this.',
-      }
-    }
-
-    const isPass = model.prediction === 'PASS'
-
-    return {
-      ready: true,
-      isPass,
-      label: isPass ? 'On Track to Pass' : 'At Risk',
-      tone: isPass ? 'success' : 'danger',
-      confidence: Number(model.probability_percent ?? 0),
-      detail: isPass
-        ? 'Estimated confidence you will pass the LET, based on your exam history.'
-        : 'Estimated confidence you will fail the LET if performance stays the same.',
-    }
-  })
+  const readiness = computed(() => describeReadiness(predictiveModel.value))
 
   // "How are you trending?" — real numbers from the same analytics summary
   // the readiness prediction already comes from (routes/api/student.php's

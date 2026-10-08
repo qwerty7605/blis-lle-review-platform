@@ -98,6 +98,13 @@ class TeacherActionPlanner
             'key' => 'publish_practice',
             'tone' => 'urgent',
             'area_key' => "topic:{$topic['topic_id']}",
+            'title' => (string) $topic['label'],
+            'subject' => (string) ($topic['subject'] ?? ''),
+            'summary' => sprintf(
+                'Your students average %s%% on this topic, and there are no Review Bot questions for them to practise it with.',
+                $this->percent($topic['score']),
+            ),
+            'next' => 'Generate and publish a practice set from the Library file this topic came from.',
             'advice' => $this->advice(
                 "Your class has nothing to practise {$topic['label']} with.",
                 [
@@ -167,6 +174,14 @@ class TeacherActionPlanner
             'key' => 'check_answer_key',
             'tone' => 'primary',
             'area_key' => "question:{$row->question_id}",
+            'title' => sprintf('Item %d in "%s"', (int) $row->item_number, $row->exam_title),
+            'subject' => '',
+            'summary' => sprintf(
+                'Only %d of the %d students who answered this item got it right. The marked answer may be wrong.',
+                $correct,
+                $answered,
+            ),
+            'next' => 'Open the item in the Library and check its marked answer against the source.',
             'advice' => $this->advice(
                 sprintf('Item %d in "%s" may be miskeyed.', (int) $row->item_number, $row->exam_title),
                 [
@@ -210,6 +225,15 @@ class TeacherActionPlanner
             'key' => 'reteach_topic',
             'tone' => 'opportunity',
             'area_key' => "topic:{$topic['topic_id']}",
+            'title' => (string) $topic['label'],
+            'subject' => (string) ($topic['subject'] ?? ''),
+            'summary' => sprintf(
+                'The class averages %s%% on this topic even though %d practice %s already published.',
+                $this->percent($topic['score']),
+                $available,
+                $available === 1 ? 'question is' : 'questions are',
+            ),
+            'next' => 'Cover the topic again before the next mock exam, then see whether the score moves.',
             'advice' => $this->advice(
                 "{$topic['label']} is not landing with the class.",
                 [
@@ -262,6 +286,18 @@ class TeacherActionPlanner
             'key' => 'follow_up_students',
             'tone' => 'info',
             'area_key' => 'students',
+            'title' => sprintf(
+                '%d %s individual follow-up',
+                count($behind),
+                count($behind) === 1 ? 'student needs' : 'students need',
+            ),
+            'subject' => '',
+            'summary' => sprintf(
+                'Well below the pass mark: %s%s.',
+                implode(', ', $names),
+                count($behind) > count($names) ? ', and others' : '',
+            ),
+            'next' => "Open each student's profile to see their subjects and exam history before you talk to them.",
             'advice' => $this->advice(
                 sprintf(
                     '%d %s far enough behind to need individual follow-up.',
@@ -304,6 +340,14 @@ class TeacherActionPlanner
             'key' => 'confirm_tags',
             'tone' => 'info',
             'area_key' => 'tags',
+            'title' => sprintf(
+                '%d %s unchecked topics',
+                $pending,
+                $pending === 1 ? 'question has' : 'questions have',
+            ),
+            'subject' => '',
+            'summary' => 'Their topics were assigned automatically and never confirmed, yet they already count toward every weak-topic reading.',
+            'next' => 'Confirm or correct the topics on those question banks.',
             'advice' => $this->advice(
                 sprintf('%d of your questions carry topics nobody has checked.', $pending),
                 [

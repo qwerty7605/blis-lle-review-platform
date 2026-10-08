@@ -1,114 +1,95 @@
 <template>
-  <div class="auth-shell">
-    <aside class="auth-brand">
-      <div class="brand-card">
-        <div class="brand-seal">
-          <GraduationCap :size="30" />
-        </div>
-        <p class="brand-label">LNU LLE Platform</p>
-        <h1>LLE Examination and Readiness System</h1>
-        <p class="brand-copy">
-          Access your reviewer workspace, take mock exams, and monitor your progress from one clean dashboard.
-        </p>
+  <AuthLayout
+    eyebrow="Welcome back"
+    title="Sign In to Continue"
+    panel-heading="Review, practice, and track your progress."
+    panel-copy="Open your reviewer workspace, take mock exams, and see how you are doing from one clean dashboard."
+    :highlights="highlights"
+  >
+    <div v-if="apiError" class="alert alert-danger" role="alert">{{ apiError }}</div>
 
-        <div class="brand-list">
-          <div class="brand-item" v-for="item in highlights" :key="item.text">
-            <component :is="item.icon" :size="16" class="brand-item-icon" />
-            <span>{{ item.text }}</span>
-          </div>
+    <div v-if="notice" class="alert alert-success">{{ notice }}</div>
+
+    <div v-if="unverifiedEmail" class="alert alert-info">
+      <p>Link expired or never arrived? We can send a new one.</p>
+      <button type="button" class="submit-btn" :disabled="isResending" @click="handleResend">
+        <span v-if="!isResending">Resend verification email</span>
+        <span v-else>Sending...</span>
+      </button>
+      <p v-if="resendMessage">{{ resendMessage }}</p>
+    </div>
+
+    <form class="auth-form" @submit.prevent="handleSubmit">
+      <label class="field-group">
+        <span class="field-label">Email or Student ID</span>
+        <div class="field-wrap">
+          <UserRound :size="17" class="field-icon" />
+          <input
+            v-model="form.identifier"
+            type="text"
+            class="field-input"
+            placeholder="e.g. you@lnu.edu.ph or 1234567"
+            autocomplete="username"
+          />
         </div>
+      </label>
+
+      <label class="field-group">
+        <span class="field-label">Password</span>
+        <div class="field-wrap">
+          <LockKeyhole :size="17" class="field-icon" />
+          <input
+            v-model="form.password"
+            :type="showPw ? 'text' : 'password'"
+            class="field-input field-input-with-toggle"
+            placeholder="Enter your password"
+            autocomplete="current-password"
+          />
+          <button
+            type="button"
+            class="field-toggle"
+            :aria-label="showPw ? 'Hide password' : 'Show password'"
+            :aria-pressed="showPw"
+            @click="showPw = !showPw"
+          >
+            <EyeOff v-if="showPw" :size="16" />
+            <Eye v-else :size="16" />
+          </button>
+        </div>
+      </label>
+
+      <div class="form-row">
+        <label class="remember-wrap">
+          <input type="checkbox" v-model="form.remember" />
+          <span>Remember me</span>
+        </label>
+        <router-link to="/forgot-password" class="inline-link">Forgot password?</router-link>
       </div>
-    </aside>
 
-    <main class="auth-main">
-      <section class="auth-card">
-        <header class="auth-header">
-          <p class="eyebrow">Welcome back</p>
-          <h2>Sign in to continue</h2>
-          <p class="subtitle">Use your registered account to open your LLE workspace.</p>
-        </header>
+      <button type="submit" class="submit-btn" :disabled="isLoading">
+        <span v-if="!isLoading">Sign In</span>
+        <span v-else class="spinner" />
+      </button>
+    </form>
 
-        <div v-if="apiError" class="alert alert-danger">{{ apiError }}</div>
-
-        <div v-if="notice" class="alert alert-success">{{ notice }}</div>
-
-        <div v-if="unverifiedEmail" class="alert alert-info">
-          <p>Link expired or never arrived? We can send a new one.</p>
-          <button type="button" class="submit-btn" :disabled="isResending" @click="handleResend">
-            <span v-if="!isResending">Resend verification email</span>
-            <span v-else>Sending...</span>
-          </button>
-          <p v-if="resendMessage">{{ resendMessage }}</p>
-        </div>
-
-        <form class="auth-form" @submit.prevent="handleSubmit">
-          <label class="field-group">
-            <span class="field-label">Email or Student ID</span>
-            <div class="field-wrap">
-              <UserRound :size="17" class="field-icon" />
-              <input
-                v-model="form.identifier"
-                type="text"
-                class="field-input"
-                placeholder="e.g. you@lnu.edu.ph or 1234567"
-                autocomplete="username"
-              />
-            </div>
-          </label>
-
-          <label class="field-group">
-            <span class="field-label">Password</span>
-            <div class="field-wrap">
-              <LockKeyhole :size="17" class="field-icon" />
-              <input
-                v-model="form.password"
-                :type="showPw ? 'text' : 'password'"
-                class="field-input field-input-with-toggle"
-                placeholder="Enter your password"
-                autocomplete="current-password"
-              />
-              <button type="button" class="field-toggle" @click="showPw = !showPw">
-                <EyeOff v-if="showPw" :size="16" />
-                <Eye v-else :size="16" />
-              </button>
-            </div>
-          </label>
-
-          <div class="form-row">
-            <label class="remember-wrap">
-              <input type="checkbox" v-model="form.remember" />
-              <span>Remember me</span>
-            </label>
-            <router-link to="/forgot-password" class="inline-link">Forgot password?</router-link>
-          </div>
-
-          <button type="submit" class="submit-btn" :disabled="isLoading">
-            <span v-if="!isLoading">Sign In</span>
-            <span v-else class="spinner" />
-          </button>
-        </form>
-
-        <p class="auth-footer">
-          No account yet?
-          <router-link to="/register" class="inline-link strong">Create one</router-link>
-        </p>
-      </section>
-    </main>
-  </div>
+    <template #footer>
+      No account yet?
+      <router-link to="/register" class="inline-link strong">Create one</router-link>
+    </template>
+  </AuthLayout>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
+import AuthLayout from './AuthLayout.vue'
 import {
   BarChart3,
   ClipboardCheck,
   Eye,
   EyeOff,
-  GraduationCap,
   LockKeyhole,
-  Mail,
   ShieldCheck,
   UserRound,
 } from 'lucide-vue-next'
@@ -184,239 +165,14 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-.auth-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: minmax(320px, 460px) 1fr;
-  background:
-    radial-gradient(circle at 10% 12%, rgba(26, 35, 126, 0.12), transparent 32%),
-    radial-gradient(circle at 90% 90%, rgba(201, 168, 76, 0.24), transparent 35%),
-    var(--lnu-bg);
-}
-
-.auth-brand {
-  background: linear-gradient(155deg, var(--lnu-navy-deep), var(--lnu-navy));
-  padding: 42px 34px;
-  color: var(--lnu-white);
-  display: flex;
-}
-
-.brand-card {
-  border: 1px solid rgba(240, 208, 128, 0.25);
-  border-radius: var(--radius-lg);
-  padding: 30px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
-  box-shadow: var(--shadow-md);
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.brand-seal {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(240, 208, 128, 0.16);
-  color: var(--lnu-gold-light);
-  border: 1px solid rgba(240, 208, 128, 0.35);
-}
-
-.brand-label {
-  margin-top: 22px;
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(240, 208, 128, 0.88);
-}
-
-.brand-card h1 {
-  margin: 10px 0 0;
-  font-size: 31px;
-  line-height: 1.2;
-  color: var(--lnu-gold-light);
-}
-
-.brand-copy {
-  margin-top: 14px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 15px;
-}
-
-.brand-list {
-  margin-top: auto;
-  display: grid;
-  gap: 12px;
-  padding-top: 28px;
-}
-
-.brand-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
-  padding: 11px 12px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.brand-item-icon {
-  color: var(--lnu-gold-light);
-  flex-shrink: 0;
-}
-
-.auth-main {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 42px 24px;
-  background: transparent;
-}
-
-.auth-card {
-  width: 100%;
-  max-width: 460px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(253, 246, 227, 0.94));
-  border: 1px solid rgba(26, 35, 126, 0.16);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 32px;
-}
-
-.auth-header h2 {
-  margin: 6px 0 10px;
-  font-size: 28px;
-  line-height: 1.2;
-  color: var(--lnu-text);
-}
-
-.eyebrow {
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lnu-navy-light);
-  font-weight: 700;
-}
-
-.subtitle {
-  font-size: 15px;
-  color: var(--lnu-text-muted);
-}
-
-.alert {
-  margin-top: 16px;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-}
-
-.alert-danger {
-  background: rgba(198, 40, 40, 0.12);
-  color: var(--lnu-danger);
-  border: 1px solid rgba(198, 40, 40, 0.2);
-}
-
-.alert-success {
-  background: rgba(46, 125, 50, 0.1);
-  color: var(--lnu-success);
-  border: 1px solid rgba(46, 125, 50, 0.22);
-}
-
-.alert-info {
-  background: rgba(21, 101, 192, 0.09);
-  border: 1px solid rgba(21, 101, 192, 0.2);
-  display: grid;
-  gap: 10px;
-}
-
-.auth-form {
-  margin-top: 20px;
-  display: grid;
-  gap: 16px;
-}
-
-.field-group {
-  display: grid;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--lnu-text);
-}
-
-.field-wrap {
-  position: relative;
-}
-
-.field-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--lnu-navy-light);
-  opacity: 0.8;
-}
-
-.field-input {
-  width: 100%;
-  height: 44px;
-  border: 1px solid rgba(13, 21, 71, 0.2);
-  border-radius: var(--radius-sm);
-  padding: 0 12px 0 40px;
-  color: var(--lnu-text);
-  background: rgba(255, 255, 255, 0.9);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.field-input:focus {
-  border-color: var(--lnu-navy);
-  box-shadow: var(--focus-ring);
-  outline: none;
-}
-
-.field-input::placeholder {
-  color: rgba(13, 21, 71, 0.55);
-}
-
-.field-input-with-toggle {
-  padding-right: 44px;
-}
-
-.field-toggle {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lnu-text-muted);
-  background: transparent;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.field-toggle:hover {
-  background: rgba(13, 21, 71, 0.08);
-  color: var(--lnu-text);
-}
+/* Shared field, alert and layout styles live in auth.css (see AuthLayout.vue). */
 
 .form-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 2px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .remember-wrap {
@@ -428,128 +184,5 @@ async function handleSubmit() {
 
 .remember-wrap input {
   accent-color: var(--lnu-navy);
-}
-
-.inline-link {
-  color: var(--lnu-navy-light);
-  text-decoration: none;
-}
-
-.inline-link:hover {
-  text-decoration: underline;
-}
-
-.inline-link.strong {
-  font-weight: 700;
-}
-
-/* .submit-btn is shared globally, see style.css */
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(240, 208, 128, 0.35);
-  border-top-color: var(--lnu-gold-light);
-  animation: spin 0.8s linear infinite;
-}
-
-.auth-footer {
-  margin-top: 18px;
-  color: var(--lnu-text-muted);
-  text-align: center;
-  font-size: 15px;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (min-width: 981px) {
-  .auth-shell {
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .auth-brand,
-  .auth-main {
-    min-height: 0;
-  }
-
-  /*
-   * The form column scrolls on its own, and the card is placed with
-   * `margin: auto` rather than `align-items: center`.
-   *
-   * Centred, a flex item taller than its container overflows equally in BOTH
-   * directions -- and with the shell clipping at `overflow: hidden`, the half
-   * above the top edge could not be scrolled back to. On a 768px-tall laptop
-   * this registration form is already taller than the viewport, and it grows
-   * another ~120px the moment the password checklist appears, so the heading
-   * and the Create Account button were simply cut off.
-   */
-  .auth-brand {
-    overflow-y: auto;
-  }
-
-  .auth-main {
-    align-items: flex-start;
-    overflow-y: auto;
-  }
-
-  .auth-card {
-    margin: auto;
-  }
-
-  .auth-brand {
-    padding: clamp(28px, 3vw, 42px) clamp(24px, 2.6vw, 34px);
-  }
-
-  .brand-card {
-    padding: clamp(24px, 2.1vw, 30px);
-  }
-
-  .brand-card h1 {
-    font-size: clamp(28px, 2vw, 31px);
-  }
-
-  .brand-copy {
-    margin-top: 12px;
-  }
-
-  .brand-list {
-    gap: 10px;
-    padding-top: clamp(20px, 3vh, 28px);
-  }
-
-  .auth-main {
-    padding: clamp(24px, 3vw, 42px) 24px;
-  }
-
-  .auth-card {
-    padding: clamp(24px, 2vw, 32px);
-  }
-}
-
-@media (max-width: 980px) {
-  .auth-shell {
-    grid-template-columns: 1fr;
-    min-height: 100dvh;
-    height: auto;
-  }
-
-  .auth-brand {
-    display: none;
-  }
-
-  .auth-main {
-    padding: 24px 16px;
-  }
-
-  .auth-card {
-    padding: 24px;
-  }
 }
 </style>

@@ -174,6 +174,14 @@
                   <dd>{{ archivedDateLabel(student) }}</dd>
                 </div>
               </dl>
+
+              <RouterLink
+                class="primary-btn directory-row-profile-btn"
+                :to="{ name: 'dashboard-student-profile', params: { studentId: student.id } }"
+              >
+                View profile
+                <ArrowRight :size="15" />
+              </RouterLink>
             </details>
           </li>
         </ul>
@@ -263,7 +271,12 @@
                 :class="{ 'is-archived': isArchivedStudent(student) }"
               >
                 <td class="directory-table-name-cell">
-                  <strong>{{ student.name }}</strong>
+                  <RouterLink
+                    class="directory-profile-link"
+                    :to="{ name: 'dashboard-student-profile', params: { studentId: student.id } }"
+                  >
+                    <strong>{{ student.name }}</strong>
+                  </RouterLink>
                   <span v-if="isArchivedStudent(student)" class="pill danger">
                     Archived {{ archivedDateLabel(student) }}
                   </span>
@@ -400,7 +413,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { AlertCircle, ChevronDown, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
+import { AlertCircle, ArrowRight, ChevronDown, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
 import BottomSheet from '@/components/BottomSheet.vue'
 import { useStudentsModule } from '../composables/useStudentsModule'
 import { useCompactLayout, usePhoneLayout } from '../composables/useViewport'
@@ -552,3 +565,32 @@ watch(isPhone, () => {
 </script>
 
 <style scoped src="../dashboard.css"></style>
+
+<style scoped>
+/* A student's name opens their profile. */
+.directory-profile-link {
+  color: var(--lnu-navy);
+  text-decoration: none;
+}
+
+.directory-profile-link:hover strong,
+.directory-profile-link:focus-visible strong {
+  text-decoration: underline;
+}
+
+.directory-profile-link:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.directory-row-profile-btn {
+  margin: 4px 16px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  text-decoration: none;
+}
+</style>
