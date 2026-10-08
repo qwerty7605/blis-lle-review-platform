@@ -199,7 +199,7 @@ onBeforeUnmount(release)
   height: 44px;
   margin-top: -8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 14px;
   background: transparent;
   color: var(--ink-muted, #5d6b86);
   display: inline-flex;

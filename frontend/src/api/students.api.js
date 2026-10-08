@@ -7,6 +7,11 @@ class StudentsApi {
   directory(params = {}) {
     return http.get('/students/directory', { params })
   }
+
+  /** One student's identity plus their analytics. Staff and admins only. */
+  profile(studentId) {
+    return http.get(`/students/${studentId}/analytics`)
+  }
 }
 
 export const studentsApi = new StudentsApi()

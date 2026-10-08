@@ -467,7 +467,7 @@ const {
 .rbg-bank-table-wrap {
   overflow-x: auto;
   border: 1px solid rgba(13, 21, 71, 0.12);
-  border-radius: 14px;
+  border-radius: 18px;
 }
 
 .rbg-bank-table {
@@ -586,7 +586,7 @@ const {
   display: grid;
   gap: 6px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #f6f8fd;
   border: 1px solid rgba(13, 21, 71, 0.08);
 }
@@ -619,7 +619,7 @@ const {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: 14px;
   background: #eef3ff;
   border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
   flex-wrap: wrap;
@@ -649,7 +649,7 @@ const {
   display: grid;
   gap: 10px;
   padding: 16px;
-  border-radius: 16px;
+  border-radius: 20px;
   border: 1px solid rgba(13, 21, 71, 0.12);
   background: #ffffff;
 }

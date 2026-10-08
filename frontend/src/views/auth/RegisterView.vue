@@ -1,33 +1,13 @@
 <template>
-  <div class="auth-shell">
-    <aside class="auth-brand">
-      <div class="brand-card">
-        <div class="brand-seal">
-          <GraduationCap :size="30" />
-        </div>
-        <p class="brand-label">LNU LLE Platform</p>
-        <h1>Create your reviewer account</h1>
-        <p class="brand-copy">
-          Register once and access your exam rooms, analytics, and mock examination modules.
-        </p>
-
-        <div class="brand-list">
-          <div class="brand-item" v-for="item in highlights" :key="item.text">
-            <component :is="item.icon" :size="16" class="brand-item-icon" />
-            <span>{{ item.text }}</span>
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <main class="auth-main">
-      <section class="auth-card">
-        <header class="auth-header">
-          <p class="eyebrow">Registration</p>
-          <h2>Create Account</h2>
-          <p class="subtitle">Complete your details to start using the platform.</p>
-        </header>
-
+  <AuthLayout
+    wide
+    eyebrow="Registration"
+    title="Create Your Account"
+    subtitle="Complete your details to start using the platform."
+    panel-heading="Create your reviewer account."
+    panel-copy="Register once and get your exam rooms, analytics, and mock examination modules in one place."
+    :highlights="highlights"
+  >
         <div v-if="apiError" class="alert alert-danger" role="alert">{{ apiError }}</div>
 
         <div v-if="pendingEmail" class="alert alert-success">
@@ -303,13 +283,13 @@
           </button>
         </form>
 
-        <p class="auth-footer">
+        <template #footer>
           Already registered?
           <router-link to="/login" class="inline-link strong">Sign in</router-link>
-        </p>
-      </section>
-    </main>
+        </template>
+  </AuthLayout>
 
+  <Teleport to="body">
     <div
       v-if="activePolicy"
       class="policy-modal-backdrop"
@@ -353,7 +333,7 @@
         </footer>
       </section>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -362,6 +342,7 @@ import { useRouter } from 'vue-router'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
 import { firstPasswordProblem, passwordChecklist, passwordStrength } from '@/utils/password'
+import AuthLayout from './AuthLayout.vue'
 import {
   BarChart3,
   Check,
@@ -732,295 +713,11 @@ async function handleSubmit() {
 </script>
 
 <style scoped>
-.auth-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: grid;
-  grid-template-columns: minmax(320px, 460px) 1fr;
-  background:
-    radial-gradient(circle at 10% 12%, rgba(26, 35, 126, 0.12), transparent 32%),
-    radial-gradient(circle at 90% 90%, rgba(201, 168, 76, 0.24), transparent 35%),
-    var(--lnu-bg);
-}
-
-.auth-brand {
-  background: linear-gradient(155deg, var(--lnu-navy-deep), var(--lnu-navy));
-  padding: 42px 34px;
-  color: var(--lnu-white);
-  display: flex;
-}
-
-.brand-card {
-  border: 1px solid rgba(240, 208, 128, 0.25);
-  border-radius: var(--radius-lg);
-  padding: 30px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
-  box-shadow: var(--shadow-md);
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.brand-seal {
-  width: 58px;
-  height: 58px;
-  border-radius: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(240, 208, 128, 0.16);
-  color: var(--lnu-gold-light);
-  border: 1px solid rgba(240, 208, 128, 0.35);
-}
-
-.brand-label {
-  margin-top: 22px;
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(240, 208, 128, 0.88);
-}
-
-.brand-card h1 {
-  margin: 10px 0 0;
-  font-size: 31px;
-  line-height: 1.2;
-  color: var(--lnu-gold-light);
-}
-
-.brand-copy {
-  margin-top: 14px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 15px;
-}
-
-.brand-list {
-  margin-top: auto;
-  display: grid;
-  gap: 12px;
-  padding-top: 28px;
-}
-
-.brand-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: var(--radius-md);
-  padding: 11px 12px;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.brand-item-icon {
-  color: var(--lnu-gold-light);
-  flex-shrink: 0;
-}
-
-.auth-main {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 42px 24px;
-  background:
-    radial-gradient(circle at top right, rgba(26, 35, 126, 0.12), transparent 40%),
-    radial-gradient(circle at bottom left, rgba(201, 168, 76, 0.2), transparent 42%);
-}
-
-.auth-card {
-  width: 100%;
-  max-width: 540px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.97), rgba(253, 246, 227, 0.94));
-  border: 1px solid rgba(26, 35, 126, 0.16);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 32px;
-}
-
-.auth-header h2 {
-  margin: 6px 0 4px;
-  font-size: 28px;
-  line-height: 1.2;
-  color: var(--lnu-text);
-}
-
-.eyebrow {
-  font-size: 14px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--lnu-navy-light);
-  font-weight: 700;
-}
-
-.subtitle {
-  font-size: 15px;
-  color: var(--lnu-text-muted);
-}
-
-.alert {
-  margin-top: 16px;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-}
-
-.alert-danger {
-  background: rgba(198, 40, 40, 0.12);
-  color: var(--lnu-danger);
-  border: 1px solid rgba(198, 40, 40, 0.2);
-}
-
-.alert-success {
-  background: rgba(46, 125, 50, 0.1);
-  color: var(--lnu-success);
-  border: 1px solid rgba(46, 125, 50, 0.22);
-  display: grid;
-  gap: 10px;
-}
-
-.auth-form {
-  margin-top: 20px;
-  display: grid;
-  gap: 16px;
-}
-
-.auth-form-grid {
-  gap: 16px;
-}
-
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-items: start;
-}
-
-.field-group {
-  display: grid;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--lnu-text);
-}
-
-.field-wrap {
-  position: relative;
-}
-
-.field-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--lnu-navy-light);
-  opacity: 0.8;
-}
-
-.field-input {
-  width: 100%;
-  height: 44px;
-  border: 1px solid rgba(13, 21, 71, 0.2);
-  border-radius: var(--radius-sm);
-  padding: 0 12px 0 40px;
-  color: var(--lnu-text);
-  background: rgba(255, 255, 255, 0.9);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.field-input:focus {
-  border-color: var(--lnu-navy);
-  box-shadow: var(--focus-ring);
-  outline: none;
-}
-
-.field-input::placeholder {
-  color: var(--lnu-gray-dark);
-}
-
-.field-select {
-  appearance: none;
-  padding-right: 38px;
-}
-
-.field-select-icon {
-  position: absolute;
-  top: 50%;
-  right: 12px;
-  transform: translateY(-50%);
-  color: var(--lnu-text-muted);
-  pointer-events: none;
-}
-
-.field-input-with-toggle {
-  padding-right: 44px;
-}
-
-.field-toggle {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  transform: translateY(-50%);
-  width: 30px;
-  height: 30px;
-  border: none;
-  border-radius: 7px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--lnu-text-muted);
-  background: transparent;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.field-toggle:hover {
-  background: rgba(13, 21, 71, 0.08);
-  color: var(--lnu-text);
-}
-
-.field-input-error {
-  border-color: var(--lnu-danger);
-}
-
-.field-input-error:focus {
-  border-color: var(--lnu-danger);
-  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.18);
-}
-
-.field-error {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--lnu-danger);
-  /* A server message can be long ("The student id has already been taken.");
-     it wraps rather than stretching the grid column it sits in. */
-  overflow-wrap: anywhere;
-}
-
-.pw-rules {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.pw-rules li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--lnu-text-muted);
-}
-
-.pw-rules li.met {
-  color: var(--lnu-success);
-}
+/* Shared field, alert and layout styles live in auth.css (see AuthLayout.vue). */
 
 .pw-strength {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -1040,20 +737,31 @@ async function handleSubmit() {
 }
 
 .pw-label {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+}
+
+.pw-strength .pw-rules {
+  flex-basis: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+}
+
+.terms-section {
+  display: grid;
+  gap: 8px;
 }
 
 .terms-wrap {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--lnu-text-muted);
 }
 
 .terms-wrap input {
-  margin-top: 2px;
+  margin-top: 3px;
   accent-color: var(--lnu-navy);
 }
 
@@ -1062,47 +770,13 @@ async function handleSubmit() {
   cursor: not-allowed;
 }
 
-.terms-section {
-  display: grid;
-  gap: 10px;
-}
-
 .terms-helper {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--lnu-text-muted);
 }
 
-.inline-link {
-  color: var(--lnu-navy-light);
-  text-decoration: none;
-}
-
-.inline-link:hover {
-  text-decoration: underline;
-}
-
-.inline-link.strong {
-  font-weight: 700;
-}
-
-/* .submit-btn is shared globally, see style.css */
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 2px solid rgba(240, 208, 128, 0.35);
-  border-top-color: var(--lnu-gold-light);
-  animation: spin 0.8s linear infinite;
-}
-
-.auth-footer {
-  margin-top: 18px;
-  color: var(--lnu-text-muted);
-  text-align: center;
-  font-size: 15px;
-}
-
+/* The policy dialog is teleported to <body>, outside .auth-shell, so it
+   is styled here rather than through auth.css. */
 .policy-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1161,12 +835,7 @@ async function handleSubmit() {
   gap: 14px;
 }
 
-.policy-updated {
-  margin: 0;
-  font-size: 13px;
-  color: var(--lnu-text-muted);
-}
-
+.policy-updated,
 .policy-loading {
   margin: 0;
   font-size: 13px;
@@ -1211,111 +880,12 @@ async function handleSubmit() {
 .policy-mark-btn {
   min-width: 132px;
   height: 38px;
+  padding: 0 16px;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (min-width: 981px) {
-  .auth-shell {
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .auth-brand,
-  .auth-main {
-    min-height: 0;
-  }
-
-  /*
-   * The form column scrolls on its own, and the card is placed with
-   * `margin: auto` rather than `align-items: center`.
-   *
-   * Centred, a flex item taller than its container overflows equally in BOTH
-   * directions -- and with the shell clipping at `overflow: hidden`, the half
-   * above the top edge could not be scrolled back to. On a 768px-tall laptop
-   * this registration form is already taller than the viewport, and it grows
-   * another ~120px the moment the password checklist appears, so the heading
-   * and the Create Account button were simply cut off.
-   */
-  .auth-brand {
-    overflow-y: auto;
-  }
-
-  .auth-main {
-    align-items: flex-start;
-    overflow-y: auto;
-  }
-
-  .auth-card {
-    margin: auto;
-  }
-
-  .auth-brand {
-    padding: clamp(28px, 3vw, 42px) clamp(24px, 2.6vw, 34px);
-  }
-
-  .brand-card {
-    padding: clamp(24px, 2.1vw, 30px);
-  }
-
-  .brand-card h1 {
-    font-size: clamp(28px, 2vw, 31px);
-  }
-
-  .brand-copy {
-    margin-top: 12px;
-  }
-
-  .brand-list {
-    gap: 10px;
-    padding-top: clamp(20px, 3vh, 28px);
-  }
-
-  .auth-main {
-    padding: clamp(18px, 2.4vw, 42px) 24px;
-  }
-
-  .auth-card {
-    max-width: 620px;
-    padding: clamp(24px, 1.9vw, 32px);
-  }
-
-  .auth-form,
-  .auth-form-grid {
-    gap: 14px;
-  }
-
-  .terms-section {
-    gap: 8px;
-  }
-}
-
-@media (max-width: 980px) {
-  .auth-shell {
-    grid-template-columns: 1fr;
-    min-height: 100dvh;
-    height: auto;
-  }
-
-  .auth-brand {
-    display: none;
-  }
-
-  .auth-main {
-    padding: 24px 16px;
-  }
-
-  .auth-card {
-    padding: 24px;
-  }
-
-  .field-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 560px) {
+  .pw-strength .pw-rules {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .policy-modal-backdrop {
