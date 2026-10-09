@@ -243,6 +243,7 @@ const isFillScreenRoute = computed(() => FILL_SCREEN_ROUTES.includes(currentRout
 // still says where you are.
 const NAV_PARENTS = {
   'dashboard-student-profile': 'dashboard-students',
+  'dashboard-year-end': 'dashboard-users',
 }
 const activeNavRoute = computed(() => NAV_PARENTS[currentRouteName.value] ?? currentRouteName.value)
 
