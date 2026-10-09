@@ -27,6 +27,7 @@ const ExamsView = () => import('../views/dashboard/staff/ExamsView.vue')
 const ReportsView = () => import('../views/dashboard/staff/ReportsView.vue')
 const SettingsView = () => import('../views/dashboard/shared/SettingsView.vue')
 const UsersView = () => import('../views/dashboard/admin/UsersView.vue')
+const YearEndView = () => import('../views/dashboard/admin/YearEndView.vue')
 const AuditView = () => import('../views/dashboard/admin/AuditView.vue')
 
 function dashboardRouteMeta(key) {
@@ -138,6 +139,12 @@ const routes = [
         name: 'dashboard-users',
         component: UsersView,
         meta: dashboardRouteMeta('users'),
+      },
+      {
+        path: 'year-end',
+        name: 'dashboard-year-end',
+        component: YearEndView,
+        meta: dashboardRouteMeta('yearEnd'),
       },
       {
         path: 'audit',
