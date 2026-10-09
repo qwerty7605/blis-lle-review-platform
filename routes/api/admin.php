@@ -175,7 +175,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                 'nullable',
                 'string',
                 'max:32',
-                'regex:/^\d{7,20}$/',
+                'regex:/^\d{7,10}$/',
                 'unique:users,student_id',
             ],
             'role' => ['required', Rule::in(User::ROLES)],
@@ -281,7 +281,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'student_id' => ['sometimes', 'nullable', 'string', 'max:32', 'regex:/^\d{7,20}$/', Rule::unique('users', 'student_id')->ignore($user->id)],
+            'student_id' => ['sometimes', 'nullable', 'string', 'max:32', 'regex:/^\d{7,10}$/', Rule::unique('users', 'student_id')->ignore($user->id)],
             'role' => ['sometimes', 'required', Rule::in(User::ROLES)],
             'year_level' => ['sometimes', 'nullable', 'integer', 'min:' . User::YEAR_LEVEL_MIN, 'max:' . User::YEAR_LEVEL_MAX],
             'student_status' => ['sometimes', 'nullable', Rule::in(User::STUDENT_STATUSES)],
@@ -431,7 +431,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         }
 
         $validated = $request->validate([
-            'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,20}$/'],
+            'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,10}$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['required', 'string', PasswordRule::defaults()],
         ]);

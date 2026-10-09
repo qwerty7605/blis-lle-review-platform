@@ -100,6 +100,7 @@
                   :aria-describedby="fieldErrors.student_id ? 'register-student_id-error' : undefined"
                   inputmode="numeric"
                   pattern="[0-9]*"
+                  maxlength="10"
                   @input="clearFieldError('student_id')"
                 />
               </div>
@@ -250,7 +251,7 @@
                 id="register-agreed"
                 type="checkbox"
                 v-model="form.agreed"
-                :disabled="!canAgree"
+                :disabled="!policiesRead"
                 :aria-invalid="Boolean(fieldErrors.agreed)"
                 @change="clearFieldError('agreed')"
               />
@@ -259,21 +260,13 @@
                 <a
                   href="#"
                   class="inline-link strong"
-                  :style="termsRead ? 'color: var(--lnu-success)' : ''"
-                  @click.prevent="openPolicyModal('terms')"
-                  >Terms of Service</a
-                >
-                and
-                <a
-                  href="#"
-                  class="inline-link strong"
-                  :style="privacyRead ? 'color: var(--lnu-success)' : ''"
-                  @click.prevent="openPolicyModal('privacy')"
-                  >Privacy Policy</a
+                  :style="policiesRead ? 'color: var(--lnu-success)' : ''"
+                  @click.prevent="openPolicyModal"
+                  >Terms of Service and Privacy Policy</a
                 >.
               </span>
             </label>
-            <span v-if="!canAgree" class="terms-helper">Open and read both documents before agreeing.</span>
+            <span v-if="!policiesRead" class="terms-helper">Open and read both documents before agreeing.</span>
             <p v-if="fieldErrors.agreed" class="field-error" role="alert">{{ fieldErrors.agreed }}</p>
           </div>
 
@@ -291,16 +284,16 @@
 
   <Teleport to="body">
     <div
-      v-if="activePolicy"
+      v-if="policyModalOpen"
       class="policy-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      :aria-label="activePolicyTitle"
+      aria-label="Terms of Service and Privacy Policy"
       @click.self="closePolicyModal"
     >
       <section class="policy-modal">
         <header class="policy-modal-header">
-          <h3>{{ activePolicyTitle }}</h3>
+          <h3>Terms of Service and Privacy Policy</h3>
           <button type="button" class="policy-close-btn" @click="closePolicyModal">Close</button>
         </header>
 
@@ -309,8 +302,12 @@
           <p v-if="legalLoading" class="policy-loading">Loading latest policy content...</p>
           <p v-else-if="legalError" class="policy-warning">{{ legalError }}</p>
           <article class="policy-article">
-            <h4>{{ activePolicyTitle }}</h4>
-            <p class="policy-body-text">{{ activePolicyContent }}</p>
+            <h4>Terms of Service</h4>
+            <p class="policy-body-text">{{ legalTexts.terms_of_use_text }}</p>
+          </article>
+          <article class="policy-article">
+            <h4>Privacy Policy</h4>
+            <p class="policy-body-text">{{ legalTexts.privacy_policy_text }}</p>
           </article>
         </div>
 
@@ -318,7 +315,7 @@
           <span class="policy-scroll-note">
             {{
               policyReadyToConfirm
-                ? 'You reached the end of this document.'
+                ? 'You reached the end of both documents.'
                 : 'Scroll to the bottom to mark as read.'
             }}
           </span>
@@ -444,11 +441,15 @@ async function focusFirstError() {
   document.getElementById(`register-${firstField}`)?.focus()
 }
 const pendingEmail = ref('')
-const activePolicy = ref('')
+/*
+ * The Terms of Service and the Privacy Policy open together in one dialog and
+ * are marked as read together. They used to be two links, each with its own
+ * scroll-and-confirm, so agreeing to a single sentence took two separate trips.
+ */
+const policyModalOpen = ref(false)
 const policyBodyRef = ref(null)
 const policyReadyToConfirm = ref(false)
-const termsRead = ref(false)
-const privacyRead = ref(false)
+const policiesRead = ref(false)
 const legalLoading = ref(false)
 const legalError = ref('')
 const legalUpdatedAt = ref('')
@@ -507,13 +508,6 @@ const legalTexts = reactive({
 const pwMismatch = computed(() =>
   form.password_confirmation.length > 0 && form.password !== form.password_confirmation,
 )
-const canAgree = computed(() => termsRead.value && privacyRead.value)
-const activePolicyTitle = computed(() => (activePolicy.value === 'terms' ? 'Terms of Service' : 'Privacy Policy'))
-const activePolicyContent = computed(() =>
-  activePolicy.value === 'terms'
-    ? legalTexts.terms_of_use_text
-    : legalTexts.privacy_policy_text,
-)
 const legalUpdatedLabel = computed(() => {
   if (!legalUpdatedAt.value) {
     return 'Last updated: March 5, 2026'
@@ -549,8 +543,8 @@ function updatePolicyReadiness() {
   policyReadyToConfirm.value = scrollBottom >= bodyEl.scrollHeight - 8
 }
 
-async function openPolicyModal(type) {
-  activePolicy.value = type
+async function openPolicyModal() {
+  policyModalOpen.value = true
   policyReadyToConfirm.value = false
 
   await nextTick()
@@ -561,7 +555,7 @@ async function openPolicyModal(type) {
 }
 
 function closePolicyModal() {
-  activePolicy.value = ''
+  policyModalOpen.value = false
   policyReadyToConfirm.value = false
 }
 
@@ -572,14 +566,7 @@ function handlePolicyScroll() {
 function markPolicyAsRead() {
   if (!policyReadyToConfirm.value) return
 
-  if (activePolicy.value === 'terms') {
-    termsRead.value = true
-  }
-
-  if (activePolicy.value === 'privacy') {
-    privacyRead.value = true
-  }
-
+  policiesRead.value = true
   closePolicyModal()
 }
 
@@ -601,7 +588,7 @@ async function loadPublicLegalSettings() {
     legalError.value = 'Unable to load latest policy text. Showing default content.'
   } finally {
     legalLoading.value = false
-    if (activePolicy.value) {
+    if (policyModalOpen.value) {
       await nextTick()
       updatePolicyReadiness()
     }
@@ -633,10 +620,10 @@ async function handleSubmit() {
 
   if (!studentId) {
     fieldErrors.student_id = 'Enter your student ID.'
-  } else if (!/^\d{7,20}$/.test(studentId)) {
+  } else if (!/^\d{7,10}$/.test(studentId)) {
     // Says both the rule and what was actually typed, because "invalid
     // format" leaves someone staring at a number that looks fine to them.
-    fieldErrors.student_id = `Student ID must be 7 to 20 digits -- you entered ${studentId.length}.`
+    fieldErrors.student_id = `Student ID must be 7 to 10 digits -- you entered ${studentId.length}.`
   }
 
   if (!form.year_level) {
@@ -665,7 +652,7 @@ async function handleSubmit() {
     fieldErrors.password_confirmation = 'Passwords do not match.'
   }
 
-  if (!canAgree.value) {
+  if (!policiesRead.value) {
     fieldErrors.agreed = 'Open and read both documents before agreeing.'
   } else if (!form.agreed) {
     fieldErrors.agreed = 'Confirm your agreement to continue.'
@@ -852,6 +839,12 @@ async function handleSubmit() {
   margin: 0 0 6px;
   color: var(--lnu-text);
   font-size: 15px;
+}
+
+/* Two documents share the dialog now, so the second needs a visible start. */
+.policy-article + .policy-article {
+  border-top: 1px solid rgba(13, 21, 71, 0.12);
+  padding-top: 14px;
 }
 
 .policy-body-text {

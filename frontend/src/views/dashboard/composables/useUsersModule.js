@@ -562,8 +562,8 @@ export function useUsersModule(options = {}) {
     if (!isAdminRole.value) return
     if (!userForm.name.trim() || !userForm.email.trim()) return
 
-    if (userForm.role === 'student' && !/^\d{7,20}$/.test(userForm.student_id.trim())) {
-      usersError.value = 'Student ID must be 7 to 20 digits for student accounts.'
+    if (userForm.role === 'student' && !/^\d{7,10}$/.test(userForm.student_id.trim())) {
+      usersError.value = 'Student ID must be 7 to 10 digits for student accounts.'
       return
     }
 
@@ -644,8 +644,8 @@ export function useUsersModule(options = {}) {
     const targetUserId = Number(recoverTargetUser.value?.id ?? 0)
     if (!Number.isFinite(targetUserId) || targetUserId < 1) return
 
-    if (!/^\d{7,20}$/.test(recoverForm.student_id.trim())) {
-      usersError.value = 'Student ID must be 7 to 20 digits.'
+    if (!/^\d{7,10}$/.test(recoverForm.student_id.trim())) {
+      usersError.value = 'Student ID must be 7 to 10 digits.'
       return
     }
 

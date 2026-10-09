@@ -332,7 +332,7 @@
               v-model.trim="userForm.student_id"
               type="text"
               class="text-input"
-              maxlength="32"
+              maxlength="10"
               inputmode="numeric"
               placeholder="e.g. 2300001"
             />
@@ -443,7 +443,7 @@
               v-model.trim="recoverForm.student_id"
               type="text"
               class="text-input"
-              maxlength="32"
+              maxlength="10"
               inputmode="numeric"
               placeholder="Enter student ID on file"
             />
