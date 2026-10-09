@@ -179,6 +179,11 @@
   display: block;
 }
 
+/* Only shown where the panel that normally carries the seal is hidden. */
+.auth-shell .auth-logo .auth-logo-seal {
+  display: none;
+}
+
 .auth-shell .auth-eyebrow {
   margin: 22px 0 0;
   font-size: 13px;
@@ -466,6 +471,19 @@
   .auth-shell .auth-logo img {
     width: 46px;
     height: 46px;
+  }
+
+  /* One mark at this width, and it is the university's. A little larger
+     than the flat BLIS mark it replaces: the seal is fine detail, and at
+     46px its lettering closes up. */
+  .auth-shell .auth-logo .auth-logo-mark {
+    display: none;
+  }
+
+  .auth-shell .auth-logo .auth-logo-seal {
+    display: block;
+    width: 56px;
+    height: 56px;
   }
 
   .auth-shell .auth-title {

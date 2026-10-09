@@ -30,7 +30,11 @@
         <div class="auth-content">
           <header class="auth-header">
             <div class="auth-logo">
-              <img :src="blisLogo" alt="" />
+              <!-- Tablets and phones lose the navy panel, and the university
+                   seal with it, so there the seal is the one mark shown here
+                   in place of the BLIS one (the 900px block in auth.css). -->
+              <img class="auth-logo-mark" :src="blisLogo" alt="" />
+              <img class="auth-logo-seal" :src="lnuSeal" alt="Leyte Normal University seal" />
               <span>BLIS</span>
             </div>
             <p v-if="eyebrow" class="auth-eyebrow">{{ eyebrow }}</p>
