@@ -5,6 +5,7 @@ import {
   ClipboardList,
   DoorOpen,
   FileText,
+  GraduationCap,
   LayoutDashboard,
   Settings,
   Sparkles,
@@ -142,6 +143,17 @@ export const dashboardModules = {
     sub: 'Create accounts, assign roles, and manage account status',
     icon: UserRound,
   },
+  yearEnd: {
+    key: 'yearEnd',
+    routeName: 'dashboard-year-end',
+    label: 'End of School Year',
+    title: 'End of School Year',
+    sub: 'Graduate the finishing class and move everyone else up a year',
+    icon: GraduationCap,
+    // Done once a year, so it is opened from the Users page rather than
+    // holding a place in the sidebar.
+    hidden: true,
+  },
   audit: {
     key: 'audit',
     routeName: 'dashboard-audit',
@@ -156,7 +168,7 @@ const dashboardNavKeysByRole = {
   student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult'],
   staff_master_examiner: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
   faculty: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
-  admin: ['users', 'room', 'students', 'studentProfile', 'licensure', 'settings', 'audit'],
+  admin: ['users', 'yearEnd', 'room', 'students', 'studentProfile', 'licensure', 'settings', 'audit'],
 }
 
 export function normalizeDashboardRole(role) {
