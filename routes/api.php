@@ -263,7 +263,7 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
         'first_name' => ['required', 'string', 'max:255'],
         'middle_name' => ['nullable', 'string', 'max:255'],
         'last_name' => ['required', 'string', 'max:255'],
-        'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,20}$/', 'unique:users,student_id'],
+        'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,10}$/', 'unique:users,student_id'],
         'year_level' => ['required', Rule::in(User::YEAR_LEVELS)],
         'email' => [
             'required',
