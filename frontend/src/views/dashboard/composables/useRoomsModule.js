@@ -17,6 +17,12 @@ import {
 } from './studentExamAvailability'
 import { useDashboardDataServices } from './useDashboardDataServices'
 
+// The width at which the exam screen stacks into one column and the question
+// list becomes a bottom sheet. It has to match the exam layer's Responsive
+// block in dashboard.css: this said 1200px while the stylesheet stacked at
+// 900px, and in between the two disagreed about which column was which.
+const EXAM_PHONE_VIEWPORT_QUERY = '(max-width: 900px)'
+
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
@@ -435,7 +441,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       if (!isOpen) return
 
       const mobileViewport = isExamMobileViewport.value
-        || (typeof window !== 'undefined' && window.matchMedia('(max-width: 1200px)').matches)
+        || (typeof window !== 'undefined' && window.matchMedia(EXAM_PHONE_VIEWPORT_QUERY).matches)
 
       isExamMobileViewport.value = mobileViewport
       examAttemptSidebarCollapsed.value = mobileViewport
@@ -456,6 +462,23 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   function toggleExamAttemptSidebar() {
     examAttemptSidebarCollapsed.value = !examAttemptSidebarCollapsed.value
+  }
+
+  // The phone sheet reports open/closed; the flag is kept the other way
+  // round because the desktop column, which collapses, came first.
+  function setExamQuestionListOpen(open) {
+    examAttemptSidebarCollapsed.value = !open
+  }
+
+  // On a phone the list is a sheet over the question, so picking a number
+  // closes it -- otherwise the question just jumped to stays hidden behind
+  // the list that was used to reach it.
+  function pickStudentExamQuestionFromList(targetIndex) {
+    goToStudentExamQuestionIndex(targetIndex)
+
+    if (isExamMobileViewport.value) {
+      examAttemptSidebarCollapsed.value = true
+    }
   }
 
   // Deep link back from the exam result page's "Review Answers" button
@@ -480,7 +503,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   onMounted(async () => {
     if (typeof window !== 'undefined') {
-      examAttemptMobileMediaQuery = window.matchMedia('(max-width: 1200px)')
+      examAttemptMobileMediaQuery = window.matchMedia(EXAM_PHONE_VIEWPORT_QUERY)
       syncExamAttemptSidebarForViewport(examAttemptMobileMediaQuery)
 
       if (typeof examAttemptMobileMediaQuery.addEventListener === 'function') {
@@ -1691,6 +1714,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentExamReviewVisible,
     studentExamQuestions,
     studentExamCurrentIndex,
+    isExamMobileViewport,
     examAttemptSidebarCollapsed,
     studentExamLoading,
     studentExamSaving,
@@ -1729,6 +1753,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentQuestionReviewMessage,
     studentQuestionCorrectAnswerText,
     toggleExamAttemptSidebar,
+    setExamQuestionListOpen,
+    pickStudentExamQuestionFromList,
     openExamSimulation,
     openStudentExamReview,
     goToStudentExamQuestionIndex,

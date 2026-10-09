@@ -392,12 +392,20 @@
           <div
             v-else-if="studentExamAttempt"
             class="exam-attempt-layout"
-            :class="{ 'is-results-view': isStudentExamResultSummaryVisible }"
+            :class="{
+              'is-results-view': isStudentExamResultSummaryVisible,
+              'is-list-hidden': examAttemptSidebarCollapsed,
+            }"
           >
-            <aside
+            <!-- One question list, two containers: the left-hand column from
+                 901px up, and a bottom sheet on a phone, where a column that
+                 had to share the screen with the question had no room left
+                 to show the numbers. -->
+            <component
+              :is="isExamMobileViewport ? BottomSheet : 'aside'"
               v-if="!isStudentExamResultSummaryVisible"
-              class="exam-attempt-sidebar"
-              :class="{ 'is-collapsed': examAttemptSidebarCollapsed }"
+              v-bind="examQuestionListContainerProps"
+              @update:open="setExamQuestionListOpen"
             >
               <div class="exam-status-legend">
                 <template v-if="!isStudentExamSubmitted">
@@ -422,12 +430,12 @@
                   class="exam-jump-btn"
                   :class="questionPaletteClass(question, index)"
                   :disabled="studentExamSaving || studentExamSubmitting || studentExamBookmarking || (!isStudentOpenNavigationMode && !isStudentExamSubmitted)"
-                  @click="goToStudentExamQuestionIndex(index)"
+                  @click="pickStudentExamQuestionFromList(index)"
                 >
                   {{ question.item_number }}
                 </button>
               </div>
-            </aside>
+            </component>
 
             <section class="exam-attempt-main">
               <div v-if="isStudentExamResultSummaryVisible" class="room-detail-loading exam-attempt-loading">
@@ -693,6 +701,7 @@ import { examDeliveryModeLabel, formatLongDate, formatRemainingDuration, formatT
 import { examScheduleEnd, isStudentExamEnded } from '../composables/studentExamAvailability'
 import { useRoomsModule } from '../composables/useRoomsModule'
 import { useCompactLayout } from '../composables/useViewport'
+import BottomSheet from '@/components/BottomSheet.vue'
 
 // The room picker lives in the nav drawer at this width (see
 // DashboardLayout), so the page's Join Room action moves to the app bar --
@@ -725,6 +734,7 @@ const {
   studentExamAttempt,
   studentExamQuestions,
   studentExamCurrentIndex,
+  isExamMobileViewport,
   examAttemptSidebarCollapsed,
   studentExamLoading,
   studentExamSaving,
@@ -760,8 +770,9 @@ const {
   studentQuestionReviewMessage,
   studentQuestionCorrectAnswerText,
   toggleExamAttemptSidebar,
+  setExamQuestionListOpen,
+  pickStudentExamQuestionFromList,
   openExamSimulation,
-  goToStudentExamQuestionIndex,
   goToStudentExamQuestion,
   handleExamAttemptCloseClick,
   showStudentExamResultSummary,
@@ -787,6 +798,24 @@ const examProgressPercent = computed(() => {
   if (total === 0) return 0
 
   return Math.round((Number(studentExamAttempt.value?.answered_count ?? 0) / total) * 100)
+})
+
+// What the question list's container is given: the sheet takes its open
+// state and a heading, the column only its classes.
+const examQuestionListContainerProps = computed(() => {
+  if (!isExamMobileViewport.value) {
+    return { class: ['exam-attempt-sidebar', { 'is-collapsed': examAttemptSidebarCollapsed.value }] }
+  }
+
+  const canJump = isStudentOpenNavigationMode.value || isStudentExamSubmitted.value
+
+  return {
+    open: !examAttemptSidebarCollapsed.value,
+    title: 'Question List',
+    subtitle: canJump
+      ? 'Tap a number to go to that question.'
+      : 'This exam moves one question at a time.',
+  }
 })
 
 /*

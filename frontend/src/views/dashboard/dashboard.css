@@ -4443,28 +4443,6 @@
     font-size: 20px;
   }
 
-  .exam-attempt-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .exam-attempt-sidebar {
-    max-height: 220px;
-    order: 2;
-    transition: max-height 0.22s ease, padding 0.22s ease, opacity 0.18s ease, border-color 0.18s ease;
-  }
-
-  .exam-attempt-sidebar.is-collapsed {
-    max-height: 0;
-    padding: 0;
-    opacity: 0;
-    overflow: hidden;
-    border-color: transparent;
-  }
-
-  .exam-attempt-main {
-    order: 1;
-  }
-
   .exam-result-hero {
     grid-template-columns: 1fr;
   }
@@ -4584,10 +4562,6 @@
   .exam-attempt-card.immersive {
     min-height: auto;
     overflow: visible;
-  }
-
-  .exam-attempt-sidebar {
-    max-height: 220px;
   }
 
   .exam-status-legend {
@@ -5155,13 +5129,6 @@
   .exam-attempt-footer {
     gap: 8px;
     padding: 9px 10px;
-  }
-
-  .exam-attempt-sidebar {
-    padding: 10px;
-    gap: 9px;
-    max-height: 200px;
-    border-radius: 14px;
   }
 
   .exam-question-jump.immersive {
@@ -6035,6 +6002,17 @@
   overflow: hidden;
 }
 
+/* "Hide Question List" has to do something at every width. The collapsed
+   rule used to sit inside a media query, so on a desktop the button changed
+   its own label and nothing else. */
+.exam-attempt-sidebar.is-collapsed {
+  display: none;
+}
+
+.exam-attempt-layout.is-list-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .exam-status-legend {
   flex-shrink: 0;
   gap: 5px 9px;
@@ -6383,6 +6361,41 @@
   flex: 1;
   min-height: 0;
   height: auto;
+}
+
+/* Phones. These follow the rule above on purpose: it has to lose here. */
+@media (max-width: 900px) {
+  /* The shell is what scrolls at this width, so the layout has to be as
+     tall as what is in it. Held to the visible height instead, a long
+     question left no room for anything that came after it. It still grows
+     to fill the screen when the question is short. */
+  .exam-attempt-layout {
+    flex: 1 0 auto;
+  }
+
+  /* Three buttons in a two-column grid left the list toggle in a cell
+     narrower than itself, lying across Previous. It takes the whole row. */
+  .exam-attempt-nav .exam-sidebar-inline-toggle {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+}
+
+/* The question list inside the phone sheet (BottomSheet's body): the legend
+   stays put and the numbers scroll under it, however many there are. */
+.sheet-body .legend-item {
+  font-size: 12.5px;
+}
+
+.sheet-body .exam-question-jump.immersive {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  padding-right: 0;
+}
+
+.sheet-body .exam-jump-btn {
+  min-height: 44px;
+  font-size: 15px;
 }
 
 /* =======================================================================
