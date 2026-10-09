@@ -16,18 +16,31 @@
           <h3>Users</h3>
         </div>
         <!-- Narrow screens: the app bar already names the page, so this header
-             hides and its one action moves up into the bar. -->
+             hides and its actions move up into the bar. -->
         <Teleport to="#layout-topbar-actions" defer :disabled="!isCompact">
-          <button
-            type="button"
-            class="primary-btn"
-            :class="isCompact ? 'appbar-action' : 'add-room-btn'"
-            :aria-label="isCompact ? 'Add user' : undefined"
-            @click="openCreateUserModal"
-          >
-            <Plus :size="16" />
-            {{ isCompact ? 'Add' : 'Add User' }}
-          </button>
+          <div class="management-actions">
+            <!-- Once a year: graduate the finishing class and move everyone
+                 else up. A page of its own, since it is a list to review. -->
+            <RouterLink
+              :to="{ name: 'dashboard-year-end' }"
+              :class="isCompact ? 'appbar-icon-action' : 'ghost-btn'"
+              :aria-label="isCompact ? 'End of school year' : undefined"
+              :title="isCompact ? 'End of school year' : undefined"
+            >
+              <GraduationCap :size="isCompact ? 20 : 15" />
+              <template v-if="!isCompact">End of School Year</template>
+            </RouterLink>
+            <button
+              type="button"
+              class="primary-btn"
+              :class="isCompact ? 'appbar-action' : 'add-room-btn'"
+              :aria-label="isCompact ? 'Add user' : undefined"
+              @click="openCreateUserModal"
+            >
+              <Plus :size="16" />
+              {{ isCompact ? 'Add' : 'Add User' }}
+            </button>
+          </div>
         </Teleport>
       </header>
 
@@ -568,6 +581,7 @@ import {
   ArchiveRestore,
   CheckCircle2,
   Ellipsis,
+  GraduationCap,
   Pencil,
   Plus,
   RefreshCw,
