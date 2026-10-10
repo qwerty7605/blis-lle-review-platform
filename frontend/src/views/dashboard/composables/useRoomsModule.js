@@ -23,6 +23,17 @@ import { useDashboardDataServices } from './useDashboardDataServices'
 // 900px, and in between the two disagreed about which column was which.
 const EXAM_PHONE_VIEWPORT_QUERY = '(max-width: 900px)'
 
+// How often an open exam page asks the server about its attempt. Answers are
+// saved the moment they are picked and the countdown runs in the browser, so
+// this only has to notice what changes on the server -- above all the attempt
+// being closed. At 4 seconds it was most of the server's work during an exam:
+// every student downloading the whole attempt again fifteen times a minute.
+const EXAM_STATUS_CHECK_INTERVAL_MS = 30000
+
+// How many times, a second apart, the page asks whether the exam has closed
+// once its countdown runs out. The first answer is nearly always yes.
+const EXAM_TIME_UP_TRIES = 10
+
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
@@ -288,6 +299,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   let examAttemptMobileMediaQuery
   let studentExamTimerInterval
   let studentExamSyncInterval
+  let studentExamTimeUpCheck
   let liveBoardRefreshInterval
   let studentExamSyncing = false
 
@@ -559,6 +571,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   }
 
   function clearStudentExamTimer() {
+    clearTimeout(studentExamTimeUpCheck)
+    studentExamTimeUpCheck = null
+
     if (!studentExamTimerInterval) return
     clearInterval(studentExamTimerInterval)
     studentExamTimerInterval = null
@@ -572,7 +587,11 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       return
     }
 
-    studentExamRemainingSeconds.value = Math.max(0, Number(remainingSeconds))
+    // The server sends fractions of a second. Counted down as they came, the
+    // value stepped from 0.4 to -0.6 and never read zero, which is the moment
+    // the watcher at the bottom of this file waits for. Rounded up rather than
+    // down, so the page cannot reach zero before the server does.
+    studentExamRemainingSeconds.value = Math.max(0, Math.ceil(Number(remainingSeconds)))
 
     if (studentExamRemainingSeconds.value <= 0 || isStudentExamSubmitted.value) return
 
@@ -621,7 +640,33 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
     studentExamSyncInterval = setInterval(() => {
       refreshStudentExamAttemptStatus(true)
-    }, 4000)
+    }, EXAM_STATUS_CHECK_INTERVAL_MS)
+  }
+
+  /*
+   * The countdown only counts. An attempt is closed by the server, the next
+   * time it is asked about one whose time has passed -- so the page asks the
+   * moment its countdown runs out, rather than sit at 00:00 until the next
+   * periodic check.
+   *
+   * One question is not always enough: refreshStudentExamAttemptStatus()
+   * stands aside while an answer is being saved, and the two clocks can
+   * disagree by a moment. So it asks again, a second apart, until the page has
+   * its answer or has waited long enough to leave it to the periodic check.
+   */
+  function confirmStudentExamTimeIsUp(triesLeft = EXAM_TIME_UP_TRIES) {
+    const stillAtZero = () => showExamSimulationModal.value
+      && !isStudentExamSubmitted.value
+      && studentExamRemainingSeconds.value === 0
+
+    if (!stillAtZero()) return
+
+    refreshStudentExamAttemptStatus(false).finally(() => {
+      if (!stillAtZero() || triesLeft <= 1) return
+
+      clearTimeout(studentExamTimeUpCheck)
+      studentExamTimeUpCheck = setTimeout(() => confirmStudentExamTimeIsUp(triesLeft - 1), 1000)
+    })
   }
 
   function syncStudentAnswerDraft() {
@@ -1658,13 +1703,11 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   watch(
     () => studentExamRemainingSeconds.value,
-    async (remainingSeconds) => {
+    (remainingSeconds) => {
       if (remainingSeconds !== 0) return
-      if (!showExamSimulationModal.value || isStudentExamSubmitted.value) return
-      if (studentExamLoading.value || studentExamSaving.value || studentExamSubmitting.value) return
 
       clearStudentExamTimer()
-      await refreshStudentExamAttemptStatus(false)
+      confirmStudentExamTimeIsUp()
     },
   )
 
