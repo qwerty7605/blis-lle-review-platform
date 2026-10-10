@@ -138,13 +138,19 @@
         </button>
       </div>
 
-      <!-- Phones show the list and the open room one at a time (list screen,
-           then detail screen with a way back) -- stacked, a tapped room
-           opened below all 30-odd room cards, out of sight. -->
+      <!-- Wherever this is a single column (900px and under) it shows the
+           list and the open room one at a time: list screen, then the room
+           with a way back. Stacked, a tapped room opened below all 30-odd
+           room cards, out of sight. -->
       <div
         v-else
         class="rooms-grid"
-        :class="{ 'is-phone-list': isPhone && phonePane === 'list', 'is-phone-detail': isPhone && phonePane === 'detail' }"
+        :class="{
+          'is-pane-list': isCompact && compactPane === 'list',
+          'is-pane-detail': isCompact && compactPane === 'detail',
+          'is-tab-students': showRoomTabs && roomTab === 'students',
+          'is-tab-exams': showRoomTabs && roomTab === 'exams',
+        }"
       >
         <aside class="surface-card rooms-list-card">
           <div class="rooms-list-head">
@@ -168,7 +174,7 @@
               :key="room.id"
               type="button"
               class="rooms-list-item"
-              :class="{ active: selectedRoomId === room.id }"
+              :class="{ active: highlightedRoomId === room.id }"
               @click="openRoomFromList(room.id)"
             >
               <div class="rooms-list-item-head">
@@ -187,7 +193,7 @@
         </aside>
 
         <section class="room-detail-column">
-          <button v-if="isPhone" type="button" class="ghost-btn rooms-back-btn" @click="phonePane = 'list'">
+          <button v-if="isCompact" type="button" class="ghost-btn rooms-back-btn" @click="backToRoomList">
             <ChevronLeft :size="16" />
             All rooms
           </button>
@@ -221,6 +227,25 @@
                 </button>
               </div>
             </header>
+
+            <!-- A small screen has room for one of these at a time. Stacked,
+                 the class list sat underneath every exam the room has. -->
+            <div v-if="showRoomTabs" class="rooms-pane-tabs" role="tablist" aria-label="Room sections">
+              <button
+                v-for="tab in roomTabs"
+                :key="tab.key"
+                type="button"
+                role="tab"
+                class="rooms-pane-tab"
+                :class="{ active: roomTab === tab.key }"
+                :aria-selected="(roomTab === tab.key).toString()"
+                @click="roomTab = tab.key"
+              >
+                <component :is="tab.icon" :size="15" />
+                {{ tab.label }}
+                <span class="rooms-pane-tab-count">{{ tab.count }}</span>
+              </button>
+            </div>
 
             <article v-if="isStaffRole" class="surface-card rooms-exams-card">
               <div class="rooms-exams-head">
@@ -530,7 +555,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   AlertCircle,
   Archive,
@@ -555,7 +581,7 @@ import {
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatExamSchedule } from '../composables/useDashboardFormatters'
 import { useRoomsModule } from '../composables/useRoomsModule'
-import { usePhoneLayout } from '../composables/useViewport'
+import { useCompactLayout } from '../composables/useViewport'
 
 // Local, not composable state -- mirrors the same "reveal archived exams
 // inline" toggle the student Rooms page uses (see RoomsView.vue), reset per
@@ -629,30 +655,104 @@ const {
   exportRoomGrades,
 } = useRoomsModule({ mode: 'management' })
 
-const isPhone = usePhoneLayout()
-const phonePane = ref('list')
-let phoneOpenedRoomId = null
+const isCompact = useCompactLayout()
+const route = useRoute()
+const router = useRouter()
+
+// The room named in the address, when there is one.
+const roomIdInAddress = computed(() => {
+  const roomId = Number(route.query?.room)
+  return Number.isFinite(roomId) && roomId > 0 ? roomId : null
+})
+
+/*
+ * One pane at a time wherever this page is a single column (900px and
+ * under): the list of rooms, then the room that was tapped. From 641 to
+ * 900px it used to be stacked instead, so the room opened underneath the
+ * whole list -- some 3,500px down for an admin with thirty rooms -- and
+ * nothing on screen moved when one was tapped.
+ *
+ * Which pane is showing is read from the address (?room=ID) rather than kept
+ * in a ref, so the phone's own Back button returns to the list instead of
+ * leaving the page, and a link to a room opens that room.
+ */
+const compactPane = computed(() => (
+  roomIdInAddress.value !== null && roomIdInAddress.value === selectedRoomId.value ? 'detail' : 'list'
+))
+
+let openedFromList = false
+let listScrollTop = 0
+
+// Side by side, the highlighted card is the room showing next to it. On its
+// own screen the list has no room showing, and the one that happens to be
+// loaded first is not something the reader chose -- so there it marks the
+// room they last opened, which is what they look for on the way back.
+const lastOpenedRoomId = ref(null)
+const highlightedRoomId = computed(() => (isCompact.value ? lastOpenedRoomId.value : selectedRoomId.value))
 
 function openRoomFromList(roomId) {
   selectRoom(roomId)
 
-  if (isPhone.value) {
-    phoneOpenedRoomId = roomId
-    phonePane.value = 'detail'
-    window.scrollTo({ top: 0 })
-  }
+  if (!isCompact.value) return
+
+  openedFromList = true
+  listScrollTop = window.scrollY
+  router.push({ query: { ...route.query, room: String(roomId) } })
 }
 
-// A room that changes under the detail screen (deleted, say) sends the
-// phone back to the list rather than quietly showing a different room.
-watch(selectedRoomId, (roomId) => {
-  if (isPhone.value && phonePane.value === 'detail' && roomId !== phoneOpenedRoomId) {
-    phonePane.value = 'list'
+function withoutRoomInAddress() {
+  const query = { ...route.query }
+  delete query.room
+
+  return { query }
+}
+
+function backToRoomList() {
+  // Opened by a tap on this page: the list is the previous entry in history,
+  // so going back keeps Back and Forward meaning what they say. Opened from
+  // a link, there is no list behind it to go back to.
+  if (openedFromList) {
+    router.back()
+    return
   }
+
+  router.replace(withoutRoomInAddress())
+}
+
+// A teacher's room has two long lists, its students and its exams. An admin
+// sees no exams here, so there is nothing to switch between.
+const roomTab = ref('students')
+const showRoomTabs = computed(() => isCompact.value && isStaffRole.value && Boolean(selectedRoom.value))
+const roomTabs = computed(() => [
+  { key: 'students', label: 'Students', icon: Users, count: selectedRoomCurrentMembers.value.length },
+  { key: 'exams', label: 'Exams', icon: FileText, count: selectedRoomActiveExams.value.length },
+])
+
+// The top of the room on the way in; on the way out, back to where the list
+// was left, so opening room 20 does not mean scrolling down to it again.
+watch(compactPane, async (pane) => {
+  if (!isCompact.value) return
+
+  await nextTick()
+
+  if (pane === 'detail') {
+    lastOpenedRoomId.value = roomIdInAddress.value
+    roomTab.value = 'students'
+    window.scrollTo({ top: 0 })
+    return
+  }
+
+  window.scrollTo({ top: openedFromList ? listScrollTop : 0 })
+  openedFromList = false
 })
 
-watch(isPhone, (phone) => {
-  if (!phone) phonePane.value = 'list'
+// A room that changes under the open one (it was deleted, say) drops the
+// address back to the list rather than quietly showing a different room.
+watch(selectedRoomId, (roomId) => {
+  if (!isCompact.value || roomIdInAddress.value === null) return
+  if (roomId === roomIdInAddress.value) return
+
+  router.replace(withoutRoomInAddress())
 })
 
 // Read-only "how much of this room's assigned exam list is still live" --
@@ -1359,6 +1459,56 @@ const roomExamCoveragePercent = computed(() => {
   color: var(--lnu-text-muted);
 }
 
+.rooms-back-btn {
+  display: none;
+}
+
+/* ---- Students / Exams switch inside a room (900px and under) ---- */
+.rooms-pane-tabs {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.rooms-pane-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rooms-pane-tab.active {
+  background: var(--surface);
+  color: var(--lnu-navy);
+  box-shadow: 0 1px 3px rgba(13, 21, 71, 0.14);
+}
+
+.rooms-pane-tab:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.rooms-pane-tab-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 1200px) {
   .rooms-grid {
     grid-template-columns: 220px minmax(0, 1fr);
@@ -1367,17 +1517,42 @@ const roomExamCoveragePercent = computed(() => {
   .room-side-column {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 900px) {
+  /* minmax(0, ...), not a bare 1fr: a bare one cannot shrink below its
+     widest unbreakable line, and a creator's name on a room card was enough
+     to push the page 30-50px past the edge of a phone. */
   .rooms-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .room-side-column {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One pane at a time -- see compactPane in the script. */
+  .rooms-grid.is-pane-list .room-detail-column,
+  .rooms-grid.is-pane-list .room-side-column,
+  .rooms-grid.is-pane-detail .rooms-list-card {
+    display: none;
+  }
+
+  /* ...and inside a teacher's room, one list at a time. The overview is
+     about exams, so it keeps them company. */
+  .rooms-grid.is-tab-students .rooms-exams-card,
+  .rooms-grid.is-tab-students .rooms-summary-card,
+  .rooms-grid.is-tab-exams .rooms-roster-card {
+    display: none;
+  }
+
+  .rooms-back-btn {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 4px;
+    padding-left: 8px;
   }
 
   .room-banner {
@@ -1395,22 +1570,27 @@ const roomExamCoveragePercent = computed(() => {
   }
 }
 
-.rooms-back-btn {
-  display: none;
+/* Tablets and phones turned sideways: the list has the whole width to
+   itself now, so it runs two cards across and is half as long. */
+@media (min-width: 641px) and (max-width: 900px) {
+  .rooms-grid.is-pane-list .rooms-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
 }
 
 @media (max-width: 640px) {
-  .rooms-grid.is-phone-list .room-detail-column,
-  .rooms-grid.is-phone-list .room-side-column,
-  .rooms-grid.is-phone-detail .rooms-list-card {
-    display: none;
+  /* The title on a line of its own: beside the Live Board button it had a
+     third of the row and broke into four lines. */
+  .rooms-exam-row-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
   }
 
-  .rooms-back-btn {
-    display: inline-flex;
-    align-self: flex-start;
-    gap: 4px;
-    padding-left: 8px;
+  .rooms-exam-row-actions .rooms-exam-btn {
+    flex: 1;
   }
 
   /* Two-line rows: name, then code, members and owner on one line. */
@@ -1457,6 +1637,10 @@ const roomExamCoveragePercent = computed(() => {
   .rooms-join-btn,
   .room-banner-action-btn {
     height: var(--control-height);
+  }
+
+  .rooms-pane-tab {
+    min-height: 44px;
   }
 }
 </style>
