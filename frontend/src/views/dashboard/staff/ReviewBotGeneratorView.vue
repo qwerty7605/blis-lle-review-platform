@@ -31,42 +31,24 @@
         <p>No files uploaded yet. Upload an exam question set in the Library first — the Review Bot generates from those, not from a separate upload here.</p>
       </div>
 
-      <div v-else class="rbg-bank-table-wrap">
-        <table class="rbg-bank-table">
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Subject</th>
-              <th>Items</th>
-              <th>Mapping</th>
-              <th>Source</th>
-              <th class="rbg-bank-table-action-head"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="bank in libraryBanks"
-              :key="bank.id"
-              class="rbg-bank-row"
-              tabindex="0"
-              role="button"
-              :aria-label="`Select ${bank.title}`"
-              @click="selectBank(bank.id)"
-              @keydown.enter="selectBank(bank.id)"
-              @keydown.space.prevent="selectBank(bank.id)"
-            >
-              <td>
-                <span class="rbg-bank-table-title"><FileText :size="15" />{{ bank.title }}</span>
-              </td>
-              <td><span class="pill neutral">{{ bank.subject || 'No subject' }}</span></td>
-              <td>{{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}</td>
-              <td><span class="pill" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus }}</span></td>
-              <td class="review-muted">{{ bank.sourceFilename || '—' }}</td>
-              <td class="rbg-bank-table-action"><ChevronRight :size="16" /></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <!-- One button per file. This was a six-column table, which scrolled
+           sideways at every screen size because of the file name column. -->
+      <ul v-else class="rbg-file-list">
+        <li v-for="bank in libraryBanks" :key="bank.id">
+          <button type="button" class="rbg-file-row" @click="selectBank(bank.id)">
+            <span class="rbg-file-icon" aria-hidden="true"><FileText :size="17" /></span>
+            <span class="rbg-file-copy">
+              <strong>{{ bank.title }}</strong>
+              <span>
+                {{ bank.subject || 'No subject' }} · {{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}
+              </span>
+              <small v-if="bank.sourceFilename" :title="bank.sourceFilename">{{ bank.sourceFilename }}</small>
+            </span>
+            <span class="pill" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus }}</span>
+            <ChevronRight :size="18" class="rbg-file-chevron" aria-hidden="true" />
+          </button>
+        </li>
+      </ul>
     </article>
 
     <template v-else>
@@ -464,65 +446,92 @@ const {
   line-height: 1.5;
 }
 
-.rbg-bank-table-wrap {
-  overflow-x: auto;
+.rbg-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   border: 1px solid rgba(13, 21, 71, 0.12);
   border-radius: 18px;
+  overflow: hidden;
 }
 
-.rbg-bank-table {
+.rbg-file-list > li + li {
+  border-top: 1px solid rgba(13, 21, 71, 0.08);
+}
+
+.rbg-file-row {
   width: 100%;
-  min-width: 640px;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.rbg-bank-table th,
-.rbg-bank-table td {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px 12px;
   padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   text-align: left;
-  vertical-align: middle;
-  border-bottom: 1px solid rgba(13, 21, 71, 0.08);
-}
-
-.rbg-bank-table thead th {
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--lnu-text-muted);
-  background: #f6f8fd;
-}
-
-.rbg-bank-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.rbg-bank-row {
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
 
-.rbg-bank-row:hover,
-.rbg-bank-row:focus-visible {
+.rbg-file-row:hover {
   background: rgba(var(--lnu-info-rgb), 0.06);
-  outline: none;
 }
 
-.rbg-bank-table-title {
-  display: flex;
+.rbg-file-row:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.rbg-file-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
+  justify-content: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+.rbg-file-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.rbg-file-copy strong {
   font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
   color: var(--lnu-navy-deep);
+  overflow-wrap: anywhere;
 }
 
-.rbg-bank-table-action-head {
-  width: 32px;
+.rbg-file-copy span {
+  font-size: 13px;
+  color: var(--lnu-text-muted);
 }
 
-.rbg-bank-table-action {
+/* The uploaded file's name: long, unbroken, and the least needed. */
+.rbg-file-copy small {
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rbg-file-row > .pill {
+  flex-shrink: 0;
+}
+
+.rbg-file-chevron {
+  flex-shrink: 0;
   color: var(--lnu-text-muted);
 }
 
@@ -757,6 +766,49 @@ const {
   .rbg-selected-file-actions .primary-btn {
     flex: 1;
     justify-content: center;
+  }
+
+  /* The status moves under the name. Beside it, a 320px phone had 50px
+     left for the name itself. */
+  .rbg-file-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .rbg-file-row > .pill {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .rbg-file-chevron {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  /* The introduction is read once; the file list is the page. */
+  .rbg-head {
+    padding: 16px;
+  }
+
+  .rbg-head h3 {
+    font-size: 17px;
+    line-height: 1.35;
+  }
+
+  .rbg-head p:not(.rbg-kicker) {
+    font-size: 13.5px;
+  }
+
+  .rbg-generate,
+  .rbg-list {
+    padding: 14px;
+  }
+}
+
+@media (pointer: coarse) {
+  .review-count-chip {
+    min-height: 40px;
+    padding-inline: 14px;
   }
 }
 </style>

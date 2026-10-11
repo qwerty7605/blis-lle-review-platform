@@ -145,12 +145,13 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
-                    <span v-if="isStudentExamEnded(exam)">at {{ formatTimeOnly(examScheduleEnd(exam)) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
                     <span class="rooms-exam-window-label">Window Ended</span>
-                    <span class="rooms-exam-window-date">{{ formatLongDate(examScheduleEnd(exam)) }}</span>
+                    <span class="rooms-exam-window-date">
+                      {{ formatLongDate(examScheduleEnd(exam)) }} at {{ formatTimeOnly(examScheduleEnd(exam)) }}
+                    </span>
                   </div>
                   <p v-else class="rooms-exam-window-fallback">{{ studentExamAvailabilityText(exam) }}</p>
                 </div>
@@ -180,12 +181,13 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
-                    <span v-if="isStudentExamEnded(exam)">at {{ formatTimeOnly(examScheduleEnd(exam)) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
                     <span class="rooms-exam-window-label">Window Ended</span>
-                    <span class="rooms-exam-window-date">{{ formatLongDate(examScheduleEnd(exam)) }}</span>
+                    <span class="rooms-exam-window-date">
+                      {{ formatLongDate(examScheduleEnd(exam)) }} at {{ formatTimeOnly(examScheduleEnd(exam)) }}
+                    </span>
                   </div>
                   <p v-else class="rooms-exam-window-fallback">{{ studentExamAvailabilityText(exam) }}</p>
                 </div>
@@ -319,10 +321,10 @@
 
     <teleport to="body">
       <div v-if="showExamSimulationModal" class="exam-attempt-backdrop">
-        <div class="exam-attempt-shell">
+        <div class="exam-attempt-shell" role="dialog" aria-modal="true" aria-labelledby="exam-attempt-title">
           <header class="exam-attempt-head">
             <div class="exam-head-copy">
-              <h3>{{ selectedStudentExam?.title || 'Exam Attempt' }}</h3>
+              <h3 id="exam-attempt-title">{{ selectedStudentExam?.title || 'Exam Attempt' }}</h3>
               <p>
                 {{ selectedRoom?.name || 'Unknown Room' }}
                 <span v-if="selectedRoom?.code">· {{ selectedRoom.code }}</span>
@@ -361,12 +363,12 @@
                 <span class="exam-timer-value">{{ formatRemainingDuration(studentExamRemainingSeconds) }}</span>
               </div>
 
-              <template v-if="studentExamAttempt && isStudentExamSubmitted">
+              <div v-if="studentExamAttempt && isStudentExamSubmitted" class="exam-head-score">
                 <span class="pill success">Score: {{ Number(studentExamAttempt.score_percent ?? 0).toFixed(2) }}%</span>
                 <span class="pill neutral">
                   {{ Number(studentExamAttempt.correct_answers ?? 0) }}/{{ Number(studentExamAttempt.total_items ?? 0) }} correct
                 </span>
-              </template>
+              </div>
 
               <button
                 type="button"
@@ -548,7 +550,7 @@
                     :aria-expanded="(!examAttemptSidebarCollapsed).toString()"
                     @click="toggleExamAttemptSidebar"
                   >
-                    {{ examAttemptSidebarCollapsed ? 'Show Question List' : 'Hide Question List' }}
+                    {{ examQuestionListToggleLabel }}
                     <ChevronRight :size="15" :class="{ 'is-open': !examAttemptSidebarCollapsed }" />
                   </button>
                   <button
@@ -816,6 +818,15 @@ const examQuestionListContainerProps = computed(() => {
       ? 'Tap a number to go to that question.'
       : 'This exam moves one question at a time.',
   }
+})
+
+// On a phone or tablet the list is a sheet that this button opens, and the
+// button shares its row with Bookmark, so it carries the name alone. From
+// 901px up it shows and hides a column and says which.
+const examQuestionListToggleLabel = computed(() => {
+  if (isExamMobileViewport.value) return 'Question List'
+
+  return examAttemptSidebarCollapsed.value ? 'Show Question List' : 'Hide Question List'
 })
 
 /*
@@ -1246,7 +1257,7 @@ const examTimerTone = computed(() => {
 }
 
 .rooms-exam-window-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -1392,7 +1403,7 @@ const examTimerTone = computed(() => {
   align-items: center;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -1542,7 +1553,7 @@ const examTimerTone = computed(() => {
 }
 
 .rooms-summary-stat span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -1560,13 +1571,59 @@ const examTimerTone = computed(() => {
 
   .room-side-column {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Between 901px and 1200px the panels sit in two rows, and two rows cannot
+ * share one screen: on a 1024x768 lab monitor the exam list was an 80px
+ * window. Here the page stops pinning itself to the screen height, each
+ * list gets a workable window, and the page scrolls down to the class list.
+ * (Same rule as the staff page, shared/RoomManagementView.vue.)
+ *
+ * The same on any wider screen that is short. A 1366x768 laptop shows a
+ * page about 640px of height once the browser's own bars are counted, and
+ * pinned to that the exam list was a 284px window.
+ */
+@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 759px) {
+  .room-view,
+  .rooms-grid {
+    flex: none;
+  }
+
+  .rooms-grid {
+    align-items: start;
+  }
+
+  .rooms-list-card {
+    max-height: 560px;
+  }
+
+  .rooms-exam-list {
+    max-height: 420px;
+  }
+
+  .rooms-roster-list {
+    max-height: 460px;
+  }
+}
+
+/* Only where the side panels are a two-column grid. From 1201px they are a
+   column, and there this would let each card take the width of its longest
+   name instead of the column's. */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .room-side-column {
+    align-items: start;
   }
 }
 
 @media (max-width: 900px) {
+  /* minmax(0, ...), not a bare 1fr: a bare one cannot shrink below its
+     widest unbreakable line, and one long name in the class list pushed
+     this page 19px past the edge of a 390px phone. */
   .rooms-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /*
@@ -1581,7 +1638,7 @@ const examTimerTone = computed(() => {
   }
 
   .room-side-column {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .room-banner {
@@ -1589,9 +1646,96 @@ const examTimerTone = computed(() => {
     align-items: flex-start;
   }
 
+  /* A quiet outline, at its own width. Stretched across the banner in red
+     it was the largest thing on the page, on the page a student opens to
+     take an exam. */
   .room-banner-leave-btn {
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    background: transparent;
+    box-shadow: none;
+    color: #fff;
+  }
+
+  .room-banner-leave-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+
+  /* The summary is three numbers; the class list under it can be fifty
+     rows. The other way round nobody reached the summary. */
+  .rooms-summary-card {
+    order: -1;
+  }
+}
+
+@media (max-width: 640px) {
+  /*
+   * An exam reads top to bottom: its name, what it holds, when its window
+   * closes, then the button at full width. Side by side, the button took
+   * 126px of a 320px screen and pushed the title out past the card's edge.
+   * The head dissolves so the button can come after the row's last line.
+   */
+  .rooms-exam-row-head {
+    display: contents;
+  }
+
+  .rooms-exam-row-foot {
+    order: 1;
+  }
+
+  .rooms-exam-btn {
+    order: 2;
     width: 100%;
-    justify-content: center;
+  }
+
+  .rooms-exam-window {
+    text-align: left;
+  }
+
+  /* A classmate's whole name, on two lines if it needs them. */
+  .rooms-roster-item-copy strong {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+}
+
+/* On the narrowest phones a year tag beside the name left the name about
+   60px, one syllable a line. The tag goes under it, in line with the text
+   (42px is the avatar and its gap). */
+@media (max-width: 380px) {
+  .rooms-roster-item {
+    flex-wrap: wrap;
+  }
+
+  .rooms-roster-item-copy {
+    flex-basis: calc(100% - 42px);
+  }
+
+  .rooms-tag.small {
+    margin-left: 42px;
+  }
+}
+
+@media (pointer: coarse) {
+  .rooms-exam-btn,
+  .rooms-join-btn {
+    height: 44px;
+  }
+
+  .rooms-search {
+    height: 44px;
+  }
+
+  .rooms-search input {
+    align-self: stretch;
+    font-size: 16px;
+  }
+
+  /* A text link 16px tall; the padding is its tap area. */
+  .rooms-link-btn {
+    min-height: 44px;
+    margin-block: -12px;
+    padding-inline: 4px;
   }
 }
 

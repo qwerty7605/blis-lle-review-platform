@@ -353,6 +353,14 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   text-decoration: underline;
 }
 
+/* The way back was a 20px-tall line of text on a touch screen. */
+@media (pointer: coarse) {
+  .profile-back {
+    min-height: 44px;
+    margin-block: -8px;
+  }
+}
+
 /* ---------- Loading / error / empty ---------- */
 
 .profile-state {

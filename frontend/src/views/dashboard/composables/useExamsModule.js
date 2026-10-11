@@ -207,10 +207,19 @@ export function useExamsModule() {
     examForm.room_ids = []
   }
 
+  // The form as it was when it opened, to tell an untouched one from one
+  // somebody has been filling in.
+  let examFormAsOpened = ''
+
+  function rememberExamFormAsOpened() {
+    examFormAsOpened = JSON.stringify(examForm)
+  }
+
   function openCreateExamModal() {
     resetExamForm()
     examError.value = ''
     examMessage.value = ''
+    rememberExamFormAsOpened()
     showExamModal.value = true
   }
 
@@ -231,12 +240,26 @@ export function useExamsModule() {
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examError.value = ''
     examMessage.value = ''
+    rememberExamFormAsOpened()
     showExamModal.value = true
   }
 
   function closeExamModal() {
     showExamModal.value = false
+    // An error about a form that is no longer on screen has nothing to point at.
+    examError.value = ''
     resetExamForm()
+  }
+
+  // A click on the dimmed area around the form. It closes a form nobody has
+  // touched. One with changes in it stays: this is the longest form in the
+  // system, and a stray click beside it used to throw all of it away without
+  // a word. Cancel and the X still close it either way.
+  function dismissExamModal() {
+    if (examSaving.value) return
+    if (JSON.stringify(examForm) !== examFormAsOpened) return
+
+    closeExamModal()
   }
 
   function openDeleteExamModal(exam) {
@@ -390,16 +413,19 @@ export function useExamsModule() {
     }
 
     try {
-      if (examForm.id) {
+      const wasEditing = Boolean(examForm.id)
+
+      if (wasEditing) {
         await services.updateExam(examForm.id, payload)
-        examMessage.value = 'Exam updated successfully.'
       } else {
         await services.createExam(payload)
-        examMessage.value = 'Exam created successfully.'
       }
 
       closeExamModal()
       await loadExams()
+      // Set after the reload: loadExams() clears both banners as it starts,
+      // which used to wipe this message before it was ever shown.
+      examMessage.value = wasEditing ? 'Exam updated successfully.' : 'Exam created successfully.'
     } catch (error) {
       examError.value = firstApiError(error, 'Unable to save exam.')
     } finally {
@@ -417,8 +443,8 @@ export function useExamsModule() {
     try {
       await services.deleteExam(selectedExam.value.id)
       closeDeleteExamModal()
-      examMessage.value = 'Exam deleted successfully.'
       await loadExams()
+      examMessage.value = 'Exam deleted successfully.'
     } catch (error) {
       examError.value = firstApiError(error, 'Unable to delete exam.')
     } finally {
@@ -467,6 +493,7 @@ export function useExamsModule() {
     openCreateExamModal,
     openEditExamModal,
     closeExamModal,
+    dismissExamModal,
     openDeleteExamModal,
     closeDeleteExamModal,
     handleSaveExam,
