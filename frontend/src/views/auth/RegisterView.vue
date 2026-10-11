@@ -757,6 +757,20 @@ async function handleSubmit() {
   cursor: not-allowed;
 }
 
+@media (pointer: coarse) {
+  .terms-wrap {
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .terms-wrap input {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    margin-top: 0;
+  }
+}
+
 .terms-helper {
   font-size: 12.5px;
   color: var(--lnu-text-muted);
@@ -775,9 +789,12 @@ async function handleSubmit() {
   padding: 20px;
 }
 
+/* dvh after vh: on a phone 90vh is measured without the browser's toolbar,
+   so the dialog's last row, the button, could sit underneath it. */
 .policy-modal {
   width: min(780px, 100%);
   max-height: min(640px, 90vh);
+  max-height: min(640px, 90dvh);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   background: #fff;
@@ -815,8 +832,11 @@ async function handleSubmit() {
   border-color: var(--lnu-navy);
 }
 
+/* contain: the reader is asked to scroll to the end, and once there the
+   next swipe used to move the registration form behind the dialog. */
 .policy-modal-body {
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 16px 18px;
   display: grid;
   gap: 14px;
@@ -885,12 +905,35 @@ async function handleSubmit() {
     padding: 12px;
   }
 
+  /* Two documents to read on a small screen: the dialog takes all of it. */
+  .policy-modal {
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+  }
+
+  .policy-modal-header h3 {
+    font-size: 16px;
+    line-height: 1.3;
+  }
+
   .policy-modal-footer {
     align-items: stretch;
   }
 
   .policy-mark-btn {
     width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .policy-close-btn {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 0 14px;
+  }
+
+  .policy-mark-btn {
+    height: 44px;
   }
 }
 </style>
