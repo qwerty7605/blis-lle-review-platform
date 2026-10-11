@@ -76,6 +76,42 @@ function fontFamily() {
   return getComputedStyle(document.body).fontFamily || 'sans-serif'
 }
 
+const TICK_FONT_SIZE = 11.5
+// The most of a sideways bar chart's width its category names may take.
+const CATEGORY_WIDTH_SHARE = 0.4
+
+/*
+ * A category name broken into lines no wider than maxWidth, at word breaks.
+ *
+ * Chart.js draws a name on one line however long it is, and gives the names
+ * at most half the chart. On a phone "Cataloging and Classification" did not
+ * fit in that half: it was cut off at its start ("ing and Classification"),
+ * and at 320px the names took the whole chart and left no bars.
+ */
+function wrapCategory(ctx, text, maxWidth, family) {
+  ctx.save()
+  ctx.font = `${TICK_FONT_SIZE}px ${family}`
+
+  const lines = []
+  let line = ''
+
+  for (const word of String(text ?? '').split(/\s+/).filter(Boolean)) {
+    const candidate = line ? `${line} ${word}` : word
+
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+
+  if (line) lines.push(line)
+  ctx.restore()
+
+  return lines.length > 1 ? lines : (lines[0] ?? '')
+}
+
 // The dashed pass-mark line across the plot, labelled at its end.
 const thresholdPlugin = {
   id: 'thresholdLine',
@@ -200,7 +236,25 @@ function buildConfig() {
         }
   ))
 
-  const ticks = { color: MUTED, font: { family, size: 11.5 } }
+  const ticks = { color: MUTED, font: { family, size: TICK_FONT_SIZE } }
+
+  // Sideways bars name their categories down the left edge; those names
+  // wrap to the room they are allowed. Asked again whenever the chart is
+  // resized, so the breaks follow its width.
+  const categoryTicks = props.horizontal
+    ? {
+        ...ticks,
+        autoSkip: false,
+        callback(value) {
+          return wrapCategory(
+            this.chart.ctx,
+            this.getLabelForValue(value),
+            this.chart.width * CATEGORY_WIDTH_SHARE,
+            family,
+          )
+        },
+      }
+    : ticks
 
   return {
     type: props.type,
@@ -223,7 +277,7 @@ function buildConfig() {
         [indexAxis]: {
           grid: { display: false },
           border: { color: GRID },
-          ticks,
+          ticks: categoryTicks,
         },
         [valueAxis]: {
           beginAtZero: true,

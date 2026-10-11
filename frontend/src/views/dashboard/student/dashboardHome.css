@@ -562,6 +562,13 @@
     flex-basis: 100%;
   }
 
+  /* The exam's whole name. On one line a phone showed "Pre-Board
+     Examination: Select..." and two exams could read the same. */
+  .notice-item-body > strong {
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+
   .home-state-actions {
     width: 100%;
     flex-direction: column;
@@ -573,4 +580,17 @@
     height: 44px;
   }
 
+}
+
+/* ---------- Touch screens ---------- */
+
+@media (pointer: coarse) {
+  .notice-filter-tab {
+    height: 40px;
+  }
+
+  .home-state-btn-outline,
+  .home-state-link {
+    height: 44px;
+  }
 }

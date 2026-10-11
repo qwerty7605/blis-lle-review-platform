@@ -1,5 +1,5 @@
 <template>
-  <section class="library-view">
+  <section ref="pageRef" class="library-view">
     <div v-if="libraryMessage" class="feedback success">
       <CheckCircle2 :size="15" />
       <span>{{ libraryMessage }}</span>
@@ -60,7 +60,7 @@
           />
         </label>
 
-        <div class="library-filters" role="group" aria-label="Filter by subject">
+        <div v-scroll-hint class="library-filters" role="group" aria-label="Filter by subject">
           <button
             v-for="filter in subjectFilters"
             :key="filter.key"
@@ -83,9 +83,9 @@
         <button type="button" class="ghost-btn" @click="clearBankFilters">Clear filters</button>
       </div>
 
-      <!-- Desktop and tablet: one row per bank. Phones keep the cards below,
-           where a six-column table would only scroll sideways. -->
-      <div v-else-if="!isPhone" class="library-table-card">
+      <!-- A table where its six columns fit. Anywhere narrower (a phone, a
+           tablet, a small laptop with the sidebar open) the cards below. -->
+      <div v-else-if="!useCards" class="library-table-card">
         <div class="library-table-scroll">
           <table class="library-table">
             <thead>
@@ -673,8 +673,9 @@ import {
   X,
 } from 'lucide-vue-next'
 import { formatCompactDate, formatDateTime } from '../composables/useDashboardFormatters'
-import { usePhoneLayout } from '../composables/useViewport'
+import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 import { useLibraryModule } from '../composables/useLibraryModule'
+import { vScrollHint } from '@/utils/scrollHint'
 
 function questionTypeLabel(type) {
   return String(type ?? 'multiple_choice')
@@ -749,7 +750,19 @@ const {
  * /library/banks already returns all of them.
  */
 // Phones (640px and under) show the banks as cards; wider screens as a table.
+/*
+ * The table needs about 940px. Whether the list has that depends on the
+ * page's own width, not the window's: at 768px and at 1024px with the
+ * sidebar open it has about 730px, and View, Edit and Delete ended up off
+ * the right-hand edge. So the page is measured.
+ */
+const LIBRARY_TABLE_MIN_WIDTH = 940
 const isPhone = usePhoneLayout()
+const pageRef = ref(null)
+const pageWidth = useElementWidth(pageRef, estimatePageWidth())
+const useCards = computed(() => (
+  pageWidth.value > 0 ? pageWidth.value < LIBRARY_TABLE_MIN_WIDTH : isPhone.value
+))
 
 const bankSearch = ref('')
 const activeSubject = ref('all')
@@ -851,13 +864,24 @@ function mappingState(bank) {
   gap: 5px;
 }
 
+/* A head, one list that scrolls, and the buttons under it, all inside the
+   screen. The list used to have its own 70vh window inside a card with no
+   height limit, which put Close below the bottom of a 768px-high laptop. */
 .library-bank-view-modal {
   width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .library-bank-view-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: grid;
+  align-content: start;
   gap: 16px;
+  padding-right: 4px;
 }
 
 .library-bank-view-meta {
@@ -869,9 +893,6 @@ function mappingState(bank) {
 .library-bank-question-list {
   display: grid;
   gap: 14px;
-  max-height: min(70vh, 760px);
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .library-bank-question-card {
@@ -1376,7 +1397,8 @@ function mappingState(bank) {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  /* One column on a phone, two where two 340px cards fit side by side. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
   gap: 14px;
 }
 
@@ -1652,6 +1674,94 @@ function mappingState(bank) {
   .bank-actions .ghost-btn {
     flex: 1;
     justify-content: center;
+  }
+}
+
+/* Touch screens: a search field under 16px makes iOS zoom the whole page in
+   when it is tapped. */
+@media (pointer: coarse) {
+  .library-search-input {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .library-filter {
+    height: 40px;
+  }
+
+  .bank-topics-btn {
+    min-height: 36px;
+  }
+
+  .bank-mapping-btn {
+    min-height: 40px;
+  }
+}
+
+/* =====================================================================
+   Dialogs: Add questions, View questions
+   ===================================================================== */
+
+/* Head, body and button bar run edge to edge. The shared .modal-card padding
+   had put a white frame around all three. */
+.library-modal-card {
+  padding: 0;
+  gap: 0;
+}
+
+@media (max-width: 640px) {
+  /* Both rise from the bottom edge like every other dialog on a phone. */
+  .library-modal-card,
+  .library-bank-view-modal {
+    width: 100%;
+    margin: auto 0 0;
+    border: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .library-modal-card {
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  /* View questions takes the whole sheet, edge to edge. */
+  .library-bank-view-modal {
+    height: calc(100vh - 12px);
+    height: calc(100dvh - 12px);
+    max-height: none;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .library-bank-view-modal > .library-modal-head {
+    position: static;
+    padding: 10px 8px 10px 16px;
+  }
+
+  .library-modal-title-wrap h4 {
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .library-modal-title-wrap p {
+    margin-top: 2px;
+    font-size: 13px;
+  }
+
+  .library-bank-view-body {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .library-bank-question-card {
+    border-radius: 16px;
+  }
+
+  .library-bank-view-modal > .modal-actions {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
   }
 }
 </style>

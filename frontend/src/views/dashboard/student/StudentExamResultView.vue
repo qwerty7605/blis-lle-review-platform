@@ -348,4 +348,65 @@ onMounted(loadResult)
   gap: 18px;
   padding: 22px;
 }
+
+/* The room line under the exam's name. It kept the browser's paragraph
+   margins, a blank line above and below it. */
+.exam-result-page-card .room-page-title p {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--lnu-text-muted);
+}
+
+/* Large figures set with a line-height of 1 are taller than their own line;
+   1.15 is the least that holds them. */
+.exam-result-copy h4,
+.exam-result-score-value,
+.exam-result-stat strong {
+  line-height: 1.15;
+}
+
+@media (max-width: 640px) {
+  .exam-result-page-card {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  /* The exam's name over its room, then Back at its own width. */
+  .exam-result-page-card > .room-page-head {
+    gap: 10px;
+    margin-bottom: 0;
+    padding: 0 0 14px;
+  }
+
+  .exam-result-page-card .room-page-title {
+    align-items: flex-start;
+  }
+
+  .exam-result-page-card .room-page-title svg {
+    flex-shrink: 0;
+    margin-top: 3px;
+  }
+
+  .exam-result-page-card > .room-page-head > .ghost-btn {
+    align-self: flex-start;
+  }
+
+  /* Four numbers in two rows. One to a row, they filled a screen before
+     the breakdown began. */
+  .exam-result-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .exam-result-stat {
+    gap: 4px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .exam-result-stat span {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+}
 </style>

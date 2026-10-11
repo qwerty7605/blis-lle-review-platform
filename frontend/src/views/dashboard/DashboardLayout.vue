@@ -423,8 +423,70 @@ watch(isMobileViewport, (mobile) => {
 // Back/forward while the drawer is open should not leave it covering the page.
 watch(() => route.fullPath, () => closeMobileNav({ restoreFocus: false }))
 
+// A dialog covers the page, so the page behind it should not scroll either:
+// on a phone a swipe that started on the dialog's title or buttons moved the
+// list underneath. Every dialog is a .modal-backdrop teleported to <body>, and
+// the exam a student is taking is an .exam-attempt-backdrop there, so this
+// watches for either, once, instead of each one locking for itself.
+let dialogObserver = null
+let dialogLocked = false
+
+function syncDialogLock() {
+  const open = document.querySelector('body > .modal-backdrop, body > .exam-attempt-backdrop') !== null
+  if (open === dialogLocked) return
+
+  dialogLocked = open
+  if (open) {
+    lockScroll()
+  } else {
+    unlockScroll()
+  }
+}
+
+/*
+ * A click belongs to whatever the press and the release have in common. Press
+ * inside a dialog, drag (selecting the text in a field, say) and let go over
+ * the dimmed area around it, and the click is the dimmed area's: the dialog
+ * closed, and the form in it was gone. A click on that area counts only when
+ * the press began there too; any other is dropped here, on its way down,
+ * before a dialog hears it.
+ */
+let pressTarget = null
+
+function rememberPress(event) {
+  pressTarget = event.target
+}
+
+function dropDragOutClick(event) {
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (!target.classList.contains('modal-backdrop') && !target.classList.contains('sheet-backdrop')) return
+  if (pressTarget === target) return
+
+  event.stopPropagation()
+}
+
+onMounted(() => {
+  dialogObserver = new MutationObserver(syncDialogLock)
+  dialogObserver.observe(document.body, { childList: true })
+  syncDialogLock()
+
+  document.addEventListener('pointerdown', rememberPress, true)
+  document.addEventListener('click', dropDragOutClick, true)
+})
+
 onBeforeUnmount(() => {
   if (drawerOpen.value) unlockScroll()
+
+  dialogObserver?.disconnect()
+  dialogObserver = null
+  document.removeEventListener('pointerdown', rememberPress, true)
+  document.removeEventListener('click', dropDragOutClick, true)
+  pressTarget = null
+  if (dialogLocked) {
+    dialogLocked = false
+    unlockScroll()
+  }
 })
 </script>
 

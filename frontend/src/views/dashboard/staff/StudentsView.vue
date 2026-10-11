@@ -1,5 +1,5 @@
 <template>
-  <section class="room-view">
+  <section ref="pageRef" class="room-view">
     <div v-if="directoryError" class="feedback danger">
       <AlertCircle :size="15" />
       <span>{{ directoryError }}</span>
@@ -38,18 +38,18 @@
         </article>
       </div>
 
-      <div class="management-toolbar" :class="{ 'is-search-row': isPhone }">
+      <div class="management-toolbar" :class="{ 'is-search-row': useRows }">
         <input
           v-model.trim="studentFilters.search"
           type="text"
           class="text-input"
           inputmode="search"
           enterkeyhint="search"
-          :placeholder="isPhone ? 'Search students' : 'Search name, student ID, email, room, or exam'"
+          :placeholder="useRows ? 'Search students' : 'Search name, student ID, email, room, or exam'"
           aria-label="Search students"
         />
         <button
-          v-if="isPhone"
+          v-if="useRows"
           type="button"
           class="ghost-btn filter-trigger"
           aria-haspopup="dialog"
@@ -92,7 +92,7 @@
         </template>
       </div>
 
-      <div v-if="isPhone && activeStudentFilters.length > 0" class="filter-chip-row">
+      <div v-if="useRows && activeStudentFilters.length > 0" v-scroll-hint class="filter-chip-row">
         <button
           v-for="chip in activeStudentFilters"
           :key="chip.key"
@@ -119,9 +119,10 @@
       </div>
 
       <template v-else>
-        <!-- Phones: the 12-column table became a sideways scroll five screens
-             wide. Each student is a row that opens to the full record. -->
-        <ul v-if="isPhone" class="directory-row-list is-in-card">
+        <!-- Where the table cannot fit: on a phone its 12 columns were a
+             sideways scroll five screens wide. Each student is a row that
+             opens to the full record. -->
+        <ul v-if="useRows" class="directory-row-list is-in-card">
           <li v-for="student in students" :key="student.id">
             <details class="directory-row-details" :class="{ 'is-archived': isArchivedStudent(student) }">
               <summary class="directory-row">
@@ -187,34 +188,49 @@
         </ul>
 
         <div v-else class="directory-table-wrap">
-          <table class="directory-table">
+          <table class="directory-table students-table" :class="{ 'is-merged': isMergedTable, 'is-tight': isTightTable }">
             <thead>
               <tr>
-                <th class="directory-table-name-cell" :aria-sort="sortAriaValue('name')">
+                <!-- In the eight-column table a heading carries two sorts, one
+                     for each line of its cells: the folded columns kept
+                     theirs. -->
+                <th class="directory-table-name-cell" :aria-sort="headingAriaSort('name', 'email')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('name')">
                     Student
                     <span class="directory-sort-arrow">{{ sortIndicator('name') }}</span>
                   </button>
+                  <button v-if="isMergedTable" type="button" class="directory-sort-btn is-second" @click="toggleStudentSort('email')">
+                    Email
+                    <span class="directory-sort-arrow">{{ sortIndicator('email') }}</span>
+                  </button>
                 </th>
-                <th :aria-sort="sortAriaValue('student_id')">
+                <th :aria-sort="headingAriaSort('student_id', 'admission_year')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('student_id')">
                     ID
                     <span class="directory-sort-arrow">{{ sortIndicator('student_id') }}</span>
                   </button>
+                  <button v-if="isMergedTable" type="button" class="directory-sort-btn is-second" @click="toggleStudentSort('admission_year')">
+                    Batch
+                    <span class="directory-sort-arrow">{{ sortIndicator('admission_year') }}</span>
+                  </button>
                 </th>
-                <th :aria-sort="sortAriaValue('year_level')">
+                <th :aria-sort="headingAriaSort('year_level', 'student_status')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('year_level')">
                     Year
                     <span class="directory-sort-arrow">{{ sortIndicator('year_level') }}</span>
                   </button>
+                  <button v-if="isMergedTable" type="button" class="directory-sort-btn is-second" @click="toggleStudentSort('student_status')">
+                    Status
+                    <span class="directory-sort-arrow">{{ sortIndicator('student_status') }}</span>
+                  </button>
                 </th>
-                <th :aria-sort="sortAriaValue('admission_year')">
+                <th v-if="!isMergedTable" :aria-sort="sortAriaValue('admission_year')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('admission_year')">
                     Batch
                     <span class="directory-sort-arrow">{{ sortIndicator('admission_year') }}</span>
                   </button>
                 </th>
-                <th :aria-sort="sortAriaValue('student_status')">
+                <th v-if="!isMergedTable" :aria-sort="sortAriaValue('student_status')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('student_status')">
                     Status
                     <span class="directory-sort-arrow">{{ sortIndicator('student_status') }}</span>
@@ -226,10 +242,14 @@
                     <span class="directory-sort-arrow">{{ sortIndicator('room_count') }}</span>
                   </button>
                 </th>
-                <th class="numeric" :aria-sort="sortAriaValue('attempts_submitted')">
+                <th class="numeric" :aria-sort="headingAriaSort('attempts_submitted', 'last_activity_at')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('attempts_submitted')">
                     Submitted
                     <span class="directory-sort-arrow">{{ sortIndicator('attempts_submitted') }}</span>
+                  </button>
+                  <button v-if="isMergedTable" type="button" class="directory-sort-btn is-second" @click="toggleStudentSort('last_activity_at')">
+                    Last active
+                    <span class="directory-sort-arrow">{{ sortIndicator('last_activity_at') }}</span>
                   </button>
                 </th>
                 <th class="numeric" :aria-sort="sortAriaValue('average_score_percent')">
@@ -250,13 +270,13 @@
                     <span class="directory-sort-arrow">{{ sortIndicator('latest_score_percent') }}</span>
                   </button>
                 </th>
-                <th :aria-sort="sortAriaValue('last_activity_at')">
+                <th v-if="!isMergedTable" :aria-sort="sortAriaValue('last_activity_at')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('last_activity_at')">
                     Activity
                     <span class="directory-sort-arrow">{{ sortIndicator('last_activity_at') }}</span>
                   </button>
                 </th>
-                <th :aria-sort="sortAriaValue('email')">
+                <th v-if="!isMergedTable" :aria-sort="sortAriaValue('email')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('email')">
                     Email
                     <span class="directory-sort-arrow">{{ sortIndicator('email') }}</span>
@@ -280,13 +300,18 @@
                   <span v-if="isArchivedStudent(student)" class="pill danger">
                     Archived {{ archivedDateLabel(student) }}
                   </span>
+                  <small v-if="isMergedTable" class="muted students-cell-line" :title="student.email">{{ student.email }}</small>
                 </td>
-                <td>{{ student.student_id || '—' }}</td>
+                <td>
+                  {{ student.student_id || '—' }}
+                  <small v-if="isMergedTable && student.admission_year" class="muted">Batch {{ student.admission_year }}</small>
+                </td>
                 <td>
                   <span class="pill navy">{{ yearLevelShortLabel(student.year_level) }}</span>
+                  <small v-if="isMergedTable" class="muted">{{ studentStatusLabel(student.student_status) }}</small>
                 </td>
-                <td>{{ student.admission_year || '--' }}</td>
-                <td>
+                <td v-if="!isMergedTable">{{ student.admission_year || '--' }}</td>
+                <td v-if="!isMergedTable">
                   <span
                     class="pill"
                     :class="student.student_status === 'enrolled' ? 'success' : 'neutral'"
@@ -296,7 +321,12 @@
                   <span class="directory-table-sections">{{ roomNamesLabel(student) }}</span>
                   <small class="muted">{{ student.room_count }} section{{ student.room_count === 1 ? '' : 's' }}</small>
                 </td>
-                <td class="numeric">{{ student.attempts_submitted }}</td>
+                <td class="numeric">
+                  {{ student.attempts_submitted }}
+                  <small v-if="isMergedTable" class="muted" :title="`Last activity: ${lastActivityLabel(student)}`">
+                    {{ lastActivityDateLabel(student) }}
+                  </small>
+                </td>
                 <td class="numeric">
                   <span class="pill" :class="scoreTone(student)">
                     {{ formatPercent(student.average_score_percent) }}
@@ -305,15 +335,21 @@
                 <td class="numeric">{{ formatPercent(student.pass_rate_percent) }}</td>
                 <td>
                   <strong>{{ formatPercent(student.latest_score_percent) }}</strong>
-                  <small v-if="latestExamLabel(student)" class="muted">{{ latestExamLabel(student) }}</small>
+                  <small v-if="latestExamLabel(student)" class="muted students-cell-line" :title="latestExamLabel(student)">
+                    {{ latestExamLabel(student) }}
+                  </small>
                 </td>
-                <td>
+                <td v-if="!isMergedTable">
                   <span>{{ lastActivityLabel(student) }}</span>
-                  <small v-if="strongestSubjectLabel(student)" class="muted">
+                  <small
+                    v-if="strongestSubjectLabel(student)"
+                    class="muted students-cell-line"
+                    :title="`Best in ${strongestSubjectLabel(student)}`"
+                  >
                     Best in {{ strongestSubjectLabel(student) }}
                   </small>
                 </td>
-                <td class="directory-table-email-cell">{{ student.email }}</td>
+                <td v-if="!isMergedTable" class="directory-table-email-cell" :title="student.email">{{ student.email }}</td>
               </tr>
             </tbody>
           </table>
@@ -346,10 +382,11 @@
       </template>
     </article>
 
-    <BottomSheet v-if="isPhone" v-model:open="filtersOpen" title="Filter and sort">
+    <BottomSheet v-if="useRows" v-model:open="filtersOpen" title="Filter and sort">
       <label class="field-stack">
         <span class="field-label">Sort by</span>
         <select v-model="studentSortChoice" class="text-input">
+          <option v-if="!isListedSortChoice" :value="studentSortChoice">Sorted by column</option>
           <option v-for="option in sortChoices" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
@@ -415,11 +452,45 @@
 import { computed, ref, watch } from 'vue'
 import { AlertCircle, ArrowRight, ChevronDown, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
 import BottomSheet from '@/components/BottomSheet.vue'
+import { formatCompactDate } from '../composables/useDashboardFormatters'
 import { useStudentsModule } from '../composables/useStudentsModule'
-import { useCompactLayout, usePhoneLayout } from '../composables/useViewport'
+import { vScrollHint } from '@/utils/scrollHint'
+import { estimatePageWidth, useCompactLayout, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
 const isCompact = useCompactLayout()
 const isPhone = usePhoneLayout()
+
+/*
+ * Three layouts, chosen by the room the page really has (the sidebar takes
+ * 264px of the window, or 84px collapsed):
+ *
+ *   under 920px     rows that open, as on a phone
+ *   920 to 1599px   the table with four columns folded into the others:
+ *                   email under the name, batch under the ID, status under
+ *                   the year, last activity under the submitted count
+ *                   (under 1010px with its long cells cut shorter)
+ *   1600px and up   all twelve columns
+ *
+ * Twelve columns need about 1,600px. On a 1366px laptop the page has
+ * 1,050px, and the scores, the columns this page is opened for, were the
+ * ones off its right edge.
+ */
+const STUDENT_ROWS_BELOW = 920
+const STUDENT_TIGHT_TABLE_BELOW = 1010
+const STUDENT_FULL_TABLE_FROM = 1600
+
+const pageRef = ref(null)
+const pageWidth = useElementWidth(pageRef, estimatePageWidth())
+
+const useRows = computed(() => (
+  pageWidth.value > 0 ? pageWidth.value < STUDENT_ROWS_BELOW : isPhone.value
+))
+const isMergedTable = computed(() => (
+  !useRows.value && pageWidth.value > 0 && pageWidth.value < STUDENT_FULL_TABLE_FROM
+))
+const isTightTable = computed(() => (
+  isMergedTable.value && pageWidth.value < STUDENT_TIGHT_TABLE_BELOW
+))
 
 const {
   directoryLoading,
@@ -537,6 +608,21 @@ const studentSortChoice = computed({
   },
 })
 
+// What a heading reports to a screen reader: its own column's sort, or in
+// the eight-column table that of the column folded into it.
+function headingAriaSort(key, foldedKey) {
+  const own = sortAriaValue(key)
+  if (own !== 'none' || !isMergedTable.value) return own
+
+  return sortAriaValue(foldedKey)
+}
+
+// A sort chosen from a column heading may be one the list does not name
+// (student ID, Z to A), and a select with no matching option shows blank.
+const isListedSortChoice = computed(() => (
+  sortChoices.some((option) => option.value === studentSortChoice.value)
+))
+
 const filterSheetDoneLabel = computed(() => {
   if (directoryLoading.value) return 'Updating…'
 
@@ -554,12 +640,18 @@ function studentRowMeta(student) {
   ].filter(Boolean).join(' · ')
 }
 
+// The date alone, for the line under the submitted count: the full
+// timestamp is wider than the column it sits in.
+function lastActivityDateLabel(student) {
+  return student?.last_activity_at ? formatCompactDate(student.last_activity_at) : 'No activity'
+}
+
 function studentScoreLabel(student) {
   if (Number(student?.attempts_submitted ?? 0) < 1) return 'No attempts'
   return `Avg ${formatPercent(student.average_score_percent)}`
 }
 
-watch(isPhone, () => {
+watch(useRows, () => {
   filtersOpen.value = false
 })
 </script>
@@ -582,6 +674,61 @@ watch(isPhone, () => {
   outline: 2px solid var(--lnu-navy);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* A second line in a cell that may be as long as an exam's title or an
+   email address: one line, cut with an ellipsis, whole in its tooltip.
+   Left to run on, two of these set the table's width by themselves. */
+.students-cell-line {
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.students-table .directory-table-email-cell {
+  max-width: 200px;
+}
+
+/* The second sort in a heading, under the first as the second line is
+   under the first in the cells below. flex, not inline-flex: two inline
+   buttons at full width sat side by side and doubled the column. */
+.students-table.is-merged thead .directory-sort-btn {
+  display: flex;
+}
+
+/* The first gives up its bottom padding to bring the second up under it;
+   pulled up with a margin instead, the second lay over the first. */
+.students-table.is-merged thead .directory-sort-btn:not(.is-second):not(:only-child) {
+  padding-bottom: 1px;
+}
+
+.directory-sort-btn.is-second {
+  padding-top: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--lnu-text-muted);
+}
+
+/* Eight columns are sized by what is in them, not held to the 1080px the
+   twelve needed. */
+.students-table.is-merged {
+  min-width: 0;
+}
+
+.students-table.is-merged .directory-table-sections {
+  max-width: 150px;
+}
+
+.students-table.is-tight .directory-table-name-cell {
+  min-width: 180px;
+}
+
+.students-table.is-tight .students-cell-line,
+.students-table.is-tight .directory-table-sections {
+  max-width: 120px;
 }
 
 .directory-row-profile-btn {

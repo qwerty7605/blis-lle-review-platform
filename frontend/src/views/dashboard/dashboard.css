@@ -3088,13 +3088,15 @@
   gap: 8px;
 }
 
+/* No min-height: 0 here. Inside a list with a height limit it lets the
+   browser shrink every row to its padding once the rows no longer fit, and
+   their text then spills over the rows below. */
 .exam-policy-item,
 .exam-room-choice {
   border: 1px solid rgba(13, 21, 71, 0.12);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   padding: 10px 12px;
-  min-height: 0;
 }
 
 .exam-policy-item:hover,
@@ -3686,9 +3688,12 @@
   gap: 16px;
 }
 
+/* 140px, not 150px: four cards then stay on one row down to the width
+   where phones take over with two. At 150px a 1024px laptop with the
+   sidebar open showed three and left the fourth alone on a second row. */
 .user-directory-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -3709,7 +3714,8 @@
 
 .user-directory-summary-card strong {
   font-size: 28px;
-  line-height: 1;
+  /* 1 clipped the top and bottom of the digits in this font. */
+  line-height: 1.2;
   color: var(--lnu-navy-deep);
 }
 
@@ -3919,7 +3925,7 @@
 .directory-table-name-cell .pill {
   display: inline-block;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .directory-sort-btn {
@@ -3943,7 +3949,7 @@
 }
 
 .directory-sort-arrow {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--lnu-navy);
 }
 
@@ -5426,7 +5432,7 @@
 
 .directory-sort-btn {
   padding: 9px 12px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -5485,7 +5491,7 @@
 
 .stat-label {
   margin: 0;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -5559,9 +5565,12 @@
   align-items: start;
 }
 
+/* minmax(0, ...), not a bare 1fr: a bare one is as wide as the longest
+   one-line thing inside it, and on a 320px phone the teacher's "Students
+   Below Passing" panel pushed the whole page 20px sideways. */
 @media (max-width: 1100px) {
   .insight-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -5677,6 +5686,14 @@ a.ghost-btn {
 
 .text-input:focus {
   box-shadow: var(--focus-ring);
+}
+
+/* Four forms use this wrapper and nothing defined it, so each field's label
+   sat directly under the field above it. */
+.room-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
 }
 
 .check-item {
@@ -5914,7 +5931,7 @@ a.ghost-btn {
 }
 
 .exam-progress-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -6026,7 +6043,7 @@ a.ghost-btn {
 }
 
 .legend-item {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-soft);
 }
 
@@ -6144,6 +6161,12 @@ a.ghost-btn {
 
 .exam-attempt-card.immersive .surface-head {
   margin-bottom: 0;
+}
+
+/* The heading kept the browser's own margins, about 21px above and below,
+   which on a phone is a line of the question. */
+.exam-attempt-card.immersive .surface-head h4 {
+  margin: 0;
 }
 
 .exam-attempt-question-text {
@@ -6292,6 +6315,15 @@ a.ghost-btn {
 }
 
 /* ---- Responsive ---- */
+/* From 901px to about 980px the question list column leaves this row too
+   little room and Submit drops to a line of its own. It stays on the right
+   there, where it is at every other width. */
+@media (min-width: 901px) and (max-width: 980px) {
+  .exam-attempt-footer > .primary-btn {
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 900px) {
   .exam-attempt-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -6307,32 +6339,6 @@ a.ghost-btn {
 
   .exam-attempt-head h3 {
     font-size: 14px;
-  }
-}
-
-@media (max-width: 620px) {
-  .exam-attempt-head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .exam-head-meta {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .exam-attempt-footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .exam-attempt-nav {
-    justify-content: space-between;
-  }
-
-  .exam-attempt-footer .primary-btn {
-    width: 100%;
-    justify-content: center;
   }
 }
 
@@ -6370,21 +6376,207 @@ a.ghost-btn {
   height: auto;
 }
 
-/* Phones. These follow the rule above on purpose: it has to lose here. */
+.exam-head-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Tablets and phones. These follow the rule above on purpose: it has to
+   lose here. */
 @media (max-width: 900px) {
   /* The shell is what scrolls at this width, so the layout has to be as
      tall as what is in it. Held to the visible height instead, a long
      question left no room for anything that came after it. It still grows
      to fill the screen when the question is short. */
-  .exam-attempt-layout {
-    flex: 1 0 auto;
+  .exam-attempt-shell {
+    overscroll-behavior: contain;
   }
 
-  /* Three buttons in a two-column grid left the list toggle in a cell
-     narrower than itself, lying across Previous. It takes the whole row. */
+  .exam-attempt-layout {
+    flex: 1 0 auto;
+    padding: 10px;
+  }
+
+  /*
+   * One row of buttons, as on a desktop. From 900px down they used to
+   * stack four deep at full width: 220px of the screen, pinned under the
+   * question, on a tablet as much as on a phone.
+   */
+  .exam-attempt-footer {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .exam-attempt-footer .ghost-btn,
+  .exam-attempt-footer .primary-btn,
+  .exam-attempt-footer .bookmark-toggle-btn {
+    flex-shrink: 0;
+    width: auto;
+  }
+
+  .exam-attempt-nav {
+    display: inline-flex;
+    width: auto;
+  }
+
   .exam-attempt-nav .exam-sidebar-inline-toggle {
-    grid-column: 1 / -1;
     min-width: 0;
+  }
+}
+
+/*
+ * Phones. The header and the buttons are pinned, so every pixel they take
+ * comes out of the question: at 116px and 220px they left a 360x640 phone
+ * 304px for it, about four lines and one answer choice. Here they are 62px
+ * and 114px.
+ */
+@media (max-width: 640px) {
+  /* One row: the exam's name over the answered count, then the clock, then
+     Exit. The room line is dropped; it was read before the exam opened. */
+  .exam-attempt-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'copy timer exit'
+      'progress timer exit';
+    align-items: center;
+    gap: 3px 8px;
+    padding: 8px 12px;
+  }
+
+  .exam-head-copy {
+    grid-area: copy;
+  }
+
+  .exam-attempt-head h3 {
+    font-size: 13.5px;
+    line-height: 1.3;
+  }
+
+  .exam-attempt-head p {
+    display: none;
+  }
+
+  /* Its children are placed straight into the header's grid. */
+  .exam-head-meta {
+    display: contents;
+  }
+
+  .exam-progress,
+  .exam-head-score {
+    grid-area: progress;
+    min-width: 0;
+  }
+
+  .exam-progress {
+    gap: 3px;
+  }
+
+  .exam-progress-top {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .exam-progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .exam-progress-value em {
+    font-size: 12px;
+  }
+
+  .exam-head-score {
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .exam-head-score .pill {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+
+  .exam-timer {
+    grid-area: timer;
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .exam-head-meta > .ghost-btn {
+    grid-area: exit;
+  }
+
+  /* The buttons run edge to edge like the header, so the space around the
+     question moves from the layout onto the card. */
+  .exam-attempt-layout {
+    padding: 0;
+  }
+
+  .exam-attempt-main {
+    gap: 8px;
+  }
+
+  .exam-attempt-card.immersive,
+  .exam-attempt-main > .exam-attempt-loading {
+    margin: 8px 8px 0;
+  }
+
+  /* The question and its choices at one size. The choices were set larger
+     than the question they answer (17px against 16px). */
+  .exam-attempt-question-text {
+    line-height: 1.5;
+  }
+
+  .exam-option-card .exam-option-text {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .exam-option-card .exam-option-letter {
+    font-size: 13px;
+  }
+
+  /*
+   * Two rows, edge to edge like the header: Bookmark and the question
+   * list, then Previous, Next and Submit. The nav group dissolves so its
+   * three buttons can sit in either row.
+   */
+  .exam-attempt-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: var(--surface);
+  }
+
+  .exam-attempt-nav {
+    display: contents;
+  }
+
+  .exam-attempt-footer > .bookmark-toggle-btn,
+  .exam-attempt-footer > .ghost-btn,
+  .exam-attempt-nav .exam-sidebar-inline-toggle {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .exam-attempt-nav .ghost-btn:not(.exam-sidebar-inline-toggle) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .exam-attempt-footer > .primary-btn {
+    flex: 0 0 auto;
+    padding: 0 14px;
   }
 }
 
@@ -6423,7 +6615,7 @@ a.ghost-btn {
 
 .assignment-label {
   flex-shrink: 0;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -6533,7 +6725,7 @@ a.assignment-chip.is-link:hover {
 }
 
 .exams-filter-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -6831,12 +7023,26 @@ a.assignment-chip.is-link:hover {
   min-width: 0;
 }
 
-.directory-row-facts > .is-wide {
+.directory-row-facts > .is-wide,
+.directory-row-facts > .is-full {
   grid-column: 1 / -1;
 }
 
+/* The same rows on a tablet or a small laptop, wherever a table does not
+   fit its page: four facts across instead of two, and a wide one takes two
+   of the four. */
+@media (min-width: 641px) {
+  .directory-row-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .directory-row-facts > .is-wide {
+    grid-column: span 2;
+  }
+}
+
 .directory-row-facts dt {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -6969,6 +7175,18 @@ a.assignment-chip.is-link:hover {
   .management-toolbar > .narrow,
   .management-toolbar > .management-actions {
     flex: 0 0 auto;
+  }
+
+  /* A text field's natural width at 16px is about 340px, and a column that
+     is allowed to wrap takes its widest item's width: on the Licensure page
+     the search field ran past the edge of a 360px screen. */
+  .management-toolbar:not(.is-search-row) {
+    flex-wrap: nowrap;
+  }
+
+  .management-toolbar:not(.is-search-row) > .text-input {
+    width: 100%;
+    min-width: 0;
   }
 
   .management-toolbar.is-search-row {
@@ -7124,7 +7342,7 @@ a.assignment-chip.is-link:hover {
 
   .audit-list .pill {
     padding: 3px 8px;
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   /* Dialogs had no height limit, so a long form (Create User is ~1,140px)
@@ -7137,13 +7355,59 @@ a.assignment-chip.is-link:hover {
     padding: 12px 0 0;
   }
 
+  /* margin-top: auto is what puts the card on the bottom edge. The shared
+     `margin: auto` centres it whatever align-items says, which left a
+     sheet with square bottom corners floating in the middle of the screen. */
   .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) {
+    --modal-pad: 18px;
     width: 100%;
+    max-height: calc(100vh - 12px);
     max-height: calc(100dvh - 12px);
+    margin: auto 0 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     border-radius: 18px 18px 0 0;
-    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    padding: var(--modal-pad);
+    padding-bottom: calc(var(--modal-pad) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal):has(> .modal-actions:last-child) {
+    padding-bottom: 0;
+  }
+
+  /* The button bar runs edge to edge, so its side margins have to match the
+     card's padding (they were 18px against a 24px card). */
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 calc(-1 * var(--modal-pad));
+    padding: 12px var(--modal-pad) calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
+  }
+}
+
+/* ---- Dialogs taller than the screen (tablets and laptops) ----
+   The same contract as on a phone, in the middle of the screen: the dialog
+   is never taller than what is visible, what is in it scrolls, and its
+   buttons stay at its bottom edge. Before, the whole overlay scrolled, and
+   on a 768px-high laptop a long form's heading and its Save button were
+   never on screen together.
+
+   At rest nothing looks different: the button bar sits where it sat (the
+   margin takes back what its padding adds) and carries no line above it,
+   only a fade that shows once something scrolls underneath. */
+@media (min-width: 641px) {
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) {
+    --modal-pad: 24px;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--modal-pad);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
   }
 
   .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal):has(> .modal-actions:last-child) {
@@ -7154,11 +7418,42 @@ a.assignment-chip.is-link:hover {
     position: sticky;
     bottom: 0;
     z-index: 1;
-    margin: 0 -18px;
-    padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--border-soft);
+    margin: -12px calc(-1 * var(--modal-pad)) 0;
+    padding: 12px var(--modal-pad) var(--modal-pad);
     background: var(--surface);
   }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: 18px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--surface));
+    pointer-events: none;
+  }
+}
+
+/* ---- Rows that scroll sideways ----
+   Tabs and filter chips on a phone sit in one row with its scrollbar
+   hidden, and what does not fit is cut off at the screen's edge with nothing
+   to say there is more. The row fades out at an edge while something lies
+   beyond it; utils/scrollHint.js (v-scroll-hint) adds and removes the two
+   classes as the row is scrolled. */
+.has-more-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+.has-more-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+
+.has-more-start.has-more-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
 }
 
 /* ---- Touch screens ---- */
@@ -7172,6 +7467,25 @@ a.assignment-chip.is-link:hover {
     width: 44px;
     height: 44px;
     border-radius: 10px;
+  }
+
+  /* The X that closes a dialog was 34px, on every dialog. */
+  .modal-close {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* A checkbox and its label are one target. The row was 19px tall. */
+  .check-item {
+    min-height: 44px;
+  }
+
+  .check-item input[type='checkbox'],
+  .check-item input[type='radio'] {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
   }
 }
 

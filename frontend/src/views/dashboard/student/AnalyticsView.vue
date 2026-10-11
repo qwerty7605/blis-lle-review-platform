@@ -696,7 +696,7 @@ function trendToneClass(subject) {
   margin: 0;
   font-size: clamp(22px, 2.4vw, 28px);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.2;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -751,7 +751,7 @@ function trendToneClass(subject) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -786,11 +786,11 @@ function trendToneClass(subject) {
   font-size: clamp(30px, 3vw, 40px);
   font-weight: 800;
   color: var(--a-ink);
-  line-height: 1.05;
+  line-height: 1.2;
 }
 
 .analytics-overview-sublabel {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -835,7 +835,7 @@ function trendToneClass(subject) {
 }
 
 .analytics-overview-box-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -985,7 +985,7 @@ function trendToneClass(subject) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1118,7 +1118,7 @@ function trendToneClass(subject) {
 .plan-review-empty {
   grid-area: action;
   padding: 0 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1249,7 +1249,7 @@ function trendToneClass(subject) {
 }
 
 .guidance-kicker {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1285,7 +1285,7 @@ function trendToneClass(subject) {
 }
 
 .mastery-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1419,7 +1419,7 @@ function trendToneClass(subject) {
 .guidance-point-label {
   display: block;
   margin-bottom: 3px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1658,6 +1658,83 @@ function trendToneClass(subject) {
 
   .guidance-point {
     padding: 11px 12px;
+  }
+}
+
+/*
+ * Without the sidebar an info icon sits within 130px of the screen's left
+ * edge, and a 250px bubble centred on it ran off that edge. Here the bubble
+ * hangs under the row its icon is in, starting at the row's left, and can
+ * never be wider than the row.
+ */
+@media (max-width: 900px) {
+  .analytics-overview-labelrow,
+  .analytics-section-head {
+    position: relative;
+  }
+
+  .info-hint {
+    position: static;
+  }
+
+  .info-hint-bubble {
+    top: calc(100% + 6px);
+    bottom: auto;
+    left: 0;
+    max-width: min(100%, 320px);
+    transform: translateY(-4px);
+  }
+
+  .info-hint-bubble::after {
+    display: none;
+  }
+
+  .info-hint:hover .info-hint-bubble,
+  .info-hint:focus-visible .info-hint-bubble {
+    transform: translateY(0);
+  }
+}
+
+@media (pointer: coarse) {
+  /* A 12px icon: the padding is its tap area and the margin gives the room
+     back, so nothing around it moves. */
+  .info-hint {
+    margin: -14px;
+    padding: 14px;
+  }
+
+  /* A finger has no hover, and a tap does not count as keyboard focus. */
+  .info-hint:focus .info-hint-bubble {
+    opacity: 1;
+  }
+
+  .analytics-refresh-btn {
+    width: 40px;
+    height: 40px;
+    margin-left: 6px;
+    border-radius: 10px;
+  }
+
+  .analytics-refresh-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .plan-review-btn {
+    min-height: 44px;
+  }
+
+  /* "Why this estimate?" was a 19px line of text to tap. Padding, not a
+     flex box, so the summary keeps its arrow. */
+  .prediction-reasoning > summary {
+    padding-block: 12px;
+  }
+}
+
+/* Three tabs across 280px: with their icons the labels ran into each other. */
+@media (max-width: 360px) {
+  .analytics-tab svg {
+    display: none;
   }
 }
 </style>
