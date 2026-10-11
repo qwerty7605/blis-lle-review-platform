@@ -134,7 +134,7 @@ Defined in `database/seeders/DatabaseSeeder.php`:
     - `GET /api/student/exam-attempts/{attempt}`
     - `PATCH /api/student/exam-attempts/{attempt}/answers`
     - `POST /api/student/exam-attempts/{attempt}/submit`
-  - Reports: `/api/reports/overview`. In the UI this page is the teacher's **Dashboard**: first in the staff sidebar and the page staff land on after signing in. The nav key, route (`/dashboard/reports`, `dashboard-reports`) and `ReportsView.vue` keep the name "reports".
+  - Reports: `/api/reports/overview`. In the UI this page is the teacher's **Dashboard**: first in the staff sidebar and the page staff land on after signing in. The nav key, route (`/dashboard/reports`, `dashboard-reports`) and `ReportsView.vue` keep the name "reports". `metrics.managed_rooms` counts the rooms the Rooms page lists (not archived); the rest of the report still reads archived rooms' results.
   - System settings: `/api/settings/system` (admin can update)
   - End of school year (admin only): `GET /api/admin/year-end` proposes what closing the year would do (4th year and above graduate, everyone else moves up one level) and `POST /api/admin/year-end` applies only the students the admin sends back, each with the year level they were shown; a record that changed since is skipped. Logic in `app/Services/SchoolYearEndService.php`. Page: `frontend/src/views/dashboard/admin/YearEndView.vue` at `/dashboard/year-end`, opened from the Users page; it is a hidden nav module (`yearEnd`). Nothing about it is scheduled or automatic.
   - Student room details (`GET /api/rooms/{room}`) expose active rosters for room pages and current/archived exams separately; attempt availability is enforced by `scheduled_at`, archive state, and question set presence.
