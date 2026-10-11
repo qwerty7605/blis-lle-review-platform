@@ -123,6 +123,8 @@ Defined in `database/seeders/DatabaseSeeder.php`:
     - `docker compose exec -T php sh -lc 'mkdir -p storage/logs bootstrap/cache && chown -R www-data:www-data storage bootstrap/cache && chmod -R ug+rwx storage bootstrap/cache'`
 - Container name/port conflicts with old projects
   - Check `docker ps` and remove conflicting containers before `up -d`.
+- 429 `Too Many Attempts`
+  - Limits live in `AppServiceProvider::configureRateLimiting()`. Per-IP tiers are sized for a campus behind one address (about 230 students): 120 sign-ins and 600 signed-out requests a minute, 30 registrations a minute and 150 an hour, 30 resend/reset emails an hour. The tight tiers are per account (5 sign-in tries a minute) and per mailbox (3 emails an hour). Signed-in users are counted per user (120 a minute). Covered by `tests/Feature/CampusRateLimitTest.php`.
 - New backend modules (API-backed):
   - Staff student directory: `/api/students/directory`
   - Student profile (staff and admin only): `GET /api/students/{student}/analytics` returns `student` plus the same payload as `/api/student/analytics` (both built by `$buildStudentAnalytics` in `routes/api/student.php`). Page: `frontend/src/views/dashboard/staff/StudentProfileView.vue` at `/dashboard/students/:studentId`, opened by clicking a name in the Students directory; it is a hidden nav module (`studentProfile`).
