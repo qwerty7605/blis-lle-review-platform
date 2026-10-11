@@ -1,10 +1,12 @@
 <template>
-  <section class="room-view">
+  <section ref="pageRef" class="room-view">
     <div v-if="examMessage" class="feedback success">
       <CheckCircle2 :size="15" />
       <span>{{ examMessage }}</span>
     </div>
-    <div v-if="examError" class="feedback danger">
+    <!-- While the form is open it covers this banner, so the form shows the
+         error itself (see its footer). -->
+    <div v-if="examError && !showExamModal" class="feedback danger">
       <AlertCircle :size="15" />
       <span>{{ examError }}</span>
     </div>
@@ -60,7 +62,7 @@
           />
         </label>
 
-        <div class="examlist-filters" role="group" aria-label="Filter by room">
+        <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by room">
           <button
             type="button"
             class="examlist-filter"
@@ -101,9 +103,9 @@
         <button type="button" class="ghost-btn" @click="clearExamFilters">Clear filters</button>
       </div>
 
-      <!-- Desktop and tablet: one row per exam. Phones keep the cards below,
-           where a six-column table would only scroll sideways. -->
-      <div v-else-if="!isPhone" class="examlist-table-card">
+      <!-- A table where its six columns fit. Anywhere narrower (a phone, a
+           tablet, a small laptop with the sidebar open) the rows below. -->
+      <div v-else-if="!useRows" class="examlist-table-card">
         <div class="examlist-table-scroll">
           <table class="examlist-table">
             <thead>
@@ -191,99 +193,100 @@
         </div>
       </div>
 
-      <ul v-else class="examlist-grid">
-        <li
-          v-for="exam in filteredExams"
-          :id="`exam-${exam.id}`"
-          :key="exam.id"
-          class="examrow-card"
-          :class="{ 'is-highlighted': highlightedExamId === exam.id }"
-        >
-          <div class="examrow-card-top">
-            <span class="examrow-icon" aria-hidden="true"><FileText :size="18" /></span>
-            <div class="examrow-card-heading">
-              <h3>{{ exam.title }}</h3>
-              <p>{{ examQuestionBankSubject(exam) }}</p>
-            </div>
-          </div>
-
-          <dl class="examrow-facts">
-            <div>
-              <dt>Questions</dt>
-              <dd>{{ exam.total_items }}</dd>
-            </div>
-            <div>
-              <dt>Minutes</dt>
-              <dd>{{ exam.duration_minutes }}</dd>
-            </div>
-            <div class="is-wide">
-              <dt>Schedule</dt>
-              <dd>
-                <span class="examrow-status" :class="`is-${examWindow(exam).tone}`">
-                  <i aria-hidden="true"></i>{{ examWindow(exam).label }}
+      <!-- One line per exam, opening in place for the rest and for Edit and
+           Delete. The cards this replaces were about 480px each, which made
+           67 exams a 35,000px page on a phone. -->
+      <div v-else class="examlist-rows-card">
+        <ul class="directory-row-list examlist-rows">
+          <li v-for="exam in filteredExams" :id="`exam-${exam.id}`" :key="exam.id">
+            <details
+              class="directory-row-details"
+              :class="{ 'is-highlighted': highlightedExamId === exam.id }"
+              :open="highlightedExamId === exam.id"
+            >
+              <summary class="directory-row">
+                <span class="directory-row-copy">
+                  <strong>{{ exam.title }}</strong>
+                  <span>{{ examRowMeta(exam) }}</span>
                 </span>
-                <span class="examrow-muted">{{ examWindow(exam).dates }}</span>
-              </dd>
-            </div>
-            <div class="is-wide">
-              <dt>Rules</dt>
-              <dd>{{ examRulesText(exam) }}</dd>
-            </div>
-          </dl>
+                <span class="pill" :class="examWindowPill(exam)">{{ examWindow(exam).label }}</span>
+                <ChevronDown :size="18" class="directory-row-more directory-row-chevron" aria-hidden="true" />
+              </summary>
 
-          <div v-if="exam.assigned_rooms?.length > 0 || exam.archived_rooms?.length > 0" class="examrow-rooms">
-            <router-link
-              v-for="room in exam.assigned_rooms"
-              :key="`room-${room.id}`"
-              class="assignment-chip"
-              :to="{ name: 'dashboard-room-management', query: { room: room.id } }"
-            >
-              <DoorOpen :size="12" />
-              {{ room.name }}
-            </router-link>
-            <span
-              v-for="room in exam.archived_rooms"
-              :key="`archived-room-${room.id}`"
-              class="assignment-chip is-archived"
-            >
-              <Archive :size="12" />
-              {{ room.name }}
-            </span>
-          </div>
-          <p v-else class="examrow-muted">Not assigned to any room</p>
+              <dl class="directory-row-facts">
+                <div>
+                  <dt>Subject</dt>
+                  <dd>{{ examQuestionBankSubject(exam) }}</dd>
+                </div>
+                <div>
+                  <dt>Schedule</dt>
+                  <dd>{{ examWindow(exam).dates }}</dd>
+                </div>
+                <div class="is-wide">
+                  <dt>Rules</dt>
+                  <dd>{{ examRulesText(exam) }}</dd>
+                </div>
+                <div class="is-full">
+                  <dt>Rooms</dt>
+                  <dd>
+                    <div v-if="exam.assigned_rooms?.length > 0 || exam.archived_rooms?.length > 0" class="examrow-rooms">
+                      <router-link
+                        v-for="room in exam.assigned_rooms"
+                        :key="`room-${room.id}`"
+                        class="assignment-chip"
+                        :to="{ name: 'dashboard-room-management', query: { room: room.id } }"
+                      >
+                        <DoorOpen :size="12" />
+                        {{ room.name }}
+                      </router-link>
+                      <span
+                        v-for="room in exam.archived_rooms"
+                        :key="`archived-room-${room.id}`"
+                        class="assignment-chip is-archived"
+                      >
+                        <Archive :size="12" />
+                        {{ room.name }}
+                      </span>
+                    </div>
+                    <template v-else>Not assigned to any room</template>
+                  </dd>
+                </div>
+              </dl>
 
-          <div class="examrow-card-actions">
-            <button type="button" class="primary-btn" @click="openEditExamModal(exam)">
-              <Pencil :size="15" />
-              Edit
-            </button>
-            <button
-              type="button"
-              class="examrow-delete-btn"
-              :aria-label="`Delete ${exam.title}`"
-              title="Delete"
-              @click="openDeleteExamModal(exam)"
-            >
-              <Trash2 :size="16" />
-            </button>
-          </div>
-        </li>
-      </ul>
+              <div class="directory-row-actions examlist-row-actions">
+                <button
+                  type="button"
+                  class="examrow-delete-btn"
+                  :aria-label="`Delete ${exam.title}`"
+                  title="Delete"
+                  @click="openDeleteExamModal(exam)"
+                >
+                  <Trash2 :size="16" />
+                </button>
+                <button type="button" class="primary-btn" @click="openEditExamModal(exam)">
+                  <Pencil :size="15" />
+                  Edit
+                </button>
+              </div>
+            </details>
+          </li>
+        </ul>
+      </div>
     </template>
 
     <teleport to="body">
-      <div v-if="showExamModal" class="modal-backdrop exam-modal-backdrop" @click.self="closeExamModal">
-        <div class="modal-card exam-modal-card">
+      <div v-if="showExamModal" class="modal-backdrop exam-modal-backdrop" @click.self="dismissExamModal">
+        <div class="modal-card exam-modal-card" role="dialog" aria-modal="true" aria-labelledby="exam-form-title">
           <header class="modal-head exam-modal-head">
             <div class="exam-modal-title-wrap">
               <div class="management-inline exam-modal-top-pills">
                 <span class="pill success">{{ examForm.id ? 'Edit mode' : 'New exam' }}</span>
                 <span class="pill neutral">{{ examQuestionBanks.length }} saved question set(s)</span>
               </div>
-              <h4>{{ examForm.id ? 'Update Exam Setup' : 'Create Exam Setup' }}</h4>
+              <h4 id="exam-form-title">{{ examForm.id ? 'Update Exam Setup' : 'Create Exam Setup' }}</h4>
               <p>Build the exam in sections, then review the live summary before saving.</p>
             </div>
-            <button type="button" class="modal-close" @click="closeExamModal">
+            <button type="button" class="modal-close" aria-label="Close" @click="closeExamModal">
               <X :size="16" />
             </button>
           </header>
@@ -489,15 +492,36 @@
                   </div>
 
                   <div v-if="manageableRooms.length === 0" class="muted">No rooms available for assignment.</div>
-                  <div v-else class="check-grid exam-room-grid">
-                    <label v-for="room in manageableRooms" :key="room.id" class="check-item exam-room-choice">
-                      <input v-model="examForm.room_ids" type="checkbox" :value="room.id" />
-                      <span class="exam-room-copy">
-                        <strong>{{ room.name }}</strong>
-                        <small>{{ room.code }}</small>
-                      </span>
-                    </label>
-                  </div>
+                  <template v-else>
+                    <div class="exam-room-tools">
+                      <span>{{ examForm.room_ids.length }} of {{ manageableRooms.length }} selected</span>
+                      <button
+                        type="button"
+                        class="exam-room-tool"
+                        :disabled="examForm.room_ids.length === manageableRooms.length"
+                        @click="selectAllRooms"
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        class="exam-room-tool"
+                        :disabled="examForm.room_ids.length === 0"
+                        @click="examForm.room_ids = []"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                    <div class="check-grid exam-room-grid">
+                      <label v-for="room in manageableRooms" :key="room.id" class="check-item exam-room-choice">
+                        <input v-model="examForm.room_ids" type="checkbox" :value="room.id" />
+                        <span class="exam-room-copy">
+                          <strong>{{ room.name }}</strong>
+                          <small>{{ room.code }}</small>
+                        </span>
+                      </label>
+                    </div>
+                  </template>
                 </section>
               </div>
 
@@ -591,7 +615,13 @@
           </div>
 
           <div class="modal-actions exam-modal-actions">
-            <p class="exam-modal-action-note">
+            <!-- A save that fails has to say so here: the page's own banner
+                 is underneath this form. -->
+            <p v-if="examError" class="exam-modal-action-note is-error" role="alert">
+              <AlertCircle :size="15" />
+              <span>{{ examError }}</span>
+            </p>
+            <p v-else-if="needsMoreQuestions" class="exam-modal-action-note">
               Choose enough question sets to cover the requested item count before saving.
             </p>
             <div class="exam-modal-action-buttons">
@@ -624,6 +654,11 @@
           <p class="muted">
             Delete <strong>{{ selectedExam?.title }}</strong>? This also removes its room assignments.
           </p>
+
+          <div v-if="examError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ examError }}</span>
+          </div>
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="examSaving" @click="closeDeleteExamModal">Cancel</button>
@@ -662,8 +697,9 @@ import {
   formatExamSchedule,
   parseDateTime,
 } from '../composables/useDashboardFormatters'
-import { usePhoneLayout } from '../composables/useViewport'
+import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 import { useExamsModule } from '../composables/useExamsModule'
+import { vScrollHint } from '@/utils/scrollHint'
 
 const route = useRoute()
 const highlightedExamId = ref(null)
@@ -672,8 +708,19 @@ const highlightedExamId = ref(null)
 const selectedRoomFilter = ref('')
 const examSearch = ref('')
 
-// Phones (640px and under) show the exams as cards; wider screens as a table.
+/*
+ * The table needs 860px. Whether the list has that depends on the page's own
+ * width, not the window's: a 1024px laptop with the sidebar open leaves it
+ * 712px, and Edit and Delete ended up off the right-hand edge. So the page
+ * is measured, and anything narrower gets the rows a phone gets.
+ */
+const EXAM_TABLE_MIN_WIDTH = 860
 const isPhone = usePhoneLayout()
+const pageRef = ref(null)
+const pageWidth = useElementWidth(pageRef, estimatePageWidth())
+const useRows = computed(() => (
+  pageWidth.value > 0 ? pageWidth.value < EXAM_TABLE_MIN_WIDTH : isPhone.value
+))
 
 const {
   exams,
@@ -699,6 +746,7 @@ const {
   openCreateExamModal,
   openEditExamModal,
   closeExamModal,
+  dismissExamModal,
   openDeleteExamModal,
   closeDeleteExamModal,
   handleSaveExam,
@@ -771,6 +819,18 @@ const openExamCount = computed(() => exams.value.filter((exam) => examWindow(exa
 const unassignedExamCount = computed(() => (
   exams.value.filter((exam) => (exam.assigned_rooms ?? []).length === 0).length
 ))
+
+// A row's second line: the size of the exam and where it is running.
+function examRowMeta(exam) {
+  const rooms = (exam.assigned_rooms ?? []).length
+  const roomText = rooms === 0 ? 'No room' : `${rooms} ${rooms === 1 ? 'room' : 'rooms'}`
+
+  return `${exam.total_items} questions · ${exam.duration_minutes} min · ${roomText}`
+}
+
+function examWindowPill(exam) {
+  return { open: 'success', upcoming: 'navy', ended: 'neutral' }[examWindow(exam).tone]
+}
 
 // The three exam settings as one short line.
 function examRulesText(exam) {
@@ -873,6 +933,15 @@ const closeQuestionSetDropdown = () => {
 
 const clearSelectedQuestionBanks = () => {
   examForm.question_bank_ids = []
+}
+
+// The footer's reminder only shows while it applies.
+const needsMoreQuestions = computed(() => (
+  selectedQuestionBankTotalItems.value < Number(examForm.total_items || 0)
+))
+
+const selectAllRooms = () => {
+  examForm.room_ids = manageableRooms.value.map((room) => room.id)
 }
 
 const handleQuestionSetDropdownPointerDown = (event) => {
@@ -1145,34 +1214,53 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* ---------- Exam cards (phones) ---------- */
-.examlist-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-}
-
-/* Each card is a column so the action row sits at the bottom of every card
-   in a row, whatever the title length. */
-.examrow-card {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 20px;
+/* ---------- Rows (wherever the table does not fit) ---------- */
+.examlist-rows-card {
   border-radius: 20px;
   border: 1px solid var(--border-soft);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
-.examrow-card-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+/* Exam titles differ at their end ("... Mock Board Exam (AY 2015-2016)"),
+   which is exactly the part the shared one-line ellipsis cuts off. Here the
+   title wraps in full, and the row grows with it. */
+.examlist-rows .directory-row-copy strong {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #0b0d17;
+}
+
+.examlist-rows .directory-row-details.is-highlighted > summary {
+  background: rgba(240, 208, 128, 0.22);
+}
+
+.examlist-rows .examrow-rooms {
+  margin-top: 4px;
+}
+
+.examlist-row-actions {
+  gap: 8px;
+}
+
+.examlist-row-actions .primary-btn {
+  flex: 1 1 auto;
+  max-width: 240px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.examlist-row-actions .examrow-delete-btn {
+  width: 44px;
+  height: 44px;
 }
 
 .examrow-icon {
@@ -1185,38 +1273,6 @@ onBeforeUnmount(() => {
   justify-content: center;
   background: rgba(26, 35, 126, 0.08);
   color: var(--lnu-navy);
-}
-
-.examrow-card-heading {
-  flex: 1;
-  min-width: 0;
-}
-
-.examrow-facts {
-  margin: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 10px;
-}
-
-.examrow-facts > div {
-  min-width: 0;
-}
-
-.examrow-facts dt {
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--lnu-text-muted);
-}
-
-.examrow-facts dd {
-  margin: 2px 0 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--lnu-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .examrow-actions {
@@ -1296,22 +1352,31 @@ onBeforeUnmount(() => {
     height: 40px;
   }
 
-  .examrow-card {
-    padding: 18px 16px;
+  .examlist-rows-card {
     border-radius: 18px;
   }
+}
 
-  .examrow-facts {
-    grid-template-columns: minmax(0, 1fr);
+/* Touch screens: a search field under 16px makes iOS zoom the whole page in
+   when it is tapped, and a 25px room chip is hard to hit. */
+@media (pointer: coarse) {
+  .examlist-search-input {
+    height: 44px;
+    font-size: 16px;
   }
 
-  .examrow-actions {
-    flex-wrap: wrap;
+  .examlist-filter {
+    height: 40px;
   }
 
-  .examrow-actions .ghost-btn {
-    flex: 1;
-    justify-content: center;
+  /* Only the chips that are links to a room; archived ones are labels. */
+  .examlist-rows a.assignment-chip {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+
+  .exam-room-tool {
+    height: 40px;
   }
 }
 
@@ -1487,65 +1552,258 @@ onBeforeUnmount(() => {
   background: rgba(240, 208, 128, 0.22);
 }
 
-.examrow-card.is-highlighted {
-  border-color: var(--lnu-gold);
-  box-shadow: 0 0 0 3px rgba(240, 208, 128, 0.4);
+/* =====================================================================
+   Exam form (the Create / Update dialog)
+   Its base rules are in dashboard.css. This block comes after that file
+   and settles what the shared dialog rules further down it had undone,
+   plus the layout on small screens.
+   ===================================================================== */
+
+/* Head, body and footer are full-width bands. The shared .modal-card
+   padding put a white frame around all three, 48px of a phone's width. */
+.exam-modal-card {
+  padding: 0;
+  gap: 0;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
 }
 
-.examrow-card-heading {
-  flex: 1;
-  min-width: 0;
+.exam-modal-body {
+  overscroll-behavior: contain;
 }
 
-.examrow-card-heading h3 {
-  margin: 0;
-  font-size: 15.5px;
-  font-weight: 600;
-  line-height: 1.35;
-  color: #0b0d17;
-  overflow-wrap: anywhere;
+/* Below 1200px the form is one column. The summary follows the sections it
+   summarises, next to the Save button, instead of opening the form with a
+   screenful of zeroes above the first field. */
+.exam-modal-side {
+  order: 0;
 }
 
-.examrow-card-heading p {
-  margin: 2px 0 0;
+/* Gold on the navy card. It was navy on navy. */
+.exam-summary-kicker {
+  color: var(--lnu-gold-light);
+}
+
+.exam-summary-stat strong {
+  line-height: 1.2;
+}
+
+/* ---------- Rooms ---------- */
+.exam-room-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 13px;
   color: var(--lnu-text-muted);
 }
 
-.examrow-facts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.exam-room-tools span {
+  margin-right: auto;
 }
 
-.examrow-facts .is-wide {
-  grid-column: 1 / -1;
+.exam-room-tool {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--lnu-navy);
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.examrow-facts dd {
+.exam-room-tool:hover:not(:disabled) {
+  border-color: rgba(26, 35, 126, 0.34);
+  background: #f2f5fd;
+}
+
+.exam-room-tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.exam-room-tool:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* Rows are sized by their content (max-content), so a list longer than its
+   window scrolls instead of squeezing the rows into each other. */
+.exam-room-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  max-height: 268px;
+}
+
+.exam-room-choice {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-  white-space: normal;
+  gap: 10px;
+  min-height: 52px;
+  cursor: pointer;
 }
 
-.examrow-card-actions {
-  margin-top: auto;
+.exam-room-choice input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.exam-room-copy {
+  min-width: 0;
+}
+
+.exam-room-copy strong,
+.exam-room-copy small {
+  overflow-wrap: anywhere;
+}
+
+.exam-room-choice:has(input:checked) {
+  border-color: rgba(26, 35, 126, 0.5);
+  background: rgba(26, 35, 126, 0.05);
+}
+
+.exam-room-choice:has(input:focus-visible) {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---------- Footer ---------- */
+.exam-modal-actions {
+  gap: 12px;
+}
+
+.exam-modal-action-note.is-error {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
+  color: var(--lnu-danger);
+  font-weight: 500;
 }
 
-.examrow-card-actions .primary-btn {
-  flex: 1;
-  height: 44px;
+.exam-modal-action-note.is-error svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.exam-modal-action-buttons {
+  width: auto;
+  margin-left: auto;
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
+  flex-wrap: nowrap;
 }
 
-.examrow-card-actions .examrow-delete-btn {
-  width: 44px;
-  height: 44px;
+.exam-modal-action-buttons .primary-btn,
+.exam-modal-action-buttons .ghost-btn {
+  width: auto;
+}
+
+/* ---------- Up to 900px: one scroll, not a box scrolling inside the form ---------- */
+@media (max-width: 900px) {
+  .exam-room-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+}
+
+/* ---------- Phones: the form is the screen ---------- */
+@media (max-width: 640px) {
+  .exam-modal-backdrop {
+    padding: 0;
+  }
+
+  /* The visible height (dvh): 100vh runs under a phone browser's toolbar
+     and took the Save button with it. */
+  .exam-modal-card {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  /* One line, title and Close. The head and footer together used to take
+     295px of an 844px screen and left the fields a 470px window. */
+  .exam-modal-head {
+    gap: 8px;
+    padding: 8px 8px 8px 16px;
+  }
+
+  .exam-modal-top-pills,
+  .exam-modal-title-wrap p {
+    display: none;
+  }
+
+  .exam-modal-title-wrap h4 {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .exam-modal-body {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .exam-modal-main {
+    gap: 12px;
+  }
+
+  .exam-modal-panel,
+  .exam-modal-summary {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .exam-panel-head h5 {
+    font-size: 16px;
+  }
+
+  .exam-panel-head p {
+    font-size: 13px;
+  }
+
+  /* Items and Minutes are two short numbers: side by side. */
+  .exam-meta-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .exam-meta-row .field-stack {
+    width: auto;
+  }
+
+  .exam-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .exam-modal-action-note {
+    max-width: none;
+  }
+
+  /* Side by side: two stacked full-width buttons took 100px on their own. */
+  .exam-modal-action-buttons {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: 8px;
+  }
+
+  .exam-modal-action-buttons .primary-btn,
+  .exam-modal-action-buttons .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

@@ -429,6 +429,14 @@ function formatCount(value) {
   text-decoration: underline;
 }
 
+/* The way back was a 20px-tall line of text on a touch screen. */
+@media (pointer: coarse) {
+  .year-end-back {
+    min-height: 44px;
+    margin-block: -8px;
+  }
+}
+
 .year-end-body {
   display: grid;
   gap: 18px;

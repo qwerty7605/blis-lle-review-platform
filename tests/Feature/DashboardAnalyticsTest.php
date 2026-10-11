@@ -326,6 +326,27 @@ class DashboardAnalyticsTest extends TestCase
             ->assertJsonPath('metrics.pass_rate_percent', 100);
     }
 
+    public function test_staff_report_overview_counts_only_the_rooms_the_rooms_page_lists(): void
+    {
+        $staff = $this->makeUser('teacher@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+
+        $this->makeRoom($staff, 'BLIS 4-A', 'NOW401');
+        $this->makeRoom($staff, 'BLIS 4-B', 'NOW402');
+
+        $lastYear = $this->makeRoom($staff, 'BLIS 4-A (last year)', 'OLD401');
+        $lastYear->forceFill(['archived_at' => now()->subYear()])->save();
+
+        Sanctum::actingAs($staff);
+
+        $this->getJson('/api/reports/overview')
+            ->assertOk()
+            ->assertJsonPath('metrics.managed_rooms', 2);
+
+        $this->getJson('/api/rooms')
+            ->assertOk()
+            ->assertJsonCount(2, 'rooms');
+    }
+
     public function test_student_analytics_route_is_for_student_accounts_only(): void
     {
         $staff = $this->makeUser('staff-only@example.com', User::ROLE_STAFF_MASTER_EXAMINER);

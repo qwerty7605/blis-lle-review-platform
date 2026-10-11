@@ -1,5 +1,5 @@
 <template>
-  <section class="room-view">
+  <section ref="pageRef" class="room-view">
     <div v-if="resultsError" class="feedback danger">
       <AlertCircle :size="15" />
       <span>{{ resultsError }}</span>
@@ -166,9 +166,10 @@
       </div>
 
       <template v-else>
-        <!-- Phones: one row per result; Remove sits inside the opened row, so
-             a thumb scrolling past can't delete a result by accident. -->
-        <ul v-if="isPhone" class="directory-row-list is-in-card">
+        <!-- Where the table cannot fit: one row per result; Remove sits
+             inside the opened row, so a thumb scrolling past can't delete a
+             result by accident. -->
+        <ul v-if="useRows" class="directory-row-list is-in-card">
           <li v-for="result in results" :key="result.id">
             <details class="directory-row-details">
               <summary class="directory-row">
@@ -212,7 +213,7 @@
         </ul>
 
         <div v-else class="directory-table-wrap">
-          <table class="directory-table">
+          <table class="directory-table lle-table">
             <thead>
               <tr>
                 <th class="directory-table-name-cell">Student</th>
@@ -277,11 +278,23 @@
 </template>
 
 <script setup>
+import { computed, ref } from 'vue'
 import { AlertCircle, Award, CheckCircle2, ChevronDown, ClipboardList, RefreshCw, Save, Trash2 } from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
-import { usePhoneLayout } from '../composables/useViewport'
+import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
 const isPhone = usePhoneLayout()
+
+// The table's eight columns need about 880px, plus the card around them.
+// With less than that the list is rows: on a 1024px laptop with the sidebar
+// open the page has 708px, and Remove, the last column, was off its edge.
+const LLE_TABLE_MIN_WIDTH = 940
+
+const pageRef = ref(null)
+const pageWidth = useElementWidth(pageRef, estimatePageWidth())
+const useRows = computed(() => (
+  pageWidth.value > 0 ? pageWidth.value < LLE_TABLE_MIN_WIDTH : isPhone.value
+))
 
 function formatTakenAt(value) {
   if (!value) return '—'
@@ -407,5 +420,19 @@ const {
 .lle-matches small {
   display: block;
   font-size: 12px;
+}
+
+/* Sized by its eight columns. The shared table rule holds every table to
+   1080px, which this one never needed: on a 1366px laptop that pushed its
+   last column, Remove, 82px off the right edge. */
+.lle-table {
+  min-width: 0;
+}
+
+/* A found student is a row to tap, and Change is a button beside a name. */
+@media (pointer: coarse) {
+  .lle-matches button {
+    min-height: 48px;
+  }
 }
 </style>

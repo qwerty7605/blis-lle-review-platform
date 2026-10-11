@@ -94,6 +94,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useElementWidth } from '@/views/dashboard/composables/useViewport'
 
 const props = defineProps({
   points: { type: Array, default: () => [] }, // [{ id, label, value, sublabel, tone }]
@@ -105,20 +106,34 @@ const props = defineProps({
 
 const isCompact = computed(() => props.variant === 'compact')
 
+const hoveredIndex = ref(null)
+const wrapperRef = ref(null)
+const wrapperWidth = useElementWidth(wrapperRef)
+
 // The full variant keeps preserveAspectRatio="none" (its historical look);
 // the compact one scales uniformly instead, so its small labels are never
 // stretched by whatever width the surrounding card happens to give it --
 // hence a viewBox whose ratio is already close to the box it renders into.
-const width = computed(() => (isCompact.value ? 360 : 600))
+//
+// Scaling uniformly also shrinks: in a box narrower than the 360px drawing
+// the whole chart was scaled down to fit, text included, and on a phone its
+// 9px labels came out under 6px. So in a narrow box the drawing itself gets
+// narrower instead, and one unit stays one pixel.
+const COMPACT_WIDTH = 360
+const COMPACT_MIN_WIDTH = 200
+
+const width = computed(() => {
+  if (!isCompact.value) return 600
+  if (wrapperWidth.value <= 0) return COMPACT_WIDTH
+
+  return Math.round(Math.min(COMPACT_WIDTH, Math.max(COMPACT_MIN_WIDTH, wrapperWidth.value)))
+})
 const height = computed(() => (isCompact.value ? 150 : 220))
 const padding = computed(() => (isCompact.value
   ? { top: 14, right: 40, bottom: 22, left: 10 }
   : { top: 18, right: 12, bottom: 26, left: 34 }))
 
 const yTicks = [0, 25, 50, 75, 100]
-
-const hoveredIndex = ref(null)
-const wrapperRef = ref(null)
 
 function yFor(value) {
   const usable = height.value - padding.value.top - padding.value.bottom
@@ -199,7 +214,7 @@ const tooltipStyle = computed(() => {
 }
 
 .trend-grid-label {
-  font-size: 10px;
+  font-size: 11px;
   fill: var(--lnu-text-muted);
 }
 
@@ -210,7 +225,7 @@ const tooltipStyle = computed(() => {
 }
 
 .trend-threshold-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   fill: #9d6110;
 }
@@ -240,7 +255,7 @@ const tooltipStyle = computed(() => {
 .trend-point.tone-danger { fill: #c24b4b; }
 
 .trend-x-label {
-  font-size: 10px;
+  font-size: 11px;
   fill: var(--lnu-text-muted);
 }
 
@@ -271,7 +286,7 @@ const tooltipStyle = computed(() => {
 }
 
 .trend-chart.is-compact .trend-x-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -303,6 +318,6 @@ const tooltipStyle = computed(() => {
 
 .trend-tooltip small {
   color: rgba(255, 255, 255, 0.72);
-  font-size: 10px;
+  font-size: 11px;
 }
 </style>

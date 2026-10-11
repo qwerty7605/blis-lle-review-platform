@@ -191,7 +191,7 @@ class DashboardAnalyticsService
     {
         $managedRooms = Room::query()
             ->where('created_by', $staff->id)
-            ->get(['id', 'name', 'code']);
+            ->get(['id', 'name', 'code', 'archived_at']);
         $managedExams = Exam::query()
             ->where('created_by', $staff->id)
             ->get(['id', 'title', 'subject']);
@@ -358,7 +358,12 @@ class DashboardAnalyticsService
 
         return [
             'metrics' => [
-                'managed_rooms' => (int) $managedRooms->count(),
+                // The rooms this teacher has now, which are the ones the Rooms
+                // page lists. Everything else in this report still reads every
+                // room they ever ran: an archived room keeps its results, and
+                // the results are what the report is about. Counted together,
+                // a teacher with 6 rooms was told they managed 77.
+                'managed_rooms' => (int) $managedRooms->whereNull('archived_at')->count(),
                 'managed_exams' => (int) $managedExams->count(),
                 'students_enrolled' => (int) $studentsEnrolled,
                 'exam_assignments' => (int) collect($sessionRows)->count(),

@@ -1306,7 +1306,7 @@ const roomExamCoveragePercent = computed(() => {
   align-items: center;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -1452,7 +1452,7 @@ const roomExamCoveragePercent = computed(() => {
 }
 
 .rooms-summary-stat span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -1518,6 +1518,49 @@ const roomExamCoveragePercent = computed(() => {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Between 901px and 1200px the panels sit in two rows, and two rows cannot
+ * share one screen: at 1024x768 the exam list was an 84px window and the
+ * class list showed three students. Here the page stops pinning itself to
+ * the screen height. Each list gets a workable window and the page scrolls
+ * from the room down to its class list.
+ *
+ * The same on any wider screen that is short. A 1366x768 laptop shows a
+ * page about 640px of height once the browser's own bars are counted, and
+ * pinned to that the class list was a 221px window.
+ */
+@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 759px) {
+  .room-view,
+  .rooms-grid {
+    flex: none;
+  }
+
+  .rooms-grid {
+    align-items: start;
+  }
+
+  .rooms-list-card {
+    max-height: 560px;
+  }
+
+  .rooms-exam-list {
+    max-height: 360px;
+  }
+
+  .rooms-roster-list {
+    max-height: 460px;
+  }
+}
+
+/* Only where the side panels are a two-column grid. From 1201px they are a
+   column, and there this would let each card take the width of its longest
+   name instead of the column's. */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .room-side-column {
+    align-items: start;
   }
 }
 
@@ -1629,8 +1672,10 @@ const roomExamCoveragePercent = computed(() => {
     height: var(--control-height);
   }
 
-  /* iOS Safari zooms the page into any field under 16px. */
+  /* iOS Safari zooms the page into any field under 16px. The field fills
+     the box around it, so a tap anywhere in the box lands in the field. */
   .rooms-search input {
+    align-self: stretch;
     font-size: 16px;
   }
 

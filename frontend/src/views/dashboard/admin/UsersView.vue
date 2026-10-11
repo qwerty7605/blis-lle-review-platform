@@ -1,5 +1,5 @@
 <template>
-  <section class="room-view">
+  <section ref="pageRef" class="room-view">
     <div v-if="usersMessage" class="feedback success">
       <CheckCircle2 :size="15" />
       <span>{{ usersMessage }}</span>
@@ -44,18 +44,18 @@
         </Teleport>
       </header>
 
-      <div class="management-toolbar" :class="{ 'is-search-row': isPhone }">
+      <div class="management-toolbar" :class="{ 'is-search-row': useRows }">
         <input
           v-model.trim="userFilters.search"
           type="text"
           class="text-input"
           inputmode="search"
           enterkeyhint="search"
-          :placeholder="isPhone ? 'Search name, email, ID' : 'Search name, email, or student ID'"
+          :placeholder="useRows ? 'Search name, email, ID' : 'Search name, email, or student ID'"
           aria-label="Search users"
         />
         <button
-          v-if="isPhone"
+          v-if="useRows"
           type="button"
           class="ghost-btn filter-trigger"
           aria-haspopup="dialog"
@@ -83,7 +83,7 @@
         </template>
       </div>
 
-      <div v-if="isPhone && activeUserFilters.length > 0" class="filter-chip-row">
+      <div v-if="useRows && activeUserFilters.length > 0" v-scroll-hint class="filter-chip-row">
         <button
           v-for="chip in activeUserFilters"
           :key="chip.key"
@@ -135,12 +135,13 @@
           </header>
 
           <!--
-            Phones keep the per-year groups: their headings stick to the app
-            bar while you scroll, which is the only wayfinding a long list has
-            on a small screen. One compact row per person, with everything you
-            can do to them one tap away in the action sheet.
+            Where the table cannot fit, the list keeps the per-year groups:
+            their headings stick to the app bar while you scroll, which is the
+            only wayfinding a long list has on a small screen. One compact row
+            per person, with everything you can do to them one tap away in the
+            action sheet.
           -->
-          <div v-if="isPhone" class="directory-group-stack">
+          <div v-if="useRows" class="directory-group-stack">
             <article
               v-for="group in section.groups"
               :key="group.key"
@@ -188,7 +189,7 @@
             per-year card stacks this used to render at this width.
           -->
           <div v-else class="directory-table-wrap">
-            <table class="directory-table users-directory-table">
+            <table class="directory-table users-directory-table" :class="{ 'is-tight': isTightTable }">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
@@ -242,28 +243,41 @@
                   <td class="directory-table-email-cell" :title="user.email">{{ user.email }}</td>
                   <td>
                     <div class="management-actions compact directory-table-actions">
-                      <button type="button" class="ghost-btn" @click="openEditUserModal(user)">
+                      <!-- The words are hidden where the table is tight (see
+                           .is-tight below), so each button carries its name
+                           for a screen reader and as a tooltip as well. -->
+                      <button
+                        type="button"
+                        class="ghost-btn"
+                        :aria-label="`Edit ${user.name}`"
+                        title="Edit"
+                        @click="openEditUserModal(user)"
+                      >
                         <Pencil :size="15" />
-                        Edit
+                        <span class="directory-action-label">Edit</span>
                       </button>
                       <template v-if="section.key !== 'management'">
                         <button
                           type="button"
                           class="ghost-btn"
                           :disabled="usersSaving"
+                          :aria-label="`${section.key === 'archived' ? 'Restore' : 'Archive'} ${user.name}`"
+                          :title="section.key === 'archived' ? 'Restore' : 'Archive'"
                           @click="handleToggleUserArchive(user, section.key !== 'archived')"
                         >
                           <ArchiveRestore :size="15" />
-                          {{ section.key === 'archived' ? 'Restore' : 'Archive' }}
+                          <span class="directory-action-label">{{ section.key === 'archived' ? 'Restore' : 'Archive' }}</span>
                         </button>
                         <button
                           type="button"
                           class="ghost-btn"
                           :disabled="usersRecovering"
+                          :aria-label="`Recover the account of ${user.name}`"
+                          title="Recover account"
                           @click="openRecoverUserModal(user)"
                         >
                           <ShieldCheck :size="15" />
-                          Recover
+                          <span class="directory-action-label">Recover</span>
                         </button>
                       </template>
                     </div>
@@ -275,7 +289,7 @@
 
         </section>
 
-        <div v-if="isPhone" class="directory-load-more">
+        <div v-if="useRows" class="directory-load-more">
           <p class="muted">{{ loadedUsersLabel }}</p>
           <button
             v-if="canLoadMoreUsers"
@@ -293,7 +307,7 @@
         </div>
       </div>
 
-      <div v-if="!isPhone && usersPagination.total > 0" class="management-toolbar users-pagination">
+      <div v-if="!useRows && usersPagination.total > 0" class="management-toolbar users-pagination">
         <p class="muted">{{ usersRangeLabel }}</p>
         <div class="management-actions">
           <button
@@ -501,7 +515,7 @@
       </div>
     </teleport>
 
-    <BottomSheet v-if="isPhone" v-model:open="filtersOpen" title="Filter users">
+    <BottomSheet v-if="useRows" v-model:open="filtersOpen" title="Filter users">
       <label v-for="field in userFilterFields" :key="field.key" class="field-stack">
         <span class="field-label">{{ field.label }}</span>
         <select v-model="userFilters[field.key]" class="text-input">
@@ -592,11 +606,43 @@ import {
 } from 'lucide-vue-next'
 import BottomSheet from '@/components/BottomSheet.vue'
 import { useUsersModule } from '../composables/useUsersModule'
-import { useCompactLayout, usePhoneLayout } from '../composables/useViewport'
+import { estimatePageWidth, useCompactLayout, useElementWidth, useMediaQuery } from '../composables/useViewport'
 import { passwordIsValid } from '@/utils/password'
+import { vScrollHint } from '@/utils/scrollHint'
 
 const isCompact = useCompactLayout()
-const isPhone = usePhoneLayout()
+
+/*
+ * Three layouts, chosen by the room the page really has (the sidebar takes
+ * 264px of the window, or 84px collapsed):
+ *
+ *   under 950px     rows, each opening a sheet of its actions, as on a phone
+ *   950 to 1139px   the table with its three row buttons as icons
+ *   1140px and up   the table with the buttons named
+ *
+ * The table with named buttons is 1,094px wide. A 1366px laptop gives this
+ * page 962px, and what did not fit was the last column: Edit, Archive and
+ * Recover.
+ *
+ * The layout also decides how the list is fetched (rows grow with Load more,
+ * the table pages), so it has to be right before the first request. The
+ * page's width is not known until it is mounted; until then the layout goes
+ * by the width of the area it is about to fill, or on the first page after a
+ * reload by the window (1265px is 950px plus the open sidebar).
+ */
+const USERS_ROWS_BELOW = 950
+const USERS_NAMED_BUTTONS_FROM = 1140
+
+const pageRef = ref(null)
+const pageWidth = useElementWidth(pageRef, estimatePageWidth())
+const isNarrowWindow = useMediaQuery('(max-width: 1265px)')
+
+const useRows = computed(() => (
+  pageWidth.value > 0 ? pageWidth.value < USERS_ROWS_BELOW : isNarrowWindow.value
+))
+const isTightTable = computed(() => (
+  !useRows.value && pageWidth.value > 0 && pageWidth.value < USERS_NAMED_BUTTONS_FROM
+))
 
 /**
  * Whether an account can actually be used, which needs BOTH gates open:
@@ -698,7 +744,7 @@ const {
   handleSaveUser,
   handleToggleUserArchive,
   handleRecoverUserAccount,
-} = useUsersModule({ loadMoreMode: isPhone })
+} = useUsersModule({ loadMoreMode: useRows })
 
 const filtersOpen = ref(false)
 const userActionsOpen = ref(false)
@@ -738,12 +784,69 @@ function runUserAction(action) {
   if (user) action(user)
 }
 
-// Sheets belong to the phone layout; leaving it closes them rather than
-// leaving one to reopen the next time the screen narrows.
-watch(isPhone, () => {
+// Sheets belong to the rows layout; leaving it closes them rather than
+// leaving one to reopen the next time the page narrows.
+watch(useRows, () => {
   filtersOpen.value = false
   userActionsOpen.value = false
 })
 </script>
 
 <style scoped src="../dashboard.css"></style>
+
+<style scoped>
+/* Sized by its columns. The shared table rule holds every table to 1080px;
+   this one is narrower than that with its buttons as icons, and held to it
+   the last column, the buttons, was the part off the screen. */
+.users-directory-table {
+  min-width: 0;
+}
+
+.users-directory-table .directory-table-email-cell {
+  max-width: 220px;
+}
+
+/* Tight: the three buttons keep their icons and lose their words (each has
+   its name as a tooltip and for a screen reader), the name column gives up
+   30px and a long address is cut sooner. */
+.users-directory-table.is-tight .directory-action-label {
+  display: none;
+}
+
+.users-directory-table.is-tight .directory-table-actions .ghost-btn {
+  width: 34px;
+  padding: 0;
+  justify-content: center;
+}
+
+.users-directory-table.is-tight .directory-table-name-cell {
+  min-width: 190px;
+}
+
+.users-directory-table.is-tight .directory-table-email-cell {
+  max-width: 180px;
+}
+
+/* The form's two side-by-side rows. Centred on each other, the shorter
+   field floated halfway down the taller one's helper text; they start level
+   instead, and the checkbox lines up with the box beside it. */
+.modal-card .inline-form {
+  align-items: flex-start;
+  margin-top: 0;
+}
+
+.modal-card .inline-form > .check-item {
+  align-self: flex-end;
+  min-height: var(--control-height);
+}
+
+@media (pointer: coarse) {
+  .users-directory-table .directory-table-actions .ghost-btn {
+    height: 40px;
+  }
+
+  .users-directory-table.is-tight .directory-table-actions .ghost-btn {
+    width: 40px;
+  }
+}
+</style>
