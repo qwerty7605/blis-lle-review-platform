@@ -142,6 +142,15 @@ class AppServiceProvider extends ServiceProvider
      * falls back to the IP for guests. That matters on a campus: a computer
      * lab behind one NAT address would otherwise share a single bucket, and
      * one busy student could lock out the room.
+     *
+     * Every per-IP number below is sized for that same campus. A lab, or the
+     * school Wi-Fi, reaches this server through one address, so "one IP" can
+     * be a couple of hundred students doing the same thing in the same minute
+     * (planning figure: 230). The per-IP tiers are therefore ceilings for a
+     * whole room. What singles out an abuser is the tier keyed on the thing
+     * being attacked -- the account, or the mailbox -- and those stay tight.
+     * Tighten the per-IP tiers again if this is ever opened to the public
+     * internet rather than campus.
      */
     private function configureRateLimiting(): void
     {
@@ -152,45 +161,53 @@ class AppServiceProvider extends ServiceProvider
                 // One account, one origin: slow down password guessing.
                 Limit::perMinute(5)->by($identifier.'|'.$request->ip()),
                 // One origin, many accounts: slow down password spraying.
-                Limit::perMinute(20)->by($request->ip()),
+                // 120 lets the whole campus sign in within two minutes. It is
+                // not higher because each attempt is a bcrypt check, about a
+                // quarter of a second of CPU on the current server.
+                Limit::perMinute(120)->by($request->ip()),
             ];
         });
 
         // Public self-registration is on by default (see the
-        // allow_public_registration setting), creates an active student
-        // account and hands back a token -- so an unmetered endpoint here is
-        // an open invitation to mass-create accounts. These numbers are set
-        // to survive a lab full of students onboarding together while still
-        // making scripted signup impractical; tighten them if registration is
-        // ever opened to the public internet rather than campus.
+        // allow_public_registration setting), creates a student account and
+        // sends a verification email -- so an unmetered endpoint here is an
+        // open invitation to mass-create accounts and to spend the mail
+        // quota. 30 a minute lets a lab of 45 finish in two minutes and 150
+        // an hour fits three labs back to back, while still making scripted
+        // signup impractical; tighten them if registration is ever opened to
+        // the public internet rather than campus.
         RateLimiter::for('register', function (Request $request): array {
             return [
-                Limit::perMinute(10)->by($request->ip()),
-                Limit::perHour(40)->by($request->ip()),
+                Limit::perMinute(30)->by($request->ip()),
+                Limit::perHour(150)->by($request->ip()),
             ];
         });
 
         // Resending verification mail costs real money, and an open resend
         // endpoint is a convenient way to use somebody else's inbox as a mail
         // bomb. Capped far harder than ordinary traffic, per address as well
-        // as per origin.
+        // as per origin. The mailbox tier is the one that stops a mail bomb,
+        // wherever it is sent from; the origin tier only stops one machine
+        // working through many mailboxes, and has to leave room for a lab
+        // where a few dozen students never got their first email.
         RateLimiter::for('verification', function (Request $request): array {
             $email = Str::lower(trim((string) $request->input('email')));
 
             return [
-                Limit::perHour(6)->by($request->ip()),
+                Limit::perHour(30)->by($request->ip()),
                 Limit::perHour(3)->by($email !== '' ? $email : $request->ip()),
             ];
         });
 
         // Asking for a reset link sends mail, so it is capped hard, per address
         // as well as per origin. Kept separate from 'verification' so burning
-        // through one does not lock a student out of the other.
+        // through one does not lock a student out of the other. Same two
+        // tiers, sized the same way.
         RateLimiter::for('password-reset-request', function (Request $request): array {
             $email = Str::lower(trim((string) $request->input('email')));
 
             return [
-                Limit::perHour(6)->by($request->ip()),
+                Limit::perHour(30)->by($request->ip()),
                 Limit::perHour(3)->by($email !== '' ? $email : $request->ip()),
             ];
         });
@@ -198,17 +215,28 @@ class AppServiceProvider extends ServiceProvider
         // Spending the token sends nothing, and the token is 60 random
         // characters, so brute force is not the threat here -- a mistyped
         // confirmation is. Loose enough that fumbling the form a few times
-        // never costs someone an hour's lockout.
+        // never costs someone an hour's lockout, and kept at twice the links
+        // one origin can ask for in an hour so this step never runs out
+        // before the one above.
         RateLimiter::for('password-reset-confirm', function (Request $request): Limit {
-            return Limit::perHour(20)->by($request->ip());
+            return Limit::perHour(60)->by($request->ip());
         });
 
         RateLimiter::for('api', function (Request $request): Limit {
             // The default guard is 'web' (session), which never resolves for
             // token traffic -- ask the sanctum guard explicitly instead.
-            return Limit::perMinute(120)->by(
-                $request->user('sanctum')?->id ?: $request->ip()
-            );
+            $userId = $request->user('sanctum')?->id;
+
+            if ($userId) {
+                return Limit::perMinute(120)->by($userId);
+            }
+
+            // Signed-out requests can only be told apart by address, and a
+            // campus shares one. Every sign-in, registration and reset from
+            // that address lands in this bucket as well as in its own
+            // limiter, so it has to sit well above those or it becomes the
+            // real ceiling instead of them.
+            return Limit::perMinute(600)->by($request->ip());
         });
     }
 }
