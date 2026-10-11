@@ -45,7 +45,7 @@
     </section>
 
     <!-- One group of panels at a time, instead of nine stacked down the page -->
-    <div class="tdash-tabs" role="tablist" aria-label="Dashboard sections">
+    <div v-scroll-hint class="tdash-tabs" role="tablist" aria-label="Dashboard sections">
       <button
         v-for="tab in tabs"
         :id="`tdash-tab-${tab.key}`"
@@ -702,6 +702,7 @@ import { useReportsModule } from '../composables/useReportsModule'
 import NextStepsList from '@/components/NextStepsList.vue'
 import JsChart from '@/components/charts/JsChart.vue'
 import { useAuthStore } from '@/store/auth.store'
+import { vScrollHint } from '@/utils/scrollHint'
 
 const {
   reportLoading,
@@ -916,8 +917,12 @@ const selectedReportStudent = computed(() => (
 }
 
 /* ---- Panel shell ---- */
+/* minmax(0, ...): without a column of its own the grid takes the width of
+   the longest one-line text in the panel, and on a 320px phone a topic's
+   "Library Management · 309/470 correct" stood 16px out of the card. */
 .rp-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-content: start;
 }
@@ -1070,7 +1075,7 @@ const selectedReportStudent = computed(() => (
   justify-content: center;
   background: rgba(198, 40, 40, 0.1);
   color: #a8302f;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -1109,7 +1114,7 @@ const selectedReportStudent = computed(() => (
 }
 
 .rp-top-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1142,11 +1147,12 @@ const selectedReportStudent = computed(() => (
 /* ---- Topics ---- */
 .rp-topic-group {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
 }
 
 .rp-topic-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1179,7 +1185,7 @@ const selectedReportStudent = computed(() => (
 
 .rp-topic-copy p {
   margin: 2px 0 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1269,7 +1275,7 @@ const selectedReportStudent = computed(() => (
 
 .rp-room-stat em {
   font-style: normal;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1384,6 +1390,12 @@ const selectedReportStudent = computed(() => (
   .rp-item-picker {
     width: 100%;
     max-width: none;
+  }
+
+  /* Stacked, the text is as wide as its row, so a long line ends in an
+     ellipsis inside the row instead of running out of it. */
+  .rp-topic-copy {
+    width: 100%;
   }
 
   .rp-session-metrics {

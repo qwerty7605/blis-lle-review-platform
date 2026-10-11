@@ -435,6 +435,30 @@
   .auth-shell .field-input {
     font-size: 16px;
   }
+
+  /* The eye that shows a password fills its end of the field: it was a
+     32px square to hit, in a field 44px tall. */
+  .auth-shell .field-toggle {
+    right: 1px;
+    width: 44px;
+    height: 42px;
+  }
+
+  .auth-shell .field-input-with-toggle {
+    padding-right: 48px;
+  }
+
+  /* A link that is one line of text is a 20px target. On an inline link
+     the padding widens what a finger can hit and moves nothing; the
+     inline-flex one needs the margin to give the room back. */
+  .auth-shell .inline-link {
+    padding-block: 12px;
+  }
+
+  .auth-shell .back-link {
+    margin-block: -12px;
+    padding-block: 12px;
+  }
 }
 
 /* Tablets and phones: the form stands on its own, without the navy panel. */
@@ -494,5 +518,17 @@
 @media (max-width: 560px) {
   .auth-shell .field-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The narrowest phones: 12px back from the card's side padding, which is
+   what "Remember me" and "Forgot password?" need to share a line. */
+@media (max-width: 340px) {
+  .auth-shell {
+    padding-inline: 12px;
+  }
+
+  .auth-shell .auth-main {
+    padding-inline: 18px;
   }
 }

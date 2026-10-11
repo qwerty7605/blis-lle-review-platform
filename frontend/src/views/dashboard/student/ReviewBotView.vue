@@ -194,7 +194,7 @@
       </aside>
 
       <!-- Session: fixed head, scrolling question list, pinned submit bar -->
-      <section class="surface-card review-panel review-session" aria-labelledby="review-session-heading">
+      <section ref="sessionPanelRef" class="surface-card review-panel review-session" aria-labelledby="review-session-heading">
         <header class="review-panel-head">
           <div class="review-panel-head-copy">
             <h2 id="review-session-heading">Review</h2>
@@ -335,9 +335,13 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
+
+// Kept in step with the 1000px rule in this file's styles: from there down
+// the two panels sit one above the other and the page scrolls.
+const STACKED_QUERY = '(max-width: 1000px)'
 
 const {
   catalogLoading,
@@ -375,6 +379,33 @@ const {
   reviewNextTopic,
   repeatSameTopic,
 } = useReviewBotModule()
+
+/*
+ * Stacked, the questions open under the setup panel and the score lands above
+ * the last question: both off-screen from where the button that caused them
+ * was pressed. So the review panel is brought to the top of the screen when
+ * a set arrives and again when it is scored. Side by side, both are already
+ * in view and nothing moves.
+ */
+const sessionPanelRef = ref(null)
+
+async function showSessionPanel() {
+  if (typeof window === 'undefined' || !window.matchMedia(STACKED_QUERY).matches) return
+
+  await nextTick()
+  sessionPanelRef.value?.scrollIntoView({
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start',
+  })
+}
+
+watch(() => session.value?.attemptId, (attemptId) => {
+  if (attemptId) showSessionPanel()
+})
+
+watch(result, (value) => {
+  if (value) showSessionPanel()
+})
 
 // Drives the header progress bar, which replaced the old full-width
 // "Progress / 0 of 10" box -- same two numbers, but folded into the panel
@@ -532,7 +563,7 @@ function recommendationHeading(action) {
   border-radius: 999px;
   background: rgba(26, 35, 126, 0.09);
   color: var(--lnu-navy-deep);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -605,7 +636,7 @@ function recommendationHeading(action) {
 }
 
 .review-group-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -616,7 +647,7 @@ function recommendationHeading(action) {
   border: none;
   background: transparent;
   padding: 0;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--lnu-info);
   text-decoration: underline;
@@ -669,7 +700,7 @@ function recommendationHeading(action) {
 }
 
 .review-weak-kicker {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -725,9 +756,10 @@ function recommendationHeading(action) {
 }
 
 /* Long topic lists scroll in place rather than pushing the Items group and
-   the Start button out of view. */
+   the Start button out of view. Tall enough that an ordinary subject's
+   topics all show: at 124px six of them were a three-row window. */
 .review-chip-list {
-  max-height: 124px;
+  max-height: min(260px, 34vh);
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
@@ -894,7 +926,7 @@ function recommendationHeading(action) {
 }
 
 .review-result-kicker {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -989,7 +1021,7 @@ function recommendationHeading(action) {
 }
 
 .review-question-number {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -1098,8 +1130,11 @@ function recommendationHeading(action) {
     flex: none;
   }
 
+  /* minmax(0, ...), not a bare 1fr: a bare one cannot be narrower than the
+     longest one-line text inside it, and the review panel's subject line
+     pushed both panels 5px past the edge of a 320px phone. */
   .review-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     flex: none;
     min-height: 0;
   }
@@ -1122,6 +1157,38 @@ function recommendationHeading(action) {
   .review-empty {
     min-height: 220px;
   }
+
+  .review-session {
+    scroll-margin-top: 10px;
+  }
+
+  /*
+   * Each panel's action bar stays at the bottom of the screen while that
+   * panel scrolls past: Start Review once a subject's topics have pushed it
+   * down, then how many are left and Submit instead of waiting under the
+   * last question. clip keeps the rounded corners without making the panel
+   * the box the bar sticks to, which hidden would.
+   */
+  .review-setup,
+  .review-session {
+    overflow: clip;
+  }
+
+  .review-setup-foot,
+  .review-session-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    box-shadow: 0 -6px 16px rgba(13, 21, 71, 0.06);
+  }
+
+  .review-setup-foot {
+    background: #fffdf7;
+  }
+
+  .review-session-foot {
+    background: #fff;
+  }
 }
 
 @media (max-width: 640px) {
@@ -1132,12 +1199,26 @@ function recommendationHeading(action) {
     padding-right: 13px;
   }
 
-  .review-subject-grid {
+  .review-result {
     grid-template-columns: 1fr;
   }
 
-  .review-result {
-    grid-template-columns: 1fr;
+  /* Read at arm's length on a phone, so the size of the exam's own text. */
+  .review-question-text {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .review-option {
+    font-size: 15px;
+  }
+
+  .review-explanation strong {
+    font-size: 13.5px;
+  }
+
+  .review-explanation p {
+    font-size: 13px;
   }
 
   .review-result-score {
@@ -1149,13 +1230,63 @@ function recommendationHeading(action) {
   }
 
   .review-session-foot {
-    flex-direction: column;
-    align-items: stretch;
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+}
+
+@media (pointer: coarse) {
+  .review-segment {
+    height: 40px;
+    font-size: 13px;
   }
 
+  .review-subject-chip {
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  .review-chip {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .review-chip.is-numeric {
+    min-width: 48px;
+  }
+
+  .review-start-btn,
+  .review-clear-btn,
   .review-session-foot .primary-btn {
-    width: 100%;
-    justify-content: center;
+    height: 44px;
+  }
+
+  .review-result-actions .primary-btn,
+  .review-result-actions .ghost-btn {
+    height: 44px;
+    font-size: 13px;
+  }
+
+  /* A text link 16px tall; the padding is its tap area. */
+  .review-clear-link {
+    min-height: 44px;
+    margin-block: -14px;
+    padding-inline: 6px;
+    font-size: 12px;
+  }
+
+  /* An answer is the whole row, not the 13px dot at its start. */
+  .review-option {
+    align-items: center;
+    min-height: 48px;
+    padding: 11px 12px;
+  }
+
+  .review-option input {
+    width: 20px;
+    height: 20px;
+    margin-top: 0;
   }
 }
 </style>
