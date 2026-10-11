@@ -185,4 +185,33 @@ async function handleSubmit() {
 .remember-wrap input {
   accent-color: var(--lnu-navy);
 }
+
+/* Each on one line. Allowed to break, both did at 320px, four short lines
+   where two fit; below that the link drops under the checkbox instead. */
+.form-row {
+  flex-wrap: wrap;
+}
+
+.remember-wrap,
+.form-row .inline-link {
+  white-space: nowrap;
+}
+
+@media (max-width: 340px) {
+  .form-row {
+    gap: 8px;
+    font-size: 12.5px;
+  }
+}
+
+@media (pointer: coarse) {
+  .remember-wrap {
+    min-height: 44px;
+  }
+
+  .remember-wrap input {
+    width: 20px;
+    height: 20px;
+  }
+}
 </style>
