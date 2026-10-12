@@ -541,6 +541,13 @@
             This will remove room enrollments.
           </p>
 
+          <!-- The page-level banner sits behind this dialog, so a refused
+               delete has to be reported here to be seen at all. -->
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
+
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeDeleteRoomModal">Cancel</button>
             <button type="button" class="danger-btn" :disabled="roomLoading" @click="handleDeleteRoom">

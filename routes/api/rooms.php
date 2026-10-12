@@ -315,6 +315,14 @@ Route::delete('/rooms/{room}', function (Request $request, Room $room) use ($can
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
+    // Same rule as deleting an exam: every attempt taken in a room hangs off
+    // it, and deleting the room used to delete those results with it.
+    if ($room->examAttempts()->exists()) {
+        return response()->json([
+            'message' => 'Cannot delete this room because students have already taken exams in it. Their results would be deleted with it.',
+        ], 422);
+    }
+
     $roomId = $room->id;
     $roomName = $room->name;
     $roomCode = $room->code;
