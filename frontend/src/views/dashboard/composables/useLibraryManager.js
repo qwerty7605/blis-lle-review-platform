@@ -1,5 +1,6 @@
 import { computed, onUnmounted, reactive, ref } from 'vue'
 import { questionsApi } from '@/api/questions.api'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 
 // AI item mapping runs in a background queue worker, so a bank's
@@ -590,22 +591,36 @@ export function useLibraryManager({
     }
   }
 
-  async function loadLibraryBanks() {
+  // silent: the quiet refresh behind useLiveRefresh (below).
+  async function loadLibraryBanks({ silent = false } = {}) {
     if (!asBooleanValue(canManageLibraries)) return
 
-    libraryLoading.value = true
-    libraryError.value = ''
+    if (!silent) {
+      libraryLoading.value = true
+      libraryError.value = ''
+    }
 
     try {
       const { data } = await questionsApi.listBanks()
       libraryQuestionBanks.value = data.banks ?? []
       scheduleMappingPollIfNeeded()
     } catch (error) {
-      libraryError.value = resolveApiError(error, 'Unable to load question banks right now.')
+      if (!silent) libraryError.value = resolveApiError(error, 'Unable to load question banks right now.')
     } finally {
-      libraryLoading.value = false
+      if (!silent) libraryLoading.value = false
     }
   }
+
+  // Read again when the teacher comes back to this page. Not under a dialog:
+  // each of them is about one of the sets in this list.
+  useLiveRefresh(() => loadLibraryBanks({ silent: true }), {
+    when: () => !libraryLoading.value
+      && !librarySaving.value
+      && !showLibraryQuestionModal.value
+      && !showLibraryBankQuestionsModal.value
+      && !showEditLibraryBankModal.value
+      && !showDeleteLibraryBankModal.value,
+  })
 
   async function handleSaveLibraryQuestionBank() {
     if (!canSaveLibraryQuestionBank.value) return

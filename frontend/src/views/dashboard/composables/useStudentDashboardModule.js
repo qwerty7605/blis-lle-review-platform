@@ -2,6 +2,8 @@ import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { studentDashboardApi } from '@/api/studentDashboard.api'
 import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
+import { now } from '@/utils/clock'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 import { formatCompactDate, formatDateTime, parseDateTime } from './useDashboardFormatters'
 import { describeReadiness } from './readiness'
 import {
@@ -166,7 +168,7 @@ function noticeWhen(exam, dueAt) {
   }
 
   const scheduleStart = parseDateTime(examScheduleStart(exam))
-  if (scheduleStart && scheduleStart.getTime() > Date.now()) {
+  if (scheduleStart && scheduleStart.getTime() > now()) {
     return { label: 'Opens', text: formatShortDate(scheduleStart.getTime()) }
   }
 
@@ -392,20 +394,48 @@ export function useStudentDashboardModule() {
       dashboardLoaded.value = true
     }
 
-    // Readiness prediction — kept as a separate, best-effort request so a
-    // failure here never blocks the core dashboard (exam notices, rooms)
-    // from loading and rendering.
+    await loadReadiness()
+  }
+
+  // Readiness prediction — kept as a separate, best-effort request so a
+  // failure here never blocks the core dashboard (exam notices, rooms)
+  // from loading and rendering.
+  async function loadReadiness({ keepOnFailure = false } = {}) {
     try {
       const { data } = await studentAnalyticsApi.summary()
       predictiveModel.value = data?.predictive_model ?? null
       insightStats.value = data?.stats ?? null
       weakAreaRaw.value = data?.weak_area ?? null
     } catch {
+      if (keepOnFailure) return
+
       predictiveModel.value = null
       insightStats.value = null
       weakAreaRaw.value = null
     }
   }
+
+  /*
+   * The quiet refresh behind useLiveRefresh: the notices are read again every
+   * minute while this page is on screen, so an exam a teacher has just
+   * assigned turns up without the page being reloaded. The readiness figures
+   * only move when an exam is finished, and cost more to work out, so they
+   * are read again only when the student comes back to the page.
+   */
+  async function refreshDashboardQuietly({ returning = false } = {}) {
+    const { data } = await studentDashboardApi.summary()
+
+    recentExams.value = asList(data?.recent_exams)
+    rooms.value = asList(data?.rooms)
+    dashboardError.value = ''
+
+    if (returning) await loadReadiness({ keepOnFailure: true })
+  }
+
+  useLiveRefresh(refreshDashboardQuietly, {
+    every: 60000,
+    when: () => dashboardLoaded.value && !dashboardLoading.value,
+  })
 
   onMounted(() => {
     loadDashboard()

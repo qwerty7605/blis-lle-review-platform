@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 const SEARCH_DEBOUNCE_MS = 300
 const PAGE_SIZE = 30
@@ -58,10 +59,14 @@ export function useLleResultsModule() {
   let lookupToken = 0
   let lookupTimer = null
 
-  async function loadResults() {
+  // silent: the quiet refresh behind useLiveRefresh (below).
+  async function loadResults({ silent = false } = {}) {
     const token = ++listToken
-    resultsLoading.value = true
-    resultsError.value = ''
+
+    if (!silent) {
+      resultsLoading.value = true
+      resultsError.value = ''
+    }
 
     try {
       const { data } = await services.getLleResults({
@@ -77,13 +82,18 @@ export function useLleResultsModule() {
       results.value = Array.isArray(data?.results) ? data.results : []
       meta.value = data?.meta ?? meta.value
     } catch (error) {
-      if (token !== listToken) return
+      if (token !== listToken || silent) return
       resultsError.value = firstApiError(error, 'Unable to load recorded licensure results.')
       results.value = []
     } finally {
-      if (token === listToken) resultsLoading.value = false
+      if (token === listToken && !silent) resultsLoading.value = false
     }
   }
+
+  // Read again when someone comes back to this page.
+  useLiveRefresh(() => loadResults({ silent: true }), {
+    when: () => !resultsLoading.value && !saving.value,
+  })
 
   async function lookupStudents() {
     const term = studentQuery.value.trim()

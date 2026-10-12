@@ -208,6 +208,7 @@ import {
 } from 'lucide-vue-next'
 import { studentsApi } from '@/api/students.api'
 import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 import { describeReadiness } from '../composables/readiness'
 import { formatCompactDate } from '../composables/useDashboardFormatters'
@@ -322,6 +323,17 @@ async function loadProfile() {
     loading.value = false
   }
 }
+
+// Read again when someone comes back to this page, quietly: the profile on
+// screen stays until the new one is in, and a failure changes nothing.
+useLiveRefresh(async () => {
+  const studentId = route.params.studentId
+  const { data } = await studentsApi.profile(studentId)
+
+  if (route.params.studentId === studentId) profile.value = data
+}, {
+  when: () => !loading.value && profile.value !== null,
+})
 
 // Also reloads when moving straight from one student's profile to another's.
 watch(() => route.params.studentId, loadProfile, { immediate: true })

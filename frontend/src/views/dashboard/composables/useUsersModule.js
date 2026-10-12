@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { firstPasswordProblem, passwordIsValid } from '@/utils/password'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 const USERS_DEFAULT_PAGE_SIZE = 200
 
@@ -473,15 +474,22 @@ export function useUsersModule(options = {}) {
    * keepMessage leaves a success message from the action that triggered the
    * reload on screen; every reload used to wipe it the moment it was set.
    */
+  // options.silent: the quiet refresh behind useLiveRefresh (below). Same
+  // request for the same page and filters, but no loading state, no message
+  // cleared, and a failure kept to itself.
   async function loadAdminUsers(options = {}) {
     if (!isAdminRole.value) return
 
+    const silent = options.silent === true
     const token = ++usersRequestToken
-    usersLoading.value = true
-    usersError.value = ''
 
-    if (!options.keepMessage) {
-      usersMessage.value = ''
+    if (!silent) {
+      usersLoading.value = true
+      usersError.value = ''
+
+      if (!options.keepMessage) {
+        usersMessage.value = ''
+      }
     }
 
     try {
@@ -538,12 +546,23 @@ export function useUsersModule(options = {}) {
       usersPagination.from = Number(meta.from ?? fallbackFrom)
       usersPagination.to = Number(meta.to ?? fallbackTo)
     } catch (error) {
-      if (token !== usersRequestToken) return
+      if (token !== usersRequestToken || silent) return
       usersError.value = firstApiError(error, 'Unable to load users.')
     } finally {
-      if (token === usersRequestToken) usersLoading.value = false
+      if (token === usersRequestToken && !silent) usersLoading.value = false
     }
   }
+
+  // Read again when the admin comes back to this page, so an account that
+  // registered meanwhile is in the list. Not under a dialog about one of the
+  // rows.
+  useLiveRefresh(() => loadAdminUsers({ silent: true }), {
+    when: () => !usersLoading.value
+      && !usersSaving.value
+      && !usersRecovering.value
+      && !showUserModal.value
+      && !showRecoverUserModal.value,
+  })
 
   function loadMoreUsers() {
     if (!canLoadMoreUsers.value || usersLoading.value) return
@@ -614,8 +633,14 @@ export function useUsersModule(options = {}) {
           return
         }
 
+        const editedOwnAccount = Number(userForm.id) === Number(auth.user?.id)
+
         await services.updateUser(userForm.id, payload)
         usersMessage.value = 'User updated successfully.'
+
+        // The sidebar shows the signed-in account from the sign-in store; an
+        // admin who renamed themselves saw the old name there until a reload.
+        if (editedOwnAccount) await auth.fetchMe({ silent: true })
       } else {
         const passwordProblem = firstPasswordProblem(payload.password ?? '')
 

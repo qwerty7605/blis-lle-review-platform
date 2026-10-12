@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { reviewBotApi } from '@/api'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 function firstApiError(error, fallbackMessage) {
   return error?.response?.data?.message ?? fallbackMessage
@@ -174,20 +175,30 @@ export function useReviewBotModule() {
     clearAnswers()
   }
 
-  async function loadCatalog() {
-    catalogLoading.value = true
-    catalogError.value = ''
+  // silent: the quiet refresh behind useLiveRefresh (below).
+  async function loadCatalog({ silent = false } = {}) {
+    if (!silent) {
+      catalogLoading.value = true
+      catalogError.value = ''
+    }
 
     try {
       const { data } = await reviewBotApi.catalog()
       subjects.value = asList(data?.subjects).map(normalizeSubjectEntry).filter(Boolean)
       weakArea.value = normalizeWeakArea(data?.weak_area)
     } catch (error) {
-      catalogError.value = firstApiError(error, 'Unable to load the Review Bot catalog.')
+      if (!silent) catalogError.value = firstApiError(error, 'Unable to load the Review Bot catalog.')
     } finally {
-      catalogLoading.value = false
+      if (!silent) catalogLoading.value = false
     }
   }
+
+  // What can be practised changes when a teacher publishes questions. It is
+  // read again when the student comes back to this page, but never in the
+  // middle of a set.
+  useLiveRefresh(() => loadCatalog({ silent: true }), {
+    when: () => !catalogLoading.value && !sessionStarting.value && !session.value,
+  })
 
   async function startSession() {
     if (!canStart.value) {

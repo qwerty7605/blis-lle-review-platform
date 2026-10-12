@@ -16,6 +16,7 @@ import {
   studentSubmittedAttemptId,
 } from './studentExamAvailability'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 // The width at which the exam screen stacks into one column and the question
 // list becomes a bottom sheet. It has to match the exam layer's Responsive
@@ -33,6 +34,13 @@ const EXAM_STATUS_CHECK_INTERVAL_MS = 30000
 // How many times, a second apart, the page asks whether the exam has closed
 // once its countdown runs out. The first answer is nearly always yes.
 const EXAM_TIME_UP_TRIES = 10
+
+// How often an open Rooms page asks the server what has changed in the room
+// on screen: an exam assigned or rescheduled, a student joined. This is the
+// page a class sits on while it waits for an exam, so the number is also how
+// much the whole room asks of the server while waiting: at a minute, about
+// four requests a second for 230 students.
+const ROOM_LIVE_REFRESH_MS = 60000
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -1247,6 +1255,24 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showLeaveRoomModal.value = false
   }
 
+  function normalizeRoomDetails(room) {
+    if (!room) return null
+
+    const normalizeRoomExam = (exam) => ({
+      ...exam,
+      schedule_start_at: exam.schedule_start_at ?? exam.scheduled_at ?? null,
+      schedule_end_at: exam.schedule_end_at ?? null,
+      delivery_mode: normalizeExamDeliveryMode(exam.delivery_mode),
+    })
+
+    return {
+      ...room,
+      members: room.members ?? [],
+      assigned_exams: (room.assigned_exams ?? []).map(normalizeRoomExam),
+      archived_exams: (room.archived_exams ?? []).map(normalizeRoomExam),
+    }
+  }
+
   async function fetchRoomDetails(roomId) {
     if (!roomId) return
 
@@ -1257,22 +1283,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       const { data } = await services.getRoom(roomId)
       const room = data.room ?? null
 
-      const normalizeRoomExam = (exam) => ({
-        ...exam,
-        schedule_start_at: exam.schedule_start_at ?? exam.scheduled_at ?? null,
-        schedule_end_at: exam.schedule_end_at ?? null,
-        delivery_mode: normalizeExamDeliveryMode(exam.delivery_mode),
-      })
-
-      selectedRoom.value = room
-        ? {
-            ...room,
-            members: room.members ?? [],
-            assigned_exams: (room.assigned_exams ?? []).map(normalizeRoomExam),
-            archived_exams: (room.archived_exams ?? []).map(normalizeRoomExam),
-          }
-        : null
-
+      selectedRoom.value = normalizeRoomDetails(room)
       selectedRoomId.value = room?.id ?? null
     } catch (error) {
       roomError.value = firstApiError(error, 'Unable to load room details right now.')
@@ -1322,6 +1333,67 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       roomLoading.value = false
     }
   }
+
+  /*
+   * The same two requests as fetchRooms(), made quietly: no loading state,
+   * no message cleared, the room on screen kept on screen, and a failure
+   * kept to itself. What changes is only what the server says has changed.
+   *
+   * A student's own list of rooms changes when they join or leave one, which
+   * this page does itself, so on the minute it asks only about the room that
+   * is open and leaves the list for when they come back to the page. Staff
+   * are few and their list carries each room's member count, so theirs is
+   * read every time.
+   */
+  async function refreshRoomsQuietly({ returning = false } = {}) {
+    // No room on screen to keep: the first load failed, or there were no
+    // rooms yet. The list is asked for quietly, and only if it has something
+    // now does the ordinary load take over (it shows a loading state, which
+    // would otherwise blink once a minute over "Join a Room").
+    if (selectedRoomId.value === null) {
+      const { data } = await services.getRooms()
+      if ((data.rooms ?? []).length > 0) await fetchRooms()
+      return
+    }
+
+    if (mode !== 'student' || returning) {
+      const { data } = await services.getRooms()
+      rooms.value = data.rooms ?? []
+    }
+
+    const roomId = selectedRoomId.value
+
+    // The open room is no longer theirs (removed from it, or it was deleted):
+    // that is a change of page, so it goes through the ordinary load.
+    if (!rooms.value.some((room) => room.id === roomId)) {
+      await fetchRooms()
+      return
+    }
+
+    const { data } = await services.getRoom(roomId)
+
+    // They moved to another room, or into an exam, while this was on its way.
+    if (selectedRoomId.value !== roomId || !isSafeToRefreshRooms()) return
+
+    selectedRoom.value = normalizeRoomDetails(data.room ?? null) ?? selectedRoom.value
+  }
+
+  // Not under a dialog (it would redraw what the dialog is about), not during
+  // an exam (the exam keeps itself current), not while a load is already out.
+  function isSafeToRefreshRooms() {
+    return !showExamSimulationModal.value
+      && !roomLiveBoardActive.value
+      && !roomLoading.value
+      && !roomDetailsLoading.value
+      && !showCreateRoomModal.value
+      && !showJoinRoomModal.value
+      && !showEditRoomModal.value
+      && !showDeleteRoomModal.value
+      && !showRoomExportModal.value
+      && !showLeaveRoomModal.value
+  }
+
+  useLiveRefresh(refreshRoomsQuietly, { every: ROOM_LIVE_REFRESH_MS, when: isSafeToRefreshRooms })
 
   async function handleCreateRoom() {
     if (!canCreateRooms.value) return

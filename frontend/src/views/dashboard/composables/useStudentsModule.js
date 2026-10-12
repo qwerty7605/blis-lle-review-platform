@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 const PASSING_SCORE = 75
 
@@ -156,12 +157,17 @@ export function useStudentsModule() {
   let requestToken = 0
   let searchTimer = null
 
-  async function loadStudentsDirectory() {
+  // silent: the quiet refresh behind useLiveRefresh (below). Same request,
+  // but no loading state, and a failure leaves the list as it was.
+  async function loadStudentsDirectory({ silent = false } = {}) {
     if (!isStaffDirectoryRole.value) return
 
     const token = ++requestToken
-    directoryLoading.value = true
-    directoryError.value = ''
+
+    if (!silent) {
+      directoryLoading.value = true
+      directoryError.value = ''
+    }
 
     try {
       const { data } = await services.getStudentsDirectory({
@@ -189,13 +195,19 @@ export function useStudentsModule() {
         studentsPage.value = directoryMeta.value.current_page
       }
     } catch (error) {
-      if (token !== requestToken) return
+      if (token !== requestToken || silent) return
       directoryError.value = firstApiError(error, 'Unable to load the student directory right now.')
       directoryStudents.value = []
     } finally {
-      if (token === requestToken) directoryLoading.value = false
+      if (token === requestToken && !silent) directoryLoading.value = false
     }
   }
+
+  // Read again when someone comes back to this page: same filters, same
+  // page, the figures as they are now.
+  useLiveRefresh(() => loadStudentsDirectory({ silent: true }), {
+    when: () => !directoryLoading.value,
+  })
 
   const studentsPagination = computed(() => directoryMeta.value)
 

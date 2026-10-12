@@ -1,6 +1,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 // A page of the log at a time, newest first, with "Load more" for older
 // entries -- the log used to be a fixed 80 entries with no way further back.
@@ -68,6 +69,35 @@ export function useAuditModule() {
       if (token === requestToken) auditLoading.value = false
     }
   }
+
+  /*
+   * The quiet refresh behind useLiveRefresh (below): the newest page is read
+   * again and whatever is not on screen yet is put at the top. Older pages
+   * the admin has already loaded stay where they are.
+   */
+  async function addNewAuditLogs() {
+    if (!isAdminRole.value) return
+
+    const token = requestToken
+    const { data } = await services.getAuditLogs({ page: 1, per_page: AUDIT_PAGE_SIZE })
+
+    // A load or a "load more" started meanwhile and owns the list now.
+    if (token !== requestToken) return
+
+    const shown = new Set(auditLogs.value.map((log) => log.id))
+    const fresh = (data.logs ?? []).filter((log) => !shown.has(log.id))
+    if (fresh.length === 0) return
+
+    auditLogs.value = [...fresh, ...auditLogs.value]
+    auditMeta.value = { ...auditMeta.value, total: Number(data.meta?.total ?? auditMeta.value.total) }
+  }
+
+  // The log grows while it is being read, so it is checked every minute as
+  // well as when the admin comes back to it.
+  useLiveRefresh(addNewAuditLogs, {
+    every: 60000,
+    when: () => !auditLoading.value && !auditLoadingMore.value,
+  })
 
   async function loadMoreAuditLogs() {
     if (!isAdminRole.value || !canLoadMoreAuditLogs.value || auditLoading.value || auditLoadingMore.value) return

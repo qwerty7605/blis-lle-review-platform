@@ -5,6 +5,10 @@ import { authApi } from '@/api/auth.api'
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const initialized = ref(false)
+  // True while a sign-out the reader asked for is on its way to the server.
+  // A request that was already out comes back 401 in that moment, and must
+  // not be taken for the session ending by itself.
+  const signingOut = ref(false)
 
   const isAuthenticated = computed(() => !!user.value)
 
@@ -70,6 +74,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    signingOut.value = true
+
     try {
       await authApi.logout()
     } catch (error) {
@@ -77,12 +83,21 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       user.value = null
       initialized.value = true
+      signingOut.value = false
     }
+  }
+
+  // The server has already ended the session (see api/http.js): there is
+  // nothing to tell it, only this page's own record to clear.
+  function forgetSession() {
+    user.value = null
+    initialized.value = true
   }
 
   return {
     user,
     initialized,
+    signingOut,
     isAuthenticated,
     login,
     register,
@@ -91,5 +106,6 @@ export const useAuthStore = defineStore('auth', () => {
     resetPassword,
     fetchMe,
     logout,
+    forgetSession,
   }
 })

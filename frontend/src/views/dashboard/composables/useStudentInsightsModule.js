@@ -2,6 +2,7 @@ import { computed, onMounted, ref } from 'vue'
 import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
 import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 import { formatDateTime } from './useDashboardFormatters'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -376,9 +377,13 @@ export function useStudentInsightsModule() {
 
   const hasAttemptData = computed(() => (stats.value.completed_attempts ?? 0) > 0)
 
-  async function loadAnalytics() {
-    analyticsLoading.value = true
-    analyticsError.value = ''
+  // silent: the quiet refresh behind useLiveRefresh (below). A failure then
+  // leaves the page as it was instead of emptying it.
+  async function loadAnalytics({ silent = false } = {}) {
+    if (!silent) {
+      analyticsLoading.value = true
+      analyticsError.value = ''
+    }
 
     try {
       const { data } = await studentAnalyticsApi.summary()
@@ -408,6 +413,8 @@ export function useStudentInsightsModule() {
         ...(data?.predictive_model ?? {}),
       }
     } catch (error) {
+      if (silent) return
+
       analyticsError.value = firstApiError(error, 'Unable to load student analytics right now.')
       stats.value = {
         completed_attempts: 0,
@@ -424,10 +431,16 @@ export function useStudentInsightsModule() {
       actionPlanRows.value = []
       weakAreaRaw.value = null
     } finally {
-      analyticsLoading.value = false
+      if (!silent) analyticsLoading.value = false
       analyticsLoaded.value = true
     }
   }
+
+  // Read again when the student comes back to this page, after an exam taken
+  // in another tab, say.
+  useLiveRefresh(() => loadAnalytics({ silent: true }), {
+    when: () => analyticsLoaded.value && !analyticsLoading.value,
+  })
 
   onMounted(() => {
     loadAnalytics()

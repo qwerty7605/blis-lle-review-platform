@@ -6,7 +6,7 @@ This file is for coding agents. Keep it short, execution-focused, and updated wh
 
 - Root app: Laravel 12 API + server-rendered entry.
 - Frontend app: Vue 3 SPA in `frontend/` (Pinia + Vue Router + Axios).
-- Auth: Laravel Sanctum bearer tokens (SPA stores token in `localStorage`).
+- Auth: a Laravel Sanctum token kept in an HttpOnly, SameSite=strict cookie (`auth_token`, 7 days, set by `AuthTokenCookieService`). The SPA holds no token of its own; `frontend/src/api/http.js` sends the cookie with `withCredentials`.
 - Database: MySQL in Docker.
 
 ## Primary Entry Points
@@ -91,6 +91,17 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - The Rooms pages and the Review Bot pin themselves to the screen height only where that leaves their lists room: Rooms from 1201px wide and 760px tall, Review Bot from 1001px wide. Below that the page scrolls. A 1366x768 laptop shows about 640px of page height, so check fill-screen layouts at 1366x640, not 1366x768.
 - No text under 11px. The trend chart (`ScoreTrendChart.vue`) draws at its real width so its labels are not scaled down with it, and `JsChart.vue` wraps the category names of a sideways bar chart.
 - `GET /api/admin/users` returns rows in directory order (current students by year, archived by year, staff, admins; then name) plus `group_totals` for the headings; phones grow the list with `per_page` instead of paging. `GET /api/admin/audit-logs` pages with `page`/`per_page` (legacy `limit` still works) and returns `meta`.
+
+## Staying Current Without a Reload
+
+Nobody should have to reload a page to see what changed. Four pieces keep that true; a new page or feature has to use them rather than work around them.
+
+- **Time** (`frontend/src/utils/clock.js`): anything on screen that depends on the time (has an exam opened, has it closed) reads `now()`, never `Date.now()`, and names the moment its answer changes with `beatAt()`. `now()` is reactive and follows the server's clock (learned from the `Date` header in `api/http.js`), so Take Exam turns on at the start time by itself, even on a phone whose own clock is wrong.
+- **Data** (`frontend/src/utils/liveRefresh.js`): every page module calls `useLiveRefresh(quietRefresh, { every, when })`. All of them refresh when the reader comes back to the tab; the pages people wait on also refresh on a timer: student and staff Rooms and student Home every 60s, Audit every 60s, the announcement banner every 5 minutes. A quiet refresh sets no loading flag, clears no message, keeps the selection, and leaves the data alone if it fails: that is what `{ silent: true }` on a load function means. `when` keeps it out from under an open dialog and out of an exam.
+- **Cost**: the student Rooms timer is one `GET /api/rooms/{id}` a minute per student, spread at random over the minute. That is the page a whole class sits on before an exam; do not shorten it or add requests to it without redoing that sum.
+- **Updates** (`frontend/src/utils/appVersion.js`): a tab opened before a deploy runs old code and would ask for page scripts the deploy removed. The site's `index.html` is compared with the running one every 5 minutes and on return to the tab; once it differs, the next move to another page is a full load. A page script that fails to load anyway triggers the same at once. Not active under `npm run dev`.
+- **Sessions** (`frontend/src/api/http.js`, `main.js`): a 401 from anything outside `/auth/`, or the 403 "Account is disabled.", sends the reader to `/login?ended=...` through the router, where the page says why.
+- A save or delete reloads what it changed itself (every module already does); `useLiveRefresh` is for changes made by someone else.
 
 ## Visual Design
 
