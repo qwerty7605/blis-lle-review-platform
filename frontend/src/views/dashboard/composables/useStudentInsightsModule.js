@@ -64,7 +64,7 @@ export function useStudentInsightsModule() {
   const weakAreaRaw = ref(null)
   const predictiveModel = ref({
     status: 'awaiting_ml_api',
-    title: 'Predictive Readiness Model',
+    title: 'Exam Outcome Model',
     description: 'Prepared for future J48 (C4.5) and logistic regression API integration.',
     ml_api_endpoint: null,
     expected_inputs: [],

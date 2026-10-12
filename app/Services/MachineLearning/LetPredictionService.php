@@ -2,7 +2,9 @@
 
 namespace App\Services\MachineLearning;
 
+use App\Models\LetModel;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * LET (Licensure Examination for Teachers/Librarians) pass/fail predictor.
@@ -21,9 +23,13 @@ use InvalidArgumentException;
  * only a handful of training instances (see the `support`/`confidence`
  * returned by predict()). Treat predictions as a rough, low-confidence
  * signal — never as a certainty, and never as the sole basis for any
- * decision about a student. As the system accumulates more mock-exam and
- * LET outcome data, retrain the model in Weka, re-run InspectModel.java
- * against the new .model file, and update self::TREE below to match.
+ * decision about a student.
+ *
+ * The tree below is the starting point, not the last word. As licensure
+ * results are recorded, LetModelTrainer retrains from this system's own
+ * graduates and, when the new tree does at least as well on results the live
+ * one has never seen, stores it in let_models and predictions switch to it
+ * (see liveModel()). self::TREE stays as the fallback.
  */
 class LetPredictionService
 {
@@ -111,6 +117,12 @@ class LetPredictionService
         ],
     ];
 
+    /** How many student records the built-in tree was trained on (the sum of its leaves). */
+    private const BUILT_IN_TRAINING_COUNT = 500;
+
+    /** @var array{source: string, id: ?int, trained_on: int, trained_at: ?string, tree: array<string, mixed>}|null */
+    private ?array $liveModel = null;
+
     /** Feature keys the tree can reference, in the order the training data used. */
     public static function requiredFeatures(): array
     {
@@ -122,14 +134,65 @@ class LetPredictionService
     }
 
     /**
+     * The tree the system shipped with, whatever is live now.
+     *
+     * @return array<string, mixed>
+     */
+    public static function builtInTree(): array
+    {
+        return self::TREE;
+    }
+
+    /**
+     * The model predictions are made with: the latest retrained tree that
+     * earned its place (see LetModelTrainer), or the built-in one when there
+     * is none.
+     *
+     * A failed lookup falls back to the built-in tree rather than failing the
+     * page. Migrations are run by hand on the server, so code that reads
+     * let_models can be live before the table is.
+     *
+     * @return array{source: string, id: ?int, trained_on: int, trained_at: ?string, tree: array<string, mixed>}
+     */
+    public function liveModel(): array
+    {
+        if ($this->liveModel !== null) {
+            return $this->liveModel;
+        }
+
+        try {
+            $model = LetModel::query()->active()->latest('id')->first();
+        } catch (Throwable) {
+            $model = null;
+        }
+
+        return $this->liveModel = $model
+            ? [
+                'source' => 'retrained',
+                'id' => (int) $model->id,
+                'trained_on' => (int) $model->training_count,
+                'trained_at' => $model->activated_at?->toIso8601String(),
+                'tree' => $model->tree,
+            ]
+            : [
+                'source' => 'built_in',
+                'id' => null,
+                'trained_on' => self::BUILT_IN_TRAINING_COUNT,
+                'trained_at' => null,
+                'tree' => self::TREE,
+            ];
+    }
+
+    /**
      * @param  array<string, int|float>  $features  Keyed by requiredFeatures();
      *   only the features actually used by the branches taken need to be
      *   present, but passing all of them is safest.
+     * @param  array<string, mixed>|null  $tree  a particular tree to walk; the live model's when omitted
      * @return array{prediction: string, confidence: float, support: int, leaf_errors: int, path: string[]}
      */
-    public function predict(array $features): array
+    public function predict(array $features, ?array $tree = null): array
     {
-        $node = self::TREE;
+        $node = $tree ?? $this->liveModel()['tree'];
         $path = [];
 
         while (!isset($node['leaf'])) {

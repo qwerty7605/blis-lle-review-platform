@@ -6,6 +6,9 @@ import {
   normalizeExamDeliveryMode,
 } from './useDashboardFormatters'
 import {
+  archivedExamAction,
+  archivedExamActionLabel,
+  archivedExamStatusText,
   canStudentOpenExam,
   isStudentExamCompleted,
   isStudentExamInProgress,
@@ -502,8 +505,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   }
 
   // Deep link back from the exam result page's "Review Answers" button
-  // (?room=&exam=&review=1) -- opens straight into per-question review for
-  // that exam instead of leaving the student to find it in the room's list.
+  // (?room=&exam=&attempt=&review=1) -- opens straight into per-question
+  // review of that attempt instead of leaving the student to find it in the
+  // room's list.
   async function openReviewDeepLinkIfRequested() {
     if (String(route.query?.review ?? '') !== '1') return
 
@@ -517,7 +521,17 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
     if (!targetExam) return
 
-    await openExamSimulation(targetExam, { forceReviewOverlay: true })
+    // The result page names the attempt it was showing. A link without one
+    // falls back to the attempt the room lists, and only when that attempt
+    // is finished: an attempt still in progress has nothing to review.
+    const linkedAttemptId = Number(route.query?.attempt)
+    const attemptId = Number.isFinite(linkedAttemptId) && linkedAttemptId > 0
+      ? linkedAttemptId
+      : (isStudentExamCompleted(targetExam) ? studentSubmittedAttemptId(targetExam) : null)
+
+    if (!attemptId) return
+
+    await openSubmittedAttemptReview(targetExam, attemptId)
     openStudentExamReview()
   }
 
@@ -823,7 +837,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   }
 
   function applyStudentAttemptPayload(payload, preferredQuestionId = null, options = {}) {
-    const { preserveReviewVisibility = false } = options
+    const { preserveReviewVisibility = false, syncRoomExam = true } = options
     const nextAttemptStatus = String(payload?.attempt?.status ?? '').toLowerCase()
     const previousVisitedQuestionIds = [...studentExamVisitedQuestionIds.value]
     const examPayload = payload?.exam
@@ -844,7 +858,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     if (!preserveReviewVisibility) {
       studentExamReviewVisible.value = nextAttemptStatus === 'submitted' ? false : studentExamReviewVisible.value
     }
-    syncSelectedRoomAssignedExam(examPayload, payload?.attempt ?? null)
+    if (syncRoomExam) {
+      syncSelectedRoomAssignedExam(examPayload, payload?.attempt ?? null)
+    }
 
     const answeredQuestionIds = studentExamQuestions.value
       .filter((question) => questionHasAnswer(question))
@@ -909,23 +925,73 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     }
   }
 
-  // forceReviewOverlay skips the "hand off to the result page" behavior below
-  // and always opens the overlay straight into per-question review instead --
-  // used only by the deep link back from the result page's "Review Answers"
-  // button (see the onMounted query handling further down), since that's the
-  // one caller that already knows it wants the immersive review UI, not the
-  // aggregate result.
-  async function openExamSimulation(exam, { forceReviewOverlay = false } = {}) {
-    if (!canStudentOpenExam(exam) || !selectedRoomId.value) return
+  // Opens the overlay on one finished attempt, for reading only. Used by the
+  // deep link back from the result page's "Review Answers" button. It loads
+  // that attempt and nothing else: it used to go through openExamSimulation,
+  // which starts an attempt whenever one can be started, so a student who
+  // still had a retake left and pressed "Review Answers" had the retake
+  // started on them, timer running.
+  async function openSubmittedAttemptReview(exam, attemptId) {
+    if (!attemptId || !selectedRoomId.value) return
 
-    const reviewOnlyMode = isStudentExamRetakeLimitReached(exam)
-    const submittedAttemptId = studentSubmittedAttemptId(exam)
+    selectedStudentExam.value = {
+      ...exam,
+      delivery_mode: normalizeExamDeliveryMode(exam.delivery_mode),
+    }
+    studentExamError.value = ''
+    showExamSimulationModal.value = true
+    studentExamLoading.value = true
+
+    try {
+      // Set before the payload lands so the result-redirect watcher never
+      // observes a (momentary) result-summary state for this attempt.
+      studentExamReviewVisible.value = true
+      const { data } = await services.getAttempt(attemptId)
+
+      if (String(data?.attempt?.status ?? '').toLowerCase() !== 'submitted') {
+        closeExamSimulationModal()
+        return
+      }
+
+      // The room's list already says where this exam stands (a retake may be
+      // waiting, or under way); looking at an older attempt must not rewrite it.
+      applyStudentAttemptPayload(data, null, { preserveReviewVisibility: true, syncRoomExam: false })
+      roomMessage.value = 'Reviewing your submitted attempt.'
+    } catch (error) {
+      studentExamReviewVisible.value = false
+      studentExamError.value = firstApiError(error, 'Unable to open this attempt for review.')
+    } finally {
+      studentExamLoading.value = false
+    }
+  }
+
+  // The one button an archived exam can still have: see archivedExamAction.
+  function openArchivedExam(exam) {
+    const action = archivedExamAction(exam)
+
+    if (action === 'resume') {
+      openExamSimulation(exam)
+      return
+    }
+
+    if (action === 'result') {
+      router.push({ name: 'dashboard-exam-result', params: { attemptId: studentSubmittedAttemptId(exam) } })
+    }
+  }
+
+  async function openExamSimulation(exam) {
+    if (!canStudentOpenExam(exam) || !selectedRoomId.value) return
 
     // No retakes left, nothing to answer -- the only thing this exam entry
     // can mean is "show me my result", so skip the overlay and go straight
     // to its own page instead of opening/closing it just to redirect.
-    if (reviewOnlyMode && submittedAttemptId && !forceReviewOverlay) {
-      router.push({ name: 'dashboard-exam-result', params: { attemptId: submittedAttemptId } })
+    if (isStudentExamRetakeLimitReached(exam)) {
+      const submittedAttemptId = studentSubmittedAttemptId(exam)
+
+      if (submittedAttemptId) {
+        router.push({ name: 'dashboard-exam-result', params: { attemptId: submittedAttemptId } })
+      }
+
       return
     }
 
@@ -938,16 +1004,6 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     studentExamLoading.value = true
 
     try {
-      if (reviewOnlyMode && submittedAttemptId) {
-        // Set before the payload lands so the result-redirect watcher never
-        // observes a (momentary) result-summary state for this attempt.
-        studentExamReviewVisible.value = true
-        const { data } = await services.getAttempt(submittedAttemptId)
-        applyStudentAttemptPayload(data, null, { preserveReviewVisibility: true })
-        roomMessage.value = 'Reviewing your submitted attempt.'
-        return
-      }
-
       const { data } = await services.startExam(exam.id, {
         room_id: selectedRoomId.value,
       })
@@ -1227,6 +1283,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   function openDeleteRoomModal() {
     if (!selectedRoom.value) return
+    // The dialog shows roomError, so an error left over from something else
+    // must not be waiting in it when it opens.
+    roomError.value = ''
     showDeleteRoomModal.value = true
   }
 
@@ -1861,6 +1920,10 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isStudentExamRetakeLimitReached,
     studentExamActionLabel,
     studentExamAvailabilityText,
+    archivedExamAction,
+    archivedExamActionLabel,
+    archivedExamStatusText,
+    openArchivedExam,
     examOptionCardClass,
     questionPaletteClass,
     studentQuestionReviewStatus,

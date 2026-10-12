@@ -24,7 +24,9 @@ foreach ($rows as $row) {
     }
     $expected = trim($row[$wekaColIndex]);
 
-    $result = $service->predict($features);
+    // The built-in tree specifically: this checks the port of the Weka model,
+    // and runs without the app (or its database) started.
+    $result = $service->predict($features, LetPredictionService::builtInTree());
     $actual = $result['prediction'];
 
     if ($actual !== $expected) {

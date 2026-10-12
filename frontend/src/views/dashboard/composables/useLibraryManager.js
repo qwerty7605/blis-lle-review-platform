@@ -344,6 +344,8 @@ export function useLibraryManager({
   function openDeleteLibraryBankModal(bank) {
     if (!bank?.id) return
 
+    // The dialog shows libraryError itself; an older one must not greet it.
+    libraryError.value = ''
     selectedLibraryBank.value = bank
     showDeleteLibraryBankModal.value = true
   }
@@ -537,11 +539,11 @@ export function useLibraryManager({
     libraryDocxName.value = file.name
     libraryParsing.value = true
 
-    // Auto-fill the name from the filename right away -- don't wait on the
-    // parse to finish, and never clobber a name the teacher already typed.
-    if (!libraryForm.questionName.trim()) {
-      libraryForm.questionName = deriveQuestionNameFromFilename(file.name)
-    }
+    // Named after the file right away -- don't wait on the parse to finish.
+    // Always after this file: the dialog has no name field, so a name already
+    // there can only be left over from a file picked before this one, and
+    // keeping it saved the bank under the wrong file's name.
+    libraryForm.questionName = deriveQuestionNameFromFilename(file.name)
 
     try {
       const formData = new FormData()

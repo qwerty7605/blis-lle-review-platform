@@ -163,17 +163,18 @@
                 v-for="exam in selectedRoomArchivedExams"
                 :key="`archived-${exam.id}`"
                 class="rooms-exam-row archived"
-                :class="{ locked: !canStudentOpenExam(exam) }"
+                :class="{ locked: !archivedExamAction(exam) }"
               >
                 <div class="rooms-exam-row-head">
                   <strong class="rooms-exam-title">{{ exam.title }}</strong>
+                  <!-- An archived exam takes no new attempts. -->
                   <button
-                    v-if="canStudentOpenExam(exam)"
+                    v-if="archivedExamAction(exam)"
                     type="button"
                     class="rooms-exam-btn"
-                    @click="openExamSimulation(exam)"
+                    @click="openArchivedExam(exam)"
                   >
-                    {{ studentExamActionLabel(exam) }}
+                    {{ archivedExamActionLabel(exam) }}
                   </button>
                 </div>
 
@@ -189,7 +190,7 @@
                       {{ formatLongDate(examScheduleEnd(exam)) }} at {{ formatTimeOnly(examScheduleEnd(exam)) }}
                     </span>
                   </div>
-                  <p v-else class="rooms-exam-window-fallback">{{ studentExamAvailabilityText(exam) }}</p>
+                  <p v-else class="rooms-exam-window-fallback">{{ archivedExamStatusText(exam) }}</p>
                 </div>
               </article>
             </div>
@@ -765,6 +766,10 @@ const {
   isStudentExamRetakeLimitReached,
   studentExamActionLabel,
   studentExamAvailabilityText,
+  archivedExamAction,
+  archivedExamActionLabel,
+  archivedExamStatusText,
+  openArchivedExam,
   examOptionCardClass,
   questionPaletteClass,
   studentQuestionReviewStatus,

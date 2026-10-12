@@ -1264,19 +1264,7 @@ class DashboardAnalyticsService
      */
     public function buildStaffAnalytics(User $staff): array
     {
-        $latestAttemptIds = DB::table('exam_attempts')
-            ->join('exams', 'exams.id', '=', 'exam_attempts.exam_id')
-            ->join('rooms', 'rooms.id', '=', 'exam_attempts.room_id')
-            ->join('users', 'users.id', '=', 'exam_attempts.user_id')
-            ->where('exams.created_by', $staff->id)
-            ->where('rooms.created_by', $staff->id)
-            ->where('users.role', User::ROLE_STUDENT)
-            ->whereNull('users.archived_at')
-            ->groupBy('exam_attempts.exam_id', 'exam_attempts.room_id', 'exam_attempts.user_id')
-            ->selectRaw('MAX(exam_attempts.id) as id')
-            ->pluck('id')
-            ->map(fn ($id): int => (int) $id)
-            ->values();
+        $latestAttemptIds = $this->latestStaffAttemptIds($staff);
 
         if ($latestAttemptIds->isEmpty()) {
             return $this->emptyStaffAnalytics();
@@ -1308,6 +1296,96 @@ class DashboardAnalyticsService
             'graded_attempts' => (int) $attempts->count(),
             'students_graded' => (int) $attempts->pluck('user_id')->unique()->count(),
         ];
+    }
+
+    /**
+     * Every question an exam has served, ranked by how often the class missed
+     * it -- the Item-Level Analytics list on the teacher Dashboard.
+     *
+     * Cut from the same attempts as buildStaffAnalytics(), so the counts agree
+     * with the session figures shown beside them. A question left blank counts
+     * as missed, as it does in the student's score: the denominator is every
+     * attempt the question was served in, not every answer it received.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildItemDifficulty(User $staff, Exam $exam): array
+    {
+        $attemptIds = ExamAttempt::query()
+            ->whereIn('id', $this->latestStaffAttemptIds($staff, $exam)->all())
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->pluck('id');
+
+        if ($attemptIds->isEmpty()) {
+            return [];
+        }
+
+        $rows = DB::table('exam_attempt_questions')
+            ->leftJoin('exam_attempt_answers', function ($join) {
+                $join->on('exam_attempt_answers.exam_attempt_id', '=', 'exam_attempt_questions.exam_attempt_id')
+                    ->on('exam_attempt_answers.question_bank_question_id', '=', 'exam_attempt_questions.question_bank_question_id');
+            })
+            ->whereIn('exam_attempt_questions.exam_attempt_id', $attemptIds->all())
+            ->selectRaw('
+                exam_attempt_questions.question_bank_question_id as question_id,
+                COUNT(*) as total_attempts,
+                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers
+            ')
+            ->groupBy('exam_attempt_questions.question_bank_question_id')
+            ->get();
+
+        $questionTexts = DB::table('question_bank_questions')
+            ->whereIn('id', $rows->pluck('question_id')->all())
+            ->pluck('question_text', 'id');
+
+        return collect($rows)
+            ->map(function ($row) use ($questionTexts): array {
+                $total = (int) $row->total_attempts;
+                $correct = (int) $row->correct_answers;
+
+                return [
+                    'question_id' => (int) $row->question_id,
+                    'question_text' => (string) ($questionTexts[$row->question_id] ?? 'Unknown question'),
+                    'total_attempts' => $total,
+                    'correct_answers' => $correct,
+                    'success_rate_percent' => round(($correct / $total) * 100, 2),
+                    'failure_rate_percent' => round((($total - $correct) / $total) * 100, 2),
+                ];
+            })
+            ->sortBy([
+                ['failure_rate_percent', 'desc'],
+                ['total_attempts', 'desc'],
+                ['question_id', 'asc'],
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The latest attempt per student per session across this teacher's own
+     * exams and rooms, current (non-archived) students only -- the scope every
+     * class-wide figure on the teacher Dashboard is cut from. Not yet narrowed
+     * to submitted attempts: a retake in progress stands in for the attempt
+     * before it. $exam limits it to one exam.
+     *
+     * @return Collection<int, int>
+     */
+    private function latestStaffAttemptIds(User $staff, ?Exam $exam = null): Collection
+    {
+        return DB::table('exam_attempts')
+            ->join('exams', 'exams.id', '=', 'exam_attempts.exam_id')
+            ->join('rooms', 'rooms.id', '=', 'exam_attempts.room_id')
+            ->join('users', 'users.id', '=', 'exam_attempts.user_id')
+            ->where('exams.created_by', $staff->id)
+            ->where('rooms.created_by', $staff->id)
+            ->where('users.role', User::ROLE_STUDENT)
+            ->whereNull('users.archived_at')
+            ->when($exam, fn ($query) => $query->where('exam_attempts.exam_id', $exam->id))
+            ->groupBy('exam_attempts.exam_id', 'exam_attempts.room_id', 'exam_attempts.user_id')
+            ->selectRaw('MAX(exam_attempts.id) as id')
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values();
     }
 
     /**
