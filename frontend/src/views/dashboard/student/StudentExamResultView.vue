@@ -130,7 +130,7 @@
         <article v-if="summary.readinessLevel" class="exam-feedback-card">
           <span class="exam-feedback-icon is-readiness"><ShieldCheck :size="16" /></span>
           <div class="exam-feedback-card-body">
-            <span class="exam-feedback-kicker">Readiness Level</span>
+            <span class="exam-feedback-kicker">Outcome Level</span>
             <strong>{{ summary.readinessLevel.label }}</strong>
             <p>{{ summary.readinessLevel.message }}</p>
           </div>
@@ -314,7 +314,9 @@ function reviewAnswers() {
 
   router.push({
     name: 'dashboard-rooms',
-    query: { room: room.value.id, exam: exam.value.id, review: '1' },
+    // The attempt is named so the review opens this one, not whichever
+    // attempt the room page would open for the exam.
+    query: { room: room.value.id, exam: exam.value.id, attempt: attempt.value?.id, review: '1' },
   })
 }
 

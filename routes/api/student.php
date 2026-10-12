@@ -63,6 +63,9 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
                     'exams.shuffle_questions',
                     'exam_room.created_at as assigned_at'
                 )
+                // These become the Exam Notices. One the teacher archived
+                // from the room can no longer be started, so it is not due.
+                ->wherePivotNull('archived_at')
                 ->orderByDesc('exam_room.created_at');
         },
     ]);
@@ -433,12 +436,19 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
     );
 
     if ($letFeatureResult['ready']) {
-        $letPrediction = (new \App\Services\MachineLearning\LetPredictionService())->predict($letFeatureResult['features']);
+        $letPredictor = new \App\Services\MachineLearning\LetPredictionService();
+        $letPrediction = $letPredictor->predict($letFeatureResult['features']);
+        $letModel = $letPredictor->liveModel();
 
         $predictiveModel = [
             'status' => 'connected',
-            'title' => 'Predictive Readiness Model',
-            'description' => 'Estimated with a J48 decision tree trained on a small sample of past students\' mock exam history and LET outcomes. Treat this as a rough signal, not a certainty.',
+            'title' => 'Exam Outcome Model',
+            'description' => $letModel['source'] === 'built_in'
+                ? 'Estimated with a J48 decision tree trained on a small sample of past students\' mock exam history and LET outcomes. Treat this as a rough signal, not a certainty.'
+                : sprintf(
+                    'Estimated with a decision tree retrained on %d recorded licensure results and the mock exam history behind them. Treat this as a rough signal, not a certainty.',
+                    $letModel['trained_on'],
+                ),
             'ml_api_endpoint' => '/api/predictions/let',
             'expected_inputs' => array_values(\App\Services\MachineLearning\LetReadinessFeatureBuilder::SUBJECT_FEATURE_LABELS),
             'prediction' => $letPrediction['prediction'],
@@ -452,7 +462,7 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
     } else {
         $predictiveModel = [
             'status' => 'insufficient_history',
-            'title' => 'Predictive Readiness Model',
+            'title' => 'Exam Outcome Model',
             'description' => $letFeatureResult['reason'],
             'ml_api_endpoint' => '/api/predictions/let',
             'expected_inputs' => array_values(\App\Services\MachineLearning\LetReadinessFeatureBuilder::SUBJECT_FEATURE_LABELS),
@@ -551,15 +561,21 @@ Route::post('/student/exams/{exam}/start', function (
         ], 403);
     }
 
-    $isAssigned = $exam->rooms()
-        ->where('rooms.id', $roomId)
-        ->exists();
+    $assignment = DB::table('exam_room')
+        ->where('exam_id', $exam->id)
+        ->where('room_id', $roomId)
+        ->first();
 
-    if (!$isAssigned) {
+    if (!$assignment) {
         return response()->json([
             'message' => 'This exam is not assigned to the selected room.',
         ], 422);
     }
+
+    // Decided inside the transaction below, after the look for an attempt
+    // already under way: archiving an exam takes it off the room's list, and
+    // a student who was in the middle of it still has to be able to finish.
+    $assignmentArchived = !is_null($assignment->archived_at);
 
     $scheduleStartAt = $exam->schedule_start_at ?? $exam->scheduled_at;
     $scheduleEndAt = $exam->schedule_end_at;
@@ -609,84 +625,106 @@ Route::post('/student/exams/{exam}/start', function (
         ], 422);
     }
 
-    $existingAttempt = ExamAttempt::query()
-        ->where('exam_id', $exam->id)
-        ->where('room_id', $roomId)
-        ->where('user_id', $user->id)
-        ->where('status', ExamAttempt::STATUS_IN_PROGRESS)
-        ->latest('started_at')
-        ->first();
-
-    if ($existingAttempt) {
-        $existingAttempt = $autoSubmitExpiredAttempt($existingAttempt);
-
-        if ($existingAttempt->status === ExamAttempt::STATUS_IN_PROGRESS) {
-            return response()->json([
-                'message' => 'Resuming your active attempt.',
-                'resumed' => true,
-                ...$buildAttemptPayload($existingAttempt),
-            ]);
-        }
-    }
-
-    $submittedAttemptCount = ExamAttempt::query()
-        ->where('exam_id', $exam->id)
-        ->where('user_id', $user->id)
-        ->where('status', ExamAttempt::STATUS_SUBMITTED)
-        ->count();
-
     $maxAllowedAttempts = (bool) $exam->one_take_only ? 1 : 2;
-
-    if ($submittedAttemptCount >= $maxAllowedAttempts) {
-        return response()->json([
-            'message' => (bool) $exam->one_take_only
-                ? 'This exam allows one attempt only and your attempt is already submitted.'
-                : 'Retake limit reached. You can only take this exam twice (1 initial attempt + 1 retake).',
-        ], 422);
-    }
-
-    $questionQuery = DB::table('question_bank_questions')
-        ->whereIn('question_bank_id', $questionBankIds);
-
-    if ((bool) $exam->shuffle_questions) {
-        $questionQuery->inRandomOrder();
-    } else {
-        $bankOrderSql = collect($questionBankIds)
-            ->values()
-            ->map(fn ($bankId, $index) => 'WHEN ' . (int) $bankId . ' THEN ' . $index)
-            ->implode(' ');
-
-        $questionQuery
-            ->orderByRaw('CASE question_bank_id ' . $bankOrderSql . ' ELSE ' . count($questionBankIds) . ' END')
-            ->orderBy('item_number')
-            ->orderBy('id');
-    }
-
-    $questionIds = $questionQuery
-        ->limit($targetItems)
-        ->pluck('id')
-        ->values()
-        ->all();
-    $actualTotalItems = count($questionIds);
-
-    if ($actualTotalItems < 1) {
-        return response()->json([
-            'message' => 'No questions are available for this exam.',
-        ], 422);
-    }
-
     $durationMinutes = max(1, (int) $exam->duration_minutes);
-    $startedAt = now();
 
-    $attempt = DB::transaction(function () use (
+    // Looking for an attempt and creating one have to be a single step per
+    // student. They used to be two, with nothing in between: requests arriving
+    // together -- Start pressed twice, the exam open in two tabs -- each saw
+    // no attempt and each created one, which also stepped past the one-take
+    // and retake limits. Holding the student's own row makes the second
+    // request wait for the first, and then find the attempt it made.
+    [$outcome, $attempt] = DB::transaction(function () use (
         $exam,
         $roomId,
         $user,
-        $questionIds,
-        $actualTotalItems,
+        $questionBankIds,
+        $targetItems,
+        $maxAllowedAttempts,
         $durationMinutes,
-        $startedAt
-    ) {
+        $assignmentArchived,
+        $autoSubmitExpiredAttempt
+    ): array {
+        User::query()->whereKey($user->id)->lockForUpdate()->first();
+
+        // Every room, not only this one. The limits below count attempts on
+        // the exam whichever room they were made in, but only finished ones:
+        // looking for an open attempt in this room alone let a student in two
+        // rooms that share the exam have one under way in each, and so sit a
+        // one-take exam twice.
+        $openAttempts = ExamAttempt::query()
+            ->where('exam_id', $exam->id)
+            ->where('user_id', $user->id)
+            ->where('status', ExamAttempt::STATUS_IN_PROGRESS)
+            ->latest('started_at')
+            ->get();
+
+        $openElsewhere = null;
+
+        foreach ($openAttempts as $openAttempt) {
+            $openAttempt = $autoSubmitExpiredAttempt($openAttempt);
+
+            if ($openAttempt->status !== ExamAttempt::STATUS_IN_PROGRESS) {
+                continue;
+            }
+
+            if ((int) $openAttempt->room_id === $roomId) {
+                return ['resumed', $openAttempt];
+            }
+
+            $openElsewhere ??= $openAttempt;
+        }
+
+        if ($openElsewhere) {
+            return ['open_elsewhere', $openElsewhere];
+        }
+
+        // The room page stops listing an archived exam, but that is the page.
+        // Without this the exam could still be started by asking for it.
+        if ($assignmentArchived) {
+            return ['archived', null];
+        }
+
+        $submittedAttemptCount = ExamAttempt::query()
+            ->where('exam_id', $exam->id)
+            ->where('user_id', $user->id)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->count();
+
+        if ($submittedAttemptCount >= $maxAllowedAttempts) {
+            return ['limit_reached', null];
+        }
+
+        $questionQuery = DB::table('question_bank_questions')
+            ->whereIn('question_bank_id', $questionBankIds);
+
+        if ((bool) $exam->shuffle_questions) {
+            $questionQuery->inRandomOrder();
+        } else {
+            $bankOrderSql = collect($questionBankIds)
+                ->values()
+                ->map(fn ($bankId, $index) => 'WHEN ' . (int) $bankId . ' THEN ' . $index)
+                ->implode(' ');
+
+            $questionQuery
+                ->orderByRaw('CASE question_bank_id ' . $bankOrderSql . ' ELSE ' . count($questionBankIds) . ' END')
+                ->orderBy('item_number')
+                ->orderBy('id');
+        }
+
+        $questionIds = $questionQuery
+            ->limit($targetItems)
+            ->pluck('id')
+            ->values()
+            ->all();
+        $actualTotalItems = count($questionIds);
+
+        if ($actualTotalItems < 1) {
+            return ['no_questions', null];
+        }
+
+        $startedAt = now();
+
         $createdAttempt = ExamAttempt::create([
             'exam_id' => $exam->id,
             'room_id' => $roomId,
@@ -715,8 +753,46 @@ Route::post('/student/exams/{exam}/start', function (
 
         ExamAttemptQuestion::insert($rows);
 
-        return $createdAttempt->refresh();
+        return ['started', $createdAttempt->refresh()];
     });
+
+    if ($outcome === 'resumed') {
+        return response()->json([
+            'message' => 'Resuming your active attempt.',
+            'resumed' => true,
+            ...$buildAttemptPayload($attempt),
+        ]);
+    }
+
+    if ($outcome === 'open_elsewhere') {
+        $otherRoomName = Room::query()->whereKey($attempt->room_id)->value('name');
+
+        return response()->json([
+            'message' => $otherRoomName
+                ? "You already have this exam in progress in {$otherRoomName}. Finish it there first."
+                : 'You already have this exam in progress in another room. Finish it there first.',
+        ], 422);
+    }
+
+    if ($outcome === 'archived') {
+        return response()->json([
+            'message' => 'This exam has been archived from this room and can no longer be started.',
+        ], 422);
+    }
+
+    if ($outcome === 'limit_reached') {
+        return response()->json([
+            'message' => (bool) $exam->one_take_only
+                ? 'This exam allows one attempt only and your attempt is already submitted.'
+                : 'Retake limit reached. You can only take this exam twice (1 initial attempt + 1 retake).',
+        ], 422);
+    }
+
+    if ($outcome === 'no_questions') {
+        return response()->json([
+            'message' => 'No questions are available for this exam.',
+        ], 422);
+    }
 
     $recordAudit(
         $user,

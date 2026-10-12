@@ -5,6 +5,7 @@ use App\Models\ExamAttempt;
 use App\Models\Room;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 
@@ -352,11 +353,24 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isS
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
+    // An exam students have sat cannot go: their attempts, answers and scores
+    // all hang off it, and used to be deleted along with it without a word.
+    // Archiving the exam from its rooms retires it with that history intact.
+    if ($exam->attempts()->exists()) {
+        return response()->json([
+            'message' => 'Cannot delete this exam because students have already taken it. Archive it from its rooms instead, which keeps their results.',
+        ], 422);
+    }
+
     $examId = $exam->id;
     $examTitle = $exam->title;
 
-    $exam->rooms()->detach();
-    $exam->delete();
+    // One unit, so that a delete the database refuses -- an attempt started
+    // since the check above -- does not leave the exam cut off from its rooms.
+    DB::transaction(function () use ($exam): void {
+        $exam->rooms()->detach();
+        $exam->delete();
+    });
 
     $recordAudit(
         $user,
@@ -369,6 +383,30 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isS
     );
 
     return response()->json(['message' => 'Exam deleted']);
+});
+
+Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exam) use (
+    $isStaffMasterExaminer,
+    $ensureActive,
+    $dashboardAnalyticsService
+) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$isStaffMasterExaminer($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if ((int) $exam->created_by !== (int) $user->id) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    return response()->json([
+        'item_analytics' => $dashboardAnalyticsService->buildItemDifficulty($user, $exam),
+    ]);
 });
 
 Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exam) use (

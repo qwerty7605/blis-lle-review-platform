@@ -119,6 +119,31 @@ export function studentExamActionLabel(exam) {
   return 'Take Exam'
 }
 
+/*
+ * An exam the teacher archived from the room takes no new attempts; the server
+ * refuses them. What is left for the student is finishing an attempt already
+ * under way, or reading the result of one already handed in.
+ */
+export function archivedExamAction(exam) {
+  if (isStudentExamInProgress(exam)) return 'resume'
+  if (isStudentExamCompleted(exam) && studentSubmittedAttemptId(exam)) return 'result'
+
+  return null
+}
+
+export function archivedExamActionLabel(exam) {
+  return archivedExamAction(exam) === 'resume' ? 'Resume Exam' : 'Review Result'
+}
+
+export function archivedExamStatusText(exam) {
+  const action = archivedExamAction(exam)
+
+  if (action === 'resume') return 'Archived (you can still finish your attempt)'
+  if (action === 'result') return 'Archived (review only)'
+
+  return 'Archived (no longer open)'
+}
+
 export function studentExamAvailabilityText(exam) {
   if (!examHasQuestionSet(exam)) return 'Not available (no question set linked)'
 
