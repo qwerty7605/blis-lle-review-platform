@@ -3,8 +3,30 @@ import { createPinia } from 'pinia'
 import './style.css'
 import App from './App.vue'
 import router from './router'
+import { setSessionEndedHandler } from './api/http'
+import { useAuthStore } from './store/auth.store'
+import { keepInStepWithUpdates } from './utils/appVersion'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+
+// A session that ends under an open page takes the reader to the sign-in
+// page, where they are told why, instead of leaving them on a page whose
+// every request now fails.
+const SIGNED_OUT_PAGES = ['login', 'register', 'forgot-password', 'reset-password']
+
+setSessionEndedHandler((reason) => {
+  const auth = useAuthStore()
+  if (!auth.isAuthenticated || auth.signingOut) return
+
+  auth.forgetSession()
+
+  if (SIGNED_OUT_PAGES.includes(String(router.currentRoute.value.name))) return
+
+  router.replace({ name: 'login', query: { ended: reason === 'disabled' ? 'disabled' : '1' } })
+})
+
+keepInStepWithUpdates(router)
+
 app.mount('#app')

@@ -138,7 +138,7 @@ class ReviewBotAdminService
         // all of its output as near-duplicates of the first run's, so the only
         // thing it reliably produced was wasted work. Cache::add is atomic, so
         // two simultaneous requests cannot both win.
-        $lockKey = 'review-bot-generate:' . (int) $sourceBank->id;
+        $lockKey = $this->generationLockKey((int) $sourceBank->id);
 
         if (!Cache::add($lockKey, true, now()->addMinutes(self::GENERATION_LOCK_MINUTES))) {
             return [
@@ -168,6 +168,27 @@ class ReviewBotAdminService
             ),
             'bank_id' => (int) $bank->id,
         ];
+    }
+
+    /**
+     * Whether a teacher-triggered run for this Library file is queued or
+     * running right now.
+     *
+     * The page that shows the drafts asks this with every list it loads. It
+     * is how the page knows to keep looking: the drafts are saved a batch at
+     * a time, so "some have arrived" does not mean "all have arrived", and
+     * the wait has to survive the teacher leaving the page and coming back.
+     * The answer is the in-flight lock itself, which the job releases when it
+     * ends however it ends.
+     */
+    public function isGenerating(int $sourceBankId): bool
+    {
+        return Cache::has($this->generationLockKey($sourceBankId));
+    }
+
+    private function generationLockKey(int $sourceBankId): string
+    {
+        return 'review-bot-generate:' . $sourceBankId;
     }
 
     /**

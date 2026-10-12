@@ -195,8 +195,10 @@ import { roomsApi } from '@/api/rooms.api'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
 import blisLogoWhite from '@/assets/blis-logo-white.png'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import { getDashboardNavItems } from './config/dashboardNavigation'
+import { ANNOUNCEMENT_CHANGED_EVENT } from './composables/useSettingsModule'
 import { useCompactLayout } from './composables/useViewport'
 import {
   ChevronDown,
@@ -387,14 +389,29 @@ function dismissAnnouncement() {
   }
 }
 
-onMounted(async () => {
+async function loadAnnouncement() {
   try {
     const { data } = await settingsApi.getPublicNotice()
     announcementText.value = String(data?.announcement_banner ?? '').trim()
   } catch {
     // A missing notice is not worth an error state on every dashboard page.
   }
+}
+
+onMounted(() => {
+  loadAnnouncement()
+  window.addEventListener(ANNOUNCEMENT_CHANGED_EVENT, loadAnnouncement)
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener(ANNOUNCEMENT_CHANGED_EVENT, loadAnnouncement)
+})
+
+// An announcement is for people who are already signed in. Read once, it
+// reached only those who opened the site after it was posted; it is read
+// again every few minutes, whenever someone comes back to the tab, and at
+// once when the Settings page saves one (ANNOUNCEMENT_CHANGED_EVENT).
+useLiveRefresh(loadAnnouncement, { every: 5 * 60 * 1000 })
 
 async function handleLogout() {
   await auth.logout()

@@ -216,10 +216,13 @@
 
         <div v-if="generationPending && filteredQuestions.length === 0" class="review-bot-empty compact">
           <RefreshCw :size="18" class="spin-soft" />
-          <p>Generating your review questions in the background — this can take a few minutes for a real AI call. This list updates on its own, no need to refresh.</p>
+          <p>Generating your review questions in the background. They appear here as they are made; there is no need to refresh.</p>
         </div>
 
-        <div v-else-if="questionsLoading" class="review-bot-empty compact">
+        <!-- Only when there is nothing to show yet. A reload of a list that
+             is on screen keeps it there: replacing it with this lost the
+             teacher's place, and whatever draft they were reading. -->
+        <div v-else-if="questionsLoading && filteredQuestions.length === 0" class="review-bot-empty compact">
           <RefreshCw :size="18" class="spin-soft" />
           <p>Loading questions...</p>
         </div>
@@ -230,6 +233,12 @@
         </div>
 
         <div v-else class="rbg-question-list">
+          <!-- More are still on their way: the list above is not yet all of it. -->
+          <div v-if="generationPending" class="feedback info" role="status">
+            <RefreshCw :size="14" class="spin-soft" />
+            <span>Still generating. New drafts are added to this list as they are made.</span>
+          </div>
+
           <article v-for="question in filteredQuestions" :key="question.id" class="rbg-question-card">
             <div class="rbg-question-head">
               <label class="rbg-select-one">

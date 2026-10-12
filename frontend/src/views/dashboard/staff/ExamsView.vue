@@ -699,6 +699,7 @@ import {
 } from '../composables/useDashboardFormatters'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 import { useExamsModule } from '../composables/useExamsModule'
+import { beatAt, now } from '@/utils/clock'
 import { vScrollHint } from '@/utils/scrollHint'
 
 const route = useRoute()
@@ -801,15 +802,22 @@ function clearExamFilters() {
 function examWindow(exam) {
   const start = parseDateTime(exam.schedule_start_at ?? exam.scheduled_at)
   const end = parseDateTime(exam.schedule_end_at)
-  const now = Date.now()
+  // The shared clock, and the moment this answer changes, so a row goes from
+  // Upcoming to Open to Ended on its own as the time passes.
+  const current = now()
 
   let dates = 'No schedule set'
   if (start && end) dates = `${formatCompactDate(start)} to ${formatCompactDate(end)}`
   else if (start) dates = `From ${formatCompactDate(start)}`
   else if (end) dates = `Until ${formatCompactDate(end)}`
 
-  if (start && start.getTime() > now) return { tone: 'upcoming', label: 'Upcoming', dates }
-  if (end && end.getTime() < now) return { tone: 'ended', label: 'Ended', dates }
+  if (start && start.getTime() > current) {
+    beatAt(start.getTime())
+    return { tone: 'upcoming', label: 'Upcoming', dates }
+  }
+
+  if (end && end.getTime() < current) return { tone: 'ended', label: 'Ended', dates }
+  if (end) beatAt(end.getTime())
 
   return { tone: 'open', label: 'Open', dates }
 }

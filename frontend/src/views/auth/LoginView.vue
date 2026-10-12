@@ -118,6 +118,15 @@ const VERIFICATION_NOTICES = {
 
 onMounted(() => {
   notice.value = VERIFICATION_NOTICES[route.query.verified] ?? ''
+
+  // Sent here because the session ended under an open page (see main.js).
+  if (!notice.value && route.query.ended === '1') {
+    notice.value = 'Your session ended. Sign in again to carry on.'
+  }
+
+  if (route.query.ended === 'disabled') {
+    apiError.value = 'This account has been disabled. Ask an administrator if that is a mistake.'
+  }
 })
 
 async function handleResend() {
