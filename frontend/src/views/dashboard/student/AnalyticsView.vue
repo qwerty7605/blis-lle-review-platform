@@ -220,7 +220,7 @@
           </ol>
         </section>
 
-      <!-- LET readiness beside what to review next -->
+      <!-- Exam outcome beside what to review next -->
       <div v-show="activeTab === 'readiness'" class="analytics-readiness-grid">
         <!-- Estimated outcome: the same card as the dashboard's -->
         <article class="analytics-card analytics-prediction-card" aria-labelledby="analytics-let-heading">
@@ -492,7 +492,7 @@ const readiness = computed(() => describeReadiness(predictivePanel.value))
 const tabs = [
   { key: 'subjects', label: 'Subjects', icon: LayoutGrid },
   { key: 'plan', label: 'Study Plan', icon: ListOrdered },
-  { key: 'readiness', label: 'Readiness', icon: ShieldCheck },
+  { key: 'readiness', label: 'Exam Outcome', icon: ShieldCheck },
 ]
 const activeTab = ref('subjects')
 
@@ -571,9 +571,11 @@ function trendToneClass(subject) {
 }
 
 /* ---- Row 1: brand panel + overall average ---- */
+/* The first column is never narrower than the tab bar under the brand panel
+   needs for its three labels (nor than 320px); the average card takes the rest. */
 .analytics-hero-row {
   display: grid;
-  grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr);
+  grid-template-columns: minmax(min-content, 0.42fr) minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -584,12 +586,14 @@ function trendToneClass(subject) {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 12px;
-  min-width: 0;
+  min-width: 320px;
 }
 
+/* Each tab is as wide as its label and they share what is left over. Three
+   equal thirds left "Exam Outcome", the longest label, spilling out of its
+   pill while "Subjects" had room to spare. */
 .analytics-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 4px;
   padding: 5px;
   border-radius: 14px;
@@ -599,9 +603,10 @@ function trendToneClass(subject) {
 }
 
 .analytics-tab {
+  flex: 1 1 auto;
   min-width: 0;
   height: 40px;
-  padding: 0 6px;
+  padding: 0 10px;
   border: none;
   border-radius: 10px;
   background: transparent;
@@ -618,6 +623,13 @@ function trendToneClass(subject) {
 
 .analytics-tab svg {
   flex-shrink: 0;
+}
+
+/* Last resort on a very narrow screen: shorten the label, never spill it. */
+.analytics-tab span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .analytics-tab:hover:not(.active) {
@@ -650,7 +662,7 @@ function trendToneClass(subject) {
   display: grid;
   grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   gap: 16px;
-  /* stretch: LET Readiness and What To Review Next end on the same line. */
+  /* stretch: Exam Outcome and What To Review Next end on the same line. */
   align-items: stretch;
 }
 
@@ -1174,7 +1186,7 @@ function trendToneClass(subject) {
   color: var(--a-muted);
 }
 
-/* ---- LET readiness ---- */
+/* ---- Exam outcome ---- */
 /* Amber regardless of the PASS/FAIL call -- this is a "how sure is the
    model" number, and colouring it red/green makes it read as a second
    verdict competing with the headline right above it. */
@@ -1731,8 +1743,13 @@ function trendToneClass(subject) {
   }
 }
 
-/* Three tabs across 280px: with their icons the labels ran into each other. */
-@media (max-width: 360px) {
+/* Three tabs across a phone: with their icons the labels do not all fit
+   until the bar is about 370px wide. */
+@media (max-width: 400px) {
+  .analytics-tab {
+    padding: 0 6px;
+  }
+
   .analytics-tab svg {
     display: none;
   }
