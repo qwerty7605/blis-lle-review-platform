@@ -31,3 +31,7 @@ tmp/
 
 # Playwright MCP screenshots, logs and capture scripts
 .playwright-mcp/
+
+# Output of ml/tools/compare_with_weka.php and of compiling the Java tools
+ml/tools/compare/
+ml/tools/**/*.class
