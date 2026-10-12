@@ -102,6 +102,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
 - **Updates** (`frontend/src/utils/appVersion.js`): a tab opened before a deploy runs old code and would ask for page scripts the deploy removed. The site's `index.html` is compared with the running one every 5 minutes and on return to the tab; once it differs, the next move to another page is a full load. A page script that fails to load anyway triggers the same at once. Not active under `npm run dev`.
 - **Sessions** (`frontend/src/api/http.js`, `main.js`): a 401 from anything outside `/auth/`, or the 403 "Account is disabled.", sends the reader to `/login?ended=...` through the router, where the page says why.
 - A save or delete reloads what it changed itself (every module already does); `useLiveRefresh` is for changes made by someone else.
+- **Background jobs**: a page waiting on a queued job asks the server whether the job is still going rather than guessing from what has arrived. Review Bot generation saves its drafts a batch at a time, so `GET /api/library/review-bot/questions?source_bank_id=` returns `generating` (the run's in-flight lock, `ReviewBotAdminService::isGenerating()`), and the generator page re-reads its list every 4s for as long as that is true, including after the page is left and reopened. The Library's topic tagging does the same from each bank's `mapping_status`.
 
 ## Visual Design
 
