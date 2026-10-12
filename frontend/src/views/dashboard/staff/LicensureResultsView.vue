@@ -16,7 +16,7 @@
       <p class="muted lle-intro">
         Board results are published by the PRC, so they are transcribed here once a batch has
         sat the exam. Each recorded outcome pairs with that student's mock-exam history to
-        form one training example for the LET readiness predictor.
+        form one training example for the Exam Outcome model.
       </p>
 
       <div class="lle-form">
@@ -111,6 +111,82 @@
           <button type="button" class="primary-btn" :disabled="!canSubmit" @click="submitResult">
             <Save :size="14" />
             {{ saving ? 'Saving…' : 'Record result' }}
+          </button>
+        </div>
+      </div>
+    </article>
+
+    <article class="surface-card room-shell-card is-flush">
+      <header class="room-page-head is-inline">
+        <div class="room-page-title">
+          <BrainCircuit :size="18" />
+          <h3>Exam Outcome model</h3>
+        </div>
+        <button type="button" class="ghost-btn" :disabled="modelBusy || modelLoading" @click="retrainModel">
+          <RefreshCw :size="14" :class="{ 'spin-soft': modelBusy }" />
+          {{ modelBusy ? 'Checking…' : 'Check for an update' }}
+        </button>
+      </header>
+
+      <div v-if="modelLoading && !modelStatus" class="room-empty-state">
+        <RefreshCw :size="18" class="spin-soft" />
+        <p>Loading the Exam Outcome model…</p>
+      </div>
+
+      <template v-else-if="modelStatus">
+        <p class="muted lle-intro">
+          {{ modelInUse }} After results are recorded it retrains itself, and switches to the new model
+          only if that one does at least as well on the results the current model has not seen.
+        </p>
+
+        <dl class="lle-model-facts">
+          <div>
+            <dt>Results it can learn from</dt>
+            <dd>
+              {{ modelStatus.data.usable }}
+              <small class="muted">{{ modelStatus.data.passed }} passed · {{ modelStatus.data.failed }} failed</small>
+            </dd>
+          </div>
+          <div>
+            <dt>New since the model in use</dt>
+            <dd>{{ modelStatus.data.new_since_live_model }}</dd>
+          </div>
+          <div>
+            <dt>Needed for an update</dt>
+            <dd>
+              <small class="muted">
+                {{ modelStatus.data.minimum_records }} results in all, {{ modelStatus.data.minimum_per_outcome }} of each
+                outcome, {{ modelStatus.data.minimum_new_results }} of them new
+              </small>
+            </dd>
+          </div>
+          <div v-if="modelStatus.data.skipped_for_thin_history > 0">
+            <dt>Left out</dt>
+            <dd>
+              {{ modelStatus.data.skipped_for_thin_history }}
+              <small class="muted">too few graded exams to learn from</small>
+            </dd>
+          </div>
+        </dl>
+
+        <p v-if="lastModelCheck" class="muted lle-intro">Last retraining: {{ lastModelCheck }}</p>
+      </template>
+
+      <div v-if="modelError" class="feedback danger" role="alert">
+        <AlertCircle :size="15" />
+        <span>{{ modelError }}</span>
+      </div>
+      <div v-else-if="modelNotice" class="feedback success" role="status">
+        <CheckCircle2 :size="15" />
+        <span>{{ modelNotice }}</span>
+      </div>
+
+      <div v-if="canRevertModel" class="management-toolbar">
+        <p class="muted">An administrator can stop using this model and go back to the one before it.</p>
+        <div class="management-actions">
+          <button type="button" class="ghost-btn" :disabled="modelBusy" @click="revertModel">
+            <Undo2 :size="14" />
+            Go back to the previous model
           </button>
         </div>
       </div>
@@ -279,7 +355,18 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { AlertCircle, Award, CheckCircle2, ChevronDown, ClipboardList, RefreshCw, Save, Trash2 } from 'lucide-vue-next'
+import {
+  AlertCircle,
+  Award,
+  BrainCircuit,
+  CheckCircle2,
+  ChevronDown,
+  ClipboardList,
+  RefreshCw,
+  Save,
+  Trash2,
+  Undo2,
+} from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
@@ -337,7 +424,41 @@ const {
   saveNotice,
   submitResult,
   removeResult,
+  modelStatus,
+  modelLoading,
+  modelBusy,
+  modelError,
+  modelNotice,
+  canRevertModel,
+  retrainModel,
+  revertModel,
 } = useLleResultsModule()
+
+const modelInUse = computed(() => {
+  const live = modelStatus.value?.live
+  if (!live) return ''
+
+  if (live.source === 'built_in') {
+    return `Exam Outcome estimates are using the original model, trained on ${live.trained_on} past students' records.`
+  }
+
+  const since = live.trained_at ? ` since ${new Date(live.trained_at).toLocaleDateString()}` : ''
+  return `Exam Outcome estimates are using a model retrained on ${live.trained_on} recorded results${since}.`
+})
+
+// What the most recent retraining decided, in a sentence.
+const lastModelCheck = computed(() => {
+  const latest = modelStatus.value?.history?.[0]
+  if (!latest) return ''
+
+  const when = new Date(latest.created_at).toLocaleDateString()
+  const metrics = latest.metrics ?? {}
+  const scores = `${metrics.candidate_accuracy}% right against the previous model's ${metrics.live_accuracy}% on ${metrics.compared_on} new results`
+
+  if (latest.status === 'rejected') return `${when} — not used: ${scores}.`
+  if (latest.status === 'reverted') return `${when} — taken out of use by an administrator.`
+  return `${when} — taken up: ${scores}.`
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
@@ -420,6 +541,39 @@ const {
 .lle-matches small {
   display: block;
   font-size: 12px;
+}
+
+.lle-model-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0 18px 14px;
+}
+
+.lle-model-facts > div {
+  padding: 12px 14px;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+}
+
+.lle-model-facts dt {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--lnu-text-muted);
+}
+
+.lle-model-facts dd {
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lle-model-facts small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 /* Sized by its eight columns. The shared table rule holds every table to

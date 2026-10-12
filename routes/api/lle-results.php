@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\RetrainLetModelJob;
 use App\Models\LleResult;
 use App\Models\User;
 use App\Support\Search;
@@ -134,6 +135,11 @@ Route::middleware([])->group(function () use ($ensureActive, $canManageRooms, $r
             $request,
         );
 
+        // Each recorded outcome is something the readiness model can learn
+        // from. Only one retraining ever waits, and it holds off until the
+        // batch has finished being typed in.
+        RetrainLetModelJob::dispatch();
+
         return response()->json([
             'result' => $result->load(['student:id,name,student_id,email,year_level', 'recorder:id,name']),
         ], $result->wasRecentlyCreated ? 201 : 200);
@@ -164,6 +170,8 @@ Route::middleware([])->group(function () use ($ensureActive, $canManageRooms, $r
             ['exam_year' => $examYear],
             $request,
         );
+
+        RetrainLetModelJob::dispatch();
 
         return response()->json(['message' => 'Result removed.']);
     });

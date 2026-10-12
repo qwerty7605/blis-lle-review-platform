@@ -16,6 +16,21 @@ class LleResultsApi {
   remove(id) {
     return http.delete(`/lle-results/${id}`)
   }
+
+  /** Which Exam Outcome model is in use, and what there is to retrain it on. */
+  modelStatus() {
+    return http.get('/predictions/let/model')
+  }
+
+  /** Retrains now; the server keeps the current model unless the new one does at least as well. */
+  retrainModel() {
+    return http.post('/predictions/let/model/retrain')
+  }
+
+  /** Admin only: go back to the model before the one in use. */
+  revertModel() {
+    return http.post('/predictions/let/model/revert')
+  }
 }
 
 export const lleResultsApi = new LleResultsApi()

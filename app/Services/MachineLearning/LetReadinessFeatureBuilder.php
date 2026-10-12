@@ -2,7 +2,12 @@
 
 namespace App\Services\MachineLearning;
 
+use App\Models\Exam;
+use App\Models\ExamAttempt;
+use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Builds the 15 LetPredictionService input features from a student's own
@@ -52,6 +57,82 @@ class LetReadinessFeatureBuilder
         'mock_selacq' => 'Selection & Acquisition',
         'mock_total' => 'Overall Mock Average',
     ];
+
+    /**
+     * The same subject spellings the student analytics page folds together
+     * (see $buildStudentAnalytics in routes/api/student.php), so a graduate's
+     * training record is cut from the numbers their prediction was.
+     */
+    private const SUBJECT_ALIASES = [
+        'cataloging and classification' => 'Cataloging and Classification',
+        'cataloguing and classification' => 'Cataloging and Classification',
+        'cataloging' => 'Cataloging and Classification',
+        'indexing and abstracting' => 'Indexing and Abstracting',
+        'indexing' => 'Indexing and Abstracting',
+        'information technology' => 'Information Technology',
+        'it' => 'Information Technology',
+        'reference' => 'Reference Services',
+        'reference services' => 'Reference Services',
+        'library management' => 'Library Management',
+        'selection and acquisition' => 'Selection and Acquisition',
+        'selection' => 'Selection and Acquisition',
+    ];
+
+    /**
+     * The features for one student, read straight from their exam history.
+     *
+     * $until leaves out anything submitted later. A graduate's record has to
+     * stop at the day they sat the board exam: mock exams taken afterwards
+     * (by someone preparing to retake it, say) are not what the result was
+     * earned on.
+     *
+     * @return array{ready: bool, reason?: string, features?: array<string, float>}
+     */
+    public function forStudent(User $student, ?CarbonInterface $until = null): array
+    {
+        $attempts = ExamAttempt::query()
+            ->with(['exam:id,subject,question_bank_id', 'exam.questionBank:id,subject', 'exam.questionBanks:id,subject'])
+            ->where('user_id', $student->id)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->when($until !== null, fn ($query) => $query->where('submitted_at', '<=', $until))
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (ExamAttempt $attempt): array {
+                $exam = $attempt->exam;
+
+                $subject = trim((string) ($exam?->subject ?? ''));
+                if ($subject === '' && $exam) {
+                    $subject = (string) (Exam::summarizeQuestionBankSubject($exam->resolvedQuestionBanks()) ?? '');
+                }
+
+                $normalized = Str::of($subject)->lower()->replace('&', 'and')->replace('/', ' ')->replace('-', ' ')->squish()->toString();
+
+                return [
+                    'subject' => self::SUBJECT_ALIASES[$normalized] ?? $subject,
+                    'score_percent' => is_null($attempt->score_percent) ? null : round((float) $attempt->score_percent, 2),
+                    'submitted_at' => $attempt->submitted_at,
+                ];
+            })
+            ->values();
+
+        $scores = $attempts->pluck('score_percent')->filter(fn ($score) => !is_null($score))->values();
+
+        $subjectProfiles = collect(array_keys(self::SUBJECT_TO_FEATURE))
+            ->map(function (string $label) use ($attempts): array {
+                $subjectScores = $attempts
+                    ->filter(fn (array $attempt) => $attempt['subject'] === $label)
+                    ->pluck('score_percent')
+                    ->filter(fn ($score) => !is_null($score));
+
+                return [
+                    'label' => $label,
+                    'average_score_percent' => $subjectScores->isNotEmpty() ? round((float) $subjectScores->avg(), 1) : null,
+                ];
+            });
+
+        return $this->build($attempts, $subjectProfiles, $scores->isNotEmpty() ? (float) $scores->avg() : null);
+    }
 
     /**
      * @param  Collection  $attempts  Each item: ['score_percent' => float|null, 'submitted_at' => mixed, 'subject' => string]
@@ -104,7 +185,7 @@ class LetReadinessFeatureBuilder
             if (is_null($average)) {
                 return [
                     'ready' => false,
-                    'reason' => "Finish at least one graded exam in \"{$label}\" to estimate LET readiness.",
+                    'reason' => "Finish at least one graded exam in \"{$label}\" to estimate your exam outcome.",
                 ];
             }
 
