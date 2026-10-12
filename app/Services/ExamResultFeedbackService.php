@@ -415,7 +415,7 @@ class ExamResultFeedbackService
             return [
                 'level' => 'exam_ready',
                 'label' => 'Exam Ready',
-                'message' => 'Your result is in a strong range for formal exam readiness.',
+                'message' => 'Your result is in a strong range for a good exam outcome.',
             ];
         }
 
@@ -431,7 +431,7 @@ class ExamResultFeedbackService
             return [
                 'level' => 'developing',
                 'label' => 'Developing',
-                'message' => 'You are building readiness, but your weaker areas need more targeted review.',
+                'message' => 'You are building toward a good exam outcome, but your weaker areas need more targeted review.',
             ];
         }
 
