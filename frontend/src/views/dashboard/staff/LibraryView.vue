@@ -637,6 +637,13 @@
             This action is blocked if the set already has official exam attempt records.
           </p>
 
+          <!-- The page-level banner sits behind this dialog, so a refused
+               delete has to be reported here to be seen at all. -->
+          <div v-if="libraryError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ libraryError }}</span>
+          </div>
+
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="libraryDeleting" @click="closeDeleteLibraryBankModal">
               Cancel

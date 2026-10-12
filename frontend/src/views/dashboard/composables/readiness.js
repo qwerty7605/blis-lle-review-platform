@@ -11,7 +11,7 @@ export function describeReadiness(model, audience = 'self') {
   if (!model || model.status !== 'connected') {
     return {
       ready: false,
-      label: 'Building Readiness Profile',
+      label: 'Building Exam Outcome',
       tone: 'neutral',
       confidence: null,
       detail: model?.description || (audience === 'staff'

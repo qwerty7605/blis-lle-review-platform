@@ -324,7 +324,7 @@ class StudyActionPlanner
                     [
                         $this->block('What happened', [
                             'You have not answered a single question in this subject.',
-                            'It is missing from every reading on this page, including your readiness estimate.',
+                            'It is missing from every reading on this page, including your exam outcome estimate.',
                         ]),
                         $this->block('Why it matters', [
                             'A subject with no data cannot be flagged as weak, so this is the one gap your analytics cannot see.',

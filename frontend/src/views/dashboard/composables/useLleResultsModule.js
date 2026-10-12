@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 
@@ -21,6 +22,7 @@ function currentExamYear() {
 }
 
 export function useLleResultsModule() {
+  const auth = useAuthStore()
   const services = useDashboardDataServices()
 
   const resultsLoading = ref(false)
@@ -90,9 +92,66 @@ export function useLleResultsModule() {
     }
   }
 
+  // --- the Exam Outcome model these results teach ---------------------------
+
+  const modelStatus = ref(null)
+  const modelLoading = ref(false)
+  const modelBusy = ref(false)
+  const modelError = ref('')
+  const modelNotice = ref('')
+  const canRevertModel = computed(() => (
+    String(auth.user?.role ?? '').toLowerCase() === 'admin' && Boolean(modelStatus.value?.can_revert)
+  ))
+
+  // silent: after a result is saved or removed, the counts just move.
+  async function loadModelStatus({ silent = false } = {}) {
+    if (!silent) {
+      modelLoading.value = true
+      modelError.value = ''
+    }
+
+    try {
+      const { data } = await services.getLetModelStatus()
+      modelStatus.value = data
+    } catch (error) {
+      if (!silent) modelError.value = firstApiError(error, 'Unable to load the Exam Outcome model.')
+    } finally {
+      if (!silent) modelLoading.value = false
+    }
+  }
+
+  async function changeModel(request, fallbackMessage) {
+    modelBusy.value = true
+    modelError.value = ''
+    modelNotice.value = ''
+
+    try {
+      const { data } = await request()
+      modelStatus.value = data
+      modelNotice.value = data?.message ?? ''
+    } catch (error) {
+      modelError.value = firstApiError(error, fallbackMessage)
+    } finally {
+      modelBusy.value = false
+    }
+  }
+
+  function retrainModel() {
+    return changeModel(() => services.retrainLetModel(), 'Unable to retrain the Exam Outcome model.')
+  }
+
+  function revertModel() {
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm('Stop using the current Exam Outcome model and go back to the one before it?')
+      if (!confirmed) return Promise.resolve()
+    }
+
+    return changeModel(() => services.revertLetModel(), 'Unable to go back to the previous model.')
+  }
+
   // Read again when someone comes back to this page.
-  useLiveRefresh(() => loadResults({ silent: true }), {
-    when: () => !resultsLoading.value && !saving.value,
+  useLiveRefresh(() => Promise.all([loadResults({ silent: true }), loadModelStatus({ silent: true })]), {
+    when: () => !resultsLoading.value && !saving.value && !modelBusy.value,
   })
 
   async function lookupStudents() {
@@ -168,7 +227,7 @@ export function useLleResultsModule() {
       saveNotice.value = `Recorded ${form.result.toUpperCase()} for ${name} (${form.exam_year}).`
       resetForm()
       page.value = 1
-      await loadResults()
+      await Promise.all([loadResults(), loadModelStatus({ silent: true })])
     } catch (error) {
       saveError.value = firstApiError(error, 'Unable to record that result.')
     } finally {
@@ -183,7 +242,7 @@ export function useLleResultsModule() {
 
     try {
       await services.removeLleResult(result.id)
-      await loadResults()
+      await Promise.all([loadResults(), loadModelStatus({ silent: true })])
     } catch (error) {
       resultsError.value = firstApiError(error, 'Unable to remove that result.')
     }
@@ -224,7 +283,10 @@ export function useLleResultsModule() {
     lookupTimer = setTimeout(() => lookupStudents(), SEARCH_DEBOUNCE_MS)
   })
 
-  onMounted(() => loadResults())
+  onMounted(() => {
+    loadResults()
+    loadModelStatus()
+  })
 
   onUnmounted(() => {
     if (listTimer) clearTimeout(listTimer)
@@ -255,5 +317,13 @@ export function useLleResultsModule() {
     saveNotice,
     submitResult,
     removeResult,
+    modelStatus,
+    modelLoading,
+    modelBusy,
+    modelError,
+    modelNotice,
+    canRevertModel,
+    retrainModel,
+    revertModel,
   }
 }
