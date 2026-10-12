@@ -1,13 +1,18 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { questionsApi, reviewBotAdminApi } from '@/api'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
-// Generation runs in a background queue job and can legitimately take several
-// minutes (it's a real OpenAI call per batch of source items) -- polled at
-// this cadence, self-rescheduling rather than setInterval so a slow request
-// never overlaps the next tick, and capped so a stuck/failed job doesn't
-// poll forever in the background.
-const GENERATION_POLL_INTERVAL_MS = 5000
-const GENERATION_POLL_MAX_MS = 10 * 60 * 1000
+// Generation runs in a background queue job. It is quick once it starts, but
+// it shares one worker with topic tagging, which is not, so a run can sit in
+// the queue for minutes first. While the server says a run for the open file
+// is queued or running, the draft list is read again at this cadence:
+// self-rescheduling rather than setInterval so a slow request never overlaps
+// the next one. The first look comes sooner, because an unqueued run is
+// usually done within a couple of seconds. The cap is only a backstop: the
+// server stops saying "generating" by itself after ten minutes at most.
+const GENERATION_FIRST_CHECK_MS = 2000
+const GENERATION_POLL_INTERVAL_MS = 4000
+const GENERATION_POLL_MAX_MS = 15 * 60 * 1000
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -93,10 +98,10 @@ export function useReviewBotAdminModule() {
   const generating = ref(false)
   const generateError = ref('')
   const generateMessage = ref('')
-  // True from the moment generation is queued until new drafts actually show
-  // up (or the poll gives up) -- lets the template show "generating..."
-  // instead of a bare "no questions yet" empty state while the background
-  // job is still running, so the teacher never has to guess and hit Refresh.
+  // True while a run for the open file is queued or running. The server is
+  // the one that knows (`generating`, sent with every draft list): the page
+  // only repeats it, so the wait is the same whether the run was started by
+  // this click, by an earlier one, or before the page was left and reopened.
   const generationPending = ref(false)
 
   // Step 3/4: Generate → Review/Edit → Map/Assign — the AI-generated review
@@ -185,79 +190,140 @@ export function useReviewBotAdminModule() {
     }
   }
 
-  async function loadQuestions() {
+  // silent: the quiet reload used while a run is being waited for and when
+  // the teacher comes back to the page. No loading state, which would take
+  // the list away from under a draft being read or edited, and a failure
+  // kept to itself.
+  async function loadQuestions({ silent = false } = {}) {
     if (!selectedBankId.value) {
       questions.value = []
       return
     }
 
-    questionsLoading.value = true
-    questionsError.value = ''
+    const bankId = selectedBankId.value
+    const sentAt = Date.now()
+
+    if (!silent) {
+      questionsLoading.value = true
+      questionsError.value = ''
+    }
 
     try {
       const { data } = await reviewBotAdminApi.listQuestions({
-        source_bank_id: selectedBankId.value,
+        source_bank_id: bankId,
         // The endpoint hides declined drafts by default so they do not sit in
         // the review queue; seeing them again is an explicit request.
         ...(statusFilter.value === 'rejected' ? { status: 'rejected' } : {}),
       })
+
+      // Another file was picked while this was on its way.
+      if (selectedBankId.value !== bankId) return
+
       questions.value = asList(data?.questions).map(normalizeQuestion)
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
 
-      // New drafts actually landed -- the thing generationPending was
-      // waiting for. Stops the poll below on its own, whether this load was
-      // triggered by a poll tick or a manual Refresh click.
-      if (generationPending.value && questions.value.length > generationBaselineCount) {
-        generationPending.value = false
-      }
+      noteGenerationState(Boolean(data?.generating), sentAt)
     } catch (error) {
-      questionsError.value = firstApiError(error, 'Unable to load Review Bot questions.')
+      if (!silent) questionsError.value = firstApiError(error, 'Unable to load Review Bot questions.')
     } finally {
-      questionsLoading.value = false
+      if (!silent) questionsLoading.value = false
+      scheduleGenerationCheck()
     }
   }
 
-  // Self-rescheduling poll (not setInterval, so a slow request never overlaps
-  // the next tick) that keeps checking for the generated batch while
-  // generationPending is true, and gives up after GENERATION_POLL_MAX_MS so a
-  // stuck/failed job doesn't poll forever in the background.
-  let generationBaselineCount = 0
-  let generationPollTimeoutId = null
-  let generationPollDeadline = 0
+  /*
+   * Waiting for a run to finish.
+   *
+   * This used to be guessed from the list: the wait began only when this
+   * page's own click was answered "queued", and ended the first time the
+   * list grew. Three ways that left the teacher looking at a list that
+   * needed a reload:
+   *
+   *   - Drafts are saved a batch at a time. A look that landed mid-run saw
+   *     the first batches, called the run finished, and never looked again.
+   *   - A click answered "already being generated" started no wait at all,
+   *     under a message promising the drafts would appear shortly.
+   *   - The wait lived in this page. Leave it, or pick another file, and
+   *     come back before the run was done: nothing was waiting any more.
+   *
+   * Now the server says whether a run for the file is queued or running,
+   * with every list it sends, and the list is read again for exactly as long
+   * as it says so.
+   */
+  // How many questions the list held when a run was started from this page;
+  // null when it was not, or when the list was showing declined drafts.
+  let draftsBeforeRun = null
+  // When the request that started (or joined) a run was sent. A list asked
+  // for before that cannot know about the run, and its "not generating" must
+  // not end the wait.
+  let waitingSince = 0
+  let generationCheckTimeoutId = null
+  let generationWaitDeadline = 0
 
-  function stopGenerationPoll() {
-    if (generationPollTimeoutId !== null) {
-      clearTimeout(generationPollTimeoutId)
-      generationPollTimeoutId = null
+  function stopGenerationCheck() {
+    if (generationCheckTimeoutId !== null) {
+      clearTimeout(generationCheckTimeoutId)
+      generationCheckTimeoutId = null
     }
   }
 
-  function scheduleGenerationPollIfNeeded() {
-    stopGenerationPoll()
+  function scheduleGenerationCheck(delay = GENERATION_POLL_INTERVAL_MS) {
+    stopGenerationCheck()
 
     if (!generationPending.value) return
 
-    if (Date.now() >= generationPollDeadline) {
+    if (Date.now() >= generationWaitDeadline) {
       generationPending.value = false
       return
     }
 
-    generationPollTimeoutId = setTimeout(async () => {
-      generationPollTimeoutId = null
-      await loadQuestions()
-      scheduleGenerationPollIfNeeded()
-    }, GENERATION_POLL_INTERVAL_MS)
+    generationCheckTimeoutId = setTimeout(() => {
+      generationCheckTimeoutId = null
+      // Ends by scheduling the next look, if there is still a run to wait for.
+      loadQuestions({ silent: true })
+    }, delay)
   }
 
-  onUnmounted(stopGenerationPoll)
+  function startWaitingForGeneration() {
+    if (!generationPending.value) generationWaitDeadline = Date.now() + GENERATION_POLL_MAX_MS
+    generationPending.value = true
+  }
+
+  function noteGenerationState(serverSaysGenerating, askedAt) {
+    if (serverSaysGenerating) {
+      startWaitingForGeneration()
+      return
+    }
+
+    if (!generationPending.value || askedAt < waitingSince) return
+
+    // The run this page was waiting for is over. Say what came of it, in
+    // place of the "they will appear shortly" it was started with.
+    generationPending.value = false
+
+    if (draftsBeforeRun === null || statusFilter.value === 'rejected') {
+      generateMessage.value = 'Review questions for this file have finished generating.'
+    } else {
+      const added = questions.value.length - draftsBeforeRun
+
+      generateMessage.value = added > 0
+        ? `Done. ${added} new review question${added === 1 ? '' : 's'} added as ${added === 1 ? 'a draft' : 'drafts'}.`
+        : 'Done, with nothing new to add: every item in this file already has review questions, or the new ones were too close to ones already here.'
+    }
+
+    draftsBeforeRun = null
+  }
+
+  onUnmounted(stopGenerationCheck)
 
   // Library → Select Exam File: pick a file and load both its original
   // questions and whatever review batch already exists for it. That's the
   // only choice a teacher makes -- no topic/subtopic/count picking beyond
   // this, see generate() below.
   async function selectBank(bankId) {
-    stopGenerationPoll()
+    stopGenerationCheck()
     generationPending.value = false
+    draftsBeforeRun = null
     selectedBankId.value = Number(bankId)
     coverage.value = []
     coverageOpen.value = false
@@ -265,12 +331,15 @@ export function useReviewBotAdminModule() {
     generateMessage.value = ''
     selectedIds.value = []
 
+    // If a run for this file is still going, loadQuestions() hears so from
+    // the server and picks the wait back up.
     await Promise.all([loadSourceQuestions(), loadQuestions()])
   }
 
   function changeFile() {
-    stopGenerationPoll()
+    stopGenerationCheck()
     generationPending.value = false
+    draftsBeforeRun = null
     selectedBankId.value = null
     sourceQuestions.value = []
     questions.value = []
@@ -294,6 +363,7 @@ export function useReviewBotAdminModule() {
     }
 
     generating.value = true
+    const sentAt = Date.now()
 
     try {
       const { data } = await reviewBotAdminApi.generate({
@@ -302,14 +372,17 @@ export function useReviewBotAdminModule() {
 
       generateMessage.value = data?.message ?? 'Generation queued.'
 
-      if (data?.status === 'queued') {
-        // A real background OpenAI call, not a fixed few seconds -- keep
-        // checking until the drafts actually land instead of a single
-        // reload that's very likely to run before the job finishes.
-        generationBaselineCount = questions.value.length
-        generationPollDeadline = Date.now() + GENERATION_POLL_MAX_MS
-        generationPending.value = true
-        scheduleGenerationPollIfNeeded()
+      // 'queued': this click started a run. 'in_progress': one was already
+      // going. Either way drafts are on their way, so either way the list is
+      // watched until the server says the run is over.
+      if (['queued', 'in_progress'].includes(data?.status)) {
+        if (!generationPending.value) {
+          draftsBeforeRun = statusFilter.value === 'rejected' ? null : questions.value.length
+        }
+
+        waitingSince = sentAt
+        startWaitingForGeneration()
+        scheduleGenerationCheck(GENERATION_FIRST_CHECK_MS)
       }
     } catch (error) {
       generateError.value = firstApiError(error, 'Unable to queue Review Bot question generation.')
@@ -501,6 +574,24 @@ export function useReviewBotAdminModule() {
       questionsError.value = firstApiError(error, 'Unable to delete this question.')
     }
   }
+
+  // Coming back to the page: the open file's drafts are read again quietly,
+  // or, with no file open, the list of files (a set uploaded in the Library
+  // in another tab is here without a reload).
+  useLiveRefresh(async () => {
+    if (selectedBankId.value) {
+      await loadQuestions({ silent: true })
+      return
+    }
+
+    const { data } = await questionsApi.listBanks()
+    libraryBanks.value = asList(data?.banks).map(normalizeBank)
+  }, {
+    when: () => !questionsLoading.value
+      && !libraryBanksLoading.value
+      && !generating.value
+      && savingQuestionId.value === null,
+  })
 
   onMounted(async () => {
     await Promise.all([loadCuratedTopics(), loadLibraryBanks()])

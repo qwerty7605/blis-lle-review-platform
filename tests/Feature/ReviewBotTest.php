@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Laravel\Sanctum\Sanctum;
 use App\Jobs\GenerateReviewBotQuestionsJob;
 use RuntimeException;
 use Tests\TestCase;
@@ -333,6 +334,54 @@ class ReviewBotTest extends TestCase
 
         $this->assertSame('queued', $admin->queueGeneration($teacher, $sourceBank)['status']);
         Queue::assertPushed(GenerateReviewBotQuestionsJob::class, 2);
+    }
+
+    public function test_the_draft_list_says_whether_a_run_for_that_file_is_still_going(): void
+    {
+        Queue::fake();
+        Cache::flush();
+
+        $teacher = $this->makeTeacher();
+        $sourceBank = $this->makeBank($teacher, 'Source File');
+        $otherBank = $this->makeBank($teacher, 'Another File');
+        $this->makeAssessmentQuestion($sourceBank, 1);
+
+        Sanctum::actingAs($teacher);
+
+        $list = fn (QuestionBank $bank) => $this
+            ->getJson('/api/library/review-bot/questions?source_bank_id=' . $bank->id)
+            ->assertOk();
+
+        $list($sourceBank)->assertJsonPath('generating', false);
+
+        app(ReviewBotAdminService::class)->queueGeneration($teacher, $sourceBank);
+
+        $list($sourceBank)->assertJsonPath('generating', true);
+        $list($otherBank)->assertJsonPath('generating', false);
+
+        // What the job does in its finally block when the run finishes.
+        Cache::forget('review-bot-generate:' . $sourceBank->id);
+
+        $list($sourceBank)->assertJsonPath('generating', false);
+    }
+
+    public function test_the_draft_list_stops_saying_generating_once_the_job_has_run(): void
+    {
+        Cache::flush();
+
+        $teacher = $this->makeTeacher();
+        $sourceBank = $this->makeBank($teacher, 'Source File');
+        $this->makeAssessmentQuestion($sourceBank, 1);
+
+        // The queue runs jobs inline in tests, so by the time this returns the
+        // job has been through handle() and let go of its lock.
+        app(ReviewBotAdminService::class)->queueGeneration($teacher, $sourceBank);
+
+        Sanctum::actingAs($teacher);
+
+        $this->getJson('/api/library/review-bot/questions?source_bank_id=' . $sourceBank->id)
+            ->assertOk()
+            ->assertJsonPath('generating', false);
     }
 
     // ------------------------------------------------------------------ helpers
