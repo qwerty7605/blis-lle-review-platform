@@ -1,3 +1,4 @@
+import { beatAt, now } from '@/utils/clock'
 import {
   formatDateTime,
   formatExamSchedule,
@@ -66,14 +67,30 @@ export function isStudentExamRetakeLimitReached(exam) {
   return isStudentExamCompleted(exam) && studentAttemptsRemaining(exam) <= 0
 }
 
+/*
+ * Both of these read the shared clock (utils/clock.js) rather than
+ * Date.now(), and name the moment their answer will change. A page that asks
+ * "has it opened yet?" while drawing itself is drawn again when it has: Take
+ * Exam turns on at the exam's start time, without the page being reloaded.
+ */
 export function isStudentExamUpcoming(exam) {
   const scheduleStart = parseDateTime(examScheduleStart(exam))
-  return Boolean(scheduleStart && scheduleStart.getTime() > Date.now())
+  if (!scheduleStart) return false
+
+  const upcoming = scheduleStart.getTime() > now()
+  if (upcoming) beatAt(scheduleStart.getTime())
+
+  return upcoming
 }
 
 export function isStudentExamEnded(exam) {
   const scheduleEnd = parseDateTime(examScheduleEnd(exam))
-  return Boolean(scheduleEnd && scheduleEnd.getTime() < Date.now())
+  if (!scheduleEnd) return false
+
+  const ended = scheduleEnd.getTime() < now()
+  if (!ended) beatAt(scheduleEnd.getTime())
+
+  return ended
 }
 
 export function canStudentTakeExam(exam) {

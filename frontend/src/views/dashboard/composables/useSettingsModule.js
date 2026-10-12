@@ -7,6 +7,9 @@ function firstApiError(error, fallbackMessage) {
   return error?.response?.data?.message ?? fallbackMessage
 }
 
+// Heard by DashboardLayout.vue.
+export const ANNOUNCEMENT_CHANGED_EVENT = 'lle:announcement-changed'
+
 export function useSettingsModule() {
   const services = useDashboardDataServices()
 
@@ -75,6 +78,10 @@ export function useSettingsModule() {
         privacy_policy_text: privacyPolicy,
       })
       settingsMessage.value = 'System settings updated.'
+      // The banner above every page is read by the layout, which does not
+      // know these were saved: tell it, so the admin sees the announcement
+      // they just wrote without reloading.
+      window.dispatchEvent(new Event(ANNOUNCEMENT_CHANGED_EVENT))
     } catch (error) {
       settingsError.value = firstApiError(error, 'Unable to save settings.')
     } finally {

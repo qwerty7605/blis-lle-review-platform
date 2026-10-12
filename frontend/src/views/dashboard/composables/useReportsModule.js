@@ -2,6 +2,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { DoorOpen, FileText } from 'lucide-vue-next'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -361,11 +362,14 @@ export function useReportsModule() {
     }
   }
 
-  async function loadReports() {
+  // silent: the quiet refresh behind useLiveRefresh (below).
+  async function loadReports({ silent = false } = {}) {
     if (!isStaffRole.value) return
 
-    reportLoading.value = true
-    reportError.value = ''
+    if (!silent) {
+      reportLoading.value = true
+      reportError.value = ''
+    }
 
     try {
       const { data } = await services.getReportsOverview()
@@ -376,11 +380,17 @@ export function useReportsModule() {
       reportAnalytics.value = data.analytics ?? {}
       reportActionRows.value = Array.isArray(data.action_plan) ? data.action_plan : []
     } catch (error) {
-      reportError.value = firstApiError(error, 'Unable to load report data.')
+      if (!silent) reportError.value = firstApiError(error, 'Unable to load report data.')
     } finally {
-      reportLoading.value = false
+      if (!silent) reportLoading.value = false
     }
   }
+
+  // The figures are read again when the teacher comes back to this page.
+  // Not on a timer: this is the heaviest request a teacher's pages make.
+  useLiveRefresh(() => loadReports({ silent: true }), {
+    when: () => !reportLoading.value,
+  })
 
   async function refreshAll() {
     await Promise.all([

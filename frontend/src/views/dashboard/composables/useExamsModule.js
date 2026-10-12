@@ -1,4 +1,5 @@
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useLiveRefresh } from '@/utils/liveRefresh'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { normalizeExamDeliveryMode } from './useDashboardFormatters'
 
@@ -272,7 +273,9 @@ export function useExamsModule() {
     selectedExam.value = null
   }
 
-  async function fetchManageableRooms() {
+  // keepOnFailure: a quiet refresh that fails leaves the list as it was
+  // rather than emptying the room filter over one missed request.
+  async function fetchManageableRooms({ keepOnFailure = false } = {}) {
     try {
       const { data } = await services.getRooms()
       manageableRooms.value = (data.rooms ?? []).map((room) => ({
@@ -281,11 +284,11 @@ export function useExamsModule() {
         code: room.code,
       }))
     } catch (error) {
-      manageableRooms.value = []
+      if (!keepOnFailure) manageableRooms.value = []
     }
   }
 
-  async function fetchExamQuestionBanks() {
+  async function fetchExamQuestionBanks({ keepOnFailure = false } = {}) {
     try {
       const { data } = await services.getLibraryBanks()
       examQuestionBanks.value = (data.banks ?? [])
@@ -293,20 +296,24 @@ export function useExamsModule() {
         .filter(Boolean)
         .sort(compareCategoryThenName)
     } catch (error) {
-      examQuestionBanks.value = []
+      if (!keepOnFailure) examQuestionBanks.value = []
     }
   }
 
-  async function loadExams() {
-    examLoading.value = true
-    examError.value = ''
-    examMessage.value = ''
+  // silent: the quiet refresh behind useLiveRefresh (below). Same requests,
+  // but no loading state, no message cleared, and a failure kept to itself.
+  async function loadExams({ silent = false } = {}) {
+    if (!silent) {
+      examLoading.value = true
+      examError.value = ''
+      examMessage.value = ''
+    }
 
     try {
       const [{ data: examData }] = await Promise.all([
         services.getExams(),
-        fetchManageableRooms(),
-        fetchExamQuestionBanks(),
+        fetchManageableRooms({ keepOnFailure: silent }),
+        fetchExamQuestionBanks({ keepOnFailure: silent }),
       ])
 
       exams.value = (examData.exams ?? [])
@@ -338,11 +345,18 @@ export function useExamsModule() {
           { subject: summarizeQuestionBankSubject(right.question_banks) ?? right.subject, title: right.title },
         ))
     } catch (error) {
-      examError.value = firstApiError(error, 'Unable to load exams right now.')
+      if (!silent) examError.value = firstApiError(error, 'Unable to load exams right now.')
     } finally {
-      examLoading.value = false
+      if (!silent) examLoading.value = false
     }
   }
+
+  // Read again when the teacher comes back to this page, so rooms and
+  // question sets made in another tab are here without a reload. Not under
+  // the form: its lists are what would be redrawn.
+  useLiveRefresh(() => loadExams({ silent: true }), {
+    when: () => !examLoading.value && !examSaving.value && !showExamModal.value && !showDeleteExamModal.value,
+  })
 
   async function handleSaveExam() {
     if (!examForm.title.trim()) return
