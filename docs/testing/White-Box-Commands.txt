@@ -1,0 +1,182 @@
+LNU LLE PLATFORM (BLIS) - WHITE BOX TESTS: COMMANDS AND CONSOLE LINES
+Copy from this file instead of retyping from the PDF. The Test IDs match Part B of BLIS-Test-Cases.pdf.
+
+CONSOLE HELPER (paste once per page load, after signing in as the account named in the test):
+api = (method, path, body) => fetch('/api' + path, { method, credentials: 'include', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then(async (r) => console.log(r.status, await r.json().catch(() => '')))
+
+Words in capitals (EXAM, ROOM, ROOMB, ATTEMPT, BANK, Q1, OPT) stand for id numbers. Replace them before running the line.
+
+WB_001
+docker compose exec -T php php artisan test --compact
+
+WB_002
+docker compose exec -T php php artisan test --compact --filter="RegistrationEmailVerificationTest|PasswordPolicyTest|PasswordResetTest|StudentIdLengthTest|UserDirectoryVerificationStateTest"
+
+WB_003
+docker compose exec -T php php artisan test --compact --filter="CampusRateLimitTest|MaintenanceModeTest|PublicNoticeTest|HealthCheckTest"
+
+WB_004
+docker compose exec -T php php artisan test --compact --filter="ExamAttemptStartTest|ExamAndRoomDeletionTest|StudentExamAvailabilityFlagTest|ExamResultFeedbackTest|ExamItemAnalyticsTest"
+
+WB_005
+docker compose exec -T php php artisan test --compact --filter="DocxAnswerMarkingTest|DocxQuestionReadingTest|LibraryEditingTest|QuestionMappingServiceTest"
+
+WB_006
+docker compose exec -T php php artisan test --compact --filter="ReviewBotTest|ReviewBotLocalGenerationTest|WeakAreaRecommendationTest"
+
+WB_007
+docker compose exec -T php php artisan test --compact --filter="DashboardAnalyticsTest|KnowledgeTracingTest|StudyActionPlannerTest|TeacherActionPlannerTest|StudentProfileAnalyticsTest"
+
+WB_008
+docker compose exec -T php php artisan test --compact --filter="DecisionTreeTrainerTest|LetModelRetrainingTest|LleResultTest"
+
+WB_009
+docker compose exec -T php php artisan test --compact --filter="StudentLifecycleTest|SchoolYearEndTest|AdminDirectoryPagingTest|AdminUserDirectorySummaryTest|DirectorySearchEscapingTest|RoomGradeExportTest"
+
+WB_010
+cd frontend
+npx vite build
+
+WB_011
+docker compose exec -T php php artisan migrate:status
+
+WB_012
+docker compose exec -T php php ml/tools/verify_port.php
+
+WB_014
+api('POST','/auth/login',{})
+
+WB_018
+document.cookie
+localStorage
+
+WB_020
+api('GET','/auth/me')
+
+WB_024
+api('POST','/auth/register',{first_name:'A',last_name:'B',student_id:'12345',year_level:9,email:'x@lnu.edu.ph',password:'pass',password_confirmation:'pass',agreed:false})
+
+WB_031
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_033
+Promise.all([api('POST','/student/exams/EXAM/start',{room_id:ROOM}), api('POST','/student/exams/EXAM/start',{room_id:ROOM})])
+
+WB_036
+api('PATCH','/student/exam-attempts/ATTEMPT/answers',{question_id:Q1,selected_option_id:OPT})
+
+WB_038
+api('POST','/student/exam-attempts/ATTEMPT/submit')
+
+WB_039
+api('PATCH','/student/exam-attempts/ATTEMPT/answers',{question_id:Q1,selected_option_id:null})
+
+WB_040
+api('GET','/student/exam-attempts/ATTEMPT')
+
+WB_041
+api('GET','/student/exam-attempts/ATTEMPT')
+
+WB_042
+api('GET','/student/exam-attempts/ATTEMPT')
+
+WB_043
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_044
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_045
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_046
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_047
+api('POST','/student/exams/EXAM/start',{room_id:ROOMB})
+
+WB_048
+api('POST','/student/exams/EXAM/start',{room_id:ROOMB})
+
+WB_049
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_050
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_051
+api('POST','/student/exams/EXAM/start',{room_id:ROOM})
+
+WB_052
+api('POST','/student/exams/EXAM/start',{room_id:ROOMB})
+
+WB_057
+api('DELETE','/exams/EXAM')
+
+WB_058
+api('DELETE','/exams/EXAM')
+
+WB_059
+api('GET','/rooms')
+api('GET','/admin/users')
+
+WB_060
+api('GET','/admin/users')
+api('GET','/admin/audit-logs')
+api('GET','/library/banks')
+api('GET','/exams')
+api('GET','/students/directory')
+api('GET','/lle-results')
+
+WB_061
+api('GET','/admin/users')
+api('GET','/admin/audit-logs')
+api('GET','/admin/year-end')
+api('PUT','/settings/system',{announcement_banner:'x'})
+api('POST','/predictions/let/model/revert')
+
+WB_062
+api('GET','/library/banks')
+api('GET','/exams')
+api('GET','/reports/overview')
+
+WB_063
+api('GET','/student/dashboard')
+api('GET','/student/analytics')
+
+WB_064
+api('GET','/rooms/ROOM')
+api('PATCH','/exams/EXAM',{title:'Changed'})
+api('GET','/exams/EXAM/item-analytics')
+api('DELETE','/library/banks/BANK')
+
+WB_065
+api('PUT','/settings/system',{announcement_banner:'x'.repeat(501)})
+
+WB_066
+api('GET','/rooms')
+api('GET','/settings/public/notice')
+api('GET','/auth/me')
+api('GET','/admin/users')
+
+WB_067
+api('GET','/admin/users?search=%25')
+api('GET','/admin/users?search=_')
+
+WB_068
+for (let i = 0; i < 125; i++) api('GET','/rooms')
+
+WB_073
+api('GET','/predictions/let/model')
+
+WB_074
+docker compose exec -T php php artisan let:retrain
+
+WB_075
+docker compose logs --tail 20 queue
+
+WB_076
+api('POST','/predictions/let/model/revert')
+
+WB_077
+api('GET','/student/analytics')
