@@ -1,0 +1,6 @@
+{
+  "address": "https://lnu-blis.live",
+  "admin": { "email": "admin-test-account@lnu.edu.ph", "password": "its password" },
+  "teacher": { "email": "teacher-test-account@lnu.edu.ph", "password": "its password" },
+  "student": { "email": "student-test-account@lnu.edu.ph", "password": "its password" }
+}
