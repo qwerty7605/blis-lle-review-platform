@@ -9,14 +9,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 
-Route::get('/exams', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $normalizeDeliveryMode) {
+Route::get('/exams', function (Request $request) use ($canTeach, $oversees, $ensureActive, $normalizeDeliveryMode) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -28,7 +28,7 @@ Route::get('/exams', function (Request $request) use ($isStaffMasterExaminer, $e
             'rooms:id,name,code',
         ])
         ->withCount('rooms')
-        ->where('created_by', $user->id)
+        ->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id))
         ->latest();
 
     $exams = $query->get()->map(function (Exam $exam) use ($normalizeDeliveryMode) {
@@ -44,7 +44,7 @@ Route::get('/exams', function (Request $request) use ($isStaffMasterExaminer, $e
 });
 
 Route::post('/exams', function (Request $request) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $resolveExamQuestionBankIds,
@@ -57,7 +57,7 @@ Route::post('/exams', function (Request $request) use (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -90,7 +90,7 @@ Route::post('/exams', function (Request $request) use (
     }
 
     $selectedQuestionBankIds = $resolveExamQuestionBankIds($validated);
-    $selectedQuestionBanks = $findAccessibleQuestionBanks($user, $selectedQuestionBankIds, false);
+    $selectedQuestionBanks = $findAccessibleQuestionBanks($user, $selectedQuestionBankIds, $oversees($user));
 
     if (count($selectedQuestionBankIds) !== $selectedQuestionBanks->count()) {
         return response()->json([
@@ -128,7 +128,7 @@ Route::post('/exams', function (Request $request) use (
     if ($roomIds->isNotEmpty()) {
         $allowedCount = Room::query()
             ->whereIn('id', $roomIds)
-            ->where('created_by', $user->id)
+            ->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id))
             ->count();
 
         if ($allowedCount !== $roomIds->count()) {
@@ -187,7 +187,7 @@ Route::post('/exams', function (Request $request) use (
 });
 
 Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $resolveExamQuestionBankIds,
@@ -200,11 +200,11 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -245,7 +245,7 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
         ? (int) $validated['total_items']
         : (int) $exam->total_items;
 
-    $resolvedQuestionBanks = $findAccessibleQuestionBanks($user, $resolvedQuestionBankIds, false);
+    $resolvedQuestionBanks = $findAccessibleQuestionBanks($user, $resolvedQuestionBankIds, $oversees($user));
 
     if (count($resolvedQuestionBankIds) !== $resolvedQuestionBanks->count()) {
         return response()->json([
@@ -281,7 +281,7 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
         if ($roomIds->isNotEmpty()) {
             $allowedCount = Room::query()
                 ->whereIn('id', $roomIds)
-                ->where('created_by', $user->id)
+                ->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id))
                 ->count();
 
             if ($allowedCount !== $roomIds->count()) {
@@ -347,18 +347,18 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
     ]);
 });
 
-Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($canTeach, $oversees, $ensureActive, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -373,6 +373,7 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isS
 
     $examId = $exam->id;
     $examTitle = $exam->title;
+    $examOwnerId = $exam->created_by;
 
     // One unit, so that a delete the database refuses -- an attempt started
     // since the check above -- does not leave the exam cut off from its rooms.
@@ -387,7 +388,7 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isS
         'exam',
         $examId,
         'Exam deleted',
-        ['title' => $examTitle],
+        ['title' => $examTitle, 'owner_id' => $examOwnerId],
         $request,
     );
 
@@ -395,7 +396,7 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($isS
 });
 
 Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exam) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $dashboardAnalyticsService
 ) {
@@ -405,11 +406,11 @@ Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exa
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -419,7 +420,7 @@ Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exa
 });
 
 Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exam) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $isAdmin,
     $ensureActive,
     $normalizeDeliveryMode
@@ -434,11 +435,11 @@ Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exa
     // who oversees every room and reads the board without owning either.
     $overseesAllRooms = $isAdmin($user);
 
-    if (!$overseesAllRooms && !$isStaffMasterExaminer($user)) {
+    if (!$overseesAllRooms && !$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if (!$overseesAllRooms && (int) $exam->created_by !== (int) $user->id) {
+    if (!$overseesAllRooms && !$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -454,7 +455,7 @@ Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exa
         return response()->json(['message' => 'Room not found.'], 404);
     }
 
-    if (!$overseesAllRooms && (int) $room->created_by !== (int) $user->id) {
+    if (!$overseesAllRooms && !$oversees($user, $room->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

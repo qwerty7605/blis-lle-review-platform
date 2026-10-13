@@ -1,8 +1,10 @@
 import http from './http'
 
 class ReportsApi {
-  overview() {
-    return http.get('/reports/overview')
+  // teacherId narrows an administrator's programme-wide figures to one
+  // teacher's classes; the server ignores it from anyone else.
+  overview(teacherId = '') {
+    return http.get('/reports/overview', { params: teacherId ? { teacher_id: teacherId } : {} })
   }
 
   completeResultsXlsx(examId, roomId) {

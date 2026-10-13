@@ -62,6 +62,22 @@ $isStaffMasterExaminer = static function (User $user) use ($roleService): bool {
     return $roleService->isStaffMasterExaminer($user);
 };
 
+/*
+ * Teaching -- rooms, exams, the Library, the Review Bot, reports -- is open to
+ * teachers and to administrators. A teacher works with what they made; an
+ * administrator with everyone's, so the school can step in for a teacher who
+ * is away. $oversees answers "may this person act on something that belongs
+ * to $ownerId?", and with no owner given, "do they see everybody's?".
+ */
+$canTeach = static function (User $user) use ($roleService): bool {
+    return $roleService->canManageRooms($user);
+};
+
+$oversees = static function (User $user, int|string|null $ownerId = null) use ($roleService): bool {
+    return $roleService->isAdmin($user)
+        || ($ownerId !== null && (int) $ownerId === (int) $user->id);
+};
+
 $recordAudit = static function (
     ?User $actor,
     string $action,
@@ -70,7 +86,35 @@ $recordAudit = static function (
     ?string $description = null,
     array $metadata = [],
     ?Request $request = null,
-) use ($auditLogService): void {
+) use ($auditLogService, $roleService): void {
+    // An administrator acting on a teacher's room, exam or Library file: the
+    // entry says whose it was, so the teacher can be told what changed and
+    // by whom. A route that has already deleted the thing passes owner_id.
+    $ownerId = $metadata['owner_id'] ?? null;
+    unset($metadata['owner_id']);
+
+    if ($actor && $roleService->isAdmin($actor)) {
+        $ownerId ??= match ($targetType) {
+            'exam' => Exam::query()->whereKey($targetId)->value('created_by'),
+            'room' => Room::query()->whereKey($targetId)->value('created_by'),
+            'question_bank' => QuestionBank::query()->whereKey($targetId)->value('created_by'),
+            'question_bank_question' => \App\Models\QuestionBankQuestion::query()
+                ->with('questionBank:id,created_by')
+                ->find($targetId)?->questionBank?->created_by,
+            default => null,
+        };
+
+        if ($ownerId !== null && (int) $ownerId !== (int) $actor->id) {
+            $ownerName = User::query()->whereKey($ownerId)->value('name');
+
+            if ($ownerName !== null) {
+                $metadata['owner_id'] = (int) $ownerId;
+                $metadata['owner_name'] = $ownerName;
+                $description = \Illuminate\Support\Str::limit(trim((string) $description)." (belongs to {$ownerName})", 250, '');
+            }
+        }
+    }
+
     $auditLogService->record($actor, $action, $targetType, $targetId, $description, $metadata, $request);
 };
 
@@ -92,22 +136,22 @@ $ensureTeacherReportAccess = static function (
     Request $request,
     Exam $exam,
     Room $room
-) use ($ensureActive, $isStaffMasterExaminer): User|JsonResponse {
+) use ($ensureActive, $canTeach, $oversees): User|JsonResponse {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $room->created_by !== (int) $user->id) {
+    if (!$oversees($user, $room->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -644,6 +688,8 @@ Route::middleware('auth:sanctum')->group(function () use (
     $ensureActive,
     $isAdmin,
     $isStaffMasterExaminer,
+    $canTeach,
+    $oversees,
     $recordAudit,
     $findAccessibleQuestionBank,
     $resolveExamQuestionBankIds,

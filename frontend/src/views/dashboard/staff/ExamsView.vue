@@ -62,6 +62,8 @@
           />
         </label>
 
+        <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="examOwners" label="Exams by" />
+
         <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by room">
           <button
             type="button"
@@ -132,6 +134,7 @@
                       <strong>{{ exam.title }}</strong>
                       <span>{{ examQuestionBankSubject(exam) }}</span>
                       <small>{{ examRulesText(exam) }}</small>
+                      <small v-if="seesEveryTeacher && exam.creator?.name" class="owner-line">By {{ exam.creator.name }}</small>
                     </div>
                   </div>
                 </td>
@@ -393,7 +396,7 @@
                                 <input v-model="examForm.question_bank_ids" type="checkbox" :value="bank.id" />
                                 <span class="exam-bank-copy">
                                   <strong>{{ bank.title }}</strong>
-                                  <small>{{ bank.total_items }} items</small>
+                                  <small>{{ bank.total_items }} items<template v-if="seesEveryTeacher && bank.creator?.name"> &middot; By {{ bank.creator.name }}</template></small>
                                 </span>
                               </label>
                             </div>
@@ -517,7 +520,7 @@
                         <input v-model="examForm.room_ids" type="checkbox" :value="room.id" />
                         <span class="exam-room-copy">
                           <strong>{{ room.name }}</strong>
-                          <small>{{ room.code }}</small>
+                          <small>{{ room.code }}<template v-if="seesEveryTeacher && room.ownerName"> &middot; By {{ room.ownerName }}</template></small>
                         </span>
                       </label>
                     </div>
@@ -711,12 +714,20 @@ import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composabl
 import { useExamsModule } from '../composables/useExamsModule'
 import { beatAt, now } from '@/utils/clock'
 import { vScrollHint } from '@/utils/scrollHint'
+import { useAuthStore } from '@/store/auth.store'
+import { isOwnedBy, ownersOf, overseesAll } from '@/utils/owners'
+import OwnerFilter from '../shared/OwnerFilter.vue'
 
 const route = useRoute()
 const highlightedExamId = ref(null)
 
 /** '' = All rooms; otherwise a room id, held as a string. */
 const selectedRoomFilter = ref('')
+
+// An administrator's list holds every teacher's exams.
+const seesEveryTeacher = computed(() => overseesAll(useAuthStore().user))
+const selectedOwnerFilter = ref('')
+const examOwners = computed(() => ownersOf(exams.value))
 const examSearch = ref('')
 
 /*
@@ -799,6 +810,8 @@ const filteredExams = computed(() => {
   const needle = examSearch.value.toLowerCase()
 
   return exams.value.filter((exam) => {
+    if (!isOwnedBy(exam, selectedOwnerFilter.value)) return false
+
     if (selectedRoomFilter.value !== ''
       && !(exam.assigned_rooms ?? []).some((room) => String(room.id) === selectedRoomFilter.value)) {
       return false
@@ -861,7 +874,9 @@ function examRowMeta(exam) {
   const rooms = (exam.assigned_rooms ?? []).length
   const roomText = rooms === 0 ? 'No room' : `${rooms} ${rooms === 1 ? 'room' : 'rooms'}`
 
-  return `${exam.total_items} questions · ${exam.duration_minutes} min · ${roomText}`
+  const owner = seesEveryTeacher.value && exam.creator?.name ? ` · By ${exam.creator.name}` : ''
+
+  return `${exam.total_items} questions · ${exam.duration_minutes} min · ${roomText}${owner}`
 }
 
 function examWindowPill(exam) {

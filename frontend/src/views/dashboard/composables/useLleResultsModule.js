@@ -317,6 +317,7 @@ export function useLleResultsModule() {
     saveNotice,
     submitResult,
     removeResult,
+    loadModelStatus,
     modelStatus,
     modelLoading,
     modelBusy,

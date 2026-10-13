@@ -315,10 +315,9 @@
                     </span>
 
                     <!-- Room -> Exam, the mirror of the Exams page's room
-                         chips: one click to see everywhere this exam runs.
-                         Teachers only: the Exams page is theirs. -->
+                         chips: one click to see everywhere this exam runs. -->
                     <RouterLink
-                      v-if="isStaffRole"
+                      v-if="isManagementRole"
                       class="assignment-chip is-link"
                       :to="{ name: 'dashboard-exams', query: { exam: exam.id } }"
                       :title="`Open ${exam.title} on the Exams page`"

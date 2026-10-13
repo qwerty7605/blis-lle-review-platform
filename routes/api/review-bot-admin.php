@@ -10,7 +10,7 @@ Route::post('/library/review-bot/generate', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -20,7 +20,7 @@ Route::post('/library/review-bot/generate', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -34,7 +34,7 @@ Route::post('/library/review-bot/generate', function (
 
     $sourceBank = QuestionBank::query()->find($validated['source_bank_id']);
 
-    if (!$sourceBank || (int) $sourceBank->created_by !== (int) $user->id) {
+    if (!$sourceBank || !$oversees($user, $sourceBank->created_by)) {
         return response()->json(['message' => 'That file was not found in your Library.'], 404);
     }
 
@@ -57,14 +57,14 @@ Route::get('/library/review-bot/questions', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService
 ) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
-    if (!$isStaffMasterExaminer($request->user())) {
+    if (!$canTeach($request->user())) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -94,7 +94,7 @@ Route::patch('/library/review-bot/questions/{question}', function (
     QuestionBankQuestion $question
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -109,7 +109,7 @@ Route::patch('/library/review-bot/questions/{question}', function (
     // whichever teacher happened to create the bank first -- so this is
     // deliberately just a usage_type check, unlike the Library's per-teacher
     // ownership checks on their own uploaded banks.
-    if (!$isStaffMasterExaminer($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
+    if (!$canTeach($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -139,7 +139,7 @@ Route::post('/library/review-bot/publish', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -149,7 +149,7 @@ Route::post('/library/review-bot/publish', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -169,7 +169,7 @@ Route::post('/library/review-bot/reject', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -179,7 +179,7 @@ Route::post('/library/review-bot/reject', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -202,7 +202,7 @@ Route::get('/library/review-bot/coverage', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService
 ) {
     if ($inactiveResponse = $ensureActive($request)) {
@@ -211,7 +211,7 @@ Route::get('/library/review-bot/coverage', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -232,7 +232,7 @@ Route::post('/library/review-bot/unpublish', function (
     Request $request
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -242,7 +242,7 @@ Route::post('/library/review-bot/unpublish', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -263,7 +263,7 @@ Route::delete('/library/review-bot/questions/{question}', function (
     QuestionBankQuestion $question
 ) use (
     $ensureActive,
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $reviewBotAdminService,
     $recordAudit
 ) {
@@ -274,7 +274,7 @@ Route::delete('/library/review-bot/questions/{question}', function (
     $user = $request->user();
 
     // Shared per-subject bank -- see the matching note on the PATCH route above.
-    if (!$isStaffMasterExaminer($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
+    if (!$canTeach($user) || $question->usage_type !== QuestionBankQuestion::USAGE_REVIEW_BOT) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

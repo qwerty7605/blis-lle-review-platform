@@ -97,13 +97,12 @@ class ExamItemAnalyticsTest extends TestCase
             ->assertExactJson(['item_analytics' => []]);
     }
 
-    public function test_only_the_teacher_who_owns_the_exam_can_read_it(): void
+    public function test_another_teacher_or_a_student_cannot_read_it(): void
     {
         [, , $exam] = $this->scenario();
 
         $outsiders = [
             User::factory()->create(['role' => User::ROLE_STAFF_MASTER_EXAMINER]),
-            User::factory()->create(['role' => User::ROLE_ADMIN]),
             $this->makeStudent(),
         ];
 
@@ -112,6 +111,15 @@ class ExamItemAnalyticsTest extends TestCase
 
             $this->getJson("/api/exams/{$exam->id}/item-analytics")->assertForbidden();
         }
+    }
+
+    public function test_an_administrator_reads_any_teacher_s_exam(): void
+    {
+        [, , $exam] = $this->scenario();
+
+        Sanctum::actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+
+        $this->getJson("/api/exams/{$exam->id}/item-analytics")->assertOk();
     }
 
     /** @return array{0: User, 1: Room, 2: Exam, 3: list<QuestionBankQuestion>} */

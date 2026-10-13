@@ -201,6 +201,16 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Whether this person's teaching pages cover every teacher's rooms,
+     * exams and Library files rather than only their own: an administrator.
+     * The report and analytics queries ask this before narrowing to an owner.
+     */
+    public function overseesAllTeaching(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
+
+    /**
      * Limit the query to student accounts.
      */
     public function scopeStudents(Builder $query): Builder

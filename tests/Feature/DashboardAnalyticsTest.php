@@ -357,23 +357,30 @@ class DashboardAnalyticsTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_student_cannot_join_room_for_a_different_year_level(): void
+    public function test_a_student_of_another_year_level_can_join_a_room(): void
     {
         $staff = $this->makeUser('staff-join@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
         $yearOneStudent = $this->makeUser('student-year1@example.com', User::ROLE_STUDENT, '2301801', 1);
         $yearTwoStudent = $this->makeUser('student-year2@example.com', User::ROLE_STUDENT, '2301802', 2);
+        $yearFourStudent = $this->makeUser('student-year4@example.com', User::ROLE_STUDENT, '2301805', 4);
 
         $room = $this->makeRoom($staff, 'BLIS 1A', 'B1JOIN');
         $room->members()->attach($yearOneStudent->id);
 
-        Sanctum::actingAs($yearTwoStudent);
+        // A second level, and then a third into a room that now holds two:
+        // the code is all a student needs.
+        foreach ([$yearTwoStudent, $yearFourStudent] as $student) {
+            Sanctum::actingAs($student);
 
-        $this->postJson('/api/rooms/join', ['code' => $room->code])
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'You can only join rooms that match your year level section.');
+            $this->postJson('/api/rooms/join', ['code' => $room->code])
+                ->assertOk()
+                ->assertJsonPath('message', 'Joined room successfully');
+
+            $this->assertDatabaseHas('room_user', ['room_id' => $room->id, 'user_id' => $student->id]);
+        }
     }
 
-    public function test_student_can_join_room_when_year_level_matches_section(): void
+    public function test_student_can_join_room_of_their_own_year_level(): void
     {
         $staff = $this->makeUser('staff-join-ok@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
         $existingStudent = $this->makeUser('student-existing@example.com', User::ROLE_STUDENT, '2301803', 3);

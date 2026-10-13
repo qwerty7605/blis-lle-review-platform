@@ -172,7 +172,14 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
         ->where('status', ExamAttempt::STATUS_SUBMITTED);
 
     $submittedAttemptsCount = (clone $submittedAttemptsQuery)->count();
-    $averageScorePercent = (clone $submittedAttemptsQuery)->avg('score_percent');
+    // One score per exam: the latest sitting, as everywhere else. A retake
+    // replaces the attempt it follows rather than being averaged with it.
+    $averageScorePercent = (clone $submittedAttemptsQuery)
+        ->orderByDesc('submitted_at')
+        ->orderByDesc('id')
+        ->get(['exam_id', 'score_percent'])
+        ->unique('exam_id')
+        ->avg('score_percent');
 
     $recentExams = ExamAttempt::query()
         ->with([
@@ -342,6 +349,35 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
         })
         ->values();
 
+    /*
+     * An exam may be taken twice. Every sitting is kept and listed (Exam
+     * History), but one score per exam is what the figures are made from: the
+     * latest sitting, which is also what the teacher's reports and the grade
+     * export use. Counting both made one exam taken twice read as two exams,
+     * and averaged the retake with the attempt it was meant to improve on.
+     */
+    $allAttempts = $attempts;
+    $attempts = $allAttempts->unique('exam_id')->values();
+
+    $sittingsPerExam = $allAttempts->countBy('exam_id');
+    $sittingsSeen = [];
+
+    // Newest first, so the first sitting met for an exam is its latest.
+    $examHistory = $allAttempts
+        ->map(function (array $attempt) use ($sittingsPerExam, &$sittingsSeen): array {
+            $examId = $attempt['exam_id'];
+            $total = (int) ($sittingsPerExam[$examId] ?? 1);
+            $sittingsSeen[$examId] = ($sittingsSeen[$examId] ?? 0) + 1;
+
+            return [
+                ...$attempt,
+                'attempt_number' => $total - $sittingsSeen[$examId] + 1,
+                'attempts_total' => $total,
+                'counts' => $sittingsSeen[$examId] === 1,
+            ];
+        })
+        ->values();
+
     $scoreValues = $attempts
         ->pluck('score_percent')
         ->filter(fn ($score) => !is_null($score))
@@ -435,7 +471,11 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
     $letFeatureResult = $letHeldReason !== null
         ? ['ready' => false, 'reason' => $letHeldReason]
         : $letFeatureBuilder->build(
-            $attempts,
+            // Every sitting, as before: the Exam Outcome model was trained
+            // on each graded attempt, and reading it only the latest of each
+            // exam would be giving it different numbers from the ones it
+            // learned from.
+            $allAttempts,
             $subjectProfiles,
             $scoreValues->isNotEmpty() ? (float) $scoreValues->avg() : null,
         );
@@ -495,6 +535,8 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
         'subjects' => $subjectProfiles,
         'history' => $history,
         'recent_attempts' => $attempts->take(6)->values(),
+        // Every sitting, retakes included, newest first.
+        'exam_history' => $examHistory->take(300)->values(),
         'predictive_model' => $predictiveModel,
         // Same subject -> topic -> subtopic weak-area resolution "Review Your
         // Weak Areas" already uses (see DashboardAnalyticsService), reused

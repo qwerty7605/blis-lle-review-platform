@@ -40,7 +40,7 @@
             <span class="rbg-file-copy">
               <strong>{{ bank.title }}</strong>
               <span>
-                {{ bank.subject || 'No subject' }} · {{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}
+                {{ bank.subject || 'No subject' }} · {{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}<template v-if="seesEveryTeacher && bank.ownerName"> · By {{ bank.ownerName }}</template>
               </span>
               <small v-if="bank.sourceFilename" :title="bank.sourceFilename">{{ bank.sourceFilename }}</small>
             </span>
@@ -369,6 +369,10 @@ import { computed } from 'vue'
 import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, ListChecks, RefreshCw, Sparkles } from 'lucide-vue-next'
 import { useReviewBotAdminModule } from '../composables/useReviewBotAdminModule'
 import { vScrollHint } from '@/utils/scrollHint'
+import { useAuthStore } from '@/store/auth.store'
+import { overseesAll } from '@/utils/owners'
+
+const seesEveryTeacher = computed(() => overseesAll(useAuthStore().user))
 
 const {
   curatedTopics,
