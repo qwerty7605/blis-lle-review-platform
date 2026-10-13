@@ -262,6 +262,65 @@ class LibraryEditingTest extends TestCase
         $this->assertSame('analysis', $question->cognitive_level);
         $this->assertSame(QuestionBankQuestion::TAG_SOURCE_FACULTY, $question->tag_source);
         $this->assertSame(QuestionBankQuestion::TAG_STATUS_CONFIRMED, $question->tag_status);
+
+        // The list a question is edited from carries the whole mapping. It
+        // used to leave the subtopic out, so the edit form opened without it
+        // and saving the question again cleared it.
+        $this->getJson("/api/library/banks/{$bank->id}/questions")
+            ->assertOk()
+            ->assertJsonPath('questions.0.topic.name', 'Classification Systems and Call Numbers')
+            ->assertJsonPath('questions.0.subtopic.name', 'Dewey Decimal Classification (DDC)')
+            ->assertJsonPath('questions.0.difficulty', 'hard')
+            ->assertJsonPath('questions.0.cognitive_level', 'analysis');
+    }
+
+    public function test_the_bank_list_counts_tags_still_to_confirm_until_they_are_confirmed(): void
+    {
+        $staff = $this->makeUser('teacher-confirm@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+
+        $bank = QuestionBank::create([
+            'title' => 'Tagged Bank',
+            'subject' => 'Reference Services',
+            'total_items' => 3,
+            'mapping_status' => QuestionBank::MAPPING_STATUS_COMPLETED,
+            'created_by' => $staff->id,
+        ]);
+
+        // The tagger was sure of one and unsure of two.
+        foreach ([
+            QuestionBankQuestion::TAG_STATUS_CONFIRMED,
+            QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW,
+            QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW,
+        ] as $index => $status) {
+            QuestionBankQuestion::create([
+                'question_bank_id' => $bank->id,
+                'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
+                'subject' => 'Reference Services',
+                'item_number' => $index + 1,
+                'question_text' => 'Question ' . ($index + 1) . '?',
+                'question_type' => QuestionBankQuestion::TYPE_OPEN_ENDED,
+                'tag_status' => $status,
+                'tag_source' => QuestionBankQuestion::TAG_SOURCE_RULE_BASED,
+            ]);
+        }
+
+        Sanctum::actingAs($staff);
+
+        $this->getJson('/api/library/banks')
+            ->assertOk()
+            ->assertJsonPath('banks.0.pending_tags_count', 2)
+            ->assertJsonPath('banks.0.confirmed_tags_count', 1);
+
+        $this->patchJson("/api/library/banks/{$bank->id}/tags/status")
+            ->assertOk()
+            ->assertJsonPath('confirmed_count', 2);
+
+        $this->getJson('/api/library/banks')
+            ->assertJsonPath('banks.0.pending_tags_count', 0)
+            ->assertJsonPath('banks.0.confirmed_tags_count', 3);
+
+        $this->getJson("/api/library/banks/{$bank->id}/questions")
+            ->assertJsonMissing(['tag_status' => QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW]);
     }
 
     public function test_question_update_to_open_ended_clears_options(): void

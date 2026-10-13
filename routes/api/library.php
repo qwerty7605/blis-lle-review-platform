@@ -22,10 +22,18 @@ Route::get('/library/banks', function (Request $request) use ($canTeach, $overse
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
+    // The tag counts are what the list's status is told from: a set whose
+    // tagging has finished still has tags to confirm while any is pending.
     $query = QuestionBank::query()
         ->excludingReviewBotBanks()
         ->with('creator:id,name')
-        ->withCount('questions')
+        ->withCount([
+            'questions',
+            'assessmentQuestions as pending_tags_count' => fn ($query) => $query
+                ->where('tag_status', QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW),
+            'assessmentQuestions as confirmed_tags_count' => fn ($query) => $query
+                ->where('tag_status', QuestionBankQuestion::TAG_STATUS_CONFIRMED),
+        ])
         ->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id))
         ->latest();
 
@@ -492,9 +500,12 @@ Route::get('/library/banks/{bank}/questions', function (
 
     $bank->load('creator:id,name')->loadCount(['assessmentQuestions']);
 
+    // The subtopic too: the edit form is filled from this list, and saving a
+    // question with no subtopic in the form clears the one it had.
     $questions = $bank->assessmentQuestions()
         ->with([
             'topic:id,subject,name',
+            'subtopic:id,topic_id,name',
             'options:id,question_bank_question_id,option_label,option_text,is_correct',
         ])
         ->orderBy('item_number')
