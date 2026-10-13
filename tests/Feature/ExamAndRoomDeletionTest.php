@@ -54,6 +54,56 @@ class ExamAndRoomDeletionTest extends TestCase
         $this->assertDatabaseHas('exam_attempts', ['id' => $attempt->id]);
     }
 
+    public function test_an_exam_students_have_taken_can_be_archived_from_all_its_rooms_instead(): void
+    {
+        [$staff, $student, $room, $exam] = $this->scenario();
+        $attempt = $this->makeAttempt($exam, $room, $student, ExamAttempt::STATUS_SUBMITTED);
+
+        // In a second room too, and already archived from a third.
+        $second = Room::create(['name' => 'BLIS 1B', 'code' => 'ARCH1B', 'created_by' => $staff->id]);
+        $third = Room::create(['name' => 'BLIS 1C', 'code' => 'ARCH1C', 'created_by' => $staff->id]);
+        $exam->rooms()->attach($second->id, ['assigned_by' => $staff->id]);
+        $exam->rooms()->attach($third->id, ['assigned_by' => $staff->id, 'archived_at' => now()->subWeek(), 'archived_by' => $staff->id]);
+
+        Sanctum::actingAs($staff);
+
+        $this->deleteJson("/api/exams/{$exam->id}")->assertStatus(422);
+
+        $this->postJson("/api/exams/{$exam->id}/archive")
+            ->assertOk()
+            ->assertJsonPath('archived_rooms', 2)
+            ->assertJsonPath('message', 'Exam archived from 2 rooms. Its results are kept, and each room can restore it.');
+
+        // Off every room's current list, with nothing deleted.
+        $this->assertSame(0, DB::table('exam_room')->where('exam_id', $exam->id)->whereNull('archived_at')->count());
+        $this->assertSame(3, DB::table('exam_room')->where('exam_id', $exam->id)->count());
+        $this->assertDatabaseHas('exam_room', ['exam_id' => $exam->id, 'room_id' => $room->id, 'archived_by' => $staff->id]);
+        $this->assertDatabaseHas('exams', ['id' => $exam->id]);
+        $this->assertDatabaseHas('exam_attempts', ['id' => $attempt->id]);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'exam.archive', 'actor_id' => $staff->id, 'target_id' => $exam->id]);
+
+        // Nothing left to archive, and a room can put it back.
+        $this->postJson("/api/exams/{$exam->id}/archive")->assertStatus(422);
+        $this->postJson("/api/rooms/{$room->id}/exams/{$exam->id}/restore")->assertOk();
+        $this->assertDatabaseHas('exam_room', ['exam_id' => $exam->id, 'room_id' => $room->id, 'archived_at' => null]);
+    }
+
+    public function test_only_the_exams_teacher_or_an_administrator_can_archive_it(): void
+    {
+        [, $student, $room, $exam] = $this->scenario();
+
+        Sanctum::actingAs(User::factory()->create(['role' => User::ROLE_STAFF_MASTER_EXAMINER]));
+        $this->postJson("/api/exams/{$exam->id}/archive")->assertForbidden();
+
+        Sanctum::actingAs($student);
+        $this->postJson("/api/exams/{$exam->id}/archive")->assertForbidden();
+
+        $this->assertDatabaseHas('exam_room', ['exam_id' => $exam->id, 'room_id' => $room->id, 'archived_at' => null]);
+
+        Sanctum::actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+        $this->postJson("/api/exams/{$exam->id}/archive")->assertOk()->assertJsonPath('archived_rooms', 1);
+    }
+
     public function test_an_exam_nobody_has_taken_can_still_be_deleted(): void
     {
         [$staff, , $room, $exam] = $this->scenario();

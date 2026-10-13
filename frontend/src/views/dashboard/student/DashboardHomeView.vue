@@ -138,7 +138,7 @@
                 <Gauge :size="17" />
                 <h3>Estimated Outcome</h3>
               </div>
-              <p class="home-block-subtitle">Based on recent exam performance</p>
+              <p class="home-block-subtitle">From your latest complete semester</p>
             </div>
           </div>
 

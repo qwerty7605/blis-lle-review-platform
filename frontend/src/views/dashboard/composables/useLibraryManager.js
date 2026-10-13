@@ -239,9 +239,39 @@ export function useLibraryManager({
   const libraryCognitiveLevelOptions = ['recall', 'comprehension', 'application', 'analysis']
   const libraryQuestionTypeOptions = ['multiple_choice', 'true_false', 'open_ended']
 
-  // Name/Subject are auto-filled (filename, detected content) so a teacher
-  // never has to type them, but the fields stay visible/editable in case a
-  // guess needs fixing before saving -- see handleLibraryDocxChange().
+  // What the file picked last was detected as ('' when it could not be told),
+  // and whether the teacher has picked the subject themselves. The detection
+  // fills the Core Subject field only until they have: it is sometimes wrong,
+  // and their choice has to outlast picking another file.
+  const libraryDetectedSubject = ref('')
+  const librarySubjectChosen = ref(false)
+
+  function markLibrarySubjectChosen() {
+    librarySubjectChosen.value = true
+  }
+
+  // The line under the Core Subject field: where its value came from.
+  const librarySubjectNote = computed(() => {
+    if (libraryParsing.value) return 'Reading the file...'
+
+    const detected = libraryDetectedSubject.value
+    const hasQuestions = digitalizedQuestions.value.length > 0
+
+    if (detected && libraryForm.subjectCategory === detected) {
+      return 'Detected from the file. Change it if it is wrong.'
+    }
+    if (detected) return `The file was detected as ${detected}.`
+    if (hasQuestions && !libraryForm.subjectCategory) {
+      return 'The subject could not be told from the file. Choose it here.'
+    }
+    if (!hasQuestions && !librarySubjectChosen.value) {
+      return 'Detected from the file once you pick one. You can change it.'
+    }
+
+    return ''
+  })
+
+  // The name is taken from the filename, so a teacher never has to type it.
   const canSaveLibraryQuestionBank = computed(() => (
     !librarySaving.value
     && !libraryParsing.value
@@ -272,6 +302,8 @@ export function useLibraryManager({
   function resetLibraryQuestionState() {
     libraryForm.questionName = ''
     libraryForm.subjectCategory = ''
+    libraryDetectedSubject.value = ''
+    librarySubjectChosen.value = false
     libraryForm.file = null
     libraryDocxName.value = ''
     libraryParseError.value = ''
@@ -369,9 +401,10 @@ export function useLibraryManager({
     editingLibraryBank.value = null
   }
 
+  // Resolves to whether the set was saved.
   async function handleUpdateLibraryBank() {
-    if (!editingLibraryBank.value?.id || libraryBankEditSaving.value) return
-    if (!libraryBankEditForm.title.trim()) return
+    if (!editingLibraryBank.value?.id || libraryBankEditSaving.value) return false
+    if (!libraryBankEditForm.title.trim()) return false
 
     libraryBankEditSaving.value = true
     libraryError.value = ''
@@ -385,11 +418,38 @@ export function useLibraryManager({
       libraryMessage.value = data?.message ?? 'Question bank updated.'
       closeEditLibraryBankModal()
       await Promise.all([loadLibraryBanks(), notifyBanksChanged()])
+      return true
     } catch (error) {
       libraryError.value = resolveApiError(error, 'Unable to update this question bank.')
+      return false
     } finally {
       libraryBankEditSaving.value = false
     }
+  }
+
+  const libraryBankEditDirty = computed(() => {
+    const bank = editingLibraryBank.value
+    if (!bank) return false
+
+    return libraryBankEditForm.title.trim() !== (bank.title || '').trim()
+      || libraryBankEditForm.subject !== (bank.subject || '')
+  })
+
+  // From the Edit dialog to the set's questions, where each one's wording,
+  // answer and mapping (topic, subtopic, difficulty, cognitive level) are
+  // edited. A changed name or subject is saved on the way: the topics on
+  // offer for a question are those of the set's subject.
+  async function editLibraryBankQuestions() {
+    const bank = editingLibraryBank.value
+    if (!bank?.id || libraryBankEditSaving.value) return
+
+    if (libraryBankEditDirty.value) {
+      if (!(await handleUpdateLibraryBank())) return
+    } else {
+      closeEditLibraryBankModal()
+    }
+
+    await openLibraryBankQuestionsModal(bank)
   }
 
   function cancelEditingQuestion() {
@@ -522,6 +582,10 @@ export function useLibraryManager({
     libraryForm.file = null
     libraryDocxName.value = ''
 
+    // The last file's detection says nothing about this one.
+    libraryDetectedSubject.value = ''
+    if (!librarySubjectChosen.value) libraryForm.subjectCategory = ''
+
     if (!file) return
 
     const normalizedFileName = file.name.toLowerCase()
@@ -559,9 +623,10 @@ export function useLibraryManager({
         return
       }
 
-      // Auto-fill the detected subject too, same "don't clobber" rule.
-      if (!libraryForm.subjectCategory.trim() && preview.suggested_subject) {
-        libraryForm.subjectCategory = preview.suggested_subject
+      // Fill in the detected subject, unless the teacher has already picked.
+      libraryDetectedSubject.value = String(preview.suggested_subject ?? '')
+      if (!librarySubjectChosen.value) {
+        libraryForm.subjectCategory = libraryDetectedSubject.value
       }
 
       digitalizedQuestions.value = previewQuestions.map((question, index) => {
@@ -761,6 +826,8 @@ export function useLibraryManager({
     digitalizedQuestions,
     libraryBankQuestions,
     libraryForm,
+    librarySubjectNote,
+    markLibrarySubjectChosen,
     libraryBankEditForm,
     librarySubjectCategories,
     libraryDifficultyOptions,
@@ -780,6 +847,8 @@ export function useLibraryManager({
     openEditLibraryBankModal,
     closeEditLibraryBankModal,
     handleUpdateLibraryBank,
+    libraryBankEditDirty,
+    editLibraryBankQuestions,
     handleLibraryDocxChange,
     loadLibraryBanks,
     handleSaveLibraryQuestionBank,

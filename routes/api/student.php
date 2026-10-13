@@ -466,58 +466,10 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
             ];
         });
 
-    $letFeatureBuilder = new \App\Services\MachineLearning\LetReadinessFeatureBuilder();
-    $letHeldReason = $letFeatureBuilder->reasonToHold($student);
-    $letFeatureResult = $letHeldReason !== null
-        ? ['ready' => false, 'reason' => $letHeldReason]
-        : $letFeatureBuilder->build(
-            // Every sitting, as before: the Exam Outcome model was trained
-            // on each graded attempt, and reading it only the latest of each
-            // exam would be giving it different numbers from the ones it
-            // learned from.
-            $allAttempts,
-            $subjectProfiles,
-            $scoreValues->isNotEmpty() ? (float) $scoreValues->avg() : null,
-        );
-
-    if ($letFeatureResult['ready']) {
-        $letPredictor = new \App\Services\MachineLearning\LetPredictionService();
-        $letPrediction = $letPredictor->predict($letFeatureResult['features']);
-        $letModel = $letPredictor->liveModel();
-
-        $predictiveModel = [
-            'status' => 'connected',
-            'title' => 'Exam Outcome Model',
-            'description' => $letModel['source'] === 'built_in'
-                ? 'Estimated with a J48 decision tree trained on a small sample of past students\' mock exam history and LET outcomes. Treat this as a rough signal, not a certainty.'
-                : sprintf(
-                    'Estimated with a decision tree retrained on %d recorded licensure results and the mock exam history behind them. Treat this as a rough signal, not a certainty.',
-                    $letModel['trained_on'],
-                ),
-            'ml_api_endpoint' => '/api/predictions/let',
-            'expected_inputs' => array_values(\App\Services\MachineLearning\LetReadinessFeatureBuilder::SUBJECT_FEATURE_LABELS),
-            'prediction' => $letPrediction['prediction'],
-            'probability_percent' => $letPrediction['confidence'],
-            'risk_band' => $letPrediction['prediction'] === \App\Services\MachineLearning\LetPredictionService::RESULT_PASS
-                ? ($letPrediction['confidence'] >= 80 ? 'strong' : 'developing')
-                : 'focus',
-            'decision_rules' => $letPrediction['path'],
-            'support' => $letPrediction['support'],
-        ];
-    } else {
-        $predictiveModel = [
-            'status' => 'insufficient_history',
-            'title' => 'Exam Outcome Model',
-            'description' => $letFeatureResult['reason'],
-            'ml_api_endpoint' => '/api/predictions/let',
-            'expected_inputs' => array_values(\App\Services\MachineLearning\LetReadinessFeatureBuilder::SUBJECT_FEATURE_LABELS),
-            'prediction' => null,
-            'probability_percent' => null,
-            'risk_band' => null,
-            'decision_rules' => [],
-            'support' => null,
-        ];
-    }
+    // Locked until one semester has all six subject exams; then an early
+    // warning (years 1 to 3) or a board readiness prediction (year 4), from
+    // the latest complete semester. See BoardExamOutlook.
+    $predictiveModel = app(\App\Services\MachineLearning\BoardExamOutlook::class)->for($student);
 
     return [
         'stats' => [

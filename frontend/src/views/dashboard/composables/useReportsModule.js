@@ -192,7 +192,9 @@ export function useReportsModule() {
 
     try {
       const { data } = await services.getRoom(Number(reportExportForm.room_id))
-      reportExportStudents.value = (data?.members ?? [])
+      // The class list is inside `room`. This read `data.members`, which is
+      // never there, so the Student field stayed empty and disabled.
+      reportExportStudents.value = (data?.room?.members ?? [])
         .filter((member) => String(member?.role ?? '').toLowerCase() === 'student')
         .map((member) => ({
           id: member.id,

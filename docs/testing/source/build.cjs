@@ -146,6 +146,7 @@ const html = `<!doctype html>
     </div>
     <div class="block"><h3>Test file</h3>
       <p><code>docs/testing/Sample-Cataloging-10-items.docx</code> in the project folder. It holds 10 multiple-choice questions on Cataloging and Classification. The correct choice of each item is typed in red.</p>
+      <p>The Estimated Outcome tests need five more copies of it. Copy the file five times and name the copies <code>QA-Reference.docx</code>, <code>QA-Management.docx</code>, <code>QA-Indexing.docx</code>, <code>QA-Selection.docx</code> and <code>QA-IT.docx</code>. Nothing inside them is changed.</p>
       <table>
         <tr><th style="width:24mm;white-space:nowrap">Item</th><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td><td>6</td><td>7</td><td>8</td><td>9</td><td>10</td></tr>
         <tr><th style="white-space:nowrap">Answer key</th><td>B</td><td>C</td><td>A</td><td>D</td><td>B</td><td>A</td><td>C</td><td>D</td><td>B</td><td>A</td></tr>

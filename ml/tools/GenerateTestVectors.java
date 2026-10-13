@@ -1,19 +1,35 @@
 import weka.classifiers.trees.J48;
+import weka.classifiers.trees.j48.ClassifierSplitModel;
+import weka.classifiers.trees.j48.ClassifierTree;
 import weka.core.DenseInstance;
 import weka.core.Instance;
 import weka.core.Instances;
 import weka.core.SerializationHelper;
+import weka.core.Utils;
 
 import java.io.FileWriter;
 import java.io.PrintWriter;
-import java.util.*;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Random;
 
+/**
+ * Asks the real Weka model what it predicts for a spread of cases and writes
+ * them to a CSV, so verify_port.php can check that the tree written into
+ * LetPredictionService answers the same.
+ *
+ * The cases are read off the model itself: scores on either side of every cut
+ * in the tree, random ones, and ones with scores missing (written as ?). It
+ * also prints each leaf's exact training weight, which is what the PHP tree's
+ * `instances` and `errors` are copied from.
+ *
+ * Usage: java -cp weka-stable.jar:. GenerateTestVectors model.model out.csv
+ */
 public class GenerateTestVectors {
     public static void main(String[] args) throws Exception {
-        String modelPath = args[0];
-        String outCsvPath = args[1];
-
-        Object[] loaded = SerializationHelper.readAll(modelPath);
+        Object[] loaded = SerializationHelper.readAll(args[0]);
         J48 tree = null;
         Instances header = null;
         for (Object o : loaded) {
@@ -21,103 +37,104 @@ public class GenerateTestVectors {
             if (o instanceof Instances) header = (Instances) o;
         }
 
-        String[] featureNames = {
-            "sem1", "sem2", "sem3", "sem4", "sem5", "sem6", "sem7", "sem8",
-            "mock_catclass", "mock_indexabs", "mock_it", "mock_reference",
-            "mock_libmgmt", "mock_selacq", "mock_total"
-        };
+        int features = header.numAttributes() - 1;
 
-        List<Map<String, Double>> cases = new ArrayList<>();
+        Field rootField = J48.class.getDeclaredField("m_root");
+        rootField.setAccessible(true);
+        List<double[]> cuts = new ArrayList<>();
+        System.out.println("=== Exact leaves ===");
+        walk((ClassifierTree) rootField.get(tree), header, "", cuts);
 
-        // Baseline "mid" values for every feature not being specifically probed.
-        double MID = 75.0;
+        List<double[]> cases = new ArrayList<>();
+        Random random = new Random(42);
 
-        // Helper to build a full feature map from overrides.
-        // (done inline below per case)
-
-        // Case 1: mock_total <= 57.39, sem8 <= 79.83 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 50.0, "sem8", 70.0)));
-        // Case 2: mock_total <= 57.39, sem8 > 79.83 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 50.0, "sem8", 90.0)));
-        // Case 3: mock_total>57.39, sem8<=86.41, mock_catclass<=70.62, sem1<=67.77, sem5<=83.51 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 60.0, "sem1", 60.0, "sem5", 70.0)));
-        // Case 4: ... sem5 > 83.51 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 60.0, "sem1", 60.0, "sem5", 90.0)));
-        // Case 5: ... sem1>67.77, mock_indexabs<=61.26, mock_catclass<=58.71 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 55.0, "sem1", 70.0, "mock_indexabs", 55.0)));
-        // Case 6: ... mock_catclass>58.71, mock_it<=60.59 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 65.0, "sem1", 70.0, "mock_indexabs", 55.0, "mock_it", 55.0)));
-        // Case 7: ... mock_it>60.59, mock_libmgmt<=69.79 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 65.0, "sem1", 70.0, "mock_indexabs", 55.0, "mock_it", 65.0, "mock_libmgmt", 60.0)));
-        // Case 8: ... mock_libmgmt>69.79 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 65.0, "sem1", 70.0, "mock_indexabs", 55.0, "mock_it", 65.0, "mock_libmgmt", 75.0)));
-        // Case 9: ... mock_indexabs>61.26 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 60.0, "sem1", 70.0, "mock_indexabs", 70.0)));
-        // Case 10: mock_catclass>70.62, mock_selacq<=72.23 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 80.0, "mock_selacq", 60.0)));
-        // Case 11: mock_selacq>72.23, sem1<=80.08, sem7<=85.18, sem5<=84.42 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 80.0, "mock_selacq", 80.0, "sem1", 70.0, "sem7", 80.0, "sem5", 80.0)));
-        // Case 12: ... sem5>84.42 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 80.0, "mock_selacq", 80.0, "sem1", 70.0, "sem7", 80.0, "sem5", 90.0)));
-        // Case 13: ... sem7>85.18 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 80.0, "mock_selacq", 80.0, "sem1", 70.0, "sem7", 90.0)));
-        // Case 14: ... sem1>80.08 -> FAIL
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 80.0, "mock_catclass", 80.0, "mock_selacq", 80.0, "sem1", 90.0)));
-        // Case 15: sem8>86.41 -> PASS
-        cases.add(baseCase(MID, Map.of("mock_total", 65.0, "sem8", 90.0)));
-
-        // Plus some pseudo-random cases for extra coverage.
-        Random rnd = new Random(42);
-        for (int i = 0; i < 40; i++) {
-            Map<String, Double> m = new HashMap<>();
-            for (String f : featureNames) {
-                m.put(f, Math.round(rnd.nextDouble() * 100.0 * 100.0) / 100.0);
-            }
-            cases.add(m);
-        }
-
-        // Edge cases exactly at / near thresholds
-        double[] thresholds = {57.39, 79.83, 86.41, 70.62, 67.77, 83.51, 61.26, 58.71, 60.59, 69.79, 72.23, 80.08, 85.18, 84.42};
-        for (double t : thresholds) {
-            Map<String, Double> m1 = baseCase(MID, Map.of());
-            // vary mock_total around threshold as a generic probe too
-            for (String f : featureNames) m1.put(f, MID);
-            m1.put("mock_total", t);
-            cases.add(new HashMap<>(m1));
-        }
-
-        try (PrintWriter pw = new PrintWriter(new FileWriter(outCsvPath))) {
-            pw.println(String.join(",", featureNames) + ",weka_prediction");
-            for (Map<String, Double> c : cases) {
-                Instance inst = new DenseInstance(header.numAttributes());
-                inst.setDataset(header);
-                for (int i = 0; i < featureNames.length; i++) {
-                    inst.setValue(header.attribute(featureNames[i]), c.get(featureNames[i]));
+        // Either side of every cut, everything else in the middle or missing.
+        for (double[] cut : cuts) {
+            for (double offset : new double[] {-10, -0.01, 0, 0.01, 10}) {
+                for (double rest : new double[] {75.0, 20.0, Double.NaN}) {
+                    double[] values = new double[features];
+                    java.util.Arrays.fill(values, rest);
+                    values[(int) cut[0]] = cut[1] + offset;
+                    cases.add(values);
                 }
-                double clsIdx = tree.classifyInstance(inst);
-                String clsLabel = header.classAttribute().value((int) clsIdx);
-
-                StringBuilder sb = new StringBuilder();
-                for (String f : featureNames) {
-                    sb.append(c.get(f)).append(",");
-                }
-                sb.append(clsLabel);
-                pw.println(sb.toString());
             }
         }
 
-        System.out.println("Wrote " + cases.size() + " test cases to " + outCsvPath);
+        // Anything at all.
+        for (int i = 0; i < 80; i++) {
+            double[] values = new double[features];
+            for (int j = 0; j < features; j++) {
+                values[j] = Math.round(random.nextDouble() * 100.0 * 100.0) / 100.0;
+            }
+            cases.add(values);
+        }
+
+        // Scores missing, from one to all of them.
+        for (int i = 0; i < 80; i++) {
+            double[] values = new double[features];
+            for (int j = 0; j < features; j++) {
+                values[j] = random.nextDouble() < 0.35 ? Double.NaN : Math.round(random.nextDouble() * 100.0);
+            }
+            cases.add(values);
+        }
+        double[] nothing = new double[features];
+        java.util.Arrays.fill(nothing, Double.NaN);
+        cases.add(nothing);
+
+        try (PrintWriter out = new PrintWriter(new FileWriter(args[1]))) {
+            StringBuilder head = new StringBuilder();
+            for (int j = 0; j < features; j++) head.append(header.attribute(j).name()).append(",");
+            out.println(head + "weka_prediction,weka_confidence");
+
+            for (double[] values : cases) {
+                Instance instance = new DenseInstance(header.numAttributes());
+                instance.setDataset(header);
+                StringBuilder line = new StringBuilder();
+
+                for (int j = 0; j < features; j++) {
+                    if (Double.isNaN(values[j])) {
+                        instance.setMissing(j);
+                        line.append("?,");
+                    } else {
+                        instance.setValue(j, values[j]);
+                        line.append(values[j]).append(",");
+                    }
+                }
+
+                double[] distribution = tree.distributionForInstance(instance);
+                int predicted = Utils.maxIndex(distribution);
+                String label = header.classAttribute().value(predicted).equals("PASSED") ? "PASS" : "FAIL";
+
+                out.println(line + label + "," + String.format(Locale.ROOT, "%.1f", distribution[predicted] * 100));
+            }
+        }
+
+        System.out.println("Wrote " + cases.size() + " test cases to " + args[1]);
     }
 
-    private static Map<String, Double> baseCase(double mid, Map<String, Double> overrides) {
-        String[] featureNames = {
-            "sem1", "sem2", "sem3", "sem4", "sem5", "sem6", "sem7", "sem8",
-            "mock_catclass", "mock_indexabs", "mock_it", "mock_reference",
-            "mock_libmgmt", "mock_selacq", "mock_total"
-        };
-        Map<String, Double> m = new HashMap<>();
-        for (String f : featureNames) m.put(f, mid);
-        m.putAll(overrides);
-        return m;
+    private static void walk(ClassifierTree node, Instances header, String indent, List<double[]> cuts) throws Exception {
+        ClassifierSplitModel model = node.getLocalModel();
+
+        if (node.isLeaf()) {
+            System.out.println(indent + header.classAttribute().value(model.distribution().maxClass())
+                + " instances=" + model.distribution().total()
+                + " errors=" + model.distribution().numIncorrect());
+            return;
+        }
+
+        Field attribute = model.getClass().getDeclaredField("m_attIndex");
+        Field point = model.getClass().getDeclaredField("m_splitPoint");
+        attribute.setAccessible(true);
+        point.setAccessible(true);
+
+        int index = attribute.getInt(model);
+        double cut = point.getDouble(model);
+        cuts.add(new double[] {index, cut});
+
+        ClassifierTree[] sons = node.getSons();
+        for (int i = 0; i < sons.length; i++) {
+            System.out.println(indent + header.attribute(index).name() + (i == 0 ? " <= " : " > ") + cut);
+            walk(sons[i], header, indent + "    ", cuts);
+        }
     }
 }

@@ -3,6 +3,7 @@
 use App\Models\LetModel;
 use App\Services\MachineLearning\LetModelTrainer;
 use App\Services\MachineLearning\LetPredictionService;
+use App\Services\MachineLearning\LetReadinessFeatureBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -14,7 +15,7 @@ Route::post('/predictions/let', function (
     $recordAudit
 ) {
     // Predicts with whichever model is in use: the built-in tree, or the
-    // latest retrained one (see LetPredictionService::liveModel()).
+    // retrained version that is active (see LetPredictionService::liveModel()).
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
@@ -25,22 +26,24 @@ Route::post('/predictions/let', function (
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
+    // The six subject scores. One left out is missing, not zero; `overall`
+    // is worked out here from the ones given, never sent.
     $rules = [];
-    foreach (LetPredictionService::requiredFeatures() as $feature) {
-        $rules[$feature] = ['required', 'numeric', 'min:0', 'max:100'];
+    foreach (array_keys(LetReadinessFeatureBuilder::SUBJECTS) as $subject) {
+        $rules[$subject] = ['nullable', 'numeric', 'min:0', 'max:100'];
     }
 
-    $validated = $request->validate($rules);
+    $features = LetReadinessFeatureBuilder::features($request->validate($rules));
 
     $service = new LetPredictionService();
-    $result = $service->predict($validated);
+    $result = $service->predict($features);
 
     $recordAudit(
         $user,
         'prediction.let.run',
         null,
         null,
-        'Ran LET pass/fail prediction',
+        'Ran board exam pass/fail prediction',
         [
             'prediction' => $result['prediction'],
             'confidence' => $result['confidence'],
@@ -49,27 +52,21 @@ Route::post('/predictions/let', function (
         $request,
     );
 
-    $model = $service->liveModel();
-
     return response()->json([
         'prediction' => $result['prediction'],
         'confidence' => $result['confidence'],
         'support' => $result['support'],
         'leaf_errors' => $result['leaf_errors'],
         'path' => $result['path'],
-        'disclaimer' => $model['source'] === 'built_in'
-            ? 'This model was trained on a single small student batch. Treat this as a rough indicator, not a certainty.'
-            : sprintf(
-                'This model was retrained on %d recorded licensure results. Treat this as a rough indicator, not a certainty.',
-                $model['trained_on'],
-            ),
+        'features' => $features,
+        'model_version' => $service->liveModel()['version'],
+        'disclaimer' => 'This prediction is based on past review-exam data and is a guide, not a guarantee.',
     ]);
 });
 
 /*
- * The model behind the predictions: which one is in use, how much there is to
- * learn from, and what recent retraining decided. Retraining also happens by
- * itself after licensure results are recorded (see RetrainLetModelJob).
+ * The model behind the predictions: which version is in use, whether it can
+ * be retrained, and every version with the figures it was judged on.
  */
 Route::get('/predictions/let/model', function (Request $request, LetModelTrainer $trainer) use ($canManageRooms, $ensureActive) {
     if ($inactiveResponse = $ensureActive($request)) {
@@ -83,41 +80,10 @@ Route::get('/predictions/let/model', function (Request $request, LetModelTrainer
     return response()->json($trainer->status());
 });
 
-Route::post('/predictions/let/model/retrain', function (Request $request, LetModelTrainer $trainer) use ($canManageRooms, $ensureActive, $recordAudit) {
-    if ($inactiveResponse = $ensureActive($request)) {
-        return $inactiveResponse;
-    }
-
-    $user = $request->user();
-
-    if (!$canManageRooms($user)) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
-
-    $result = $trainer->run($user, LetModel::TRIGGER_MANUAL);
-
-    $recordAudit(
-        $user,
-        'prediction.let.retrain',
-        'let_model',
-        $result['model']?->id,
-        $result['message'],
-        ['outcome' => $result['outcome']] + ($result['model']?->metrics ?? []),
-        $request,
-    );
-
-    return response()->json([
-        'outcome' => $result['outcome'],
-        'message' => $result['message'],
-        ...$trainer->status(),
-    ]);
-});
-
 /*
- * Admin only: retraining is checked before a model is used, but putting one
- * back out of use overrides that check, which is not a teacher's call.
+ * Admin only, and only on request: nothing retrains the model by itself.
  */
-Route::post('/predictions/let/model/revert', function (Request $request, LetModelTrainer $trainer) use ($isAdmin, $ensureActive, $recordAudit) {
+Route::post('/predictions/let/model/retrain', function (Request $request, LetModelTrainer $trainer) use ($isAdmin, $ensureActive, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
@@ -128,19 +94,76 @@ Route::post('/predictions/let/model/revert', function (Request $request, LetMode
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    $result = $trainer->revert();
+    $result = $trainer->run($user);
+    $model = $result['model'];
+
+    $recordAudit(
+        $user,
+        'prediction.let.retrain',
+        'let_model',
+        $model?->id,
+        $result['message'],
+        ['outcome' => $result['outcome']] + ($model ? [
+            'version' => $model->version,
+            'rows' => $model->training_count,
+            'accuracy' => $model->accuracy,
+            'kappa' => $model->kappa,
+            'baseline' => $model->baseline,
+        ] : []),
+        $request,
+    );
+
+    // A retraining that was not allowed to start is refused, not reported
+    // as done.
+    $blocked = in_array($result['outcome'], [
+        LetModelTrainer::OUTCOME_NO_BASE_DATASET,
+        LetModelTrainer::OUTCOME_NOT_ENOUGH_NEW_RESULTS,
+    ], true);
+
+    return response()->json([
+        'outcome' => $result['outcome'],
+        'message' => $result['message'],
+        ...$trainer->status(),
+    ], $blocked ? 422 : 200);
+});
+
+/*
+ * Admin only: put an earlier version back into use. `version` 1 is the
+ * original model; any other must be one that was in use before.
+ */
+Route::post('/predictions/let/model/activate', function (Request $request, LetModelTrainer $trainer) use ($isAdmin, $ensureActive, $recordAudit) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$isAdmin($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    $version = (int) $request->validate(['version' => ['required', 'integer', 'min:1']])['version'];
+    $model = $version === LetPredictionService::BUILT_IN_VERSION
+        ? null
+        : LetModel::query()->where('version', $version)->first();
+
+    $result = $version !== LetPredictionService::BUILT_IN_VERSION && $model === null
+        ? null
+        : $trainer->activate($model);
 
     if ($result === null) {
-        return response()->json(['message' => 'The built-in model is already in use.'], 422);
+        return response()->json([
+            'message' => 'That version is already in use, or was never in use and cannot be gone back to.',
+        ], 422);
     }
 
     $recordAudit(
         $user,
-        'prediction.let.revert',
+        'prediction.let.activate',
         'let_model',
-        $result['model']?->id,
+        $model?->id,
         $result['message'],
-        [],
+        ['version' => $version],
         $request,
     );
 
