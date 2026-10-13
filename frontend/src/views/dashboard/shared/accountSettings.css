@@ -1,0 +1,255 @@
+/* The Settings page's cards. Shared by the components in this folder that
+   make up the page, each of which loads it scoped. */
+.account-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.account-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 20px;
+}
+
+.account-card-head h3 {
+  margin: 0;
+  color: var(--lnu-navy-deep);
+}
+
+.account-card-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.account-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.field-label em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.account-field-error {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--lnu-danger);
+  overflow-wrap: anywhere;
+}
+
+.account-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+}
+
+/* An address is the long one: it gets the row to itself on a phone. */
+.account-fact-wide {
+  grid-column: 1 / -1;
+}
+
+.account-facts dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.account-facts dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--lnu-navy-deep);
+  overflow-wrap: anywhere;
+}
+
+.account-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.account-show {
+  justify-self: start;
+}
+
+.account-rules {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.account-rules li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-rules li.met {
+  color: var(--lnu-success);
+}
+
+.account-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (min-width: 720px) {
+  .account-grid.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .account-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .account-facts {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .account-fact-wide {
+    grid-column: auto;
+  }
+
+  .account-rules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phones: the one button in each card is as wide as the fields above it. */
+@media (max-width: 640px) {
+  .account-card {
+    padding: 16px;
+  }
+
+  .account-actions .primary-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* A row of the "where you're signed in" list. */
+.account-session-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.account-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.account-session + .account-session {
+  border-top: 1px solid var(--border-soft);
+}
+
+.account-session-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--lnu-navy-deep);
+}
+
+.account-session-copy {
+  /* From nothing, not from its text: the text wraps beside the icon instead
+     of taking a line of its own. */
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.account-session-copy strong {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 13.5px;
+  color: var(--lnu-navy-deep);
+}
+
+.account-session-copy span {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.account-session .ghost-btn {
+  flex: none;
+}
+
+.account-actions.split {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.account-checks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.account-radio-group {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.account-radio-group legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lnu-text);
+}
+
+@media (max-width: 640px) {
+  .account-session {
+    flex-wrap: wrap;
+  }
+
+  .account-session .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

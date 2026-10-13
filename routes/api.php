@@ -62,6 +62,22 @@ $isStaffMasterExaminer = static function (User $user) use ($roleService): bool {
     return $roleService->isStaffMasterExaminer($user);
 };
 
+/*
+ * Teaching -- rooms, exams, the Library, the Review Bot, reports -- is open to
+ * teachers and to administrators. A teacher works with what they made; an
+ * administrator with everyone's, so the school can step in for a teacher who
+ * is away. $oversees answers "may this person act on something that belongs
+ * to $ownerId?", and with no owner given, "do they see everybody's?".
+ */
+$canTeach = static function (User $user) use ($roleService): bool {
+    return $roleService->canManageRooms($user);
+};
+
+$oversees = static function (User $user, int|string|null $ownerId = null) use ($roleService): bool {
+    return $roleService->isAdmin($user)
+        || ($ownerId !== null && (int) $ownerId === (int) $user->id);
+};
+
 $recordAudit = static function (
     ?User $actor,
     string $action,
@@ -70,7 +86,35 @@ $recordAudit = static function (
     ?string $description = null,
     array $metadata = [],
     ?Request $request = null,
-) use ($auditLogService): void {
+) use ($auditLogService, $roleService): void {
+    // An administrator acting on a teacher's room, exam or Library file: the
+    // entry says whose it was, so the teacher can be told what changed and
+    // by whom. A route that has already deleted the thing passes owner_id.
+    $ownerId = $metadata['owner_id'] ?? null;
+    unset($metadata['owner_id']);
+
+    if ($actor && $roleService->isAdmin($actor)) {
+        $ownerId ??= match ($targetType) {
+            'exam' => Exam::query()->whereKey($targetId)->value('created_by'),
+            'room' => Room::query()->whereKey($targetId)->value('created_by'),
+            'question_bank' => QuestionBank::query()->whereKey($targetId)->value('created_by'),
+            'question_bank_question' => \App\Models\QuestionBankQuestion::query()
+                ->with('questionBank:id,created_by')
+                ->find($targetId)?->questionBank?->created_by,
+            default => null,
+        };
+
+        if ($ownerId !== null && (int) $ownerId !== (int) $actor->id) {
+            $ownerName = User::query()->whereKey($ownerId)->value('name');
+
+            if ($ownerName !== null) {
+                $metadata['owner_id'] = (int) $ownerId;
+                $metadata['owner_name'] = $ownerName;
+                $description = \Illuminate\Support\Str::limit(trim((string) $description)." (belongs to {$ownerName})", 250, '');
+            }
+        }
+    }
+
     $auditLogService->record($actor, $action, $targetType, $targetId, $description, $metadata, $request);
 };
 
@@ -92,22 +136,22 @@ $ensureTeacherReportAccess = static function (
     Request $request,
     Exam $exam,
     Room $room
-) use ($ensureActive, $isStaffMasterExaminer): User|JsonResponse {
+) use ($ensureActive, $canTeach, $oversees): User|JsonResponse {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$oversees($user, $exam->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $room->created_by !== (int) $user->id) {
+    if (!$oversees($user, $room->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -259,17 +303,36 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
         ], 403);
     }
 
+    // An email address or student ID is taken once somebody has verified an
+    // account with it, not when somebody types it into this form. A sign-up
+    // whose link was never opened is replaced by this one instead of blocking
+    // it: otherwise anyone could lock a student out of registering by entering
+    // that student's ID or address first.
+    $unclaimed = static fn () => User::query()
+        ->unclaimedRegistrations()
+        ->where(fn ($query) => $query
+            ->where('email', (string) $request->input('email'))
+            ->orWhere('student_id', trim((string) $request->input('student_id'))));
+
+    $unclaimedIds = $unclaimed()->pluck('id')->all();
+
     $validated = $request->validate([
         'first_name' => ['required', 'string', 'max:255'],
         'middle_name' => ['nullable', 'string', 'max:255'],
         'last_name' => ['required', 'string', 'max:255'],
-        'student_id' => ['required', 'string', 'max:32', 'regex:/^\d{7,10}$/', 'unique:users,student_id'],
+        'student_id' => [
+            'required',
+            'string',
+            'max:32',
+            'regex:/^\d{7,10}$/',
+            Rule::unique('users', 'student_id')->whereNotIn('id', $unclaimedIds),
+        ],
         'year_level' => ['required', Rule::in(User::YEAR_LEVELS)],
         'email' => [
             'required',
             'email',
             'max:255',
-            'unique:users,email',
+            Rule::unique('users', 'email')->whereNotIn('id', $unclaimedIds),
             new InstitutionalEmail((string) config('auth.registration.allowed_email_domain')),
         ],
         'password' => ['required', 'confirmed', PasswordRule::defaults()],
@@ -307,7 +370,26 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
     // filter -- so the people who just signed up are the ones staff cannot
     // find. Admin-provisioned accounts already default to enrolled.
     $user->applyStudentStatus(User::STUDENT_STATUS_ENROLLED);
-    $user->save();
+
+    try {
+        $replaced = DB::transaction(function () use ($unclaimed, $user): int {
+            // Asked again inside the transaction: one of them may have been
+            // verified since the check above, and then it stays.
+            $stale = $unclaimed()->lockForUpdate()->get(['id', 'email']);
+
+            DB::table('password_reset_tokens')->whereIn('email', $stale->pluck('email'))->delete();
+            User::query()->whereIn('id', $stale->pluck('id'))->delete();
+
+            $user->save();
+
+            return $stale->count();
+        });
+    } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+        // Two sign-ups for the same address or ID at the same moment.
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'email' => ['That email address or student ID has just been registered. Try again.'],
+        ]);
+    }
 
     $user->sendEmailVerificationNotification();
 
@@ -317,7 +399,7 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
         'user',
         $user->id,
         'Student account self-registered, pending email verification',
-        ['email' => $user->email, 'student_id' => $user->student_id, 'role' => $user->role],
+        ['email' => $user->email, 'student_id' => $user->student_id, 'role' => $user->role, 'replaced_unverified_signups' => $replaced],
         $request,
     );
 
@@ -334,6 +416,7 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
     $validated = $request->validate([
         'identifier' => ['required', 'string'],
         'password' => ['required'],
+        'remember' => ['sometimes', 'boolean'],
     ]);
 
     $user = User::where('email', $validated['identifier'])
@@ -361,13 +444,26 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
         ], 403);
     }
 
-    $token = $user->createToken('spa')->plainTextToken;
+    // "Remember me" decides what kind of sign-in this is; see
+    // AuthTokenCookieService for what each kind means.
+    $remember = (bool) ($validated['remember'] ?? false);
+
+    $newToken = $user->createToken($authTokenCookieService->tokenName($remember));
+    $token = $newToken->plainTextToken;
+
+    // So Settings can tell this sign-in from the person's others.
+    $newToken->accessToken->forceFill([
+        'user_agent' => Str::limit((string) $request->userAgent(), 500, ''),
+        'ip_address' => $request->ip(),
+    ])->save();
 
     $response = response()->json([
-        'user' => $user,
+        'user' => array_merge($user->toArray(), [
+            'session_idle_minutes' => $authTokenCookieService->idleMinutes($newToken->accessToken),
+        ]),
     ]);
 
-    return $authTokenCookieService->attachTokenCookie($response, $token);
+    return $authTokenCookieService->attachTokenCookie($response, $token, $remember);
 })->middleware('throttle:login');
 
 /*
@@ -475,6 +571,55 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, 
 })->name('verification.verify');
 
 /*
+ * Target of the link sent to an address someone asked to move their account
+ * to (POST /account/email). Opened from an inbox, so like the verification
+ * link it answers with a redirect to the sign-in page, which says what
+ * happened. The account is signed out everywhere: the address is what it
+ * signs in with.
+ */
+Route::get('/account/email/confirm/{id}/{hash}', function (Request $request, string $id, string $hash) use ($recordAudit) {
+    $frontend = rtrim((string) config('app.frontend_url'), '/');
+
+    if (!$request->hasValidSignature()) {
+        return redirect($frontend.'/login?email_changed=expired');
+    }
+
+    $user = User::find($id);
+    $newEmail = (string) $request->query('email');
+
+    // The fingerprint is of the address the link was asked for from: it stops
+    // matching once that address has changed, so a link is good for one use.
+    if (!$user || !$user->is_active || !hash_equals($hash, sha1($user->email)) || $newEmail === '') {
+        return redirect($frontend.'/login?email_changed=invalid');
+    }
+
+    $taken = User::query()
+        ->where('email', $newEmail)
+        ->whereNotIn('id', User::query()->unclaimedRegistrations()->select('id'))
+        ->exists();
+
+    if ($taken) {
+        return redirect($frontend.'/login?email_changed=invalid');
+    }
+
+    $oldEmail = $user->email;
+
+    DB::transaction(function () use ($user, $newEmail): void {
+        User::query()->unclaimedRegistrations()->where('email', $newEmail)->delete();
+
+        $user->forceFill(['email' => $newEmail, 'email_verified_at' => now()])->save();
+        $user->tokens()->delete();
+    });
+
+    \Illuminate\Support\Facades\Notification::route('mail', $oldEmail)
+        ->notify(new \App\Notifications\EmailWasChanged($newEmail));
+
+    $recordAudit($user, 'account.update-email', 'user', $user->id, 'Changed their sign-in email', ['from' => $oldEmail, 'to' => $newEmail], $request);
+
+    return redirect($frontend.'/login?email_changed=1');
+})->name('account.email.confirm');
+
+/*
  * Resend a verification link. The reply is identical whether the address is
  * unknown, already verified, or genuinely pending -- an unauthenticated caller
  * should not be able to probe which addresses are registered here.
@@ -543,6 +688,8 @@ Route::middleware('auth:sanctum')->group(function () use (
     $ensureActive,
     $isAdmin,
     $isStaffMasterExaminer,
+    $canTeach,
+    $oversees,
     $recordAudit,
     $findAccessibleQuestionBank,
     $resolveExamQuestionBankIds,
@@ -562,6 +709,7 @@ Route::middleware('auth:sanctum')->group(function () use (
     $reviewBotAdminService,
 ) {
     require __DIR__ . '/api/auth.php';
+    require __DIR__ . '/api/account.php';
     require __DIR__ . '/api/rooms.php';
     require __DIR__ . '/api/student.php';
     require __DIR__ . '/api/library.php';

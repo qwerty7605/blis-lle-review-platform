@@ -59,6 +59,30 @@ final class DemoData
     }
 
     /**
+     * The three teachers' addresses. DEMO_TEACHER_EMAIL replaces the first, so
+     * a local database can have a sign-in that is easier to type.
+     *
+     * @return list<string>
+     */
+    public static function teacherEmails(): array
+    {
+        [$first, $second, $third] = self::TEACHER_EMAILS;
+
+        return [strtolower(self::fromEnv('DEMO_TEACHER_EMAIL', $first)), $second, $third];
+    }
+
+    /**
+     * An address for the first featured student in place of the blis.test one
+     * they would get, when DEMO_STUDENT_EMAIL is set.
+     */
+    public static function studentEmail(): ?string
+    {
+        $email = strtolower(self::fromEnv('DEMO_STUDENT_EMAIL', ''));
+
+        return $email !== '' ? $email : null;
+    }
+
+    /**
      * @return list<string>
      */
     public static function emailDomains(): array

@@ -145,6 +145,7 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
+                    <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
@@ -182,6 +183,7 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
+                    <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
@@ -309,6 +311,12 @@
             Leave <strong>{{ selectedRoom?.name }}</strong> (<code>{{ selectedRoom?.code }}</code>)?
           </p>
 
+          <!-- The page's own banner is behind this dialog. -->
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
+
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeLeaveRoomModal">Cancel</button>
             <button type="button" class="danger-btn" :disabled="roomLoading" @click="handleLeaveRoom">
@@ -395,10 +403,7 @@
           <div
             v-else-if="studentExamAttempt"
             class="exam-attempt-layout"
-            :class="{
-              'is-results-view': isStudentExamResultSummaryVisible,
-              'is-list-hidden': examAttemptSidebarCollapsed,
-            }"
+            :class="{ 'is-results-view': isStudentExamResultSummaryVisible }"
           >
             <!-- One question list, two containers: the left-hand column from
                  901px up, and a bottom sheet on a phone, where a column that
@@ -545,13 +550,16 @@
                 </button>
 
                 <div class="exam-attempt-nav">
+                  <!-- Only where the list is a sheet. From 901px up it is a
+                       column that is always there, with nothing to open. -->
                   <button
+                    v-if="isExamMobileViewport"
                     type="button"
                     class="ghost-btn exam-sidebar-inline-toggle"
                     :aria-expanded="(!examAttemptSidebarCollapsed).toString()"
                     @click="toggleExamAttemptSidebar"
                   >
-                    {{ examQuestionListToggleLabel }}
+                    Question List
                     <ChevronRight :size="15" :class="{ 'is-open': !examAttemptSidebarCollapsed }" />
                   </button>
                   <button
@@ -800,6 +808,19 @@ const {
   handleLeaveRoom,
 } = useRoomsModule({ mode: 'student' })
 
+// "Attempt 2 of 2 · Latest 80.0%": how many times the exam has been sat,
+// and the score that counts, which is the latest sitting's.
+function studentAttemptSummary(exam) {
+  const taken = Number(exam.student_submitted_attempts ?? 0)
+  if (taken < 1) return ''
+
+  const allowed = Math.max(taken, Number(exam.student_max_attempts ?? taken))
+  const score = exam.student_latest_score_percent
+  const scoreText = score === null || score === undefined ? '' : ` · ${taken > 1 ? 'Latest ' : ''}${Number(score).toFixed(1)}%`
+
+  return `Attempt ${taken} of ${allowed}${scoreText}`
+}
+
 const examProgressPercent = computed(() => {
   const total = Number(studentExamAttempt.value?.total_items ?? 0)
   if (total === 0) return 0
@@ -811,7 +832,7 @@ const examProgressPercent = computed(() => {
 // state and a heading, the column only its classes.
 const examQuestionListContainerProps = computed(() => {
   if (!isExamMobileViewport.value) {
-    return { class: ['exam-attempt-sidebar', { 'is-collapsed': examAttemptSidebarCollapsed.value }] }
+    return { class: 'exam-attempt-sidebar' }
   }
 
   const canJump = isStudentOpenNavigationMode.value || isStudentExamSubmitted.value
@@ -823,15 +844,6 @@ const examQuestionListContainerProps = computed(() => {
       ? 'Tap a number to go to that question.'
       : 'This exam moves one question at a time.',
   }
-})
-
-// On a phone or tablet the list is a sheet that this button opens, and the
-// button shares its row with Bookmark, so it carries the name alone. From
-// 901px up it shows and hides a column and says which.
-const examQuestionListToggleLabel = computed(() => {
-  if (isExamMobileViewport.value) return 'Question List'
-
-  return examAttemptSidebarCollapsed.value ? 'Show Question List' : 'Hide Question List'
 })
 
 /*
@@ -1747,4 +1759,9 @@ const examTimerTone = computed(() => {
   }
 }
 
+
+.rooms-exam-attempts {
+  font-weight: 600;
+  color: var(--lnu-navy-deep);
+}
 </style>

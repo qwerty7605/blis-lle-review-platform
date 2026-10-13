@@ -94,7 +94,12 @@ class DashboardAnalyticsService
             ->sortByDesc(fn (ExamAttempt $attempt) => $this->attemptSubmissionTimestamp($attempt))
             ->values();
 
-        $scoreValues = $this->extractScores($submittedAttempts);
+        // One score per exam -- the latest sitting -- as on the Analytics
+        // page and in the teacher's reports. A retake replaces the attempt
+        // it follows rather than being averaged with it.
+        $countingAttempts = $submittedAttempts->unique('exam_id')->values();
+
+        $scoreValues = $this->extractScores($countingAttempts);
         $passingAttempts = $scoreValues
             ->filter(fn (float $score) => $score >= self::PASSING_SCORE)
             ->count();
@@ -103,12 +108,12 @@ class DashboardAnalyticsService
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->count();
-        $subjects = $this->buildSubjectPerformance($submittedAttempts);
+        $subjects = $this->buildSubjectPerformance($countingAttempts);
         $topicPerformance = $this->buildTopicWeaknessPerformance($student);
         $weakArea = $this->buildWeakAreaRecommendation($student);
         $latestSubmittedAttempt = $submittedAttempts->first();
 
-        $scoreHistory = $submittedAttempts
+        $scoreHistory = $countingAttempts
             ->take(self::STUDENT_HISTORY_LIMIT)
             ->sortBy(fn (ExamAttempt $attempt) => $this->attemptSubmissionTimestamp($attempt))
             ->values()
@@ -152,13 +157,13 @@ class DashboardAnalyticsService
                     ->where('status', ExamAttempt::STATUS_IN_PROGRESS)
                     ->count(),
                 'passing_attempts' => (int) $passingAttempts,
-                'failing_attempts' => max(0, (int) $submittedAttempts->count() - (int) $passingAttempts),
+                'failing_attempts' => max(0, (int) $countingAttempts->count() - (int) $passingAttempts),
                 'passing_threshold' => self::PASSING_SCORE,
                 'average_score_percent' => $scoreValues->isNotEmpty()
                     ? round((float) $scoreValues->avg(), 2)
                     : null,
-                'pass_rate_percent' => $submittedAttempts->isNotEmpty()
-                    ? round(($passingAttempts / $submittedAttempts->count()) * 100, 2)
+                'pass_rate_percent' => $countingAttempts->isNotEmpty()
+                    ? round(($passingAttempts / $countingAttempts->count()) * 100, 2)
                     : null,
                 'best_score_percent' => $scoreValues->isNotEmpty()
                     ? round((float) $scoreValues->max(), 2)
@@ -185,15 +190,29 @@ class DashboardAnalyticsService
     }
 
     /**
+     * The same person, to be reported on as the owner of their own rooms and
+     * exams only. An administrator's reports cover everyone's by default;
+     * this is how one teacher's -- or the administrator's own -- are picked
+     * out. The copy is never saved.
+     */
+    public function asOwner(User $owner): User
+    {
+        $copy = clone $owner;
+        $copy->role = User::ROLE_STAFF_MASTER_EXAMINER;
+
+        return $copy;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function buildStaffReportOverview(User $staff): array
     {
         $managedRooms = Room::query()
-            ->where('created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('created_by', $staff->id))
             ->get(['id', 'name', 'code', 'archived_at']);
         $managedExams = Exam::query()
-            ->where('created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('created_by', $staff->id))
             ->get(['id', 'title', 'subject']);
 
         $roomIds = $managedRooms->pluck('id')->map(fn ($id) => (int) $id)->values();
@@ -202,7 +221,7 @@ class DashboardAnalyticsService
         $studentsEnrolled = DB::table('room_user')
             ->join('rooms', 'rooms.id', '=', 'room_user.room_id')
             ->join('users', 'users.id', '=', 'room_user.user_id')
-            ->where('rooms.created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('rooms.created_by', $staff->id))
             ->where('users.role', User::ROLE_STUDENT)
             ->whereNull('users.archived_at')
             ->distinct('room_user.user_id')
@@ -235,8 +254,8 @@ class DashboardAnalyticsService
             ? DB::table('exam_room')
                 ->join('exams', 'exams.id', '=', 'exam_room.exam_id')
                 ->join('rooms', 'rooms.id', '=', 'exam_room.room_id')
-                ->where('exams.created_by', $staff->id)
-                ->where('rooms.created_by', $staff->id)
+                ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('exams.created_by', $staff->id))
+                ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('rooms.created_by', $staff->id))
                 ->whereNull('exam_room.archived_at')
                 ->select(
                     'exam_room.exam_id',
@@ -1376,8 +1395,8 @@ class DashboardAnalyticsService
             ->join('exams', 'exams.id', '=', 'exam_attempts.exam_id')
             ->join('rooms', 'rooms.id', '=', 'exam_attempts.room_id')
             ->join('users', 'users.id', '=', 'exam_attempts.user_id')
-            ->where('exams.created_by', $staff->id)
-            ->where('rooms.created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('exams.created_by', $staff->id))
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('rooms.created_by', $staff->id))
             ->where('users.role', User::ROLE_STUDENT)
             ->whereNull('users.archived_at')
             ->when($exam, fn ($query) => $query->where('exam_attempts.exam_id', $exam->id))

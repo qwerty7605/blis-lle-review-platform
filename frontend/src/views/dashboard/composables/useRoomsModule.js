@@ -247,6 +247,11 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const showJoinRoomModal = ref(false)
   const showEditRoomModal = ref(false)
   const showDeleteRoomModal = ref(false)
+  const showArchiveRoomModal = ref(false)
+  const showArchivedRoomsModal = ref(false)
+  // Rooms put away with their results; a teacher's or administrator's only.
+  const archivedRooms = ref([])
+  const restoringRoomId = ref(null)
   const showRoomExportModal = ref(false)
   const showLeaveRoomModal = ref(false)
   const editRoomName = ref('')
@@ -318,7 +323,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const isAdminRole = computed(() => normalizedRole.value === 'admin')
   const isStaffRole = computed(() => ['staff_master_examiner', 'faculty'].includes(normalizedRole.value))
   const isManagementRole = computed(() => isAdminRole.value || isStaffRole.value)
-  const canCreateRooms = computed(() => isStaffRole.value)
+  // Teachers, and administrators, who can do everything a teacher can.
+  const canCreateRooms = computed(() => isManagementRole.value)
   // A room's exams and their Live Board: the teacher's own rooms, and every
   // room for an administrator. Setting an exam up stays with its teacher.
   const canViewExamResults = computed(() => isManagementRole.value)
@@ -553,6 +559,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     // action — preselect that room instead of defaulting to the first one.
     const requestedRoomId = Number(route.query?.room)
     await fetchRooms(Number.isFinite(requestedRoomId) && requestedRoomId > 0 ? requestedRoomId : null)
+    loadArchivedRooms()
     await openReviewDeepLinkIfRequested()
   })
 
@@ -1295,6 +1302,102 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     showDeleteRoomModal.value = false
   }
 
+  /*
+   * What stands in the way of removing the open room, from the server
+   * (room.removal). Delete is for a room that was never used: once it holds
+   * results, or an exam is still open or scheduled in it, the dialog says so
+   * and offers Archive, which keeps everything.
+   */
+  const roomRemoval = computed(() => {
+    const removal = selectedRoom.value?.removal ?? {}
+    const pendingExams = Array.isArray(removal.pending_exams) ? removal.pending_exams : []
+
+    return {
+      hasResults: Boolean(removal.has_results),
+      pendingExams,
+      attemptsInProgress: Number(removal.attempts_in_progress ?? 0),
+      canDelete: !removal.has_results && pendingExams.length === 0,
+      canArchive: Number(removal.attempts_in_progress ?? 0) === 0,
+    }
+  })
+
+  function openArchiveRoomModal() {
+    if (!selectedRoom.value) return
+    roomError.value = ''
+    showDeleteRoomModal.value = false
+    showArchiveRoomModal.value = true
+  }
+
+  function closeArchiveRoomModal() {
+    showArchiveRoomModal.value = false
+  }
+
+  // Quiet: the archived list is a side panel, and failing to count it is not
+  // worth a banner over the rooms themselves.
+  async function loadArchivedRooms() {
+    if (modeKey !== 'management') return
+
+    try {
+      const { data } = await services.getArchivedRooms()
+      archivedRooms.value = data.rooms ?? []
+    } catch {
+      // Keeps what it had.
+    }
+  }
+
+  async function handleArchiveRoom() {
+    if (!selectedRoomId.value) return
+
+    roomLoading.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    try {
+      const name = selectedRoom.value?.name ?? 'The room'
+
+      await services.archiveRoom(selectedRoomId.value)
+      closeArchiveRoomModal()
+      roomMessage.value = `${name} was archived. Its students, exams and results are kept, and you can restore it from Archived Rooms.`
+      selectedRoomId.value = null
+      selectedRoom.value = null
+      await Promise.all([fetchRooms(), loadArchivedRooms()])
+    } catch (error) {
+      roomError.value = firstApiError(error, 'Unable to archive this room.')
+    } finally {
+      roomLoading.value = false
+    }
+  }
+
+  function openArchivedRoomsModal() {
+    roomError.value = ''
+    showArchivedRoomsModal.value = true
+    loadArchivedRooms()
+  }
+
+  function closeArchivedRoomsModal() {
+    showArchivedRoomsModal.value = false
+  }
+
+  async function handleRestoreRoom(room) {
+    if (!room?.id) return
+
+    restoringRoomId.value = room.id
+    roomError.value = ''
+    roomMessage.value = ''
+
+    try {
+      await services.restoreRoom(room.id)
+      await loadArchivedRooms()
+      if (archivedRooms.value.length === 0) closeArchivedRoomsModal()
+      roomMessage.value = `${room.name} was restored.`
+      await fetchRooms(room.id)
+    } catch (error) {
+      roomError.value = firstApiError(error, 'Unable to restore this room.')
+    } finally {
+      restoringRoomId.value = null
+    }
+  }
+
   function openRoomExportModal() {
     if (!selectedRoom.value) return
     roomExportForm.format = 'xlsx'
@@ -1309,6 +1412,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   function openLeaveRoomModal() {
     if (!selectedRoom.value) return
+    // The dialog shows roomError (leaving is refused mid-exam).
+    roomError.value = ''
     showLeaveRoomModal.value = true
   }
 
@@ -1450,6 +1555,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       && !showJoinRoomModal.value
       && !showEditRoomModal.value
       && !showDeleteRoomModal.value
+      && !showArchiveRoomModal.value
+      && !showArchivedRoomsModal.value
       && !showRoomExportModal.value
       && !showLeaveRoomModal.value
   }
@@ -1958,6 +2065,17 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     closeEditRoomModal,
     openDeleteRoomModal,
     closeDeleteRoomModal,
+    showArchiveRoomModal,
+    showArchivedRoomsModal,
+    archivedRooms,
+    restoringRoomId,
+    roomRemoval,
+    openArchiveRoomModal,
+    closeArchiveRoomModal,
+    handleArchiveRoom,
+    openArchivedRoomsModal,
+    closeArchivedRoomsModal,
+    handleRestoreRoom,
     openRoomExportModal,
     closeRoomExportModal,
     openLeaveRoomModal,

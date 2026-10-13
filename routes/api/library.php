@@ -11,14 +11,14 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
-Route::get('/library/banks', function (Request $request) use ($isStaffMasterExaminer, $ensureActive) {
+Route::get('/library/banks', function (Request $request) use ($canTeach, $oversees, $ensureActive) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -26,7 +26,7 @@ Route::get('/library/banks', function (Request $request) use ($isStaffMasterExam
         ->excludingReviewBotBanks()
         ->with('creator:id,name')
         ->withCount('questions')
-        ->where('created_by', $user->id)
+        ->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id))
         ->latest();
 
     return response()->json([
@@ -34,14 +34,14 @@ Route::get('/library/banks', function (Request $request) use ($isStaffMasterExam
     ]);
 });
 
-Route::post('/library/import/preview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit, $questionMappingService) {
+Route::post('/library/import/preview', function (Request $request) use ($canTeach, $oversees, $ensureActive, $recordAudit, $questionMappingService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -156,14 +156,14 @@ Route::post('/library/import/preview', function (Request $request) use ($isStaff
     ]);
 });
 
-Route::post('/library/banks', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit, $questionMappingService) {
+Route::post('/library/banks', function (Request $request) use ($canTeach, $oversees, $ensureActive, $recordAudit, $questionMappingService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -293,7 +293,7 @@ Route::patch('/library/banks/{bank}', function (
     Request $request,
     QuestionBank $bank
 ) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $questionMappingService
@@ -304,11 +304,11 @@ Route::patch('/library/banks/{bank}', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $bank->created_by !== (int) $user->id) {
+    if (!$oversees($user, $bank->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -401,18 +401,18 @@ Route::patch('/library/banks/{bank}', function (
 Route::delete('/library/banks/{bank}', function (
     Request $request,
     QuestionBank $bank
-) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+) use ($canTeach, $oversees, $ensureActive, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $bank->created_by !== (int) $user->id) {
+    if (!$oversees($user, $bank->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -462,6 +462,7 @@ Route::delete('/library/banks/{bank}', function (
         [
             'title' => $bankTitle,
             'linked_exams_count' => $linkedExamCount,
+            'owner_id' => $bank->created_by,
         ],
         $request,
     );
@@ -474,18 +475,18 @@ Route::delete('/library/banks/{bank}', function (
 Route::get('/library/banks/{bank}/questions', function (
     Request $request,
     QuestionBank $bank
-) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+) use ($canTeach, $oversees, $ensureActive, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $bank->created_by !== (int) $user->id) {
+    if (!$oversees($user, $bank->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -518,14 +519,14 @@ Route::get('/library/banks/{bank}/questions', function (
     ]);
 });
 
-Route::get('/library/topics', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $questionMappingService) {
+Route::get('/library/topics', function (Request $request) use ($canTeach, $oversees, $ensureActive, $questionMappingService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -574,7 +575,7 @@ Route::post('/library/banks/{bank}/queue-mapping', function (
     Request $request,
     QuestionBank $bank
 ) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $questionMappingService
@@ -585,11 +586,11 @@ Route::post('/library/banks/{bank}/queue-mapping', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $bank->created_by !== (int) $user->id) {
+    if (!$oversees($user, $bank->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -626,14 +627,14 @@ Route::post('/library/banks/{bank}/queue-mapping', function (
 
 Route::get('/library/mapping-queue', function (
     Request $request
-) use ($isStaffMasterExaminer, $ensureActive) {
+) use ($canTeach, $oversees, $ensureActive) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -643,7 +644,7 @@ Route::get('/library/mapping-queue', function (
             'topic:id,subject,name',
             'options:id,question_bank_question_id,option_label,option_text,is_correct',
         ])
-        ->whereHas('questionBank', fn ($query) => $query->where('created_by', $user->id))
+        ->whereHas('questionBank', fn ($query) => $query->when(!$oversees($user), fn ($query) => $query->where('created_by', $user->id)))
         ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
         ->where('tag_status', QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW)
         ->orderBy('question_bank_id')
@@ -659,7 +660,7 @@ Route::patch('/library/banks/{bank}/tags/status', function (
     Request $request,
     QuestionBank $bank
 ) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $questionMappingService
@@ -670,11 +671,11 @@ Route::patch('/library/banks/{bank}/tags/status', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $bank->created_by !== (int) $user->id) {
+    if (!$oversees($user, $bank->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -710,7 +711,7 @@ Route::patch('/library/questions/{question}', function (
     Request $request,
     QuestionBankQuestion $question
 ) use (
-    $isStaffMasterExaminer,
+    $canTeach, $oversees,
     $ensureActive,
     $recordAudit,
     $questionMappingService
@@ -721,13 +722,13 @@ Route::patch('/library/questions/{question}', function (
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
     $question->loadMissing('questionBank:id,created_by,title,subject');
 
-    if ((int) ($question->questionBank?->created_by ?? 0) !== (int) $user->id) {
+    if (!$oversees($user, $question->questionBank?->created_by)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

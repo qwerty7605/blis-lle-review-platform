@@ -147,7 +147,7 @@ class TeacherActionPlanner
             ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
             ->join('exams', 'exams.id', '=', 'exam_attempts.exam_id')
             ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
-            ->where('exams.created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('exams.created_by', $staff->id))
             ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
             ->groupBy('question_bank_questions.id', 'question_bank_questions.item_number', 'question_bank_questions.question_text', 'exams.title')
             ->havingRaw('COUNT(*) >= ?', [self::SUSPECT_ITEM_MIN_ANSWERS])
@@ -328,7 +328,7 @@ class TeacherActionPlanner
     {
         $pending = (int) DB::table('question_bank_questions')
             ->join('question_banks', 'question_banks.id', '=', 'question_bank_questions.question_bank_id')
-            ->where('question_banks.created_by', $staff->id)
+            ->when(!$staff->overseesAllTeaching(), fn ($query) => $query->where('question_banks.created_by', $staff->id))
             ->where('question_bank_questions.tag_status', QuestionBankQuestion::TAG_STATUS_PENDING_REVIEW)
             ->count();
 

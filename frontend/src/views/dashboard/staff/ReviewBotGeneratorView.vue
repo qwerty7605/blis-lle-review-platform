@@ -40,11 +40,11 @@
             <span class="rbg-file-copy">
               <strong>{{ bank.title }}</strong>
               <span>
-                {{ bank.subject || 'No subject' }} · {{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}
+                {{ bank.subject || 'No subject' }} · {{ bank.questionsCount }} item{{ bank.questionsCount === 1 ? '' : 's' }}<template v-if="seesEveryTeacher && bank.ownerName"> · By {{ bank.ownerName }}</template>
               </span>
               <small v-if="bank.sourceFilename" :title="bank.sourceFilename">{{ bank.sourceFilename }}</small>
             </span>
-            <span class="pill" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus }}</span>
+            <span class="pill pill-cap" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus.replace(/_/g, ' ') }}</span>
             <ChevronRight :size="18" class="rbg-file-chevron" aria-hidden="true" />
           </button>
         </li>
@@ -118,11 +118,20 @@
           <h3>Review, edit &amp; map the generated review questions</h3>
 
           <div class="rbg-list-actions">
-            <div class="review-count-chips">
-              <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'draft' }" @click="statusFilter = 'draft'">Draft</button>
-              <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'published' }" @click="statusFilter = 'published'">Published</button>
-              <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'all' }" @click="statusFilter = 'all'">All</button>
-              <button type="button" class="review-count-chip" :class="{ active: statusFilter === 'rejected' }" @click="statusFilter = 'rejected'">Declined</button>
+            <div v-scroll-hint class="rbg-status-tabs" role="tablist" aria-label="Show questions by status">
+              <button
+                v-for="tab in statusTabs"
+                :key="tab.value"
+                type="button"
+                role="tab"
+                class="rbg-status-tab"
+                :class="{ active: statusFilter === tab.value }"
+                :aria-selected="(statusFilter === tab.value).toString()"
+                @click="statusFilter = tab.value"
+              >
+                {{ tab.label }}
+                <span class="rbg-status-count">{{ tab.count }}</span>
+              </button>
             </div>
 
             <button type="button" class="ghost-btn" @click="toggleCoverage">
@@ -155,15 +164,15 @@
               its level shows here again.
             </p>
 
-            <div class="directory-table-wrap">
-              <table class="directory-table">
+            <div class="directory-table-wrap rbg-coverage-wrap">
+              <table class="directory-table rbg-coverage-table">
                 <thead>
                   <tr>
-                    <th class="directory-table-name-cell">Exam item</th>
+                    <th class="directory-table-name-cell">Exam Item</th>
                     <th class="numeric">Live</th>
                     <th class="numeric">Published</th>
                     <th class="numeric">Declined</th>
-                    <th>Missing levels</th>
+                    <th>Missing Levels</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,13 +181,13 @@
                       <strong>Item {{ row.item_number }}</strong>
                       <small class="muted">{{ row.question_text }}</small>
                     </td>
-                    <td class="numeric">{{ row.total }}</td>
-                    <td class="numeric">{{ row.published }}</td>
-                    <td class="numeric">{{ row.rejected }}</td>
-                    <td>
+                    <td class="numeric" data-label="Live">{{ row.total }}</td>
+                    <td class="numeric" data-label="Published">{{ row.published }}</td>
+                    <td class="numeric" data-label="Declined">{{ row.rejected }}</td>
+                    <td class="rbg-coverage-levels">
                       <span v-if="row.missing_levels.length === 0" class="pill success">Complete</span>
                       <span v-else class="rbg-coverage-missing">
-                        <span v-for="level in row.missing_levels" :key="level" class="pill neutral">{{ level }}</span>
+                        <span v-for="level in row.missing_levels" :key="level" class="pill pill-cap neutral">{{ level }}</span>
                       </span>
                     </td>
                   </tr>
@@ -195,21 +204,28 @@
 
         <div v-if="questionsError" class="feedback danger"><AlertCircle :size="15" /><span>{{ questionsError }}</span></div>
 
+        <div v-if="actionMessage" class="feedback success" role="status"><CheckCircle2 :size="15" /><span>{{ actionMessage }}</span></div>
+
+        <!-- Each tab offers only what can be done to the questions on it, and
+             each button counts the selected questions it would change. -->
         <div v-if="filteredQuestions.length > 0" class="rbg-bulk-bar">
           <label class="rbg-select-all">
             <input type="checkbox" :checked="allFilteredSelected" @change="toggleSelectAllFiltered" />
-            <span>Select all ({{ filteredQuestions.length }})</span>
+            <span>{{ selectedIds.length > 0 ? `${selectedIds.length} selected` : `Select all (${filteredQuestions.length})` }}</span>
           </label>
 
           <div class="rbg-bulk-actions">
-            <button type="button" class="primary-btn" :disabled="selectedIds.length === 0" @click="publishSelected">
-              Map &amp; Publish Selected ({{ selectedIds.length }})
+            <button v-if="['draft', 'all'].includes(statusFilter)" type="button" class="primary-btn" :disabled="publishableIds.length === 0" @click="publishSelected">
+              Map &amp; Publish ({{ publishableIds.length }})
             </button>
-            <button type="button" class="ghost-btn" :disabled="selectedIds.length === 0" @click="rejectSelected">
-              Decline Selected ({{ selectedIds.length }})
+            <button v-if="['published', 'all'].includes(statusFilter)" type="button" class="ghost-btn" :disabled="unpublishableIds.length === 0" @click="unpublishSelected">
+              Unpublish ({{ unpublishableIds.length }})
             </button>
-            <button type="button" class="ghost-btn" :disabled="selectedIds.length === 0" @click="unpublishSelected">
-              Unpublish Selected
+            <button v-if="statusFilter !== 'rejected'" type="button" class="ghost-btn" :disabled="declinableIds.length === 0" @click="rejectSelected">
+              Decline ({{ declinableIds.length }})
+            </button>
+            <button v-if="statusFilter === 'rejected'" type="button" class="primary-btn" :disabled="restorableIds.length === 0" @click="restoreSelected">
+              Restore to Draft ({{ restorableIds.length }})
             </button>
           </div>
         </div>
@@ -229,7 +245,7 @@
 
         <div v-else-if="filteredQuestions.length === 0" class="review-bot-empty compact">
           <BookOpen :size="20" />
-          <p>No {{ statusFilter === 'all' ? '' : statusFilter }} questions generated from this file yet. Generate a review exam above.</p>
+          <p>{{ emptyListMessage }}</p>
         </div>
 
         <div v-else class="rbg-question-list">
@@ -246,11 +262,11 @@
               </label>
 
               <div class="rbg-question-meta">
-                <span class="pill" :class="question.status === 'published' ? 'success' : 'gold'">{{ question.status }}</span>
+                <span class="pill" :class="STATUS_PILLS[question.status]?.tone ?? 'gold'">{{ STATUS_PILLS[question.status]?.label ?? question.status }}</span>
                 <span class="pill neutral">{{ question.subject }}</span>
                 <span v-if="question.topic" class="pill neutral">{{ question.topic }}</span>
                 <span v-if="question.subtopic" class="pill neutral">{{ question.subtopic }}</span>
-                <span class="pill navy">{{ question.difficulty }}</span>
+                <span class="pill pill-cap navy">{{ question.difficulty }}</span>
               </div>
 
               <div class="rbg-question-actions">
@@ -349,8 +365,14 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, ListChecks, RefreshCw, Sparkles } from 'lucide-vue-next'
 import { useReviewBotAdminModule } from '../composables/useReviewBotAdminModule'
+import { vScrollHint } from '@/utils/scrollHint'
+import { useAuthStore } from '@/store/auth.store'
+import { overseesAll } from '@/utils/owners'
+
+const seesEveryTeacher = computed(() => overseesAll(useAuthStore().user))
 
 const {
   curatedTopics,
@@ -374,6 +396,13 @@ const {
   statusFilter,
   selectedIds,
   allFilteredSelected,
+  statusCounts,
+  actionMessage,
+  publishableIds,
+  unpublishableIds,
+  declinableIds,
+  restorableIds,
+  restoreSelected,
   editing,
   savingQuestionId,
   loadLibraryBanks,
@@ -399,6 +428,30 @@ const {
   unpublishSelected,
   deleteQuestion,
 } = useReviewBotAdminModule()
+
+// "Declined" is the word on the page; the stored status is "rejected".
+const STATUS_PILLS = {
+  draft: { label: 'Draft', tone: 'gold' },
+  published: { label: 'Published', tone: 'success' },
+  rejected: { label: 'Declined', tone: 'neutral' },
+}
+
+// All leaves declined questions out, as the list it shows does.
+const statusTabs = computed(() => [
+  { value: 'draft', label: 'Draft', count: statusCounts.value.draft },
+  { value: 'published', label: 'Published', count: statusCounts.value.published },
+  { value: 'all', label: 'All', count: statusCounts.value.draft + statusCounts.value.published },
+  { value: 'rejected', label: 'Declined', count: statusCounts.value.rejected },
+])
+
+const emptyListMessage = computed(() => ({
+  draft: statusCounts.value.published > 0
+    ? 'No drafts waiting for review. Everything generated from this file has been published or declined.'
+    : 'No review questions generated from this file yet. Generate a review exam above.',
+  published: 'Nothing from this file is published yet. Select drafts and choose Map & Publish.',
+  all: 'No review questions generated from this file yet. Generate a review exam above.',
+  rejected: 'No declined questions for this file.',
+}[statusFilter.value]))
 </script>
 
 <style scoped src="../dashboard.css"></style>
@@ -420,11 +473,100 @@ const {
   flex-wrap: wrap;
   gap: 4px;
 }
+
+.rbg-coverage-wrap {
+  margin: 0;
+}
+
+/* Five short columns: far less than the 1080px the shared table asks for. */
+.rbg-coverage-table {
+  min-width: 0;
+}
+
+/* The shared header cell has no padding of its own, because elsewhere a sort
+   button inside it brings the padding. These headings are plain text, so
+   they take that button's spacing and type here. */
+.rbg-coverage-table thead th {
+  padding: 10px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.rbg-coverage-table th.numeric {
+  text-align: right;
+}
+
+.rbg-coverage-table .directory-table-name-cell {
+  position: static;
+  min-width: 0;
+  width: 46%;
+  box-shadow: none;
+  white-space: normal;
+}
+
+.rbg-coverage-table td small.muted {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.rbg-coverage-table .rbg-coverage-levels {
+  white-space: normal;
+}
+
+/* Phones: one block per exam item, its three counts on a line with their
+   names, since the column headings are gone. */
+@media (max-width: 640px) {
+  .rbg-coverage-table,
+  .rbg-coverage-table tbody,
+  .rbg-coverage-table tr,
+  .rbg-coverage-table td {
+    display: block;
+  }
+
+  .rbg-coverage-table thead {
+    display: none;
+  }
+
+  .rbg-coverage-table tr {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .rbg-coverage-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .rbg-coverage-table td {
+    padding: 0;
+    border-bottom: 0;
+  }
+
+  .rbg-coverage-table .directory-table-name-cell {
+    width: auto;
+    margin-bottom: 8px;
+  }
+
+  .rbg-coverage-table td.numeric {
+    display: inline-block;
+    margin: 0 14px 8px 0;
+    text-align: left;
+    font-weight: 600;
+    color: var(--lnu-navy-deep);
+  }
+
+  .rbg-coverage-table td.numeric::before {
+    content: attr(data-label) ' ';
+    font-weight: 400;
+    color: var(--ink-soft);
+  }
+}
 </style>
 
 <style scoped>
 .rbg-view {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -620,6 +762,7 @@ const {
 .rbg-generate,
 .rbg-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   padding: 18px;
 }
@@ -629,6 +772,94 @@ const {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.rbg-status-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef1f8;
+  border: 1px solid rgba(13, 21, 71, 0.08);
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rbg-status-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Phones: the four tabs share the full width instead of scrolling. */
+@media (max-width: 640px) {
+  .rbg-status-tabs {
+    display: flex;
+    width: 100%;
+    gap: 0;
+    padding: 3px;
+  }
+
+  .rbg-status-tabs .rbg-status-tab {
+    flex: 1 1 auto;
+    justify-content: center;
+    gap: 4px;
+    padding-inline: 3px;
+    font-size: 12px;
+  }
+
+  .rbg-status-tabs .rbg-status-count {
+    min-width: 0;
+    padding-inline: 5px;
+  }
+
+  .rbg-bulk-actions {
+    width: 100%;
+  }
+
+  .rbg-bulk-actions > button {
+    flex: 1 1 auto;
+  }
+}
+
+.rbg-status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rbg-status-tab:hover {
+  color: var(--lnu-navy-deep);
+}
+
+.rbg-status-tab.active {
+  background: var(--panel-navy);
+  color: #ffffff;
+}
+
+.rbg-status-count {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.08);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.rbg-status-tab.active .rbg-status-count {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .rbg-bulk-bar {
@@ -656,6 +887,7 @@ const {
 .rbg-bulk-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .rbg-question-list {
@@ -815,9 +1047,8 @@ const {
 }
 
 @media (pointer: coarse) {
-  .review-count-chip {
+  .rbg-status-tab {
     min-height: 40px;
-    padding-inline: 14px;
   }
 }
 </style>

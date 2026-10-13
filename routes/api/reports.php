@@ -24,18 +24,41 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  * and per-subject and per-session breakdowns. Purely additive for callers --
  * the frontend reads data.metrics wholesale.
  */
-Route::get('/reports/overview', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $dashboardAnalyticsService) {
+Route::get('/reports/overview', function (Request $request) use ($canTeach, $oversees, $ensureActive, $dashboardAnalyticsService) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canTeach($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    return response()->json($dashboardAnalyticsService->buildStaffReportOverview($user));
+    // A teacher's dashboard is their own classes. An administrator's is the
+    // whole programme, which ?teacher_id narrows to one person's.
+    if (!$oversees($user)) {
+        return response()->json($dashboardAnalyticsService->buildStaffReportOverview($user));
+    }
+
+    $teachers = User::query()
+        ->whereIn('role', [User::ROLE_STAFF_MASTER_EXAMINER, User::ROLE_ADMIN])
+        ->where(fn ($query) => $query
+            ->whereIn('id', Room::query()->select('created_by'))
+            ->orWhereIn('id', Exam::query()->select('created_by')))
+        ->orderBy('name')
+        ->get(['id', 'name']);
+
+    $teacher = $request->filled('teacher_id')
+        ? $teachers->firstWhere('id', (int) $request->query('teacher_id'))
+        : null;
+
+    return response()->json(array_merge(
+        $dashboardAnalyticsService->buildStaffReportOverview(
+            $teacher ? $dashboardAnalyticsService->asOwner($teacher) : $user
+        ),
+        ['scope' => ['teacher_id' => $teacher?->id, 'teachers' => $teachers]],
+    ));
 });
 
 Route::get('/reports/exams/{exam}/rooms/{room}/complete-results.csv', function (

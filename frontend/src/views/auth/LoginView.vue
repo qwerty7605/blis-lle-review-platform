@@ -126,6 +126,19 @@ onMounted(() => {
     notice.value = 'Your session ended. Sign in again to carry on.'
   }
 
+  // From the link that confirms a new sign-in email (Settings page).
+  const emailChange = {
+    1: 'Your email address was changed. Sign in with the new one.',
+    expired: 'That email change link has expired or was altered. Ask for a new one from Settings.',
+    invalid: 'That email change link is no longer valid. Ask for a new one from Settings.',
+  }[route.query.email_changed]
+
+  if (emailChange) notice.value = emailChange
+
+  if (route.query.ended === 'idle') {
+    notice.value = 'You were signed out because the page was left unused for a while. Sign in again to carry on.'
+  }
+
   if (route.query.ended === 'disabled') {
     apiError.value = 'This account has been disabled. Ask an administrator if that is a mistake.'
   }
@@ -268,7 +281,7 @@ async function handleSubmit() {
 
   isLoading.value = true
   try {
-    await auth.login(form.identifier, form.password)
+    await auth.login(form.identifier, form.password, form.remember)
     await router.push('/dashboard')
   } catch (error) {
     apiError.value = error.response?.data?.message ?? 'Invalid credentials. Please try again.'

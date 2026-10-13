@@ -220,6 +220,56 @@
           </ol>
         </section>
 
+        <!-- Exam history: every sitting, so a retake can be set beside the
+             attempt before it. The figures above use the latest of each. -->
+        <section v-show="activeTab === 'history'" class="analytics-section" aria-labelledby="analytics-history-heading">
+          <header class="analytics-section-head">
+            <h3 id="analytics-history-heading">Exam History</h3>
+            <p>
+              Every exam you have submitted, newest first. Where you took an exam twice, your latest attempt is the
+              score that counts.
+            </p>
+          </header>
+
+          <div v-if="examHistory.length === 0" class="analytics-empty">
+            <ClipboardList :size="22" />
+            <h3>No exams submitted yet</h3>
+            <p>Each exam you finish is listed here with its score.</p>
+          </div>
+
+          <template v-else>
+            <ul class="exam-history">
+              <li v-for="row in visibleHistory" :key="row.attempt_id" class="exam-history-row" :class="{ 'is-earlier': !row.counts }">
+                <span class="exam-history-copy">
+                  <strong>{{ row.title }}</strong>
+                  <span>{{ row.subject }} &middot; {{ row.room?.name || 'Unknown room' }}</span>
+                  <span>
+                    {{ formatDateTime(row.submitted_at) }}
+                    <template v-if="row.attempts_total > 1">
+                      &middot; Attempt {{ row.attempt_number }} of {{ row.attempts_total }}
+                    </template>
+                  </span>
+                </span>
+
+                <span class="exam-history-score">
+                  <strong :class="historyTone(row)">{{ historyScore(row) }}</strong>
+                  <span v-if="row.attempts_total > 1" class="pill" :class="row.counts ? 'navy' : 'neutral'">
+                    {{ row.counts ? 'Counts' : 'Earlier Attempt' }}
+                  </span>
+                </span>
+
+                <RouterLink class="ghost-btn exam-history-link" :to="{ name: 'dashboard-exam-result', params: { attemptId: row.attempt_id } }">
+                  View Result
+                </RouterLink>
+              </li>
+            </ul>
+
+            <button v-if="examHistory.length > historyShown" type="button" class="ghost-btn exam-history-more" @click="historyShown += HISTORY_PAGE">
+              Show More ({{ examHistory.length - historyShown }} left)
+            </button>
+          </template>
+        </section>
+
       <!-- Exam outcome beside what to review next -->
       <div v-show="activeTab === 'readiness'" class="analytics-readiness-grid">
         <!-- Estimated outcome: the same card as the dashboard's -->
@@ -360,6 +410,7 @@ import {
   ChevronDown,
   ClipboardList,
   Clock,
+  History,
   Info,
   Laptop,
   LayoutGrid,
@@ -375,6 +426,7 @@ import {
 } from 'lucide-vue-next'
 import { useStudentInsightsModule } from '../composables/useStudentInsightsModule'
 import { describeReadiness } from '../composables/readiness'
+import { formatDateTime } from '../composables/useDashboardFormatters'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
 import NextStepsList from '@/components/NextStepsList.vue'
@@ -393,7 +445,23 @@ const {
   actionPlan,
   predictivePanel,
   loadAnalytics,
+  examHistory,
 } = useStudentInsightsModule()
+
+const HISTORY_PAGE = 20
+const historyShown = ref(HISTORY_PAGE)
+const visibleHistory = computed(() => examHistory.value.slice(0, historyShown.value))
+
+function historyScore(row) {
+  return row.score_percent === null || row.score_percent === undefined ? 'Not graded' : `${Number(row.score_percent).toFixed(1)}%`
+}
+
+// Indigo for passing and amber for below, the pair the charts use.
+function historyTone(row) {
+  if (row.score_percent === null || row.score_percent === undefined) return 'is-ungraded'
+
+  return Number(row.score_percent) >= Number(stats.value.passing_threshold ?? 75) ? 'is-passing' : 'is-below'
+}
 
 const overviewDescription = 'The big number is your average across every finished exam. '
   + 'The line plots your last exams in order, oldest to newest (A1 is the oldest) against the gold 75% passing mark -- '
@@ -492,6 +560,7 @@ const readiness = computed(() => describeReadiness(predictivePanel.value))
 const tabs = [
   { key: 'subjects', label: 'Subjects', icon: LayoutGrid },
   { key: 'plan', label: 'Study Plan', icon: ListOrdered },
+  { key: 'history', label: 'Exam History', icon: History },
   { key: 'readiness', label: 'Exam Outcome', icon: ShieldCheck },
 ]
 const activeTab = ref('subjects')
@@ -1752,6 +1821,109 @@ function trendToneClass(subject) {
 
   .analytics-tab svg {
     display: none;
+  }
+}
+
+/* ---- Exam history ---- */
+.exam-history {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+
+.exam-history-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+}
+
+.exam-history-row + .exam-history-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+/* An attempt a retake has replaced: still there, set back a little. */
+.exam-history-row.is-earlier {
+  background: var(--surface-muted);
+}
+
+.exam-history-copy {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.exam-history-copy strong {
+  font-size: 14px;
+  color: var(--lnu-navy-deep);
+  overflow-wrap: anywhere;
+}
+
+.exam-history-copy span {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.exam-history-score {
+  flex: none;
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.exam-history-score strong {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-history-score .is-passing {
+  color: #3949ab;
+}
+
+.exam-history-score .is-below {
+  color: #a8700f;
+}
+
+.exam-history-score .is-ungraded {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.exam-history-link {
+  flex: none;
+  text-decoration: none;
+}
+
+.exam-history-more {
+  justify-self: center;
+  margin-top: 12px;
+}
+
+@media (max-width: 640px) {
+  .exam-history-row {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+
+  .exam-history-copy {
+    flex-basis: 100%;
+  }
+
+  .exam-history-score {
+    flex: 1 1 auto;
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: center;
+    justify-items: start;
+    gap: 8px;
   }
 }
 </style>

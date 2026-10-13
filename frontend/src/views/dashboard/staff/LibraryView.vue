@@ -60,6 +60,8 @@
           />
         </label>
 
+        <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="bankOwners" label="Files by" />
+
         <div v-scroll-hint class="library-filters" role="group" aria-label="Filter by subject">
           <button
             v-for="filter in subjectFilters"
@@ -106,6 +108,7 @@
                     <div class="bank-cell-copy">
                       <strong>{{ bank.title }}</strong>
                       <span>{{ bank.subject || 'General subject' }}</span>
+                      <span v-if="seesEveryTeacher && bank.creator?.name" class="owner-line">By {{ bank.creator.name }}</span>
                     </div>
                   </div>
                 </td>
@@ -177,7 +180,9 @@
             <span class="bank-icon" aria-hidden="true"><FileText :size="18" /></span>
             <div class="bank-card-heading">
               <h3 class="bank-title">{{ bank.title }}</h3>
-              <p class="bank-subject">{{ bank.subject || 'General subject' }}</p>
+              <p class="bank-subject">
+                {{ bank.subject || 'General subject' }}<template v-if="seesEveryTeacher && bank.creator?.name"> &middot; By {{ bank.creator.name }}</template>
+              </p>
             </div>
             <span class="bank-count">
               <strong>{{ bank.total_items }}</strong>
@@ -414,7 +419,7 @@
                   <div class="library-bank-question-pills">
                     <span class="pill neutral">{{ (question.question_type || 'multiple_choice').replace('_', ' ') }}</span>
                     <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
-                    <span v-if="question.difficulty" class="pill success">{{ question.difficulty }}</span>
+                    <span v-if="question.difficulty" class="pill pill-cap success">{{ question.difficulty }}</span>
                     <span v-if="question.cognitive_level" class="pill neutral">{{ cognitiveLevelLabel(question.cognitive_level) }}</span>
                     <span v-if="question.tag_status === 'pending_review'" class="pill neutral">Tag pending review</span>
                   </div>
@@ -683,6 +688,9 @@ import { formatCompactDate, formatDateTime } from '../composables/useDashboardFo
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 import { useLibraryModule } from '../composables/useLibraryModule'
 import { vScrollHint } from '@/utils/scrollHint'
+import { useAuthStore } from '@/store/auth.store'
+import { isOwnedBy, ownersOf, overseesAll } from '@/utils/owners'
+import OwnerFilter from '../shared/OwnerFilter.vue'
 
 function questionTypeLabel(type) {
   return String(type ?? 'multiple_choice')
@@ -774,6 +782,11 @@ const useCards = computed(() => (
 const bankSearch = ref('')
 const activeSubject = ref('all')
 
+// An administrator's Library holds every teacher's files.
+const seesEveryTeacher = computed(() => overseesAll(useAuthStore().user))
+const selectedOwnerFilter = ref('')
+const bankOwners = computed(() => ownersOf(libraryQuestionBanks.value))
+
 const totalQuestions = computed(() => (
   libraryQuestionBanks.value.reduce((sum, bank) => sum + Number(bank.total_items ?? 0), 0)
 ))
@@ -802,6 +815,7 @@ const visibleBanks = computed(() => {
   const needle = bankSearch.value.toLowerCase()
 
   return libraryQuestionBanks.value.filter((bank) => {
+    if (!isOwnedBy(bank, selectedOwnerFilter.value)) return false
     if (activeSubject.value !== 'all' && bankSubject(bank) !== activeSubject.value) return false
     if (!needle) return true
 
@@ -813,6 +827,7 @@ const visibleBanks = computed(() => {
 function clearBankFilters() {
   bankSearch.value = ''
   activeSubject.value = 'all'
+  selectedOwnerFilter.value = ''
 }
 
 /*

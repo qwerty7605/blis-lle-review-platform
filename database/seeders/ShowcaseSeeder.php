@@ -218,7 +218,7 @@ class ShowcaseSeeder extends Seeder
     private function ensureStaffAddressesAreFree(): void
     {
         $taken = DB::table('users')
-            ->whereIn('email', [DemoData::adminEmail(), ...DemoData::TEACHER_EMAILS])
+            ->whereIn('email', array_filter([DemoData::adminEmail(), ...DemoData::teacherEmails(), DemoData::studentEmail()]))
             ->where('is_demo', false)
             ->pluck('email')
             ->all();
@@ -234,7 +234,7 @@ class ShowcaseSeeder extends Seeder
 
     private function seedStaff(): void
     {
-        [$first, $second, $third] = DemoData::TEACHER_EMAILS;
+        [$first, $second, $third] = DemoData::teacherEmails();
 
         $this->staff['admin'] = $this->insertStaff(
             'Admin',
@@ -508,7 +508,7 @@ class ShowcaseSeeder extends Seeder
 
                 if ($featured !== null) {
                     [$first, $middle, $last, $ability] = self::FEATURED[$featured];
-                    $person = $this->names->person($first, $middle, $last);
+                    $person = $this->names->person($first, $middle, $last, $i === 0 ? DemoData::studentEmail() : null);
                 } else {
                     $person = $this->names->next();
                     $ability = $this->ability();

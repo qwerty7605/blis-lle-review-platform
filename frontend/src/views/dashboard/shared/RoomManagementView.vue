@@ -136,6 +136,10 @@
           <Plus :size="16" />
           Add Room
         </button>
+        <button v-if="archivedRooms.length > 0" type="button" class="ghost-btn rooms-archived-btn" @click="openArchivedRoomsModal">
+          <Archive :size="14" />
+          Archived Rooms ({{ archivedRooms.length }})
+        </button>
       </div>
 
       <!-- Wherever this is a single column (900px and under) it shows the
@@ -190,6 +194,11 @@
 
             <p v-if="filteredRooms.length === 0" class="muted rooms-list-empty">No rooms match "{{ roomSearchQuery }}".</p>
           </div>
+
+          <button v-if="archivedRooms.length > 0" type="button" class="ghost-btn rooms-archived-btn" @click="openArchivedRoomsModal">
+            <Archive :size="14" />
+            Archived Rooms ({{ archivedRooms.length }})
+          </button>
         </aside>
 
         <section class="room-detail-column">
@@ -220,6 +229,10 @@
                 <button type="button" class="ghost-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading" @click="openEditRoomModal">
                   <Pencil :size="14" />
                   Edit
+                </button>
+                <button type="button" class="ghost-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading" @click="openArchiveRoomModal">
+                  <Archive :size="14" />
+                  Archive
                 </button>
                 <button type="button" class="danger-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading" @click="openDeleteRoomModal">
                   <Trash2 :size="14" />
@@ -302,10 +315,9 @@
                     </span>
 
                     <!-- Room -> Exam, the mirror of the Exams page's room
-                         chips: one click to see everywhere this exam runs.
-                         Teachers only: the Exams page is theirs. -->
+                         chips: one click to see everywhere this exam runs. -->
                     <RouterLink
-                      v-if="isStaffRole"
+                      v-if="isManagementRole"
                       class="assignment-chip is-link"
                       :to="{ name: 'dashboard-exams', query: { exam: exam.id } }"
                       :title="`Open ${exam.title} on the Exams page`"
@@ -547,10 +559,37 @@
             </button>
           </header>
 
-          <p class="muted">
-            Delete <strong>{{ selectedRoom?.name }}</strong> (<code>{{ selectedRoom?.code }}</code>)?
-            This will remove room enrollments.
-          </p>
+          <!-- Delete is for a room that was never used. One that has results,
+               or an exam still ahead of its class, is told why and offered
+               Archive, before the button is pressed rather than after. -->
+          <template v-if="roomRemoval.canDelete">
+            <p class="muted">
+              Delete <strong>{{ selectedRoom?.name }}</strong> (<code>{{ selectedRoom?.code }}</code>)? This cannot be undone.
+            </p>
+            <p v-if="roomMemberCount > 0" class="muted">
+              {{ roomMemberCount === 1 ? '1 student' : `${roomMemberCount} students` }} will be removed from it.
+            </p>
+          </template>
+
+          <template v-else>
+            <p class="muted">
+              <strong>{{ selectedRoom?.name }}</strong> (<code>{{ selectedRoom?.code }}</code>) cannot be deleted:
+            </p>
+            <ul class="room-removal-reasons">
+              <li v-if="roomRemoval.hasResults">Students have taken exams in it, and their results would be deleted with it.</li>
+              <li v-if="roomRemoval.pendingExams.length > 0">
+                {{ roomRemoval.pendingExams.length === 1 ? 'An exam is' : 'Exams are' }} still open or scheduled in it:
+                <strong>{{ roomRemoval.pendingExams.join(', ') }}</strong>.
+              </li>
+            </ul>
+            <p class="muted">
+              {{
+                roomRemoval.hasResults
+                  ? 'Archive the room instead. It leaves your list and your students\' lists, and everything in it is kept.'
+                  : 'Archive that exam from the room first, or archive the room, which keeps everything in it.'
+              }}
+            </p>
+          </template>
 
           <!-- The page-level banner sits behind this dialog, so a refused
                delete has to be reported here to be seen at all. -->
@@ -561,10 +600,103 @@
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeDeleteRoomModal">Cancel</button>
-            <button type="button" class="danger-btn" :disabled="roomLoading" @click="handleDeleteRoom">
+            <button v-if="roomRemoval.canDelete" type="button" class="danger-btn" :disabled="roomLoading" @click="handleDeleteRoom">
               <Trash2 :size="16" />
               Delete Room
             </button>
+            <button v-else type="button" class="primary-btn" :disabled="roomLoading" @click="openArchiveRoomModal">
+              <Archive :size="16" />
+              Archive Instead
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showArchiveRoomModal" class="modal-backdrop" @click.self="closeArchiveRoomModal">
+        <div class="modal-card">
+          <header class="modal-head">
+            <h4>Archive Room</h4>
+            <button type="button" class="modal-close" @click="closeArchiveRoomModal">
+              <X :size="16" />
+            </button>
+          </header>
+
+          <template v-if="roomRemoval.canArchive">
+            <p class="muted">
+              Archive <strong>{{ selectedRoom?.name }}</strong> (<code>{{ selectedRoom?.code }}</code>)? It leaves your
+              list and your students' lists. Its students, exams and results are kept, and you can restore it at any time.
+            </p>
+            <p v-if="roomRemoval.pendingExams.length > 0" class="feedback info" role="note">
+              <AlertCircle :size="15" />
+              <span>
+                Students will no longer be able to take
+                <strong>{{ roomRemoval.pendingExams.join(', ') }}</strong> in this room while it is archived.
+              </span>
+            </p>
+          </template>
+
+          <p v-else class="muted">
+            <strong>{{ selectedRoom?.name }}</strong> cannot be archived right now:
+            {{ roomRemoval.attemptsInProgress === 1 ? '1 student is' : `${roomRemoval.attemptsInProgress} students are` }}
+            in the middle of an exam in it. Try again once they have submitted.
+          </p>
+
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeArchiveRoomModal">Cancel</button>
+            <button v-if="roomRemoval.canArchive" type="button" class="primary-btn" :disabled="roomLoading" @click="handleArchiveRoom">
+              <Archive :size="16" />
+              Archive Room
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <teleport to="body">
+      <div v-if="showArchivedRoomsModal" class="modal-backdrop" @click.self="closeArchivedRoomsModal">
+        <div class="modal-card">
+          <header class="modal-head">
+            <h4>Archived Rooms</h4>
+            <button type="button" class="modal-close" @click="closeArchivedRoomsModal">
+              <X :size="16" />
+            </button>
+          </header>
+
+          <p class="muted">Restoring a room puts it back in your list and your students' lists, as it was.</p>
+
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
+
+          <ul class="archived-room-list">
+            <li v-for="room in archivedRooms" :key="room.id" class="archived-room">
+              <span class="archived-room-copy">
+                <strong>{{ room.name }}</strong>
+                <span>
+                  Code {{ room.code }} &middot; {{ archivedRoomStudents(room) }}
+                  <template v-if="room.creator?.name && isAdminRole"> &middot; By {{ room.creator.name }}</template>
+                </span>
+              </span>
+              <button type="button" class="ghost-btn" :disabled="restoringRoomId !== null" @click="handleRestoreRoom(room)">
+                <RefreshCw v-if="restoringRoomId === room.id" :size="14" class="spin-soft" />
+                <ArchiveRestore v-else :size="14" />
+                Restore
+              </button>
+            </li>
+          </ul>
+
+          <p v-if="archivedRooms.length === 0" class="muted">No archived rooms.</p>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" @click="closeArchivedRoomsModal">Close</button>
           </div>
         </div>
       </div>
@@ -606,6 +738,16 @@ import { useCompactLayout } from '../composables/useViewport'
 // page load like every other UI-only reveal on this view.
 const showArchivedExams = ref(false)
 
+// An old room's students have mostly graduated, and those are counted apart.
+function archivedRoomStudents(room) {
+  const count = Number(room.members_count ?? 0) + Number(room.archived_members_count ?? 0)
+
+  return count === 1 ? '1 student' : `${count} students`
+}
+
+// How many students deleting the open room would take out of it.
+const roomMemberCount = computed(() => Number(selectedRoom.value?.members_count ?? selectedRoom.value?.members?.length ?? 0))
+
 const {
   isStaffRole,
   isManagementRole,
@@ -620,6 +762,18 @@ const {
   showCreateRoomModal,
   showEditRoomModal,
   showDeleteRoomModal,
+  showArchiveRoomModal,
+  showArchivedRoomsModal,
+  archivedRooms,
+  restoringRoomId,
+  roomRemoval,
+  openArchiveRoomModal,
+  closeArchiveRoomModal,
+  handleArchiveRoom,
+  openArchivedRoomsModal,
+  closeArchivedRoomsModal,
+  handleRestoreRoom,
+  isAdminRole,
   showRoomExportModal,
   editRoomName,
   roomLoading,
@@ -788,6 +942,73 @@ const roomExamCoveragePercent = computed(() => {
 
 <style scoped src="../dashboard.css"></style>
 <style scoped>
+/* Archive, archived rooms, and why a room cannot be deleted. */
+.rooms-archived-btn {
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.room-removal-reasons {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.archived-room-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+}
+
+.archived-room-list:empty {
+  display: none;
+}
+
+.archived-room {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.archived-room + .archived-room {
+  border-top: 1px solid var(--border-soft);
+}
+
+.archived-room-copy {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.archived-room-copy strong {
+  font-size: 13.5px;
+  color: var(--lnu-navy-deep);
+  overflow-wrap: anywhere;
+}
+
+.archived-room-copy span {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.archived-room .ghost-btn {
+  flex: none;
+}
+
 /*
   Mirrors RoomsView.vue's (student) redesign class-for-class so both roles
   see the same room-browsing layout, with staff-only actions layered on top

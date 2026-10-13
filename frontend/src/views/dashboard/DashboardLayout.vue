@@ -48,6 +48,8 @@
 
       <nav class="layout-nav">
         <template v-for="item in navItems" :key="item.routeName">
+          <p v-if="item.groupLabel && showSidebarLabels" class="layout-nav-heading">{{ item.groupLabel }}</p>
+          <hr v-else-if="item.groupLabel" class="layout-nav-divider" />
           <!--
             On a phone a student's rooms live here rather than as a list on the
             Rooms page itself: the page had to spend its first screenful on a
@@ -651,6 +653,40 @@ onBeforeUnmount(() => {
   margin-top: 22px;
   display: grid;
   gap: 6px;
+  /* The menu takes what height is left and scrolls inside it, so the account
+     tile and Log out below stay on screen however many pages a role has: an
+     administrator's list is longer than a 640px-high laptop screen. */
+  flex: 1 1 auto;
+  min-height: 0;
+  align-content: start;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+}
+
+.layout-nav-heading {
+  margin: 10px 0 2px;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.layout-nav-heading:first-child {
+  margin-top: 0;
+}
+
+.layout-nav-divider {
+  width: 28px;
+  margin: 6px auto;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.layout-nav-divider:first-child {
+  display: none;
 }
 
 .layout-nav-item {
@@ -688,6 +724,7 @@ onBeforeUnmount(() => {
 }
 
 .layout-sidebar-footer {
+  flex: none;
   margin-top: auto;
   border-top: 1px solid rgba(240, 208, 128, 0.22);
   padding-top: 12px;

@@ -201,6 +201,16 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Whether this person's teaching pages cover every teacher's rooms,
+     * exams and Library files rather than only their own: an administrator.
+     * The report and analytics queries ask this before narrowing to an owner.
+     */
+    public function overseesAllTeaching(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
+
+    /**
      * Limit the query to student accounts.
      */
     public function scopeStudents(Builder $query): Builder
@@ -214,6 +224,30 @@ class User extends Authenticatable implements MustVerifyEmail
     public function scopeCurrentStudents(Builder $query): Builder
     {
         return $query->students()->whereNull('archived_at');
+    }
+
+    /**
+     * Sign-ups nobody finished: self-registered student accounts whose emailed
+     * link was never opened. Such an account cannot sign in, so it holds
+     * nothing but the email address and student ID that were typed into the
+     * form -- and whoever typed them has not shown they own either. These are
+     * the rows a new registration may replace and the hourly clean-up removes.
+     *
+     * "Untouched since it was created" keeps out an account an administrator
+     * has edited, including one whose verification they withdrew: that account
+     * is theirs to decide about. The checks on rooms and results are a second
+     * guard, so nothing with history can match.
+     */
+    public function scopeUnclaimedRegistrations(Builder $query): Builder
+    {
+        return $query
+            ->where('role', self::ROLE_STUDENT)
+            ->whereNull('email_verified_at')
+            ->where('is_demo', false)
+            ->whereColumn('updated_at', '<=', 'created_at')
+            ->whereNotExists(fn ($sub) => $sub->selectRaw('1')->from('room_user')->whereColumn('room_user.user_id', 'users.id'))
+            ->whereNotExists(fn ($sub) => $sub->selectRaw('1')->from('exam_attempts')->whereColumn('exam_attempts.user_id', 'users.id'))
+            ->whereNotExists(fn ($sub) => $sub->selectRaw('1')->from('lle_results')->whereColumn('lle_results.user_id', 'users.id'));
     }
 
     /**
@@ -280,6 +314,8 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            // The person's own Settings choices; see routes/api/account.php.
+            'preferences' => 'array',
             'is_active' => 'boolean',
             // Without this the column -- a real boolean in the schema -- comes
             // back as 0/1 while is_active beside it comes back as true/false,

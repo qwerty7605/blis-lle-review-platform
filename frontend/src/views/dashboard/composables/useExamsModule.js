@@ -1,4 +1,6 @@
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useAuthStore } from '@/store/auth.store'
+import { examDefaultsFor } from '@/utils/examDefaults'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { normalizeExamDeliveryMode } from './useDashboardFormatters'
@@ -67,6 +69,9 @@ function normalizeQuestionBankRecord(bank) {
     title: String(bank.title ?? '').trim(),
     subject: bank.subject ? String(bank.subject).trim() : null,
     total_items: Number(bank.total_items ?? bank.questions_count ?? 0),
+    // Present on the Library's own list; named to an administrator, who is
+    // choosing among every teacher's files.
+    creator: bank.creator ?? null,
   }
 }
 
@@ -198,14 +203,11 @@ export function useExamsModule() {
     examForm.title = ''
     examForm.description = ''
     examForm.question_bank_ids = []
-    examForm.total_items = 60
-    examForm.duration_minutes = 90
     examForm.schedule_start_at = currentDateTimeLocalValue()
     examForm.schedule_end_at = ''
-    examForm.one_take_only = false
-    examForm.shuffle_questions = false
-    examForm.results_visibility_mode = 'hidden'
     examForm.room_ids = []
+    // The teacher's own starting values from Settings, or the standard ones.
+    Object.assign(examForm, examDefaultsFor(useAuthStore().user))
   }
 
   // The form as it was when it opened, to tell an untouched one from one
@@ -282,6 +284,8 @@ export function useExamsModule() {
         id: room.id,
         name: room.name,
         code: room.code,
+        // Shown to an administrator, who is choosing among every teacher's.
+        ownerName: room.creator?.name ?? '',
       }))
     } catch (error) {
       if (!keepOnFailure) manageableRooms.value = []
