@@ -145,6 +145,7 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
+                    <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
@@ -182,6 +183,7 @@
                   <div class="rooms-exam-meta">
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
+                    <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
                   </div>
 
                   <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
@@ -805,6 +807,19 @@ const {
   handleJoinRoom,
   handleLeaveRoom,
 } = useRoomsModule({ mode: 'student' })
+
+// "Attempt 2 of 2 · Latest 80.0%": how many times the exam has been sat,
+// and the score that counts, which is the latest sitting's.
+function studentAttemptSummary(exam) {
+  const taken = Number(exam.student_submitted_attempts ?? 0)
+  if (taken < 1) return ''
+
+  const allowed = Math.max(taken, Number(exam.student_max_attempts ?? taken))
+  const score = exam.student_latest_score_percent
+  const scoreText = score === null || score === undefined ? '' : ` · ${taken > 1 ? 'Latest ' : ''}${Number(score).toFixed(1)}%`
+
+  return `Attempt ${taken} of ${allowed}${scoreText}`
+}
 
 const examProgressPercent = computed(() => {
   const total = Number(studentExamAttempt.value?.total_items ?? 0)
@@ -1744,4 +1759,9 @@ const examTimerTone = computed(() => {
   }
 }
 
+
+.rooms-exam-attempts {
+  font-weight: 600;
+  color: var(--lnu-navy-deep);
+}
 </style>

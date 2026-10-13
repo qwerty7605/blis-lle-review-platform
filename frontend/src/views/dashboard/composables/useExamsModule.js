@@ -69,6 +69,9 @@ function normalizeQuestionBankRecord(bank) {
     title: String(bank.title ?? '').trim(),
     subject: bank.subject ? String(bank.subject).trim() : null,
     total_items: Number(bank.total_items ?? bank.questions_count ?? 0),
+    // Present on the Library's own list; named to an administrator, who is
+    // choosing among every teacher's files.
+    creator: bank.creator ?? null,
   }
 }
 
@@ -281,6 +284,8 @@ export function useExamsModule() {
         id: room.id,
         name: room.name,
         code: room.code,
+        // Shown to an administrator, who is choosing among every teacher's.
+        ownerName: room.creator?.name ?? '',
       }))
     } catch (error) {
       if (!keepOnFailure) manageableRooms.value = []

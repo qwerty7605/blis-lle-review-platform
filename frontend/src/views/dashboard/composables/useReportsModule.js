@@ -87,7 +87,11 @@ export function useReportsModule() {
   const auth = useAuthStore()
   const services = useDashboardDataServices()
 
-  const isStaffRole = computed(() => ['staff_master_examiner'].includes(String(auth.user?.role ?? 'student').toLowerCase()))
+  // Everyone the Dashboard is for: teachers, and administrators, whose
+  // figures cover the whole programme unless narrowed to one teacher.
+  const isStaffRole = computed(() => ['staff_master_examiner', 'faculty', 'admin'].includes(String(auth.user?.role ?? 'student').toLowerCase()))
+  const reportTeachers = ref([])
+  const reportTeacherId = ref('')
 
   const reportLoading = ref(false)
   const reportError = ref('')
@@ -372,7 +376,8 @@ export function useReportsModule() {
     }
 
     try {
-      const { data } = await services.getReportsOverview()
+      const { data } = await services.getReportsOverview(reportTeacherId.value)
+      reportTeachers.value = Array.isArray(data.scope?.teachers) ? data.scope.teachers : []
       reportMetrics.value = data.metrics ?? {}
       reportActivity.value = data.recent_activity ?? []
       reportSessionPerformance.value = data.session_performance ?? []
@@ -475,6 +480,8 @@ export function useReportsModule() {
     reportMetricCards,
     formatPercent,
     loadReports,
+    reportTeachers,
+    reportTeacherId,
     loadReportExportTargets,
     exportReport,
     sendReportEmail,

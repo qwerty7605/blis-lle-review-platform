@@ -44,10 +44,12 @@ export function useDashboardDataServices() {
     getLiveBoard: (examId, roomId) => examsApi.liveBoard(examId, roomId),
     getItemAnalytics: (examId) => examsApi.itemAnalytics(examId),
 
-    getReportsOverview: () => reportsApi.overview(),
+    getReportsOverview: (teacherId) => reportsApi.overview(teacherId),
     getStudentsDirectory: (params) => studentsApi.directory(params),
     getLleResults: (params) => lleResultsApi.list(params),
     recordLleResult: (payload) => lleResultsApi.record(payload),
+    getLleBatch: (params) => lleResultsApi.batch(params),
+    recordLleBatch: (payload) => lleResultsApi.recordBatch(payload),
     removeLleResult: (id) => lleResultsApi.remove(id),
     getLetModelStatus: () => lleResultsApi.modelStatus(),
     retrainLetModel: () => lleResultsApi.retrainModel(),

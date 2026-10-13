@@ -19,6 +19,20 @@
         form one training example for the Exam Outcome model.
       </p>
 
+      <!-- One at a time, for a late result or a correction; or a whole batch
+           from the published list, without looking each student up. -->
+      <div class="lle-mode" role="tablist" aria-label="How to record">
+        <button type="button" role="tab" class="lle-mode-tab" :class="{ active: recordMode === 'batch' }" :aria-selected="(recordMode === 'batch').toString()" @click="recordMode = 'batch'">
+          <Users :size="14" /> By Batch
+        </button>
+        <button type="button" role="tab" class="lle-mode-tab" :class="{ active: recordMode === 'single' }" :aria-selected="(recordMode === 'single').toString()" @click="recordMode = 'single'">
+          <UserRound :size="14" /> One Student
+        </button>
+      </div>
+
+      <LicensureBatchEntry v-if="recordMode === 'batch'" @saved="refreshAfterBatch" />
+
+      <template v-else>
       <div class="lle-form">
         <div class="lle-field lle-field-wide">
           <label for="lle-student">Student</label>
@@ -114,6 +128,7 @@
           </button>
         </div>
       </div>
+      </template>
     </article>
 
     <article class="surface-card room-shell-card is-flush">
@@ -366,8 +381,11 @@ import {
   Save,
   Trash2,
   Undo2,
+  UserRound,
+  Users,
 } from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
+import LicensureBatchEntry from './LicensureBatchEntry.vue'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
 const isPhone = usePhoneLayout()
@@ -432,7 +450,18 @@ const {
   canRevertModel,
   retrainModel,
   revertModel,
+  loadModelStatus,
 } = useLleResultsModule()
+
+// A batch is how results arrive, so that is the way the page opens.
+const recordMode = ref('batch')
+
+// The list of recorded results and the model's count of what it can learn
+// from both changed.
+function refreshAfterBatch() {
+  loadResults()
+  loadModelStatus({ silent: true })
+}
 
 const modelInUse = computed(() => {
   const live = modelStatus.value?.live
@@ -464,6 +493,62 @@ const lastModelCheck = computed(() => {
 <style scoped src="../dashboard.css"></style>
 
 <style scoped>
+.lle-mode {
+  display: inline-flex;
+  gap: 4px;
+  margin: 0 18px 14px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef1f8;
+  border: 1px solid rgba(13, 21, 71, 0.08);
+  justify-self: start;
+  width: fit-content;
+  max-width: calc(100% - 36px);
+}
+
+.lle-mode-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lle-mode-tab.active {
+  background: var(--panel-navy);
+  color: #ffffff;
+}
+
+@media (max-width: 640px) {
+  .lle-mode {
+    display: flex;
+    width: auto;
+    justify-self: stretch;
+    margin-inline: 14px;
+    max-width: none;
+  }
+
+  .lle-mode-tab {
+    flex: 1 1 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .lle-mode-tab {
+    min-height: 40px;
+  }
+}
+
 .lle-intro {
   margin: 0 18px 14px;
   max-width: 70ch;

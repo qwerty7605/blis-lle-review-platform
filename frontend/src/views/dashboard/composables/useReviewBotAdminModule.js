@@ -32,6 +32,8 @@ function normalizeBank(bank) {
     sourceFilename: bank.source_filename ?? null,
     questionsCount: Number(bank.questions_count ?? bank.total_items ?? 0),
     mappingStatus: bank.mapping_status ?? 'idle',
+    // Named on an administrator's list, which has every teacher's files.
+    ownerName: bank.creator?.name ?? '',
     createdAt: bank.created_at ?? null,
   }
 }

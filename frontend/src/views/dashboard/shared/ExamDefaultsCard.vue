@@ -33,14 +33,14 @@
       </div>
 
       <fieldset class="account-radio-group">
-        <legend>After a Student Submits</legend>
+        <legend>Results Visibility</legend>
         <label class="check-item">
           <input v-model="form.results_visibility_mode" type="radio" value="hidden" />
-          <span>Keep the score and answers hidden</span>
+          <span>Hidden: students see only their final score</span>
         </label>
         <label class="check-item">
           <input v-model="form.results_visibility_mode" type="radio" value="visible" />
-          <span>Show the score and answers</span>
+          <span>Visible: students can also review right and wrong answers</span>
         </label>
       </fieldset>
 

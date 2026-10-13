@@ -5708,6 +5708,15 @@ a.ghost-btn {
   letter-spacing: 0;
 }
 
+/* "By <teacher>" under a room, exam or Library file, on an administrator's
+   pages, where the list holds every teacher's. */
+.owner-line {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lnu-info);
+  overflow-wrap: anywhere;
+}
+
 /* A pill showing a stored value ("easy", "analysis") starts each word with a
    capital, like the pills whose wording is written out in the page. */
 .pill.pill-cap {

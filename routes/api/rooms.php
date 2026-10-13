@@ -161,7 +161,7 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                 ExamAttempt::STATUS_IN_PROGRESS,
                 ExamAttempt::STATUS_SUBMITTED,
             ])
-            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at')
+            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at', 'score_percent')
             ->orderByDesc('started_at')
             ->orderByDesc('id')
             ->get()
@@ -200,6 +200,8 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                     $assignedExam->student_attempt_id = $latestAttemptId;
                     $assignedExam->student_submitted_at = $submittedAttempt?->submitted_at;
                     $assignedExam->student_submitted_attempts = $submittedAttemptCount;
+                    // The latest sitting's, which is the score that counts.
+                    $assignedExam->student_latest_score_percent = $submittedAttempt?->score_percent;
                     $assignedExam->student_max_attempts = $maxAllowedAttempts;
                     $assignedExam->student_attempts_remaining = $remainingAttempts;
                     $assignedExam->student_can_start_attempt = $assignedExam->studentCanStartAttempt($remainingAttempts, $archivedAssignment);
@@ -449,13 +451,13 @@ Route::post('/rooms/{room}/restore', function (Request $request, Room $room) use
     return response()->json(['message' => 'Room restored.']);
 });
 
-Route::post('/rooms', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+Route::post('/rooms', function (Request $request) use ($canManageRooms, $ensureActive, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
-    if (!$isStaffMasterExaminer($user)) {
+    if (!$canManageRooms($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -509,38 +511,10 @@ Route::post('/rooms/join', function (Request $request) use ($ensureActive, $reco
 
     $user = $request->user();
 
-    // Rooms are year-level sections: a room's existing student roster defines
-    // the level, and joiners have to match it. This guard existed before the
-    // routes were split out of the monolithic api.php and was lost in that
-    // move, leaving the rule enforced nowhere.
-    if ($user?->role === User::ROLE_STUDENT) {
-        $studentYearLevel = !is_null($user->year_level)
-            ? (int) $user->year_level
-            : null;
-
-        $roomYearLevels = $room->members()
-            ->where('users.role', User::ROLE_STUDENT)
-            ->whereNull('users.archived_at')
-            ->where('users.id', '!=', $user->id)
-            ->pluck('users.year_level')
-            ->filter(fn ($yearLevel) => !is_null($yearLevel))
-            ->map(fn ($yearLevel) => (int) $yearLevel)
-            ->unique()
-            ->values();
-
-        if ($roomYearLevels->count() > 1) {
-            return response()->json([
-                'message' => 'This room already mixes year levels. Clean up the roster before allowing more student joins.',
-            ], 422);
-        }
-
-        if ($roomYearLevels->isNotEmpty() && (!is_int($studentYearLevel) || (int) $roomYearLevels->first() !== $studentYearLevel)) {
-            return response()->json([
-                'message' => 'You can only join rooms that match your year level section.',
-            ], 422);
-        }
-    }
-
+    // Anyone with the code may join, whatever their year level. A rule that
+    // let the first student to join set the room's level turned away the
+    // rest of a mixed class (and an irregular student from the class they
+    // were retaking), with nothing on the teacher's side to say why.
     $user->rooms()->syncWithoutDetaching([$room->id]);
 
     $recordAudit(
