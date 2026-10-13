@@ -12,11 +12,13 @@
 
     <div v-if="unverifiedEmail" class="alert alert-info">
       <p>Link expired or never arrived? We can send a new one.</p>
-      <button type="button" class="submit-btn" :disabled="isResending" @click="handleResend">
-        <span v-if="!isResending">Resend verification email</span>
-        <span v-else>Sending...</span>
+      <button type="button" class="submit-btn" :disabled="resendDisabled" @click="handleResend">
+        <span v-if="isResending">Sending...</span>
+        <span v-else-if="resendWaitSeconds > 0">Resend again in {{ resendWaitSeconds }}s</span>
+        <span v-else>Resend verification email</span>
       </button>
-      <p v-if="resendMessage">{{ resendMessage }}</p>
+      <p v-if="resendMessage" role="status">{{ resendMessage }}</p>
+      <p v-if="resendTooMany" class="resend-limit" role="alert">Too many attempts. Try again later.</p>
     </div>
 
     <form class="auth-form" @submit.prevent="handleSubmit">
@@ -80,7 +82,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
 import AuthLayout from './AuthLayout.vue'
@@ -129,16 +131,122 @@ onMounted(() => {
   }
 })
 
+/*
+ * Resending the verification email is paced: 20 seconds between one and the
+ * next, so a second press is not made before the first email has had time to
+ * arrive, and three in an hour for one address, which is all the server will
+ * send (see the 'verification' limiter in AppServiceProvider). The fourth
+ * press is told so instead of being sent off to be refused.
+ *
+ * The times are kept for the browser tab, per address, so reloading the page
+ * does not hand the wait back.
+ */
+const RESEND_WAIT_MS = 20 * 1000
+const RESEND_LIMIT = 3
+const RESEND_WINDOW_MS = 60 * 60 * 1000
+
+const resendSentAt = ref([])
+const resendTooMany = ref(false)
+const resendClock = ref(Date.now())
+let resendTicker = null
+
+const resendWaitSeconds = computed(() => {
+  const last = resendSentAt.value[resendSentAt.value.length - 1]
+  if (!last) return 0
+
+  return Math.max(0, Math.ceil((last + RESEND_WAIT_MS - resendClock.value) / 1000))
+})
+
+const resendDisabled = computed(() => (
+  isResending.value || resendWaitSeconds.value > 0 || resendTooMany.value
+))
+
+function resendStorageKey(email) {
+  return `resend-verification:${String(email).toLowerCase()}`
+}
+
+function recentResends(times) {
+  return times.filter((time) => Date.now() - time < RESEND_WINDOW_MS)
+}
+
+function loadResendTimes(email) {
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(resendStorageKey(email)) ?? '[]')
+
+    return recentResends(Array.isArray(stored) ? stored.filter(Number.isFinite) : [])
+  } catch {
+    // Storage can be switched off; the page then paces from memory alone.
+    return []
+  }
+}
+
+function saveResendTimes(email) {
+  try {
+    window.sessionStorage.setItem(resendStorageKey(email), JSON.stringify(resendSentAt.value))
+  } catch {
+    // Nothing to do: see loadResendTimes.
+  }
+}
+
+// Counts the wait down a second at a time, and stops when there is none.
+function runResendClock() {
+  resendClock.value = Date.now()
+
+  if (resendWaitSeconds.value === 0) {
+    window.clearInterval(resendTicker)
+    resendTicker = null
+    return
+  }
+
+  if (resendTicker === null) {
+    resendTicker = window.setInterval(runResendClock, 1000)
+  }
+}
+
+// A different account's sign-in was refused: its own count, not the last one's.
+watch(unverifiedEmail, (email) => {
+  resendMessage.value = ''
+  resendTooMany.value = false
+  resendSentAt.value = email ? loadResendTimes(email) : []
+  runResendClock()
+})
+
+onBeforeUnmount(() => {
+  window.clearInterval(resendTicker)
+})
+
 async function handleResend() {
+  if (resendDisabled.value) return
+
+  resendSentAt.value = recentResends(resendSentAt.value)
+
+  if (resendSentAt.value.length >= RESEND_LIMIT) {
+    resendMessage.value = ''
+    resendTooMany.value = true
+    return
+  }
+
   isResending.value = true
   resendMessage.value = ''
 
   try {
     const data = await auth.resendVerification(unverifiedEmail.value)
     resendMessage.value = data?.message ?? 'Check your inbox.'
+
+    // Counted from when the server answered, so the wait is never shorter
+    // than the one the email is actually given.
+    resendSentAt.value = [...resendSentAt.value, Date.now()]
+    saveResendTimes(unverifiedEmail.value)
+    runResendClock()
   } catch (error) {
-    resendMessage.value =
-      error.response?.data?.message ?? 'Could not send right now. Try again shortly.'
+    // 429: the server has already sent this address all it will this hour,
+    // from this browser or another.
+    if (error.response?.status === 429) {
+      resendTooMany.value = true
+    } else {
+      resendMessage.value =
+        error.response?.data?.message ?? 'Could not send right now. Try again shortly.'
+    }
   } finally {
     isResending.value = false
   }
@@ -175,6 +283,11 @@ async function handleSubmit() {
 
 <style scoped>
 /* Shared field, alert and layout styles live in auth.css (see AuthLayout.vue). */
+
+.resend-limit {
+  color: var(--lnu-danger);
+  font-weight: 600;
+}
 
 .form-row {
   display: flex;
