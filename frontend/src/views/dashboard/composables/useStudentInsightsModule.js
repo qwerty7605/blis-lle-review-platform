@@ -59,6 +59,8 @@ export function useStudentInsightsModule() {
   const subjectRows = ref([])
   const historyRows = ref([])
   const recentAttemptRows = ref([])
+  // Every sitting, retakes included, newest first (Exam History).
+  const examHistory = ref([])
   const studyPlanRows = ref([])
   const actionPlanRows = ref([])
   const weakAreaRaw = ref(null)
@@ -405,6 +407,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = asList(data?.subjects)
       historyRows.value = asList(data?.history)
       recentAttemptRows.value = asList(data?.recent_attempts)
+      examHistory.value = asList(data?.exam_history)
       studyPlanRows.value = asList(data?.study_plan)
       actionPlanRows.value = asList(data?.action_plan)
       weakAreaRaw.value = data?.weak_area ?? null
@@ -427,6 +430,7 @@ export function useStudentInsightsModule() {
       subjectRows.value = []
       historyRows.value = []
       recentAttemptRows.value = []
+      examHistory.value = []
       studyPlanRows.value = []
       actionPlanRows.value = []
       weakAreaRaw.value = null
@@ -459,6 +463,7 @@ export function useStudentInsightsModule() {
     focusSubjects,
     strengths,
     scoreHistory,
+    examHistory,
     recentAttempts,
     studyPlan,
     actionPlan,

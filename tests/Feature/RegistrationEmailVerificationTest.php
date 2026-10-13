@@ -229,6 +229,112 @@ class RegistrationEmailVerificationTest extends TestCase
 
     // --------------------------------------------------------------- helpers
 
+    // ------------------------------------- a sign-up nobody verified holds nothing
+
+    public function test_an_unverified_signup_does_not_keep_its_student_id_from_the_real_owner(): void
+    {
+        Notification::fake();
+
+        // Someone types another student's ID with an address they cannot open.
+        $this->postJson('/api/auth/register', $this->payload(['email' => 'youyou@lnu.edu.ph']))->assertStatus(201);
+
+        // The owner of that ID then signs up with their own address.
+        $this->postJson('/api/auth/register', $this->payload(['email' => 'juan@lnu.edu.ph']))->assertStatus(201);
+
+        $this->assertDatabaseMissing('users', ['email' => 'youyou@lnu.edu.ph']);
+        $this->assertSame('juan@lnu.edu.ph', User::firstWhere('student_id', '2300001')->email);
+    }
+
+    public function test_an_unverified_signup_does_not_keep_its_email_from_the_real_owner(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload(['student_id' => '2309999']))->assertStatus(201);
+        $stale = User::firstWhere('email', 'juan@lnu.edu.ph');
+
+        $this->postJson('/api/auth/register', $this->payload())->assertStatus(201);
+
+        $this->assertDatabaseCount('users', 1);
+        $this->assertSame('2300001', User::firstWhere('email', 'juan@lnu.edu.ph')->student_id);
+
+        // The link sent for the sign-up that was replaced opens nothing.
+        $this->get($this->verificationUrl($stale))->assertRedirectContains('verified=invalid');
+    }
+
+    public function test_a_verified_account_still_keeps_its_email_and_student_id(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload())->assertStatus(201);
+        $this->get($this->verificationUrl(User::firstWhere('email', 'juan@lnu.edu.ph')));
+
+        $this->postJson('/api/auth/register', $this->payload(['email' => 'other@lnu.edu.ph']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('student_id');
+
+        $this->postJson('/api/auth/register', $this->payload(['student_id' => '2309999']))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('email');
+
+        $this->assertDatabaseCount('users', 1);
+    }
+
+    public function test_an_account_an_administrator_unverified_is_not_replaced(): void
+    {
+        Notification::fake();
+
+        // Verified once, edited by an administrator, verification withdrawn:
+        // that account is the administrator's to decide about.
+        $existing = User::factory()->create([
+            'role' => User::ROLE_STUDENT,
+            'email' => 'juan@lnu.edu.ph',
+            'student_id' => '2300001',
+            'email_verified_at' => null,
+            'created_at' => now()->subDays(30),
+            'updated_at' => now()->subDay(),
+        ]);
+
+        $this->postJson('/api/auth/register', $this->payload())
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['email', 'student_id']);
+
+        $this->assertDatabaseHas('users', ['id' => $existing->id]);
+    }
+
+    public function test_a_refused_signup_does_not_remove_the_one_it_would_have_replaced(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload())->assertStatus(201);
+
+        $this->postJson('/api/auth/register', $this->payload(['password' => 'short', 'password_confirmation' => 'short']))
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('users', ['email' => 'juan@lnu.edu.ph']);
+    }
+
+    public function test_signups_whose_link_expired_unopened_are_cleaned_up(): void
+    {
+        Notification::fake();
+
+        $this->postJson('/api/auth/register', $this->payload())->assertStatus(201);
+        $this->postJson('/api/auth/register', $this->payload(['email' => 'new@lnu.edu.ph', 'student_id' => '2309999']))->assertStatus(201);
+
+        // Timestamps set directly: an Eloquent update would move updated_at.
+        \Illuminate\Support\Facades\DB::table('users')->where('email', 'juan@lnu.edu.ph')->update([
+            'created_at' => now()->subDays(2),
+            'updated_at' => now()->subDays(2),
+        ]);
+
+        $verified = User::factory()->create(['role' => User::ROLE_STUDENT, 'created_at' => now()->subDays(40), 'updated_at' => now()->subDays(40)]);
+
+        $this->artisan('registrations:prune-unverified')->assertSuccessful();
+
+        $this->assertDatabaseMissing('users', ['email' => 'juan@lnu.edu.ph']);
+        $this->assertDatabaseHas('users', ['email' => 'new@lnu.edu.ph']);
+        $this->assertDatabaseHas('users', ['id' => $verified->id]);
+    }
+
     private function payload(array $overrides = []): array
     {
         return array_merge([

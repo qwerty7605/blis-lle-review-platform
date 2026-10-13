@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use App\Services\AuthTokenCookieService;
 use App\Support\SystemSettings;
+use Laravel\Sanctum\PersonalAccessToken;
+use Laravel\Sanctum\Sanctum;
 use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Support\Str;
 
@@ -38,6 +41,20 @@ class AppServiceProvider extends ServiceProvider
         $this->configureAccountMails();
         $this->configurePasswordPolicy();
         $this->configureHealthCheck();
+        $this->configureIdleSignOut();
+    }
+
+    /**
+     * A sign-in made without "Remember me" stops working once it has sat
+     * unused for too long. Sanctum asks this before it records the request as
+     * a use of the token, so the time compared is the previous use.
+     */
+    private function configureIdleSignOut(): void
+    {
+        Sanctum::authenticateAccessTokensUsing(
+            static fn (PersonalAccessToken $token, bool $isValid): bool => $isValid
+                && !app(AuthTokenCookieService::class)->hasGoneIdle($token)
+        );
     }
 
     /**

@@ -46,6 +46,31 @@
         </button>
       </header>
 
+      <!-- An exam taken twice: either sitting can be opened from here. The
+           room page only ever links to the latest. -->
+      <nav v-if="sittings.length > 1" class="result-sittings" aria-label="Your attempts at this exam">
+        <div class="result-sittings-tabs">
+          <RouterLink
+            v-for="sitting in sittings"
+            :key="sitting.id"
+            class="result-sitting"
+            :class="{ active: sitting.id === attempt.id }"
+            :aria-current="sitting.id === attempt.id ? 'page' : undefined"
+            :to="{ name: 'dashboard-exam-result', params: { attemptId: sitting.id } }"
+          >
+            Attempt {{ sitting.number }}
+            <span class="result-sitting-score">{{ sittingScore(sitting) }}</span>
+          </RouterLink>
+        </div>
+        <p class="review-muted">
+          {{
+            currentSittingCounts
+              ? 'This is your latest attempt, the score that counts.'
+              : 'This is an earlier attempt. Your latest attempt is the score that counts.'
+          }}
+        </p>
+      </nav>
+
       <section class="exam-result-hero" :class="`is-${summary.tone}`">
         <div class="exam-result-copy">
           <div class="exam-result-badge">
@@ -231,7 +256,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronRight, ClipboardCheck, Lightbulb, RefreshCw, ShieldCheck, Target, TrendingUp } from 'lucide-vue-next'
 import { studentExamsApi } from '@/api/studentExams.api'
@@ -259,6 +284,18 @@ const exam = ref(null)
 const room = ref(null)
 const feedback = ref(null)
 const questionsCount = ref(0)
+// Every submitted sitting of this exam, oldest first.
+const sittings = ref([])
+
+const currentSittingCounts = computed(() => (
+  sittings.value.find((sitting) => sitting.id === attempt.value?.id)?.counts ?? true
+))
+
+function sittingScore(sitting) {
+  return sitting.score_percent === null || sitting.score_percent === undefined
+    ? 'Not graded'
+    : `${Number(sitting.score_percent).toFixed(1)}%`
+}
 
 const summary = computed(() => buildExamResultSummary({
   attempt: attempt.value,
@@ -292,6 +329,7 @@ async function loadResult() {
     room.value = data?.room ?? null
     feedback.value = data?.feedback ?? null
     questionsCount.value = Array.isArray(data?.questions) ? data.questions.length : 0
+    sittings.value = Array.isArray(data?.sittings) ? data.sittings : []
   } catch (error) {
     attempt.value = null
     loadError.value = firstApiError(error, 'Unable to load this exam result.')
@@ -335,6 +373,11 @@ function goToReviewWeakArea() {
 }
 
 onMounted(loadResult)
+
+// Switching to the other sitting keeps this page mounted; only the id changes.
+watch(() => route.params.attemptId, (next, previous) => {
+  if (next && next !== previous) loadResult()
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
@@ -409,6 +452,76 @@ onMounted(loadResult)
   .exam-result-stat span {
     font-size: 11px;
     letter-spacing: 0.06em;
+  }
+}
+
+/* The two sittings of an exam that was retaken. */
+.result-sittings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0 18px 14px;
+}
+
+.result-sittings p {
+  margin: 0;
+}
+
+.result-sittings-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef1f8;
+  border: 1px solid rgba(13, 21, 71, 0.08);
+  justify-self: start;
+  max-width: 100%;
+}
+
+.result-sitting {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.result-sitting.active {
+  background: var(--panel-navy);
+  color: #ffffff;
+}
+
+.result-sitting-score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .result-sittings {
+    margin-inline: 14px;
+  }
+
+  .result-sittings-tabs {
+    display: flex;
+    justify-self: stretch;
+  }
+
+  .result-sitting {
+    flex: 1 1 0;
+    padding: 0 8px;
+  }
+}
+
+@media (pointer: coarse) {
+  .result-sitting {
+    min-height: 40px;
   }
 }
 </style>

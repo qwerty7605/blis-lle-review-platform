@@ -32,7 +32,13 @@ Route::get('/rooms', function (Request $request) use ($canManageRooms, $ensureAc
                 'archivedStudentMembers as archived_members_count',
                 'archivedExams as archived_exams_count',
             ])
-            ->whereNull('rooms.archived_at')
+            // ?archived=1 is the other half of the list: rooms put away with
+            // their results, which can be restored.
+            ->when(
+                $request->boolean('archived'),
+                fn ($query) => $query->whereNotNull('rooms.archived_at'),
+                fn ($query) => $query->whereNull('rooms.archived_at'),
+            )
             ->latest();
 
         if (!$isAdmin($user)) {
@@ -75,6 +81,10 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
         $isMember = $user->rooms()->where('rooms.id', $room->id)->exists();
         if (!$isMember) {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        if ($room->isArchived()) {
+            return response()->json(['message' => 'This room has been archived by your teacher.'], 403);
         }
     }
 
@@ -151,7 +161,7 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                 ExamAttempt::STATUS_IN_PROGRESS,
                 ExamAttempt::STATUS_SUBMITTED,
             ])
-            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at')
+            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at', 'score_percent')
             ->orderByDesc('started_at')
             ->orderByDesc('id')
             ->get()
@@ -190,6 +200,8 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                     $assignedExam->student_attempt_id = $latestAttemptId;
                     $assignedExam->student_submitted_at = $submittedAttempt?->submitted_at;
                     $assignedExam->student_submitted_attempts = $submittedAttemptCount;
+                    // The latest sitting's, which is the score that counts.
+                    $assignedExam->student_latest_score_percent = $submittedAttempt?->score_percent;
                     $assignedExam->student_max_attempts = $maxAllowedAttempts;
                     $assignedExam->student_attempts_remaining = $remainingAttempts;
                     $assignedExam->student_can_start_attempt = $assignedExam->studentCanStartAttempt($remainingAttempts, $archivedAssignment);
@@ -250,7 +262,18 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
         'archived_members' => $archivedMembers,
         'assigned_exams' => $assignedExams,
         'archived_exams' => $archivedExams,
+        'archived_at' => $room->archived_at,
     ];
+
+    // What stands in the way of deleting or archiving the room, so its page
+    // can say so before the button is pressed rather than after.
+    if ($canManageRooms($user)) {
+        $roomData['removal'] = [
+            'has_results' => $room->examAttempts()->exists(),
+            'pending_exams' => $room->pendingExams()->orderBy('exams.title')->pluck('exams.title')->all(),
+            'attempts_in_progress' => $room->attemptsInProgress()->count(),
+        ];
+    }
 
     return response()->json(['room' => $roomData]);
 });
@@ -321,11 +344,35 @@ Route::delete('/rooms/{room}', function (Request $request, Room $room) use ($can
         ], 422);
     }
 
+    // And nothing may still be ahead of the class in it: an exam that is open
+    // or scheduled would vanish for every student in the room.
+    $pendingExams = $room->pendingExams()->orderBy('exams.title')->pluck('exams.title');
+
+    if ($pendingExams->isNotEmpty()) {
+        return response()->json([
+            'message' => sprintf(
+                'Cannot delete this room while %s still open or scheduled in it: %s. Archive %s from the room first.',
+                $pendingExams->count() === 1 ? 'an exam is' : 'exams are',
+                $pendingExams->implode(', '),
+                $pendingExams->count() === 1 ? 'it' : 'them',
+            ),
+            'pending_exams' => $pendingExams->all(),
+        ], 422);
+    }
+
     $roomId = $room->id;
     $roomName = $room->name;
     $roomCode = $room->code;
 
-    $room->delete();
+    try {
+        $room->delete();
+    } catch (\Illuminate\Database\QueryException) {
+        // An attempt was started between the checks above and the delete; the
+        // database refuses to drop a room that has one.
+        return response()->json([
+            'message' => 'Cannot delete this room because a student has just started an exam in it.',
+        ], 422);
+    }
 
     $recordAudit(
         $user,
@@ -340,13 +387,77 @@ Route::delete('/rooms/{room}', function (Request $request, Room $room) use ($can
     return response()->json(['message' => 'Room deleted']);
 });
 
-Route::post('/rooms', function (Request $request) use ($isStaffMasterExaminer, $ensureActive, $recordAudit) {
+/*
+ * Putting a room away without losing anything in it. An archived room leaves
+ * the teacher's and its students' lists, takes no new students and starts no
+ * new exams; its roster, exams and every result stay, and restoring it brings
+ * all of that back. This is what a room with results gets instead of Delete.
+ */
+Route::post('/rooms/{room}/archive', function (Request $request, Room $room) use ($canManageRooms, $ensureActive, $isAdmin, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
 
     $user = $request->user();
-    if (!$isStaffMasterExaminer($user)) {
+
+    if (!$canManageRooms($user) || (!$isAdmin($user) && (int) $room->created_by !== (int) $user->id)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if ($room->isArchived()) {
+        return response()->json(['message' => 'This room is already archived.'], 422);
+    }
+
+    // The room would disappear from under them with the clock still running.
+    $inProgress = $room->attemptsInProgress()->count();
+
+    if ($inProgress > 0) {
+        return response()->json([
+            'message' => sprintf(
+                'Cannot archive this room while %d student%s in the middle of an exam in it. Try again once %s submitted.',
+                $inProgress,
+                $inProgress === 1 ? ' is' : 's are',
+                $inProgress === 1 ? 'they have' : 'they have all',
+            ),
+        ], 422);
+    }
+
+    $room->forceFill(['archived_at' => now()])->save();
+
+    $recordAudit($user, 'room.archive', 'room', $room->id, 'Room archived', ['name' => $room->name, 'code' => $room->code], $request);
+
+    return response()->json(['message' => 'Room archived. Its students, exams and results are kept.']);
+});
+
+Route::post('/rooms/{room}/restore', function (Request $request, Room $room) use ($canManageRooms, $ensureActive, $isAdmin, $recordAudit) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$canManageRooms($user) || (!$isAdmin($user) && (int) $room->created_by !== (int) $user->id)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if (!$room->isArchived()) {
+        return response()->json(['message' => 'This room is not archived.'], 422);
+    }
+
+    $room->forceFill(['archived_at' => null])->save();
+
+    $recordAudit($user, 'room.restore', 'room', $room->id, 'Room restored', ['name' => $room->name, 'code' => $room->code], $request);
+
+    return response()->json(['message' => 'Room restored.']);
+});
+
+Route::post('/rooms', function (Request $request) use ($canManageRooms, $ensureActive, $recordAudit) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+    if (!$canManageRooms($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -394,40 +505,16 @@ Route::post('/rooms/join', function (Request $request) use ($ensureActive, $reco
         return response()->json(['message' => 'Room code not found'], 404);
     }
 
-    $user = $request->user();
-
-    // Rooms are year-level sections: a room's existing student roster defines
-    // the level, and joiners have to match it. This guard existed before the
-    // routes were split out of the monolithic api.php and was lost in that
-    // move, leaving the rule enforced nowhere.
-    if ($user?->role === User::ROLE_STUDENT) {
-        $studentYearLevel = !is_null($user->year_level)
-            ? (int) $user->year_level
-            : null;
-
-        $roomYearLevels = $room->members()
-            ->where('users.role', User::ROLE_STUDENT)
-            ->whereNull('users.archived_at')
-            ->where('users.id', '!=', $user->id)
-            ->pluck('users.year_level')
-            ->filter(fn ($yearLevel) => !is_null($yearLevel))
-            ->map(fn ($yearLevel) => (int) $yearLevel)
-            ->unique()
-            ->values();
-
-        if ($roomYearLevels->count() > 1) {
-            return response()->json([
-                'message' => 'This room already mixes year levels. Clean up the roster before allowing more student joins.',
-            ], 422);
-        }
-
-        if ($roomYearLevels->isNotEmpty() && (!is_int($studentYearLevel) || (int) $roomYearLevels->first() !== $studentYearLevel)) {
-            return response()->json([
-                'message' => 'You can only join rooms that match your year level section.',
-            ], 422);
-        }
+    if ($room->isArchived()) {
+        return response()->json(['message' => 'This room has been archived and is no longer taking students.'], 422);
     }
 
+    $user = $request->user();
+
+    // Anyone with the code may join, whatever their year level. A rule that
+    // let the first student to join set the room's level turned away the
+    // rest of a mixed class (and an irregular student from the class they
+    // were retaking), with nothing on the teacher's side to say why.
     $user->rooms()->syncWithoutDetaching([$room->id]);
 
     $recordAudit(
@@ -471,6 +558,14 @@ Route::delete('/rooms/{room}/members/{member}', function (
         ], 422);
     }
 
+    // Taking a student out while they are sitting an exam here would cut
+    // them off from it with the clock still running.
+    if ($room->attemptsInProgress()->where('user_id', $member->id)->exists()) {
+        return response()->json([
+            'message' => "{$member->name} is in the middle of an exam in this room. Remove them once they have submitted it.",
+        ], 422);
+    }
+
     $detached = $room->members()->detach($member->id);
     if ($detached === 0) {
         return response()->json([
@@ -507,6 +602,12 @@ Route::delete('/rooms/{room}/leave', function (Request $request, Room $room) use
 
     if ($canManageRooms($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if ($room->attemptsInProgress()->where('user_id', $user->id)->exists()) {
+        return response()->json([
+            'message' => 'You are in the middle of an exam in this room. Submit it before leaving the room.',
+        ], 422);
     }
 
     $detached = $user->rooms()->detach($room->id);

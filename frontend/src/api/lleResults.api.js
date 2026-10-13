@@ -13,6 +13,16 @@ class LleResultsApi {
     return http.post('/lle-results', payload)
   }
 
+  /** The batches there are, and one batch's students with what is recorded for exam_year. */
+  batch(params = {}) {
+    return http.get('/lle-results/batch', { params })
+  }
+
+  /** Every student given a result, for one exam year, in one request. */
+  recordBatch(payload) {
+    return http.post('/lle-results/batch', payload)
+  }
+
   remove(id) {
     return http.delete(`/lle-results/${id}`)
   }

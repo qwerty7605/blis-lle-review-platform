@@ -137,7 +137,25 @@ class ExamAttemptService
             $remainingSeconds = max(0, now()->diffInSeconds($attempt->expires_at, false));
         }
 
+        // Every sitting of this exam by this student, oldest first, so the
+        // result page can offer the other one. The latest is the one that
+        // counts in the student's figures and the teacher's reports.
+        $sittings = ExamAttempt::query()
+            ->where('user_id', $attempt->user_id)
+            ->where('exam_id', $attempt->exam_id)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->orderBy('submitted_at')
+            ->orderBy('id')
+            ->get(['id', 'score_percent', 'submitted_at']);
+
         return [
+            'sittings' => $sittings->values()->map(fn (ExamAttempt $sitting, int $index): array => [
+                'id' => $sitting->id,
+                'number' => $index + 1,
+                'score_percent' => $sitting->score_percent,
+                'submitted_at' => $sitting->submitted_at,
+                'counts' => $index === $sittings->count() - 1,
+            ])->all(),
             'attempt' => [
                 'id' => $attempt->id,
                 'status' => $attempt->status,

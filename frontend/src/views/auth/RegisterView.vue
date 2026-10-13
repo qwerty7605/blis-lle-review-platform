@@ -251,8 +251,9 @@
                 id="register-agreed"
                 type="checkbox"
                 v-model="form.agreed"
-                :disabled="!policiesRead"
                 :aria-invalid="Boolean(fieldErrors.agreed)"
+                aria-describedby="register-agreed-note"
+                @click="handleAgreeClick"
                 @change="clearFieldError('agreed')"
               />
               <span>
@@ -266,8 +267,14 @@
                 >.
               </span>
             </label>
-            <span v-if="!policiesRead" class="terms-helper">Open and read both documents before agreeing.</span>
-            <p v-if="fieldErrors.agreed" class="field-error" role="alert">{{ fieldErrors.agreed }}</p>
+            <!-- One line under the box: the hint, or the error in its place.
+                 Both at once said the same sentence twice. -->
+            <p v-if="fieldErrors.agreed" id="register-agreed-note" class="field-error" role="alert">
+              {{ fieldErrors.agreed }}
+            </p>
+            <p v-else-if="!policiesRead" id="register-agreed-note" class="terms-helper">
+              Open and read both documents before agreeing.
+            </p>
           </div>
 
           <button type="submit" class="submit-btn" :disabled="isLoading" :aria-busy="isLoading">
@@ -567,7 +574,18 @@ function markPolicyAsRead() {
   if (!policyReadyToConfirm.value) return
 
   policiesRead.value = true
+  // "Read both documents first" is no longer true once they have been.
+  clearFieldError('agreed')
   closePolicyModal()
+}
+
+// The box cannot be ticked before the documents are read. A click on it then
+// opens them, rather than landing on a greyed-out control that does nothing.
+function handleAgreeClick(event) {
+  if (policiesRead.value) return
+
+  event.preventDefault()
+  openPolicyModal()
 }
 
 async function loadPublicLegalSettings() {
@@ -653,9 +671,9 @@ async function handleSubmit() {
   }
 
   if (!policiesRead.value) {
-    fieldErrors.agreed = 'Open and read both documents before agreeing.'
+    fieldErrors.agreed = 'Read the Terms of Service and Privacy Policy, then tick the box to agree.'
   } else if (!form.agreed) {
-    fieldErrors.agreed = 'Confirm your agreement to continue.'
+    fieldErrors.agreed = 'Tick the box to agree before creating your account.'
   }
 
   if (hasFieldErrors.value) {
@@ -752,9 +770,10 @@ async function handleSubmit() {
   accent-color: var(--lnu-navy);
 }
 
-.terms-wrap input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.terms-wrap input[aria-invalid='true'] {
+  outline: 2px solid var(--lnu-danger);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 @media (pointer: coarse) {
@@ -772,7 +791,9 @@ async function handleSubmit() {
 }
 
 .terms-helper {
+  margin: 0;
   font-size: 12.5px;
+  line-height: 1.4;
   color: var(--lnu-text-muted);
 }
 

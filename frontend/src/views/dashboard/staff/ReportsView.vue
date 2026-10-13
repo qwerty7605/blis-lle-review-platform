@@ -18,6 +18,13 @@
       <div class="tdash-hero-copy">
         <h2 class="tdash-hero-title">Welcome back, {{ teacherFirstName }}</h2>
         <p class="tdash-hero-body">{{ heroSummary }}</p>
+        <p v-if="reportTeachers.length > 0" class="tdash-hero-scope">
+          {{ reportScopeText }}
+        </p>
+      </div>
+
+      <div v-if="reportTeachers.length > 1" class="tdash-hero-filter">
+        <OwnerFilter v-model="reportTeacherId" :owners="reportTeachers" label="Classes of" />
       </div>
 
       <button type="button" class="tdash-hero-btn" :disabled="reportLoading" @click="loadReports">
@@ -681,7 +688,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   AlertCircle,
   BarChart3,
@@ -703,6 +710,7 @@ import NextStepsList from '@/components/NextStepsList.vue'
 import JsChart from '@/components/charts/JsChart.vue'
 import { useAuthStore } from '@/store/auth.store'
 import { vScrollHint } from '@/utils/scrollHint'
+import OwnerFilter from '../shared/OwnerFilter.vue'
 
 const {
   reportLoading,
@@ -733,7 +741,20 @@ const {
   itemAnalyticsLoading,
   itemAnalyticsError,
   itemAnalyticsExamId,
+  reportTeachers,
+  reportTeacherId,
 } = useReportsModule()
+
+// An administrator's figures: the whole programme, or one teacher's classes.
+const reportScopeText = computed(() => {
+  const teacher = reportTeachers.value.find((entry) => String(entry.id) === reportTeacherId.value)
+
+  return teacher
+    ? `Showing ${teacher.name}'s rooms and exams.`
+    : `Showing every teacher's rooms and exams (${reportTeachers.value.length} ${reportTeachers.value.length === 1 ? 'teacher' : 'teachers'}).`
+})
+
+watch(reportTeacherId, () => loadReports())
 
 const PASSING_SCORE = 75
 
@@ -1410,6 +1431,21 @@ const selectedReportStudent = computed(() => (
    ===================================================================== */
 .reports-view {
   gap: 16px;
+}
+
+.tdash-hero-scope {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* The filter is a light control: it sits on its own white chip inside the
+   navy panel rather than being recoloured for it. */
+.tdash-hero-filter {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  max-width: 100%;
 }
 
 .tdash-hero {

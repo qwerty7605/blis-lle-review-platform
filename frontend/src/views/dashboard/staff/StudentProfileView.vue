@@ -32,7 +32,6 @@
             <li><GraduationCap :size="13" />{{ yearLevelLabel }}</li>
             <li><CircleDot :size="13" />{{ statusLabel }}</li>
             <li v-if="student.admission_year"><CalendarDays :size="13" />Batch {{ student.admission_year }}</li>
-            <li v-for="room in student.rooms" :key="room.id"><DoorOpen :size="13" />{{ room.name }}</li>
             <li v-if="student.archived_at" class="is-warning"><Archive :size="13" />Archived</li>
           </ul>
         </div>
@@ -198,7 +197,6 @@ import {
   CalendarDays,
   CircleDot,
   ClipboardList,
-  DoorOpen,
   Gauge,
   GraduationCap,
   LayoutGrid,
