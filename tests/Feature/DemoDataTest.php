@@ -115,6 +115,23 @@ class DemoDataTest extends TestCase
         $this->assertSame(0, $mismatched);
     }
 
+    public function test_a_featured_fourth_year_has_the_history_an_estimate_is_shown_from(): void
+    {
+        $this->seed(ShowcaseSeeder::class);
+
+        Sanctum::actingAs(User::query()->where('email', 'markanthony.villareal@' . DemoData::EMAIL_DOMAIN)->firstOrFail());
+        $this->getJson('/api/student/analytics')
+            ->assertOk()
+            ->assertJsonPath('predictive_model.status', 'connected');
+
+        // The lower years are told when theirs comes.
+        Sanctum::actingAs(User::query()->where('is_demo', true)->where('year_level', 1)->where('is_active', true)->firstOrFail());
+        $this->getJson('/api/student/analytics')
+            ->assertOk()
+            ->assertJsonPath('predictive_model.prediction', null)
+            ->assertJsonPath('predictive_model.description', fn (string $text) => str_starts_with($text, 'Available in 4th year.'));
+    }
+
     public function test_purge_removes_the_demo_and_leaves_real_records_alone(): void
     {
         $real = $this->realCourse();

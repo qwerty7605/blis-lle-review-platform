@@ -325,10 +325,10 @@ module.exports = [
     'Signed in as Admin. No retrained model exists.', "Console:\napi('POST','/predictions/let/model/revert')",
     ['Run the line'],
     'Status 422 with "The built-in model is already in use."'),
-  c('wb-model-insufficient', 'To verify that the estimate is withheld from a student with too little history (LetReadinessFeatureBuilder).',
-    'Signed in as a student with fewer than 8 graded exams', "Console:\napi('GET','/student/analytics')",
+  c('wb-model-insufficient', 'To verify that the estimate is withheld from a student below 4th year (LetReadinessFeatureBuilder::reasonToHold).',
+    'Signed in as a student below 4th year', "Console:\napi('GET','/student/analytics')",
     ['Run the line', 'Read "predictive_model" in the reply'],
-    'predictive_model.status is "insufficient_history" and its description says to finish at least 8 graded exams. No pass or fail label is returned.'),
+    'predictive_model.status is "insufficient_history" and its description begins "Available in 4th year." No pass or fail label is returned.'),
 
   { section: 'AUDIT TRAIL AND SERVICE HEALTH' },
   c('wb-audit-row', 'To verify what an audited action writes (AuditLogService::record).',

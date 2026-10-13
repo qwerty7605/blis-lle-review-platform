@@ -38,6 +38,8 @@ use RuntimeException;
  *  - this term's exams: a mock board exam per subject for fourth years (one
  *    open right now, with students mid-attempt), quizzes for the lower years,
  *    and a pre-board exam still to come;
+ *  - the first three years of most fourth years' exams, six subjects a
+ *    semester, which is the history a pass/fail estimate is shown from;
  *  - Review Bot questions made by the app's own generator from those items --
  *    published, declined and awaiting review -- and students' practice on them;
  *  - ten graduated cohorts of history, with their board exam results.
@@ -199,6 +201,9 @@ class ShowcaseSeeder extends Seeder
         $this->seedReviewBot();
         $this->seedReviewBotSessions();
         $this->seedAuditTrail();
+
+        // Last, so the numbers everything above draws stay what they were.
+        $this->seedFourthYearHistory();
 
         $this->report();
     }
@@ -515,9 +520,10 @@ class ShowcaseSeeder extends Seeder
                     'year_level' => $yearLevel,
                     'ability' => (float) $ability,
                     'featured' => $featured,
-                    // Most fourth years have sat enough subjects for the LET
-                    // predictor to score them; the rest keep a partial history
-                    // so "not enough history yet" shows too.
+                    // Most fourth years have the exams of their first three
+                    // years behind them (seedFourthYearHistory) and every
+                    // subject this term, so the LET predictor scores them; the
+                    // rest keep a partial history so the wait shows too.
                     'prediction_ready' => $yearLevel === 4 && ($featured !== null || $i < (int) round($count * 0.6)),
                 ];
             }
@@ -1223,6 +1229,82 @@ class ShowcaseSeeder extends Seeder
     }
 
     // ---------------------------------------------------------------- history
+
+    /**
+     * What the fourth years the predictor scores sat before this term: six
+     * semesters of the six subjects, in the sections they were in then. A
+     * student is shown an estimate from about seven semesters of exams
+     * (LetReadinessFeatureBuilder::MIN_GRADED_EXAMS), and with this term's
+     * mock exams these students are past that.
+     */
+    private function seedFourthYearHistory(): void
+    {
+        $students = array_values(array_filter($this->students, fn (array $student): bool => $student['prediction_ready']));
+
+        if ($students === []) {
+            return;
+        }
+
+        $this->command?->info("Building the fourth years' first three years of exams...");
+
+        for ($yearLevel = 1; $yearLevel <= 3; $yearLevel++) {
+            $startYear = $this->termStart->year - (4 - $yearLevel);
+            $closedAt = CarbonImmutable::create($startYear + 1, 6, 30);
+            $academicYear = sprintf('AY %d-%d', $startYear, $startYear + 1);
+
+            // The section each was in that year, by the one they are in now.
+            // They are not added as members: a student's dashboard lists every
+            // room they belong to, archived or not.
+            $rooms = [];
+
+            foreach ($this->sections[4] as $index => $currentRoomId) {
+                $rooms[$currentRoomId] = $this->insertRoom(
+                    sprintf('BLIS %d-%s (%s)', $yearLevel, chr(ord('A') + $index), $academicYear),
+                    $this->staff['chair'],
+                    CarbonImmutable::create($startYear, 8, 1),
+                    $closedAt,
+                );
+            }
+
+            foreach ([1, 2] as $semester) {
+                $semestersDone = ($yearLevel - 1) * 2 + $semester;
+                $opens = $semester === 1
+                    ? CarbonImmutable::create($startYear, 9, 15)
+                    : CarbonImmutable::create($startYear + 1, 2, 10);
+
+                foreach (self::SUBJECTS as $i => $subject) {
+                    $sat = $opens->addWeeks($i * 2)->setTime(8, 0);
+
+                    $exam = $this->insertExam([
+                        'title' => sprintf('%s Major Exam (%s, %s Semester)', $subject, $academicYear, $semester === 1 ? '1st' : '2nd'),
+                        'subject' => $subject,
+                        'description' => $this->describe($subject),
+                        'bank' => $this->libraryBanks[$subject],
+                        'duration' => 60,
+                        'start' => $sat,
+                        'end' => $sat->addDays(2)->setTime(17, 0),
+                        'results' => 'visible',
+                        'one_take_only' => true,
+                        'shuffle' => false,
+                        'owner' => $this->staff['chair'],
+                    ], array_values($rooms), $closedAt);
+
+                    foreach ($students as $student) {
+                        $this->queueAttempt(
+                            ['id' => $student['id'], 'room_id' => $rooms[$student['room_id']]],
+                            $exam,
+                            // A gentle climb towards where they are this term.
+                            $this->scoreFor($student, $subject) - (7 - $semestersDone) * 1.2,
+                            $sat->addDays(mt_rand(0, 1))->setTime(mt_rand(8, 15), mt_rand(0, 59), mt_rand(0, 59)),
+                        );
+                    }
+                }
+            }
+
+            // Scores only: nobody opens a first-year exam item by item.
+            $this->flushAttempts(false);
+        }
+    }
 
     /**
      * One graduating cohort per past year, each with the exam record they
