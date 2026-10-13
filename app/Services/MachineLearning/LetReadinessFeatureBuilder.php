@@ -6,80 +6,49 @@ use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\User;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * Builds the 15 LetPredictionService input features from a student's own
- * submitted exam attempt history, since this system doesn't track official
- * semester GPA — only practice/mock exam results (see ml/README.md).
+ * Turns a student's exams into what the board exam model reads: one score in
+ * each of the six board subjects, from one semester, and their weighted
+ * average.
  *
- * `sem1`..`sem8` are approximated by splitting the student's submitted,
- * scored attempts into 8 equal-sized chronological buckets (oldest first)
- * and averaging each bucket's score. This is a stand-in for "one mock
- * result per semester" — it is only as accurate as the assumption that a
- * student's attempts are spread reasonably evenly across their 8
- * semesters. Eight exams would be enough to fill the buckets and far too
- * few for them to be semesters, so nothing is built from less than
- * MIN_GRADED_EXAMS: no prediction, and no training record either.
+ * A semester is the school year and semester each exam is filed under
+ * (exams.school_year, exams.semester). Within it an exam counts once, by its
+ * latest sitting, and a subject's score is the average of its exams. A
+ * semester is complete when all six subjects have a score, and only a
+ * complete semester is ever predicted from or learned from.
  *
- * `mock_catclass`..`mock_selacq` and `mock_total` reuse the same
- * per-subject averages already computed for the student's Analytics page
- * (the six canonical BLIS subjects), so they stay consistent with what
- * the student sees elsewhere.
+ * Only exams taken in this system are read, so a transferee is treated like
+ * anyone else: nothing from a previous school is known here.
  */
 class LetReadinessFeatureBuilder
 {
-    /**
-     * The model's semester inputs, one per semester of the four-year
-     * programme.
-     */
-    private const SEMESTERS = 8;
-
-    /**
-     * The fewest graded exams the features are built from: seven semesters
-     * of the six subjects, which a student has at the end of fourth year's
-     * first semester. From there each bucket is close to one real semester.
-     * The same number holds a student's prediction and a graduate's training
-     * record, so the model never learns from a history it would not predict
-     * from.
-     */
-    public const MIN_GRADED_EXAMS = 42;
-
-    /** A student is shown a prediction from this year level. */
-    public const SHOWN_FROM_YEAR_LEVEL = 4;
-
-    private const SUBJECT_TO_FEATURE = [
-        'Cataloging and Classification' => 'mock_catclass',
-        'Indexing and Abstracting' => 'mock_indexabs',
-        'Information Technology' => 'mock_it',
-        'Reference Services' => 'mock_reference',
-        'Library Management' => 'mock_libmgmt',
-        'Selection and Acquisition' => 'mock_selacq',
+    /** The model's subject attributes, in its own order, and the subject each one is. */
+    public const SUBJECTS = [
+        'reference' => 'Reference Services',
+        'management' => 'Library Management',
+        'indexing' => 'Indexing and Abstracting',
+        'selection' => 'Selection and Acquisition',
+        'cataloging' => 'Cataloging and Classification',
+        'it' => 'Information Technology',
     ];
 
-    public const SUBJECT_FEATURE_LABELS = [
-        'sem1' => 'Semester 1 Mock Average',
-        'sem2' => 'Semester 2 Mock Average',
-        'sem3' => 'Semester 3 Mock Average',
-        'sem4' => 'Semester 4 Mock Average',
-        'sem5' => 'Semester 5 Mock Average',
-        'sem6' => 'Semester 6 Mock Average',
-        'sem7' => 'Semester 7 Mock Average',
-        'sem8' => 'Semester 8 Mock Average',
-        'mock_catclass' => 'Cataloging & Classification',
-        'mock_indexabs' => 'Indexing & Abstracting',
-        'mock_it' => 'Information Technology',
-        'mock_reference' => 'Reference Services',
-        'mock_libmgmt' => 'Library Management',
-        'mock_selacq' => 'Selection & Acquisition',
-        'mock_total' => 'Overall Mock Average',
+    /** Each subject's share of `overall`. */
+    public const WEIGHTS = [
+        'reference' => 0.20,
+        'management' => 0.20,
+        'indexing' => 0.15,
+        'selection' => 0.15,
+        'cataloging' => 0.20,
+        'it' => 0.10,
     ];
+
+    public const LOCKED_MESSAGE = 'Complete all 6 subject exams this semester to unlock your result.';
 
     /**
      * The same subject spellings the student analytics page folds together
-     * (see $buildStudentAnalytics in routes/api/student.php), so a graduate's
-     * training record is cut from the numbers their prediction was.
+     * (see $buildStudentAnalytics in routes/api/student.php).
      */
     private const SUBJECT_ALIASES = [
         'cataloging and classification' => 'Cataloging and Classification',
@@ -97,150 +66,122 @@ class LetReadinessFeatureBuilder
     ];
 
     /**
-     * Why this student is not shown a prediction yet, or null when they can
-     * be. The wording is read by the student and by staff on their profile.
-     *
-     * The model reads four years of results. Before fourth year the eight
-     * buckets would be cut from a year or two and read as a whole degree, so
-     * the prediction is held whatever the number of exams. build() holds it
-     * for too few exams, with its own reason.
-     */
-    public function reasonToHold(User $student): ?string
-    {
-        $finishedProgramme = $student->student_status === User::STUDENT_STATUS_GRADUATED;
-
-        if (!$finishedProgramme && (int) $student->year_level < self::SHOWN_FROM_YEAR_LEVEL) {
-            return 'Available in 4th year. The estimate reads four years of exam results, so it waits until they are on record.';
-        }
-
-        return null;
-    }
-
-    /**
-     * The features for one student, read straight from their exam history.
+     * Every semester the student has a graded exam in, oldest first.
      *
      * $until leaves out anything submitted later. A graduate's record has to
-     * stop at the day they sat the board exam: mock exams taken afterwards
-     * (by someone preparing to retake it, say) are not what the result was
+     * stop at the day they sat the board exam: exams taken afterwards (by
+     * someone preparing to retake it, say) are not what the result was
      * earned on.
      *
-     * @return array{ready: bool, reason?: string, features?: array<string, float>}
+     * @return array<int, array{school_year: int, semester: int, label: string, scores: array<string, ?float>, complete: bool, missing: array<int, string>}>
      */
-    public function forStudent(User $student, ?CarbonInterface $until = null): array
+    public function semesters(User $student, ?CarbonInterface $until = null): array
     {
         $attempts = ExamAttempt::query()
-            ->with(['exam:id,subject,question_bank_id', 'exam.questionBank:id,subject', 'exam.questionBanks:id,subject'])
+            ->with(['exam:id,subject,question_bank_id,school_year,semester', 'exam.questionBank:id,subject', 'exam.questionBanks:id,subject'])
             ->where('user_id', $student->id)
             ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->whereNotNull('score_percent')
             ->when($until !== null, fn ($query) => $query->where('submitted_at', '<=', $until))
             ->orderByDesc('submitted_at')
             ->orderByDesc('id')
             ->get()
-            ->map(function (ExamAttempt $attempt): array {
-                $exam = $attempt->exam;
+            // Newest first, so the first sitting met for an exam is its latest.
+            ->unique('exam_id');
 
-                $subject = trim((string) ($exam?->subject ?? ''));
-                if ($subject === '' && $exam) {
-                    $subject = (string) (Exam::summarizeQuestionBankSubject($exam->resolvedQuestionBanks()) ?? '');
-                }
+        $subjectKeys = array_flip(self::SUBJECTS);
+        $collected = [];
 
-                $normalized = Str::of($subject)->lower()->replace('&', 'and')->replace('/', ' ')->replace('-', ' ')->squish()->toString();
+        foreach ($attempts as $attempt) {
+            $exam = $attempt->exam;
+            $key = $exam ? ($subjectKeys[$this->subjectOf($exam)] ?? null) : null;
 
-                return [
-                    'subject' => self::SUBJECT_ALIASES[$normalized] ?? $subject,
-                    'score_percent' => is_null($attempt->score_percent) ? null : round((float) $attempt->score_percent, 2),
-                    'submitted_at' => $attempt->submitted_at,
-                ];
-            })
-            ->values();
+            if ($key === null) {
+                continue; // not one of the six board subjects
+            }
 
-        $scores = $attempts->pluck('score_percent')->filter(fn ($score) => !is_null($score))->values();
+            $term = $exam->school_year && $exam->semester
+                ? ['school_year' => (int) $exam->school_year, 'semester' => (int) $exam->semester]
+                : Exam::termForDate($attempt->submitted_at);
 
-        $subjectProfiles = collect(array_keys(self::SUBJECT_TO_FEATURE))
-            ->map(function (string $label) use ($attempts): array {
-                $subjectScores = $attempts
-                    ->filter(fn (array $attempt) => $attempt['subject'] === $label)
-                    ->pluck('score_percent')
-                    ->filter(fn ($score) => !is_null($score));
+            $collected[$term['school_year'] * 10 + $term['semester']][$key][] = (float) $attempt->score_percent;
+        }
 
-                return [
-                    'label' => $label,
-                    'average_score_percent' => $subjectScores->isNotEmpty() ? round((float) $subjectScores->avg(), 1) : null,
-                ];
-            });
+        ksort($collected);
+        $semesters = [];
 
-        return $this->build($attempts, $subjectProfiles, $scores->isNotEmpty() ? (float) $scores->avg() : null);
+        foreach ($collected as $order => $bySubject) {
+            $scores = [];
+            foreach (array_keys(self::SUBJECTS) as $key) {
+                $scores[$key] = isset($bySubject[$key])
+                    ? round(array_sum($bySubject[$key]) / count($bySubject[$key]), 2)
+                    : null;
+            }
+
+            $missing = array_keys(array_filter($scores, static fn (?float $score): bool => $score === null));
+            $schoolYear = intdiv($order, 10);
+
+            $semesters[] = [
+                'school_year' => $schoolYear,
+                'semester' => $order % 10,
+                'label' => Exam::termLabel($schoolYear, $order % 10),
+                'scores' => $scores,
+                'complete' => $missing === [],
+                'missing' => array_map(static fn (string $key): string => self::SUBJECTS[$key], $missing),
+            ];
+        }
+
+        return $semesters;
     }
 
     /**
-     * @param  Collection  $attempts  Each item: ['score_percent' => float|null, 'submitted_at' => mixed, 'subject' => string]
-     * @param  Collection  $subjectProfiles  Each item: ['label' => string, 'average_score_percent' => float|null]
-     * @param  float|null  $overallAverageScore  Student's overall average score across all submitted attempts
-     * @return array{ready: bool, reason?: string, features?: array<string, float>}
+     * The model's attributes for a set of subject scores: the six scores as
+     * they are (a subject with none stays null, i.e. missing) and `overall`.
+     *
+     * @param  array<string, ?float>  $scores  keyed like SUBJECTS
+     * @return array<string, ?float>
      */
-    public function build(Collection $attempts, Collection $subjectProfiles, ?float $overallAverageScore): array
+    public static function features(array $scores): array
     {
-        $scored = $attempts
-            ->filter(fn (array $attempt) => !is_null($attempt['score_percent'] ?? null))
-            ->sortBy('submitted_at')
-            ->values();
-
-        if ($scored->count() < self::MIN_GRADED_EXAMS) {
-            return [
-                'ready' => false,
-                'reason' => sprintf(
-                    'Available after %d graded exams, about seven semesters of results (%d so far).',
-                    self::MIN_GRADED_EXAMS,
-                    $scored->count(),
-                ),
-            ];
+        $features = [];
+        foreach (array_keys(self::SUBJECTS) as $key) {
+            $features[$key] = is_numeric($scores[$key] ?? null) ? (float) $scores[$key] : null;
         }
 
-        $bucketCount = self::SEMESTERS;
-        $total = $scored->count();
-        $buckets = array_fill(0, $bucketCount, []);
+        return $features + ['overall' => self::overall($features)];
+    }
 
-        foreach ($scored->values() as $index => $attempt) {
-            $bucketIndex = (int) min(
-                $bucketCount - 1,
-                floor($index * $bucketCount / $total),
-            );
-            $buckets[$bucketIndex][] = (float) $attempt['score_percent'];
-        }
+    /**
+     * The weighted average of the subjects that have a score, the weights of
+     * the others left out of the division so that a missing subject does not
+     * pull the average down.
+     *
+     * @param  array<string, ?float>  $scores
+     */
+    public static function overall(array $scores): ?float
+    {
+        $sum = 0.0;
+        $weight = 0.0;
 
-        $semesterFeatures = [];
-        foreach ($buckets as $i => $scores) {
-            // Never empty: MIN_GRADED_EXAMS is well over one attempt a bucket.
-            $semesterFeatures['sem' . ($i + 1)] = round(array_sum($scores) / count($scores), 2);
-        }
-
-        $mockFeatures = [];
-        foreach (self::SUBJECT_TO_FEATURE as $label => $featureKey) {
-            $profile = $subjectProfiles->firstWhere('label', $label);
-            $average = $profile['average_score_percent'] ?? null;
-
-            if (is_null($average)) {
-                return [
-                    'ready' => false,
-                    'reason' => "Finish at least one graded exam in \"{$label}\" to estimate your exam outcome.",
-                ];
+        foreach (self::WEIGHTS as $key => $share) {
+            if (is_numeric($scores[$key] ?? null)) {
+                $sum += $share * (float) $scores[$key];
+                $weight += $share;
             }
-
-            $mockFeatures[$featureKey] = (float) $average;
         }
 
-        if (is_null($overallAverageScore)) {
-            return [
-                'ready' => false,
-                'reason' => 'Finish more graded exams to estimate an overall mock score.',
-            ];
+        return $weight > 0 ? round($sum / $weight, 2) : null;
+    }
+
+    private function subjectOf(Exam $exam): string
+    {
+        $subject = trim((string) ($exam->subject ?? ''));
+        if ($subject === '') {
+            $subject = (string) (Exam::summarizeQuestionBankSubject($exam->resolvedQuestionBanks()) ?? '');
         }
 
-        $mockFeatures['mock_total'] = (float) $overallAverageScore;
+        $normalized = Str::of($subject)->lower()->replace('&', 'and')->replace('/', ' ')->replace('-', ' ')->squish()->toString();
 
-        return [
-            'ready' => true,
-            'features' => array_merge($semesterFeatures, $mockFeatures),
-        ];
+        return self::SUBJECT_ALIASES[$normalized] ?? $subject;
     }
 }

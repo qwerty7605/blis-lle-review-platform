@@ -15,8 +15,8 @@
 
       <p class="muted lle-intro">
         Board results are published by the PRC, so they are transcribed here once a batch has
-        sat the exam. Each recorded outcome pairs with that student's mock-exam history to
-        form one training example for the Exam Outcome model.
+        sat the exam. Each recorded outcome pairs with that graduate's fourth-year subject scores
+        to form one training row for the Exam Outcome model.
       </p>
 
       <!-- One at a time, for a late result or a correction; or a whole batch
@@ -137,9 +137,16 @@
           <BrainCircuit :size="18" />
           <h3>Exam Outcome model</h3>
         </div>
-        <button type="button" class="ghost-btn" :disabled="modelBusy || modelLoading" @click="retrainModel">
+        <button
+          v-if="canManageModel"
+          type="button"
+          class="primary-btn"
+          :disabled="modelBusy || modelLoading || !modelStatus?.can_retrain"
+          :title="modelStatus?.retrain_blocked_reason || ''"
+          @click="retrainModel"
+        >
           <RefreshCw :size="14" :class="{ 'spin-soft': modelBusy }" />
-          {{ modelBusy ? 'Checking…' : 'Check for an update' }}
+          {{ modelBusy ? 'Retraining…' : 'Retrain model' }}
         </button>
       </header>
 
@@ -150,41 +157,95 @@
 
       <template v-else-if="modelStatus">
         <p class="muted lle-intro">
-          {{ modelInUse }} After results are recorded it retrains itself, and switches to the new model
-          only if that one does at least as well on the results the current model has not seen.
+          {{ modelInUse }} It is retrained only when an administrator asks, on the original records plus
+          every graduate with a confirmed board result, and a new version is used only if its accuracy is
+          at least the baseline and its Kappa at least that of the version in use.
         </p>
 
         <dl class="lle-model-facts">
           <div>
-            <dt>Results it can learn from</dt>
+            <dt>Original records</dt>
             <dd>
-              {{ modelStatus.data.usable }}
-              <small class="muted">{{ modelStatus.data.passed }} passed · {{ modelStatus.data.failed }} failed</small>
+              {{ modelStatus.base_dataset.present ? modelStatus.data.base_rows : 'Missing' }}
+              <small class="muted">{{ modelStatus.base_dataset.path }}</small>
             </dd>
           </div>
           <div>
-            <dt>New since the model in use</dt>
-            <dd>{{ modelStatus.data.new_since_live_model }}</dd>
-          </div>
-          <div>
-            <dt>Needed for an update</dt>
+            <dt>Graduates with a confirmed result</dt>
             <dd>
-              <small class="muted">
-                {{ modelStatus.data.minimum_records }} results in all, {{ modelStatus.data.minimum_per_outcome }} of each
-                outcome, {{ modelStatus.data.minimum_new_results }} of them new
+              {{ modelStatus.data.confirmed_graduates }}
+              <small v-if="modelStatus.data.skipped_graduates > 0" class="muted">
+                {{ modelStatus.data.skipped_graduates }} more left out: no complete fourth-year semester
               </small>
             </dd>
           </div>
-          <div v-if="modelStatus.data.skipped_for_thin_history > 0">
-            <dt>Left out</dt>
+          <div>
+            <dt>New since the last training</dt>
             <dd>
-              {{ modelStatus.data.skipped_for_thin_history }}
-              <small class="muted">too few graded exams to learn from</small>
+              {{ modelStatus.data.new_since_last_training }}
+              <small class="muted">{{ modelStatus.data.minimum_new_results }} needed to retrain</small>
             </dd>
           </div>
         </dl>
 
-        <p v-if="lastModelCheck" class="muted lle-intro">Last retraining: {{ lastModelCheck }}</p>
+        <p v-if="modelStatus.retrain_blocked_reason" class="muted lle-intro">
+          {{ modelStatus.retrain_blocked_reason }}
+        </p>
+
+        <div class="directory-table-wrap lle-versions-wrap">
+          <table class="directory-table lle-versions">
+            <caption class="visually-hidden">Every version of the Exam Outcome model and the figures it was judged on</caption>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Trained</th>
+                <th scope="col" class="numeric">Rows</th>
+                <th scope="col" class="numeric">Failed rows</th>
+                <th scope="col" class="numeric">Accuracy</th>
+                <th scope="col" class="numeric">Kappa</th>
+                <th scope="col" class="numeric">Failed recall</th>
+                <th scope="col" class="numeric">Baseline</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="version in modelStatus.versions" :key="version.version">
+                <td>
+                  <strong>v{{ version.version }}</strong>
+                  <small class="muted lle-version-label">{{ version.label }}</small>
+                  <code class="lle-version-file">{{ version.file_path }}</code>
+                </td>
+                <td>{{ version.trained_at ? new Date(version.trained_at).toLocaleDateString() : 'Shipped with the system' }}</td>
+                <td class="numeric">{{ version.rows ?? '—' }}</td>
+                <td class="numeric">{{ version.failed ?? '—' }}</td>
+                <td class="numeric">{{ percent(version.accuracy) }}</td>
+                <td class="numeric">{{ version.kappa === null ? '—' : Number(version.kappa).toFixed(4) }}</td>
+                <td class="numeric">{{ percent(version.failed_recall) }}</td>
+                <td class="numeric">{{ percent(version.baseline) }}</td>
+                <td>
+                  <span v-if="version.active" class="pill success">In use</span>
+                  <button
+                    v-else-if="canManageModel && version.can_activate"
+                    type="button"
+                    class="ghost-btn"
+                    :disabled="modelBusy"
+                    @click="activateModelVersion(version.version)"
+                  >
+                    <Undo2 :size="14" />
+                    Use this version
+                  </button>
+                  <span v-else class="pill neutral">{{ version.status === 'rejected' ? 'Not taken up' : 'Not in use' }}</span>
+                  <small v-if="version.note" class="muted lle-version-note">{{ version.note }}</small>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="muted lle-intro">
+          Accuracy, Kappa and Failed recall are from 10-fold cross-validation with random seed 1. Baseline is the
+          share of rows that passed, which is what always answering "passed" would score.
+        </p>
       </template>
 
       <div v-if="modelError" class="feedback danger" role="alert">
@@ -196,15 +257,6 @@
         <span>{{ modelNotice }}</span>
       </div>
 
-      <div v-if="canRevertModel" class="management-toolbar">
-        <p class="muted">An administrator can stop using this model and go back to the one before it.</p>
-        <div class="management-actions">
-          <button type="button" class="ghost-btn" :disabled="modelBusy" @click="revertModel">
-            <Undo2 :size="14" />
-            Go back to the previous model
-          </button>
-        </div>
-      </div>
     </article>
 
     <article class="surface-card room-shell-card is-flush">
@@ -447,9 +499,9 @@ const {
   modelBusy,
   modelError,
   modelNotice,
-  canRevertModel,
+  canManageModel,
   retrainModel,
-  revertModel,
+  activateModelVersion,
   loadModelStatus,
 } = useLleResultsModule()
 
@@ -468,26 +520,15 @@ const modelInUse = computed(() => {
   if (!live) return ''
 
   if (live.source === 'built_in') {
-    return `Exam Outcome estimates are using the original model, trained on ${live.trained_on} past students' records.`
+    return `Exam Outcome results are using version ${live.version}, the original model, trained on ${live.trained_on} past review-exam records.`
   }
 
-  const since = live.trained_at ? ` since ${new Date(live.trained_at).toLocaleDateString()}` : ''
-  return `Exam Outcome estimates are using a model retrained on ${live.trained_on} recorded results${since}.`
+  return `Exam Outcome results are using version ${live.version}, retrained on ${live.trained_on} rows.`
 })
 
-// What the most recent retraining decided, in a sentence.
-const lastModelCheck = computed(() => {
-  const latest = modelStatus.value?.history?.[0]
-  if (!latest) return ''
-
-  const when = new Date(latest.created_at).toLocaleDateString()
-  const metrics = latest.metrics ?? {}
-  const scores = `${metrics.candidate_accuracy}% right against the previous model's ${metrics.live_accuracy}% on ${metrics.compared_on} new results`
-
-  if (latest.status === 'rejected') return `${when} — not used: ${scores}.`
-  if (latest.status === 'reverted') return `${when} — taken out of use by an administrator.`
-  return `${when} — taken up: ${scores}.`
-})
+function percent(value) {
+  return value === null || value === undefined ? '—' : `${Number(value).toFixed(2)}%`
+}
 </script>
 
 <style scoped src="../dashboard.css"></style>
@@ -659,6 +700,53 @@ const lastModelCheck = computed(() => {
   font-size: 12px;
   font-weight: 400;
   line-height: 1.4;
+}
+
+.lle-versions-wrap {
+  margin: 0 18px 14px;
+}
+
+/* Sized by its own columns, like the results table below. */
+.lle-versions {
+  min-width: 0;
+}
+
+/* The shared header cell has no padding of its own: elsewhere a sort button
+   fills it. These headings are plain text, set like those buttons. */
+.lle-versions thead th {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.lle-versions th.numeric {
+  text-align: right;
+}
+
+.lle-versions td {
+  vertical-align: top;
+}
+
+.lle-version-label,
+.lle-version-note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lle-version-note {
+  margin-top: 4px;
+  max-width: 34ch;
+  white-space: normal;
+}
+
+.lle-version-file {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--lnu-text-muted);
 }
 
 /* Sized by its eight columns. The shared table rule holds every table to

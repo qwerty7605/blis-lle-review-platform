@@ -1,85 +1,130 @@
-# ML: LET pass/fail predictor
+# ML: board exam pass/fail predictor
 
-This folder holds the original Weka-trained model and the tooling used to
-turn it into the PHP code the app actually runs. The app itself never loads
-`.model` files at runtime — it uses a hand-verified PHP port of the tree
-instead, because this stack has no Java or Python runtime.
+This folder holds the Weka-trained model, its base dataset, and the tooling
+used to check the PHP code the app actually runs against Weka. The app never
+loads the `.model` file at runtime: this stack has no Java or Python, so the
+tree is written out in PHP and retrained in PHP, and both are checked here
+against the real Weka.
 
 ## What's here
 
-- `models/j48_LLE.model` — the original Weka J48 (C4.5) decision tree,
-  trained on one BLIS student batch (4 years of semester grades + mock
-  exam subject scores, labeled with each student's actual LET result).
-- `tools/InspectModel.java` — loads a `.model` file with Weka and dumps its
-  tree structure (`toString()`, `graph()`, attribute list).
-- `tools/GenerateTestVectors.java` — generates feature vectors covering
-  every leaf of the tree (plus random/edge cases) and classifies them with
-  the real Weka model, for regression-testing the PHP port.
-- `tools/weka-stable.jar` — Weka 3.8.6, fetched from Maven Central. Not
-  needed by the running app; only used by the two tools above.
-- `tools/test_vectors.csv` — output of `GenerateTestVectors.java` against
-  the current model: 69 cases with Weka's actual prediction for each.
+- `models/New_Model_LLE.model` — the original model: a Weka J48 (C4.5)
+  decision tree, options `-C 0.25 -M 2`, trained on `lle_board_exam_clean`
+  (156 review-exam records, 30 of them FAILED; a row is one review exam a
+  student took, labelled with that student's real board result, so a student
+  can appear more than once). Its attributes, in order:
+  `reference, management, indexing, selection, cataloging, it, overall,
+  board_result {FAILED,PASSED}`. Its whole tree:
+
+  ```
+  selection <= 43: FAILED (13.17/2.08)
+  selection > 43
+  |   it <= 32: FAILED (3.79/0.66)
+  |   it > 32: PASSED (139.04/15.78)
+  ```
+
+- `data/lle_clean.arff` — the base dataset the model was trained on. **Keep
+  it in the project.** Every retraining learns from all of its rows plus the
+  graduates confirmed since. Without it "Retrain model" is refused.
+- `tools/InspectModel.java` — loads a `.model` file with Weka and prints its
+  tree, attributes and options.
+- `tools/GenerateTestVectors.java` — asks the real model what it predicts for
+  a spread of cases (either side of every cut, random scores, scores missing)
+  and writes them to `tools/test_vectors.csv`. Also prints each leaf's exact
+  training weight.
 - `tools/verify_port.php` — replays `test_vectors.csv` through
-  `App\Services\MachineLearning\LetPredictionService` and fails if any
-  prediction disagrees with the real model.
+  `LetPredictionService` and fails if an outcome or a confidence disagrees
+  with the real model.
+- `tools/CompareWithWeka.java`, `tools/compare_with_weka.php` — train Weka's
+  J48 and the app's own trainer on the same datasets and compare the trees and
+  the cross-validation figures.
+- `tools/weka-stable.jar` — Weka 3.8.6, from Maven Central. Not needed by the
+  running app; only by the tools above.
 
-## Where the app actually uses this
+## Where the app uses this
 
-`app/Services/MachineLearning/LetPredictionService.php` — a plain PHP
-class with the tree hardcoded as a nested array, plus a `predict()` method
-that walks it. Exposed at `POST /api/predictions/let` (staff/admin only,
-see `routes/api/predictions.php`).
+All in `app/Services/MachineLearning/`:
 
-**Data quality caveat** (from the person who trained this model): the
-training set is a single small student cohort, so treat predictions as a
-rough signal, not a certainty. The API response always includes a
-`confidence`/`support` figure per prediction and a disclaimer string —
-don't strip those out in any UI that displays this.
+- `LetPredictionService` — the tree as a nested array (version 1, the
+  starting model) and `predict()`, which walks whichever version is in use. A
+  missing score is treated as Weka treats `?`: the case goes down both
+  branches in the proportion the training data did. It is never read as 0.
+- `LetReadinessFeatureBuilder` — a student's exams turned into the model's
+  attributes. Each exam is filed under a school year and semester
+  (`exams.school_year`, `exams.semester`, set on the exam form, defaulting from
+  the date). Within a semester an exam counts once (its latest sitting) and a
+  subject's score is the average of its exams. `overall` is the weighted
+  average of the subjects that have a score (reference 0.20, management 0.20,
+  indexing 0.15, selection 0.15, cataloging 0.20, it 0.10), divided by the
+  weights present.
+- `BoardExamOutlook` — what a student is shown. Locked until one semester has
+  all six subject exams ("Complete all 6 subject exams this semester to unlock
+  your result."). Then the latest complete semester is read: years 1 to 3 get
+  an early warning ("On track" / "At risk"), year 4 a board readiness
+  prediction ("Likely to pass" / "At risk of failing"). Also the subjects the
+  model treats as risk indicators (read off the tree in use: for the original,
+  selection ≤ 43 and it ≤ 32) and the two lowest subjects.
+- `DecisionTreeTrainer` — J48 `-C 0.25 -M 2` in PHP, missing values and
+  subtree raising included.
+- `LetModelEvaluator`, `JavaRandom` — 10-fold cross-validation with random
+  seed 1, dealt into folds the way Weka deals them.
+- `LetBaseDataset`, `LetTrainingSetBuilder`, `LetModelTrainer` — retraining.
+
+**Data quality caveat:** 156 records is small, and the tree looks at two of
+the six subjects. A prediction is a guide, not a guarantee, and the notes the
+pages show say so. Do not strip them out.
 
 ## How the model learns from new results
 
-The built-in tree is where the system starts. From then on it retrains
-itself, in PHP, from the licensure results recorded on the Licensure page:
+Only when an administrator clicks "Retrain model" on the Licensure page.
+Nothing retrains by itself.
 
-1. Saving or removing a result queues `App\Jobs\RetrainLetModelJob`. Only
-   one waits at a time, and it holds off until no result has been saved for
-   ten minutes, so a batch typed in one student at a time is learned from
-   once.
-2. `LetTrainingSetBuilder` makes one record per person with a result: their
-   15 features (from exams submitted up to the day they sat the board exam)
-   and the real outcome. Demo accounts are left out, and so is anyone with
-   fewer than 42 graded exams (seven semesters of the six subjects), the
-   same history a student needs before a prediction is shown: with less,
-   the eight semester features are not semesters. Records imported with
-   `php artisan let:import-training-data file.csv` are added.
-3. `DecisionTreeTrainer` grows a tree from them the way J48 does.
-4. `LetModelTrainer` compares that tree with the model in use on the
-   results the model in use has never seen. For those, the new tree's
-   answers come from cross-validation, so it is not marked on records it
-   was trained on. It needs 20 records, 5 of each outcome and 10 unseen.
-5. If the new tree does at least as well it is stored in `let_models` as
-   `active` and predictions use it from then on
-   (`LetPredictionService::liveModel()`); otherwise it is stored as
-   `rejected` and nothing changes. An administrator can go back to the
-   previous model from the Licensure page, and `php artisan let:retrain`
-   runs the whole check by hand.
+1. Staff record each graduate's real board result and exam date (Licensure
+   page, `lle_results`).
+2. A training row is one graduate with a recorded result: the six scores of
+   their last complete semester, which must be in their final school year
+   here (their fourth), and the real result. Scores from years 1 to 3 are
+   never a row, nor is anything the model itself predicted. Demo accounts are
+   left out.
+3. The training set is every row of `data/lle_clean.arff` plus those rows.
+4. Retraining is refused until there are 10 confirmed results the last
+   training did not have.
+5. A J48 tree is trained and scored by 10-fold cross-validation, seed 1. The
+   baseline is the share of rows that PASSED.
+6. The new tree is taken up only if its accuracy is at least the baseline and
+   its Kappa at least that of the model in use. Otherwise the current model
+   stays and the administrator is told why.
+7. Every tree trained is kept as a numbered version in `let_models` (version,
+   date, rows, FAILED rows, accuracy, Kappa, FAILED recall, baseline, file
+   path, active) with its file under `storage/app/private/let-models/`. The
+   original is version 1. An administrator can go back to any version that
+   was once in use.
 
-The original cohort's file is not in this repository. Until it is imported,
-a retrained tree knows only this system's own graduates.
+## Checking the PHP code against Weka
 
-### Checking the PHP trainer against Weka
+Both checks need a JDK, which this project's containers do not have, so the
+Java side runs in a throwaway container. From the repo root:
 
-`tools/compare_with_weka.php` and `tools/CompareWithWeka.java` train both on
-the same made-up datasets (30 to 1000 students) and compare the trees, which
-must come out identical. J48 runs with `-S` (no subtree raising), which the
-PHP trainer does not do. From the repo root:
+**The port of the model.** Must report 0 mismatches:
 
 ```
-docker exec blis-system-php-1 php ml/tools/compare_with_weka.php generate
+docker run --rm -v "<absolute path to>/ml:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
+  "javac -cp weka-stable.jar InspectModel.java GenerateTestVectors.java && \
+   java -cp weka-stable.jar:. InspectModel /ml/models/New_Model_LLE.model && \
+   java -cp weka-stable.jar:. GenerateTestVectors /ml/models/New_Model_LLE.model /ml/tools/test_vectors.csv"
+docker compose exec -T php php ml/tools/verify_port.php
+```
+
+**The trainer and the cross-validation.** Must report ALL MATCH: the same
+trees, and the same accuracy, Kappa and FAILED recall, as Weka's J48 on eight
+made-up datasets (40 to 1000 rows, up to a fifth of the scores missing):
+
+```
+docker compose exec -T php php ml/tools/compare_with_weka.php generate
 docker run --rm -v "<absolute path to>/ml:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
   "javac -cp weka-stable.jar org/bounce/net/DefaultAuthenticator.java CompareWithWeka.java && \
    java -Djava.awt.headless=true -cp weka-stable.jar:. CompareWithWeka compare/*.csv"
-docker exec blis-system-php-1 php ml/tools/compare_with_weka.php check
+docker compose exec -T php php ml/tools/compare_with_weka.php check
 ```
 
 `tools/org/bounce/net/DefaultAuthenticator.java` is a stand-in for a class
@@ -87,29 +132,12 @@ Weka wants at start-up that is not inside `weka-stable.jar`.
 
 ## Replacing the built-in tree by hand
 
-Only needed to change the fallback tree itself, from a model trained in Weka:
+Only needed to change version 1 itself, from a model trained in Weka:
 
-1. Drop the new `.model` file into `ml/models/`.
-2. Run `InspectModel.java` against it (see below) to get the new tree text.
-3. Update the `TREE` constant in `LetPredictionService.php` to match, and
-   update `requiredFeatures()` if the attribute set changed.
-4. Regenerate `test_vectors.csv` with `GenerateTestVectors.java` against
-   the new model, then run `verify_port.php` — it must report 0 mismatches
-   before shipping.
-
-Both Java tools need a JDK + `weka-stable.jar` on the classpath. No JDK is
-installed in this project's containers, so run them via a throwaway
-container, e.g. from the repo root:
-
-```
-docker run --rm -v "<absolute path to>/ml:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
-  "javac -cp weka-stable.jar InspectModel.java GenerateTestVectors.java && \
-   java -cp weka-stable.jar:. InspectModel /ml/models/j48_LLE.model && \
-   java -cp weka-stable.jar:. GenerateTestVectors /ml/models/j48_LLE.model /ml/tools/test_vectors.csv"
-```
-
-Then verify the PHP port from the php container:
-
-```
-docker exec blis-system-php-1 sh -c "cd //var/www && php ml/tools/verify_port.php"
-```
+1. Put the new `.model` file in `ml/models/` and its dataset at
+   `ml/data/lle_clean.arff`.
+2. Run `InspectModel.java` and `GenerateTestVectors.java` against it (above).
+3. Update the `TREE` constant in `LetPredictionService.php` from the printed
+   tree and exact leaves, and `LetReadinessFeatureBuilder::SUBJECTS` if the
+   attributes changed.
+4. Run `verify_port.php`. It must report 0 mismatches before shipping.

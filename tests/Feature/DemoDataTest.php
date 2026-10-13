@@ -115,21 +115,38 @@ class DemoDataTest extends TestCase
         $this->assertSame(0, $mismatched);
     }
 
-    public function test_a_featured_fourth_year_has_the_history_an_estimate_is_shown_from(): void
+    public function test_the_demo_shows_the_estimated_outcome_locked_as_an_early_warning_and_as_a_prediction(): void
     {
         $this->seed(ShowcaseSeeder::class);
 
+        // A featured fourth year has sat all six subjects this semester.
         Sanctum::actingAs(User::query()->where('email', 'markanthony.villareal@' . DemoData::EMAIL_DOMAIN)->firstOrFail());
         $this->getJson('/api/student/analytics')
             ->assertOk()
-            ->assertJsonPath('predictive_model.status', 'connected');
+            ->assertJsonPath('predictive_model.status', 'ready')
+            ->assertJsonPath('predictive_model.mode', 'board_readiness');
 
-        // The lower years are told when theirs comes.
+        // A third year who has sat all six gets the early warning.
+        $thirdYear = User::query()
+            ->where('is_demo', true)->where('year_level', 3)->where('is_active', true)
+            ->whereIn('id', ExamAttempt::query()
+                ->where('status', ExamAttempt::STATUS_SUBMITTED)
+                ->groupBy('user_id')
+                ->havingRaw('count(distinct exam_id) >= 6')
+                ->select('user_id'))
+            ->firstOrFail();
+        Sanctum::actingAs($thirdYear);
+        $this->getJson('/api/student/analytics')
+            ->assertOk()
+            ->assertJsonPath('predictive_model.status', 'ready')
+            ->assertJsonPath('predictive_model.mode', 'early_warning');
+
+        // The first years have two subjects so far.
         Sanctum::actingAs(User::query()->where('is_demo', true)->where('year_level', 1)->where('is_active', true)->firstOrFail());
         $this->getJson('/api/student/analytics')
             ->assertOk()
-            ->assertJsonPath('predictive_model.prediction', null)
-            ->assertJsonPath('predictive_model.description', fn (string $text) => str_starts_with($text, 'Available in 4th year.'));
+            ->assertJsonPath('predictive_model.status', 'locked')
+            ->assertJsonPath('predictive_model.message', 'Complete all 6 subject exams this semester to unlock your result.');
     }
 
     public function test_purge_removes_the_demo_and_leaves_real_records_alone(): void

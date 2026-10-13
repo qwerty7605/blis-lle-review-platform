@@ -2,15 +2,13 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\RetrainLetModelJob;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\LetModel;
-use App\Models\LetTrainingRecord;
 use App\Models\LleResult;
 use App\Models\Room;
 use App\Models\User;
-use App\Services\MachineLearning\DecisionTreeTrainer;
+use App\Services\MachineLearning\LetBaseDataset;
 use App\Services\MachineLearning\LetModelTrainer;
 use App\Services\MachineLearning\LetPredictionService;
 use App\Services\MachineLearning\LetReadinessFeatureBuilder;
@@ -19,337 +17,303 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
- * The readiness model used to be a tree typed into the code: it could not
- * learn from the licensure results the system was collecting. It now retrains
- * from them, and takes the new tree only when it does at least as well as the
- * model in use on results that model has never seen.
+ * The board exam model learns from real results, on request. An
+ * administrator retrains it once ten new confirmed results are in; the new
+ * tree is trained on the base dataset plus those graduates, judged by 10-fold
+ * cross-validation, and taken up only if it is no worse than always answering
+ * PASSED and no worse than the model in use. Every version is kept.
  */
 class LetModelRetrainingTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const SUBJECTS = [
-        'Information Technology',
-        'Cataloging and Classification',
-        'Indexing and Abstracting',
-        'Reference Services',
-        'Library Management',
-        'Selection and Acquisition',
+    private const SCORES = [
+        'reference' => 75, 'management' => 76, 'indexing' => 74,
+        'selection' => 75, 'cataloging' => 77, 'it' => 73,
     ];
+
+    private User $admin;
 
     private User $staff;
 
     private Room $room;
 
+    private string $basePath;
+
     /** @var array<string, Exam> */
     private array $exams = [];
+
+    private int $graduatesMade = 0;
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        Storage::fake('local');
+
+        $this->admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
         $this->staff = User::factory()->create(['role' => User::ROLE_STAFF_MASTER_EXAMINER]);
-        $this->room = Room::create(['name' => 'BLIS 4A', 'code' => 'LET4A1', 'created_by' => $this->staff->id]);
+        $this->room = Room::create(['name' => 'BLIS 4A', 'code' => 'LLE4A1', 'created_by' => $this->staff->id]);
 
-        foreach (self::SUBJECTS as $subject) {
-            $this->exams[$subject] = Exam::create([
-                'title' => "{$subject} Mock",
-                'subject' => $subject,
-                'total_items' => 100,
-                'duration_minutes' => 60,
-                'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
-                'one_take_only' => false,
-                'shuffle_questions' => false,
-                'created_by' => $this->staff->id,
-            ]);
-        }
+        $this->useBaseDataset($this->baseDataset());
     }
 
-    public function test_it_learns_what_the_built_in_model_gets_wrong_and_takes_over(): void
+    protected function tearDown(): void
     {
-        // In this cohort a strong Information Technology score is what
-        // carried people through, whatever the rest looked like. The built-in
-        // tree reads their low overall average and calls every one a fail.
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
+        @unlink($this->basePath);
 
-        $result = app(LetModelTrainer::class)->run();
-
-        $this->assertSame(LetModelTrainer::OUTCOME_ACTIVATED, $result['outcome']);
-        $this->assertSame(30, $result['model']->training_count);
-        $this->assertSame(100.0, (float) $result['model']->metrics['candidate_accuracy']);
-        $this->assertSame(50.0, (float) $result['model']->metrics['live_accuracy']);
-
-        // Predictions now come from the retrained tree.
-        $predictor = new LetPredictionService();
-        $this->assertSame('retrained', $predictor->liveModel()['source']);
-
-        $strongInIt = $this->features(['Information Technology' => 90]);
-        $this->assertSame('FAIL', $predictor->predict($strongInIt, LetPredictionService::builtInTree())['prediction']);
-        $this->assertSame('PASS', $predictor->predict($strongInIt)['prediction']);
+        parent::tearDown();
     }
 
-    public function test_a_student_sees_the_retrained_model_on_their_own_dashboard(): void
+    public function test_retraining_is_blocked_with_fewer_than_ten_new_results(): void
     {
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(4, ['selection' => 30], LleResult::RESULT_FAIL);
 
-        $current = $this->fourthYear(['Information Technology' => 90]);
-        Sanctum::actingAs($current);
-
-        $this->getJson('/api/student/analytics')->assertJsonPath('predictive_model.prediction', 'FAIL');
-
-        app(LetModelTrainer::class)->run();
-
-        $this->getJson('/api/student/analytics')
-            ->assertJsonPath('predictive_model.prediction', 'PASS')
-            ->assertJsonPath('predictive_model.description', fn (string $text) => str_contains($text, 'retrained on 30 recorded licensure results'));
-    }
-
-    public function test_a_retrained_model_that_does_worse_is_kept_out(): void
-    {
-        // Here the built-in tree is right about everyone, and the learner is
-        // rigged to be useless: it calls every student a fail.
-        $this->cohort(12, [], LleResult::RESULT_PASS, 90);
-        $this->cohort(12, [], LleResult::RESULT_FAIL, 40);
-
-        $alwaysFail = new class extends DecisionTreeTrainer
-        {
-            public function train(array $rows, array $attributes): array
-            {
-                return ['leaf' => 'FAIL', 'instances' => (float) count($rows), 'errors' => 0.0];
-            }
-        };
-
-        $trainer = new LetModelTrainer(app(LetTrainingSetBuilder::class), $alwaysFail, new LetPredictionService());
-        $result = $trainer->run();
-
-        $this->assertSame(LetModelTrainer::OUTCOME_KEPT_CURRENT, $result['outcome']);
-        $this->assertSame(LetModel::STATUS_REJECTED, $result['model']->status);
-        $this->assertSame(100.0, (float) $result['model']->metrics['live_accuracy']);
-        $this->assertSame(50.0, (float) $result['model']->metrics['candidate_accuracy']);
-        $this->assertSame('built_in', (new LetPredictionService())->liveModel()['source']);
-    }
-
-    public function test_it_waits_until_there_is_enough_to_learn_from(): void
-    {
-        $this->cohort(4, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(4, ['Information Technology' => 30], LleResult::RESULT_FAIL);
-
-        $result = app(LetModelTrainer::class)->run();
-
-        $this->assertSame(LetModelTrainer::OUTCOME_NOT_ENOUGH_DATA, $result['outcome']);
-        $this->assertDatabaseCount('let_models', 0);
-    }
-
-    public function test_it_does_not_retrain_when_nothing_has_changed_or_only_a_few_results_are_new(): void
-    {
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
-
-        $trainer = app(LetModelTrainer::class);
-        $trainer->run();
-
-        $this->assertSame(LetModelTrainer::OUTCOME_NOTHING_NEW, $trainer->run()['outcome']);
-
-        $this->cohort(3, ['Information Technology' => 90], LleResult::RESULT_PASS);
-
-        $this->assertSame(LetModelTrainer::OUTCOME_NOT_ENOUGH_NEW_RESULTS, $trainer->run()['outcome']);
-        $this->assertDatabaseCount('let_models', 1);
-    }
-
-    public function test_only_people_who_sat_the_exam_are_learned_from(): void
-    {
-        $graduate = $this->student(['Information Technology' => 90]);
-        $this->recordResult($graduate, LleResult::RESULT_PASS);
-
-        // Left without sitting the exam: not a failure, just not a record.
-        $dropout = $this->student(['Information Technology' => 30]);
-        $dropout->applyStudentStatus(User::STUDENT_STATUS_DROPPED);
-        $dropout->save();
-
-        // A demo account's invented outcome.
-        $demo = $this->student(['Information Technology' => 30], 40, ['is_demo' => true]);
-        $this->recordResult($demo, LleResult::RESULT_FAIL);
-
-        // Sat the exam, but barely used the system: nothing to describe them by.
-        $thin = User::factory()->create(['role' => User::ROLE_STUDENT]);
-        $this->attempt($thin, 'Information Technology', 80, Carbon::parse('2025-03-01'));
-        $this->recordResult($thin, LleResult::RESULT_PASS);
-
-        $set = app(LetTrainingSetBuilder::class)->build();
-
-        $this->assertSame(["student:{$graduate->id}"], array_column($set['records'], 'key'));
-        $this->assertSame(1, $set['skipped']);
-    }
-
-    public function test_a_graduate_is_learned_from_only_with_the_history_a_prediction_needs(): void
-    {
-        // One exam short of what a student must have to be shown a prediction.
-        $graduate = User::factory()->create(['role' => User::ROLE_STUDENT]);
-        $day = Carbon::parse('2025-02-01');
-
-        for ($index = 0; $index < LetReadinessFeatureBuilder::MIN_GRADED_EXAMS - 1; $index++) {
-            $this->attempt($graduate, self::SUBJECTS[$index % count(self::SUBJECTS)], 80, $day->copy()->addWeeks($index));
-        }
-
-        $this->recordResult($graduate, LleResult::RESULT_PASS);
-
-        $set = app(LetTrainingSetBuilder::class)->build();
-        $this->assertSame([], $set['records']);
-        $this->assertSame(1, $set['skipped']);
-
-        $this->attempt($graduate, 'Selection and Acquisition', 80, $day->copy()->addWeeks(41));
-
-        $this->assertSame(["student:{$graduate->id}"], array_column(app(LetTrainingSetBuilder::class)->build()['records'], 'key'));
-    }
-
-    public function test_exams_taken_after_the_board_exam_are_left_out_of_a_graduates_record(): void
-    {
-        $graduate = $this->student(['Information Technology' => 90]);
-        $this->recordResult($graduate, LleResult::RESULT_FAIL, ['taken_at' => '2026-09-15']);
-
-        $before = app(LetTrainingSetBuilder::class)->build()['records'][0]['features'];
-
-        // Preparing for a retake.
-        foreach (self::SUBJECTS as $subject) {
-            $this->attempt($graduate, $subject, 100, Carbon::parse('2026-11-01'));
-        }
-
-        $this->assertSame($before, app(LetTrainingSetBuilder::class)->build()['records'][0]['features']);
-    }
-
-    public function test_a_graduates_record_uses_the_numbers_their_prediction_was_made_from(): void
-    {
-        $student = $this->fourthYear(['Information Technology' => 88, 'Reference Services' => 61], 52);
-        Sanctum::actingAs($student);
-
-        $shown = $this->getJson('/api/student/analytics')->assertOk()->json('predictive_model');
-
-        $built = app(LetReadinessFeatureBuilder::class)->forStudent($student);
-        $direct = (new LetPredictionService())->predict($built['features']);
-
-        $this->assertTrue($built['ready']);
-        $this->assertSame($shown['prediction'], $direct['prediction']);
-        $this->assertSame($shown['decision_rules'], $direct['path']);
-    }
-
-    public function test_an_administrator_can_go_back_to_the_previous_model_and_it_stays_back(): void
-    {
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
-        app(LetModelTrainer::class)->run();
-
-        Sanctum::actingAs($this->staff);
-        $this->postJson('/api/predictions/let/model/revert')->assertForbidden();
-
-        Sanctum::actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
-        $this->postJson('/api/predictions/let/model/revert')
-            ->assertOk()
-            ->assertJsonPath('live.source', 'built_in')
-            ->assertJsonPath('can_revert', false);
-
-        // Retraining on the same results must not undo that decision.
-        $this->assertSame(LetModelTrainer::OUTCOME_NOTHING_NEW, app(LetModelTrainer::class)->run()['outcome']);
-        $this->assertSame('built_in', (new LetPredictionService())->liveModel()['source']);
-
-        $this->postJson('/api/predictions/let/model/revert')->assertStatus(422);
-    }
-
-    public function test_staff_can_see_the_model_and_retrain_it_and_students_cannot(): void
-    {
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
-
-        Sanctum::actingAs($this->staff);
+        Sanctum::actingAs($this->admin);
 
         $this->getJson('/api/predictions/let/model')
             ->assertOk()
-            ->assertJsonPath('live.source', 'built_in')
-            ->assertJsonPath('data.usable', 30)
-            ->assertJsonPath('data.new_since_live_model', 30)
-            ->assertJsonMissingPath('live.tree');
+            ->assertJsonPath('can_retrain', false)
+            ->assertJsonPath('data.new_since_last_training', 9)
+            ->assertJsonPath('data.minimum_new_results', 10);
 
         $this->postJson('/api/predictions/let/model/retrain')
-            ->assertOk()
-            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_ACTIVATED)
-            ->assertJsonPath('live.source', 'retrained')
-            ->assertJsonPath('live.trained_on', 30)
-            ->assertJsonPath('history.0.status', LetModel::STATUS_ACTIVE);
+            ->assertStatus(422)
+            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_NOT_ENOUGH_NEW_RESULTS)
+            ->assertJsonPath('message', 'Only 9 new confirmed board result(s) since the last training. At least 10 are needed before retraining.');
 
-        $this->assertDatabaseHas('audit_logs', ['action' => 'prediction.let.retrain', 'actor_id' => $this->staff->id]);
+        $this->assertDatabaseCount('let_models', 0);
+        $this->assertSame('built_in', (new LetPredictionService())->liveModel()['source']);
+    }
+
+    public function test_ten_new_results_retrain_the_model_and_one_that_holds_up_is_taken_up(): void
+    {
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(5, ['selection' => 30], LleResult::RESULT_FAIL);
+
+        Sanctum::actingAs($this->admin);
+
+        $response = $this->postJson('/api/predictions/let/model/retrain')
+            ->assertOk()
+            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_PROMOTED)
+            ->assertJsonPath('live.source', 'retrained')
+            ->assertJsonPath('live.version', 2);
+
+        // The version table: newest first, then the original.
+        $version = $response->json('versions.0');
+        $this->assertSame(2, $version['version']);
+        $this->assertTrue($version['active']);
+        $this->assertSame(50, $version['rows']);          // 40 base rows + 10 graduates
+        $this->assertSame(25, $version['failed']);
+        $this->assertEquals(100.0, $version['accuracy']);
+        $this->assertEquals(1.0, $version['kappa']);
+        $this->assertEquals(100.0, $version['failed_recall']);
+        $this->assertEquals(50.0, $version['baseline']);
+        $this->assertSame('let-models/model-v2.json', $version['file_path']);
+
+        $this->assertSame(1, $response->json('versions.1.version'));
+        $this->assertFalse($response->json('versions.1.active'));
+        $this->assertSame(LetModelTrainer::ORIGINAL_MODEL_FILE, $response->json('versions.1.file_path'));
+
+        // The model file is kept, and predictions now come from the new tree.
+        Storage::disk('local')->assertExists('let-models/model-v2.json');
+        $this->assertSame('selection', (new LetPredictionService())->liveModel()['tree']['attribute']);
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'prediction.let.retrain', 'actor_id' => $this->admin->id]);
+
+        // Nothing new since: another ten are needed before the next.
+        $this->postJson('/api/predictions/let/model/retrain')
+            ->assertStatus(422)
+            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_NOT_ENOUGH_NEW_RESULTS);
+        $this->assertDatabaseCount('let_models', 1);
+    }
+
+    public function test_a_retrained_model_that_is_worse_is_kept_out_and_the_old_one_stays(): void
+    {
+        // Results that contradict everything the base dataset shows: strong
+        // Selection scores that failed, weak ones that passed.
+        $this->graduates(6, ['selection' => 70], LleResult::RESULT_FAIL);
+        $this->graduates(6, ['selection' => 30], LleResult::RESULT_PASS);
+
+        Sanctum::actingAs($this->admin);
+
+        $response = $this->postJson('/api/predictions/let/model/retrain')
+            ->assertOk()
+            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_KEPT_CURRENT)
+            ->assertJsonPath('live.source', 'built_in')
+            ->assertJsonPath('live.version', 1)
+            ->assertJsonPath('versions.0.version', 2)
+            ->assertJsonPath('versions.0.active', false)
+            ->assertJsonPath('versions.0.status', LetModel::STATUS_REJECTED)
+            ->assertJsonPath('versions.0.can_activate', false)
+            ->assertJsonPath('versions.1.active', true);
+
+        // The administrator is told why.
+        $this->assertStringContainsString('was not taken up', $response->json('message'));
+        $this->assertStringContainsString('its Kappa', $response->json('message'));
+        $this->assertStringContainsString('Version 1 stays in use', $response->json('message'));
+        $this->assertNotNull($response->json('versions.0.note'));
+
+        $this->assertLessThan(1.0, LetModel::query()->firstOrFail()->kappa);
+        $this->assertSame('built_in', (new LetPredictionService())->liveModel()['source']);
+
+        // A version that was never in use cannot be switched to.
+        $this->postJson('/api/predictions/let/model/activate', ['version' => 2])->assertStatus(422);
+    }
+
+    public function test_an_administrator_can_go_back_to_any_version_that_was_in_use(): void
+    {
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(5, ['selection' => 30], LleResult::RESULT_FAIL);
+
+        Sanctum::actingAs($this->admin);
+        $this->postJson('/api/predictions/let/model/retrain')->assertJsonPath('live.version', 2);
+
+        $this->postJson('/api/predictions/let/model/activate', ['version' => 1])
+            ->assertOk()
+            ->assertJsonPath('live.source', 'built_in')
+            ->assertJsonPath('versions.0.active', false)
+            ->assertJsonPath('versions.0.can_activate', true)
+            ->assertJsonPath('versions.1.active', true);
+
+        // Already in use.
+        $this->postJson('/api/predictions/let/model/activate', ['version' => 1])->assertStatus(422);
+
+        $this->postJson('/api/predictions/let/model/activate', ['version' => 2])
+            ->assertOk()
+            ->assertJsonPath('live.version', 2);
+
+        $this->assertDatabaseHas('audit_logs', ['action' => 'prediction.let.activate', 'actor_id' => $this->admin->id]);
+    }
+
+    public function test_retraining_waits_for_the_base_dataset(): void
+    {
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(5, ['selection' => 30], LleResult::RESULT_FAIL);
+
+        @unlink($this->basePath);
+        $this->app->instance(LetBaseDataset::class, new LetBaseDataset($this->basePath));
+
+        Sanctum::actingAs($this->admin);
+
+        $this->getJson('/api/predictions/let/model')
+            ->assertJsonPath('base_dataset.present', false)
+            ->assertJsonPath('can_retrain', false);
+
+        $this->postJson('/api/predictions/let/model/retrain')
+            ->assertStatus(422)
+            ->assertJsonPath('outcome', LetModelTrainer::OUTCOME_NO_BASE_DATASET);
+
+        $this->assertDatabaseCount('let_models', 0);
+    }
+
+    public function test_only_an_administrator_retrains_or_changes_the_version(): void
+    {
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(5, ['selection' => 30], LleResult::RESULT_FAIL);
+
+        Sanctum::actingAs($this->staff);
+        $this->getJson('/api/predictions/let/model')->assertOk()->assertJsonMissingPath('live.tree');
+        $this->postJson('/api/predictions/let/model/retrain')->assertForbidden();
+        $this->postJson('/api/predictions/let/model/activate', ['version' => 1])->assertForbidden();
 
         Sanctum::actingAs(User::factory()->create(['role' => User::ROLE_STUDENT]));
         $this->getJson('/api/predictions/let/model')->assertForbidden();
         $this->postJson('/api/predictions/let/model/retrain')->assertForbidden();
+
+        $this->assertDatabaseCount('let_models', 0);
     }
 
-    public function test_recording_results_queues_one_retraining_however_many_are_typed_in(): void
+    public function test_recording_results_never_retrains_by_itself(): void
     {
         Queue::fake();
+        $this->graduates(5, ['selection' => 70], LleResult::RESULT_PASS);
+        $this->graduates(5, ['selection' => 30], LleResult::RESULT_FAIL);
+
+        $eleventh = $this->studentWithSemester(self::SCORES, 2025, 2);
         Sanctum::actingAs($this->staff);
 
-        foreach ([$this->student([]), $this->student([]), $this->student([])] as $student) {
-            $this->postJson('/api/lle-results', ['user_id' => $student->id, 'exam_year' => 2026, 'result' => 'pass'])
-                ->assertCreated();
-        }
+        $this->postJson('/api/lle-results', ['user_id' => $eleventh->id, 'exam_year' => 2026, 'result' => 'pass', 'taken_at' => '2026-09-14'])
+            ->assertCreated();
 
-        // A batch is entered one student at a time; one job waits for the lot.
-        Queue::assertPushed(RetrainLetModelJob::class, 1);
+        Queue::assertNothingPushed();
+        $this->assertDatabaseCount('let_models', 0);
+        $this->assertDatabaseHas('lle_results', ['user_id' => $eleventh->id, 'taken_at' => '2026-09-14 00:00:00']);
     }
 
-    public function test_removing_a_result_queues_retraining_too(): void
+    public function test_training_rows_come_only_from_graduates_with_a_real_result_and_a_complete_final_year_semester(): void
     {
-        $student = $this->student([]);
-        $this->recordResult($student, LleResult::RESULT_PASS);
+        // Sat the board exam after a complete fourth-year semester.
+        $graduate = $this->studentWithSemester(['selection' => 61] + self::SCORES, 2025, 2);
+        $this->recordResult($graduate, LleResult::RESULT_FAIL);
 
-        Queue::fake();
+        // A complete semester, but no board result: nothing to learn from.
+        $this->studentWithSemester(self::SCORES, 2025, 2);
+
+        // Complete in third year, one exam short in fourth: third-year
+        // scores are never a training row.
+        $thirdYearOnly = $this->studentWithSemester(self::SCORES, 2024, 2);
+        $this->semester($thirdYearOnly, 2025, 2, ['it' => null] + self::SCORES);
+        $this->recordResult($thirdYearOnly, LleResult::RESULT_PASS);
+
+        // A demo account's invented outcome.
+        $demo = $this->studentWithSemester(self::SCORES, 2025, 2, ['is_demo' => true]);
+        $this->recordResult($demo, LleResult::RESULT_FAIL);
+
+        $set = app(LetTrainingSetBuilder::class)->build();
+
+        $this->assertSame(["student:{$graduate->id}"], array_column($set['graduates'], 'key'));
+        $this->assertSame(1, $set['skipped']);
+        $this->assertCount(40, $set['base']);
+
+        // The row: the six scores, the weighted overall, the real result.
+        $row = $set['graduates'][0];
+        $this->assertSame(LetPredictionService::RESULT_FAIL, $row['label']);
+        $this->assertSame(LetPredictionService::requiredFeatures(), array_keys($row['features']));
+        $this->assertSame(61.0, $row['features']['selection']);
+        $this->assertSame(LetReadinessFeatureBuilder::overall($row['features']), $row['features']['overall']);
+    }
+
+    public function test_exams_taken_after_the_board_exam_are_left_out_of_a_graduates_row(): void
+    {
+        $graduate = $this->studentWithSemester(self::SCORES, 2025, 2);
+        $this->recordResult($graduate, LleResult::RESULT_FAIL, ['taken_at' => '2026-09-14']);
+
+        $before = app(LetTrainingSetBuilder::class)->build()['graduates'][0]['features'];
+
+        // Preparing for a retake, the semester after.
+        $this->semester($graduate, 2026, 1, array_fill_keys(array_keys(self::SCORES), 100), Carbon::parse('2026-10-05'));
+
+        $this->assertSame($before, app(LetTrainingSetBuilder::class)->build()['graduates'][0]['features']);
+    }
+
+    public function test_the_base_dataset_keeps_a_missing_score_missing(): void
+    {
+        $rows = app(LetBaseDataset::class)->rows();
+
+        $this->assertCount(40, $rows);
+        $this->assertNull($rows[0]['features']['cataloging']);
+        $this->assertSame(LetPredictionService::RESULT_FAIL, $rows[0]['label']);
+        $this->assertSame(LetPredictionService::RESULT_PASS, $rows[39]['label']);
+    }
+
+    public function test_a_prediction_can_be_run_by_hand_with_a_subject_left_out(): void
+    {
         Sanctum::actingAs($this->staff);
 
-        $this->deleteJson('/api/lle-results/' . LleResult::query()->value('id'))->assertOk();
+        $this->postJson('/api/predictions/let', ['reference' => 80, 'management' => 70, 'indexing' => 60, 'selection' => 50, 'cataloging' => 90])
+            ->assertOk()
+            ->assertJsonPath('features.it', null)
+            ->assertJsonPath('features.overall', round((0.20 * 80 + 0.20 * 70 + 0.15 * 60 + 0.15 * 50 + 0.20 * 90) / 0.90, 2))
+            ->assertJsonPath('prediction', 'PASS');
 
-        Queue::assertPushed(RetrainLetModelJob::class, 1);
-    }
-
-    public function test_the_queued_job_retrains_on_its_own(): void
-    {
-        $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
-        $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
-
-        RetrainLetModelJob::dispatchSync();
-
-        $this->assertSame('retrained', (new LetPredictionService())->liveModel()['source']);
-        $this->assertDatabaseHas('let_models', ['status' => LetModel::STATUS_ACTIVE, 'trigger' => LetModel::TRIGGER_AUTO]);
-        $this->assertDatabaseHas('audit_logs', ['action' => 'prediction.let.retrain', 'actor_id' => null]);
-    }
-
-    public function test_past_records_can_be_imported_from_a_file_and_are_learned_from(): void
-    {
-        $features = LetPredictionService::requiredFeatures();
-        $path = tempnam(sys_get_temp_dir(), 'let') . '.csv';
-        $handle = fopen($path, 'w');
-        fputcsv($handle, [...$features, 'Result']);
-        fputcsv($handle, [...array_fill(0, 15, 88), 'PASS']);
-        fputcsv($handle, [...array_fill(0, 15, 41), 'failed']);
-        fputcsv($handle, [...array_fill(0, 14, 70), 140, 'pass']);   // out of range
-        fputcsv($handle, [...array_fill(0, 15, 70), 'maybe']);       // not an outcome
-        fclose($handle);
-
-        $this->artisan('let:import-training-data', ['file' => $path])
-            ->expectsOutputToContain('Imported 2 record(s).')
-            ->assertSuccessful();
-
-        unlink($path);
-
-        $this->assertSame(2, LetTrainingRecord::query()->count());
-
-        $records = app(LetTrainingSetBuilder::class)->build()['records'];
-        $this->assertSame(['PASS', 'FAIL'], array_column($records, 'label'));
-        $this->assertSame([LetTrainingSetBuilder::SOURCE_IMPORTED], array_values(array_unique(array_column($records, 'source'))));
+        $this->postJson('/api/predictions/let', ['selection' => 40])->assertOk()->assertJsonPath('prediction', 'FAIL');
     }
 
     public function test_predictions_still_work_before_the_new_tables_exist(): void
@@ -364,67 +328,133 @@ class LetModelRetrainingTest extends TestCase
     }
 
     /**
-     * $count graduates who all scored $scores (subject => percent, $other for
-     * the rest) and all got the same licensure $result.
+     * Forty past examinees in the model's file format. Selection decides:
+     * 20 to 38 failed, 60 to 79 passed. A few other scores are missing.
+     *
+     * Two examinees share the highest failing score. J48 moves a cut down to
+     * a score someone in the training rows really had, so a lone highest
+     * failer, held out in cross-validation, lands above the cut made without
+     * them and is counted wrong.
+     */
+    private function baseDataset(): string
+    {
+        $lines = [
+            '@relation lle_board_exam_clean',
+            '',
+            '@attribute reference numeric',
+            '@attribute management numeric',
+            '@attribute indexing numeric',
+            '@attribute selection numeric',
+            '@attribute cataloging numeric',
+            '@attribute it numeric',
+            '@attribute overall numeric',
+            '@attribute board_result {FAILED,PASSED}',
+            '',
+            '@data',
+        ];
+
+        foreach ([...range(20, 38), 38, ...range(60, 79)] as $index => $selection) {
+            $scores = [
+                'reference' => 60 + $index % 7,
+                'management' => 62 + $index % 5,
+                'indexing' => 58 + $index % 9,
+                'selection' => $selection,
+                'cataloging' => $index % 10 === 0 ? null : 61 + $index % 6,
+                'it' => 64 + $index % 4,
+            ];
+            $features = LetReadinessFeatureBuilder::features($scores);
+
+            $lines[] = implode(',', [
+                ...array_map(static fn (?float $score): string => $score === null ? '?' : (string) $score, array_values($features)),
+                $selection >= 60 ? 'PASSED' : 'FAILED',
+            ]);
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    private function useBaseDataset(string $arff): void
+    {
+        $this->basePath = tempnam(sys_get_temp_dir(), 'lle') . '.arff';
+        file_put_contents($this->basePath, $arff);
+
+        $this->app->instance(LetBaseDataset::class, new LetBaseDataset($this->basePath));
+    }
+
+    /**
+     * $count graduates with those fourth-year scores and that board result.
+     * Their other scores fall where the base dataset's do, so that nothing
+     * but the scores given tells them apart from it.
      *
      * @param  array<string, int>  $scores
      */
-    private function cohort(int $count, array $scores, string $result, int $other = 40): void
+    private function graduates(int $count, array $scores, string $result): void
     {
         for ($index = 0; $index < $count; $index++) {
-            $this->recordResult($this->student($scores, $other), $result);
+            $nth = $this->graduatesMade++;
+
+            $this->recordResult($this->studentWithSemester($scores + [
+                'reference' => 60 + $nth % 7,
+                'management' => 62 + $nth % 5,
+                'indexing' => 58 + $nth % 9,
+                'selection' => 70,
+                'cataloging' => 61 + $nth % 6,
+                'it' => 64 + $nth % 4,
+            ], 2025, 2), $result);
         }
     }
 
     /**
-     * A student with a whole degree of graded exams: the six subjects eight
-     * times over, a week apart through 2025, Information Technology first
-     * each round.
-     *
-     * @param  array<string, int>  $scores
+     * @param  array<string, int|null>  $scores
      * @param  array<string, mixed>  $attributes
      */
-    private function student(array $scores, int $other = 40, array $attributes = []): User
+    private function studentWithSemester(array $scores, int $schoolYear, int $semester, array $attributes = []): User
     {
-        $student = User::factory()->create(['role' => User::ROLE_STUDENT] + $attributes);
-        $day = Carbon::parse('2025-02-01');
-
-        for ($round = 1; $round <= 8; $round++) {
-            foreach (self::SUBJECTS as $subject) {
-                $this->attempt($student, $subject, $scores[$subject] ?? $other, $day->copy());
-                $day->addWeek();
-            }
-        }
+        $student = User::factory()->create(['role' => User::ROLE_STUDENT, 'year_level' => 4] + $attributes);
+        $this->semester($student, $schoolYear, $semester, $scores);
 
         return $student;
     }
 
     /**
-     * The same history on someone still enrolled, in the year a prediction
-     * is shown from.
-     *
-     * @param  array<string, int>  $scores
+     * @param  array<string, int|null>  $scores
      */
-    private function fourthYear(array $scores, int $other = 40): User
+    private function semester(User $student, int $schoolYear, int $semester, array $scores, ?Carbon $when = null): void
     {
-        return $this->student($scores, $other, ['year_level' => 4]);
-    }
+        $when ??= $semester === 1 ? Carbon::create($schoolYear, 9, 15) : Carbon::create($schoolYear + 1, 2, 15);
 
-    private function attempt(User $student, string $subject, int $score, Carbon $when): void
-    {
-        ExamAttempt::create([
-            'exam_id' => $this->exams[$subject]->id,
-            'room_id' => $this->room->id,
-            'user_id' => $student->id,
-            'status' => ExamAttempt::STATUS_SUBMITTED,
-            'total_items' => 100,
-            'duration_minutes' => 60,
-            'answered_count' => 100,
-            'correct_answers' => $score,
-            'score_percent' => $score,
-            'started_at' => $when->copy()->subHour(),
-            'submitted_at' => $when,
-        ]);
+        foreach (array_keys(LetReadinessFeatureBuilder::SUBJECTS) as $index => $key) {
+            if (($scores[$key] ?? null) === null) {
+                continue;
+            }
+
+            $exam = $this->exams["{$key}:{$schoolYear}:{$semester}"] ??= Exam::create([
+                'title' => LetReadinessFeatureBuilder::SUBJECTS[$key] . ' Exam',
+                'subject' => LetReadinessFeatureBuilder::SUBJECTS[$key],
+                'total_items' => 100,
+                'duration_minutes' => 60,
+                'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
+                'one_take_only' => false,
+                'shuffle_questions' => false,
+                'school_year' => $schoolYear,
+                'semester' => $semester,
+                'created_by' => $this->staff->id,
+            ]);
+
+            ExamAttempt::create([
+                'exam_id' => $exam->id,
+                'room_id' => $this->room->id,
+                'user_id' => $student->id,
+                'status' => ExamAttempt::STATUS_SUBMITTED,
+                'total_items' => 100,
+                'duration_minutes' => 60,
+                'answered_count' => 100,
+                'correct_answers' => $scores[$key],
+                'score_percent' => $scores[$key],
+                'started_at' => $when->copy()->addDays($index)->subHour(),
+                'submitted_at' => $when->copy()->addDays($index),
+            ]);
+        }
     }
 
     /**
@@ -436,18 +466,8 @@ class LetModelRetrainingTest extends TestCase
             'user_id' => $student->id,
             'exam_year' => 2026,
             'result' => $result,
+            'taken_at' => '2026-09-14',
             'recorded_by' => $this->staff->id,
         ] + $attributes);
-    }
-
-    /**
-     * The 15 features of a student with those scores.
-     *
-     * @param  array<string, int>  $scores
-     * @return array<string, float>
-     */
-    private function features(array $scores, int $other = 40): array
-    {
-        return app(LetReadinessFeatureBuilder::class)->forStudent($this->student($scores, $other))['features'];
     }
 }

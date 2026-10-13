@@ -258,7 +258,7 @@
           <header class="modal-head library-modal-head">
             <div class="library-modal-title-wrap">
               <h4>Add Assessment Questions</h4>
-              <p>Pick a DOCX — the name, subject, and item mapping are all handled automatically on save.</p>
+              <p>Pick a DOCX. The name and item mapping are handled on save; the core subject is detected and yours to change.</p>
             </div>
             <button type="button" class="modal-close" @click="closeLibraryQuestionModal">
               <X :size="16" />
@@ -285,6 +285,22 @@
               </label>
 
               <p v-if="libraryDocxName" class="library-file-chip">{{ libraryDocxName }}</p>
+
+              <label class="field-stack">
+                <span class="field-label">Core Subject</span>
+                <select
+                  v-model="libraryForm.subjectCategory"
+                  class="text-input"
+                  :disabled="librarySaving"
+                  @change="markLibrarySubjectChosen"
+                >
+                  <option value="">General subject</option>
+                  <option v-for="subject in librarySubjectCategories" :key="subject" :value="subject">
+                    {{ subject }}
+                  </option>
+                </select>
+                <p v-if="librarySubjectNote" class="library-upload-note">{{ librarySubjectNote }}</p>
+              </label>
 
               <div v-if="libraryParsing" class="feedback info">
                 <RefreshCw :size="15" class="spin-soft" />
@@ -396,6 +412,13 @@
             <div v-if="selectedLibraryQuestionBank" class="library-bank-view-meta">
               <span class="pill neutral">{{ libraryBankQuestions.length }} assessment item(s)</span>
               <span v-if="selectedLibraryQuestionBank.subject" class="pill navy">{{ selectedLibraryQuestionBank.subject }}</span>
+              <span v-if="pendingTagCount > 0" class="pill neutral">
+                {{ pendingTagCount }} {{ pendingTagCount === 1 ? 'tag' : 'tags' }} to confirm
+              </span>
+              <span v-else-if="allTagsConfirmed" class="pill success tag-confirmed-pill">
+                <CheckCircle2 :size="12" />
+                All tags confirmed
+              </span>
             </div>
 
             <div v-if="libraryBankQuestionsLoading" class="room-empty-state compact">
@@ -419,9 +442,14 @@
                   <div class="library-bank-question-pills">
                     <span class="pill neutral">{{ (question.question_type || 'multiple_choice').replace('_', ' ') }}</span>
                     <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
+                    <span v-if="question.subtopic?.name" class="pill neutral">{{ question.subtopic.name }}</span>
                     <span v-if="question.difficulty" class="pill pill-cap success">{{ question.difficulty }}</span>
                     <span v-if="question.cognitive_level" class="pill neutral">{{ cognitiveLevelLabel(question.cognitive_level) }}</span>
                     <span v-if="question.tag_status === 'pending_review'" class="pill neutral">Tag pending review</span>
+                    <span v-else-if="question.tag_status === 'confirmed'" class="pill success tag-confirmed-pill">
+                      <CheckCircle2 :size="12" />
+                      Confirmed
+                    </span>
                   </div>
                 </div>
 
@@ -497,6 +525,9 @@
                         <option value="">Not set</option>
                         <option v-for="topic in questionEditTopicOptions" :key="topic" :value="topic">{{ topic }}</option>
                       </select>
+                      <p v-if="!selectedLibraryQuestionBank?.subject" class="library-upload-note">
+                        Topics belong to a core subject. Give this set one first, under Edit.
+                      </p>
                     </label>
 
                     <label class="field-stack">
@@ -561,7 +592,7 @@
 
           <div class="modal-actions">
             <button
-              v-if="libraryBankQuestions.some((question) => question.tag_status === 'pending_review')"
+              v-if="pendingTagCount > 0"
               type="button"
               class="ghost-btn"
               :disabled="libraryMappingSaving"
@@ -605,6 +636,24 @@
                 your own confirmed tags are left untouched.
               </p>
             </label>
+          </div>
+
+          <div class="library-edit-questions">
+            <div class="library-edit-questions-text">
+              <span class="field-label">Questions and Mapping</span>
+              <p class="library-upload-note">
+                Open the questions to edit each one's wording, answer, topic, subtopic, difficulty and cognitive level.
+              </p>
+            </div>
+            <button
+              type="button"
+              class="ghost-btn"
+              :disabled="libraryBankEditSaving || !libraryBankEditForm.title.trim()"
+              @click="editLibraryBankQuestions"
+            >
+              <Pencil :size="14" />
+              {{ libraryBankEditDirty ? 'Save and Edit Questions' : 'Edit Questions' }}
+            </button>
           </div>
 
           <div class="modal-actions">
@@ -727,6 +776,8 @@ const {
   digitalizedQuestions,
   libraryBankQuestions,
   libraryForm,
+  librarySubjectNote,
+  markLibrarySubjectChosen,
   libraryBankEditForm,
   librarySubjectCategories,
   libraryDifficultyOptions,
@@ -746,6 +797,8 @@ const {
   openEditLibraryBankModal,
   closeEditLibraryBankModal,
   handleUpdateLibraryBank,
+  libraryBankEditDirty,
+  editLibraryBankQuestions,
   handleLibraryDocxChange,
   handleSaveLibraryQuestionBank,
   handleDeleteLibraryBank,
@@ -830,6 +883,16 @@ function clearBankFilters() {
   selectedOwnerFilter.value = ''
 }
 
+// The open set's tags: how many still wait for a teacher, and whether every
+// tagged question is confirmed (what "Confirm All Suggested Tags" leaves).
+const pendingTagCount = computed(() => (
+  libraryBankQuestions.value.filter((question) => question.tag_status === 'pending_review').length
+))
+const allTagsConfirmed = computed(() => (
+  libraryBankQuestions.value.length > 0
+  && libraryBankQuestions.value.every((question) => question.tag_status === 'confirmed')
+))
+
 /*
  * "Item mapping" in plain words: whether each question has been tagged with
  * its topic, difficulty and thinking level yet, and what the button will do.
@@ -838,11 +901,25 @@ function mappingState(bank) {
   const status = String(bank.mapping_status ?? 'idle').toLowerCase()
 
   if (status === 'completed') {
+    // Tagged is not yet confirmed: the tags the tagger was unsure of wait
+    // for a teacher, in the set's question list.
+    const pending = Number(bank.pending_tags_count ?? 0)
+
+    if (pending > 0) {
+      return {
+        tone: 'review',
+        icon: AlertCircle,
+        label: `${pending} ${pending === 1 ? 'tag' : 'tags'} to confirm`,
+        detail: 'Tagged, but these were uncertain. Open the set to check and confirm them.',
+        action: 'Tag again',
+      }
+    }
+
     return {
       tone: 'done',
       icon: CheckCircle2,
-      label: 'Topics tagged',
-      detail: 'Every question has a topic, difficulty and thinking level.',
+      label: 'Tags confirmed',
+      detail: 'Every question has a confirmed topic, difficulty and thinking level.',
       action: 'Tag again',
     }
   }
@@ -942,6 +1019,12 @@ function mappingState(bank) {
   gap: 8px;
 }
 
+.tag-confirmed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .library-bank-option-list {
   display: grid;
   gap: 8px;
@@ -978,6 +1061,25 @@ function mappingState(bank) {
   gap: 12px;
   padding-top: 4px;
   border-top: 1px dashed rgba(13, 21, 71, 0.14);
+}
+
+/* In the Edit dialog: the way to the set's questions. */
+.library-edit-questions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+}
+
+.library-edit-questions-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .library-question-edit-option-row {
@@ -1364,6 +1466,7 @@ function mappingState(bank) {
 }
 
 .bank-topics-status.is-done svg { color: var(--lnu-success); }
+.bank-topics-status.is-review svg { color: #9a6a0c; }
 .bank-topics-status.is-busy svg { color: var(--lnu-navy); }
 .bank-topics-status.is-failed svg { color: var(--lnu-danger); }
 
@@ -1534,6 +1637,7 @@ function mappingState(bank) {
 }
 
 .bank-mapping.is-done > svg { color: var(--lnu-success); }
+.bank-mapping.is-review > svg { color: #9a6a0c; }
 .bank-mapping.is-busy > svg { color: var(--lnu-navy); }
 .bank-mapping.is-failed > svg { color: var(--lnu-danger); }
 

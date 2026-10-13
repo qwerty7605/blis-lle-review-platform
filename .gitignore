@@ -35,3 +35,9 @@ tmp/
 # Output of ml/tools/compare_with_weka.php and of compiling the Java tools
 ml/tools/compare/
 ml/tools/**/*.class
+
+# The live-site edition of the test cases prints the website test accounts and
+# their passwords, so neither it nor the file they are read from is kept here.
+/docs/testing/BLIS-Test-Cases-Live-Site.pdf
+/docs/testing/source/live-accounts.json
+/docs/testing/source/*.html

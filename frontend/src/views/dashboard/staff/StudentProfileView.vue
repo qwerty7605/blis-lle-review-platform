@@ -60,7 +60,7 @@
           <article class="profile-card" aria-labelledby="profile-outcome-heading">
             <header class="profile-card-head">
               <h3 id="profile-outcome-heading"><Gauge :size="17" />Estimated Outcome</h3>
-              <p>Based on recent exam performance</p>
+              <p>From the latest complete semester</p>
             </header>
 
             <EstimatedOutcome

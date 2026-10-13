@@ -31,7 +31,7 @@ WB_008
 docker compose exec -T php php artisan test --compact --filter="DecisionTreeTrainerTest|LetModelRetrainingTest|LleResultTest"
 
 WB_009
-docker compose exec -T php php artisan test --compact --filter="StudentLifecycleTest|SchoolYearEndTest|AdminDirectoryPagingTest|AdminUserDirectorySummaryTest|DirectorySearchEscapingTest|RoomGradeExportTest"
+docker compose exec -T php php artisan test --compact --filter="StudentLifecycleTest|SchoolYearEndTest|AdminDirectoryPagingTest|AdminUserDirectorySummaryTest|DirectorySearchEscapingTest|RoomGradeExportTest|AdminEmailVerificationTest|AdminRoomExamsTest"
 
 WB_010
 cd frontend
@@ -133,7 +133,8 @@ api('GET','/admin/users')
 api('GET','/admin/audit-logs')
 api('GET','/admin/year-end')
 api('PUT','/settings/system',{announcement_banner:'x'})
-api('POST','/predictions/let/model/revert')
+api('POST','/predictions/let/model/retrain')
+api('POST','/predictions/let/model/activate',{version:1})
 
 WB_062
 api('GET','/library/banks')
@@ -151,32 +152,48 @@ api('GET','/exams/EXAM/item-analytics')
 api('DELETE','/library/banks/BANK')
 
 WB_065
-api('PUT','/settings/system',{announcement_banner:'x'.repeat(501)})
+api('PATCH','/admin/users/USER',{email_verified:false})
 
 WB_066
+api('PATCH','/admin/users/USER',{email_verified:false})
+api('PATCH','/admin/users/USER',{email_verified:true})
+
+WB_067
+api('PATCH','/admin/users/USER',{email_verified:false})
+
+WB_068
+api('GET','/rooms/ROOM')
+
+WB_069
+api('GET','/exams/EXAM/live-dashboard?room_id=ROOM')
+
+WB_070
+api('PUT','/settings/system',{announcement_banner:'x'.repeat(501)})
+
+WB_071
 api('GET','/rooms')
 api('GET','/settings/public/notice')
 api('GET','/auth/me')
 api('GET','/admin/users')
 
-WB_067
+WB_072
 api('GET','/admin/users?search=%25')
 api('GET','/admin/users?search=_')
 
-WB_068
+WB_073
 for (let i = 0; i < 125; i++) api('GET','/rooms')
 
-WB_073
+WB_078
 api('GET','/predictions/let/model')
 
-WB_074
-docker compose exec -T php php artisan let:retrain
+WB_079
+api('POST','/predictions/let/model/retrain')
 
-WB_075
+WB_080
 docker compose logs --tail 20 queue
 
-WB_076
-api('POST','/predictions/let/model/revert')
+WB_081
+api('POST','/predictions/let/model/activate',{version:1})
 
-WB_077
+WB_082
 api('GET','/student/analytics')

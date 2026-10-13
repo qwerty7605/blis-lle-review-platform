@@ -33,6 +33,36 @@ class DecisionTreeTrainerTest extends TestCase
         $this->assertSame('FAIL', $predictor->predict(['mock_total' => 55, 'sem1' => 50], $tree)['prediction']);
     }
 
+    public function test_a_missing_score_is_left_out_of_the_cut_and_never_read_as_zero(): void
+    {
+        // Selection decides the outcome. A third of the students have no
+        // Selection score at all, and they passed. Read as zero they would all
+        // sit below the cut and wreck it.
+        $rows = [];
+        foreach (range(30, 89) as $score) {
+            $rows[] = $this->row(['selection' => $score], $score > 50 ? 'PASS' : 'FAIL');
+        }
+        foreach (range(1, 20) as $index) {
+            $rows[] = ['features' => ['selection' => null], 'label' => 'PASS'];
+        }
+
+        $tree = (new DecisionTreeTrainer())->train($rows, ['selection']);
+
+        $this->assertSame('selection', $tree['attribute']);
+        $this->assertEquals(50, $tree['threshold']);
+        $this->assertSame('FAIL', $tree['le']['leaf']);
+
+        // The students without a score are shared between the two sides, so
+        // the 80 rows are all still there, as fractions.
+        $this->assertEqualsWithDelta(80.0, $tree['le']['instances'] + $tree['gt']['instances'], 0.001);
+        $this->assertGreaterThan(21.0, $tree['le']['instances']);
+
+        // And a student with no score is weighed across both sides.
+        $predictor = new LetPredictionService();
+        $this->assertSame('FAIL', $predictor->predict(['selection' => 40], $tree)['prediction']);
+        $this->assertSame('PASS', $predictor->predict(['selection' => null], $tree)['prediction']);
+    }
+
     public function test_one_outcome_only_gives_a_single_leaf(): void
     {
         $rows = array_map(fn (int $score): array => $this->row(['mock_total' => $score], 'PASS'), range(50, 70));

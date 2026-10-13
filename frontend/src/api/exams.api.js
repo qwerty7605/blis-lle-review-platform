@@ -17,6 +17,11 @@ class ExamsApi {
     return http.delete(`/exams/${examId}`)
   }
 
+  /** Archives the exam from every room it is still in; the exam and its results stay. */
+  archive(examId) {
+    return http.post(`/exams/${examId}/archive`)
+  }
+
   liveBoard(examId, roomId) {
     return http.get(`/exams/${examId}/live-dashboard`, { params: { room_id: roomId } })
   }

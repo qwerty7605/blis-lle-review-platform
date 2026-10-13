@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\RetrainLetModelJob;
 use App\Models\AuditLog;
 use App\Models\LleResult;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Bus;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -52,8 +50,6 @@ class LleResultBatchTest extends TestCase
 
     public function test_a_whole_list_is_recorded_in_one_request(): void
     {
-        Bus::fake([RetrainLetModelJob::class]);
-
         $staff = $this->staff();
         $ana = $this->student('Ana Cruz', 2022);
         $ben = $this->student('Ben Dizon', 2022);
@@ -83,9 +79,8 @@ class LleResultBatchTest extends TestCase
         $this->assertDatabaseMissing('lle_results', ['user_id' => $cara->id]);
         $this->assertDatabaseCount('lle_results', 2);
 
-        // One entry in the audit log and one retraining for the list.
+        // One entry in the audit log for the list.
         $this->assertSame(1, AuditLog::query()->where('action', 'lle-result.record-batch')->count());
-        Bus::assertDispatchedTimes(RetrainLetModelJob::class, 1);
     }
 
     public function test_a_list_with_a_problem_in_it_records_nothing(): void

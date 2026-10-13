@@ -99,9 +99,8 @@ export function useLleResultsModule() {
   const modelBusy = ref(false)
   const modelError = ref('')
   const modelNotice = ref('')
-  const canRevertModel = computed(() => (
-    String(auth.user?.role ?? '').toLowerCase() === 'admin' && Boolean(modelStatus.value?.can_revert)
-  ))
+  // Retraining and changing the version in use are an administrator's.
+  const canManageModel = computed(() => String(auth.user?.role ?? '').toLowerCase() === 'admin')
 
   // silent: after a result is saved or removed, the counts just move.
   async function loadModelStatus({ silent = false } = {}) {
@@ -130,6 +129,9 @@ export function useLleResultsModule() {
       modelStatus.value = data
       modelNotice.value = data?.message ?? ''
     } catch (error) {
+      // A retraining that was not allowed to start still says where things
+      // stand.
+      if (Array.isArray(error?.response?.data?.versions)) modelStatus.value = error.response.data
       modelError.value = firstApiError(error, fallbackMessage)
     } finally {
       modelBusy.value = false
@@ -140,13 +142,13 @@ export function useLleResultsModule() {
     return changeModel(() => services.retrainLetModel(), 'Unable to retrain the Exam Outcome model.')
   }
 
-  function revertModel() {
+  function activateModelVersion(version) {
     if (typeof window !== 'undefined') {
-      const confirmed = window.confirm('Stop using the current Exam Outcome model and go back to the one before it?')
+      const confirmed = window.confirm(`Use version ${version} of the Exam Outcome model from now on?`)
       if (!confirmed) return Promise.resolve()
     }
 
-    return changeModel(() => services.revertLetModel(), 'Unable to go back to the previous model.')
+    return changeModel(() => services.activateLetModel(version), 'Unable to switch to that version.')
   }
 
   // Read again when someone comes back to this page.
@@ -323,8 +325,8 @@ export function useLleResultsModule() {
     modelBusy,
     modelError,
     modelNotice,
-    canRevertModel,
+    canManageModel,
     retrainModel,
-    revertModel,
+    activateModelVersion,
   }
 }
