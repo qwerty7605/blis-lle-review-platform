@@ -48,7 +48,9 @@ itself, in PHP, from the licensure results recorded on the Licensure page:
 2. `LetTrainingSetBuilder` makes one record per person with a result: their
    15 features (from exams submitted up to the day they sat the board exam)
    and the real outcome. Demo accounts are left out, and so is anyone with
-   too few graded exams to describe. Records imported with
+   fewer than 42 graded exams (seven semesters of the six subjects), the
+   same history a student needs before a prediction is shown: with less,
+   the eight semester features are not semesters. Records imported with
    `php artisan let:import-training-data file.csv` are added.
 3. `DecisionTreeTrainer` grows a tree from them the way J48 does.
 4. `LetModelTrainer` compares that tree with the model in use on the

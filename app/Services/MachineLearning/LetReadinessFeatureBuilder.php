@@ -19,8 +19,9 @@ use Illuminate\Support\Str;
  * and averaging each bucket's score. This is a stand-in for "one mock
  * result per semester" — it is only as accurate as the assumption that a
  * student's attempts are spread reasonably evenly across their 8
- * semesters, which is why a minimum attempt count is required before a
- * prediction is considered meaningful (see MIN_ATTEMPTS_FOR_PREDICTION).
+ * semesters. Eight exams would be enough to fill the buckets and far too
+ * few for them to be semesters, so nothing is built from less than
+ * MIN_GRADED_EXAMS: no prediction, and no training record either.
  *
  * `mock_catclass`..`mock_selacq` and `mock_total` reuse the same
  * per-subject averages already computed for the student's Analytics page
@@ -29,7 +30,24 @@ use Illuminate\Support\Str;
  */
 class LetReadinessFeatureBuilder
 {
-    private const MIN_ATTEMPTS_FOR_PREDICTION = 8;
+    /**
+     * The model's semester inputs, one per semester of the four-year
+     * programme.
+     */
+    private const SEMESTERS = 8;
+
+    /**
+     * The fewest graded exams the features are built from: seven semesters
+     * of the six subjects, which a student has at the end of fourth year's
+     * first semester. From there each bucket is close to one real semester.
+     * The same number holds a student's prediction and a graduate's training
+     * record, so the model never learns from a history it would not predict
+     * from.
+     */
+    public const MIN_GRADED_EXAMS = 42;
+
+    /** A student is shown a prediction from this year level. */
+    public const SHOWN_FROM_YEAR_LEVEL = 4;
 
     private const SUBJECT_TO_FEATURE = [
         'Cataloging and Classification' => 'mock_catclass',
@@ -77,6 +95,26 @@ class LetReadinessFeatureBuilder
         'selection and acquisition' => 'Selection and Acquisition',
         'selection' => 'Selection and Acquisition',
     ];
+
+    /**
+     * Why this student is not shown a prediction yet, or null when they can
+     * be. The wording is read by the student and by staff on their profile.
+     *
+     * The model reads four years of results. Before fourth year the eight
+     * buckets would be cut from a year or two and read as a whole degree, so
+     * the prediction is held whatever the number of exams. build() holds it
+     * for too few exams, with its own reason.
+     */
+    public function reasonToHold(User $student): ?string
+    {
+        $finishedProgramme = $student->student_status === User::STUDENT_STATUS_GRADUATED;
+
+        if (!$finishedProgramme && (int) $student->year_level < self::SHOWN_FROM_YEAR_LEVEL) {
+            return 'Available in 4th year. The estimate reads four years of exam results, so it waits until they are on record.';
+        }
+
+        return null;
+    }
 
     /**
      * The features for one student, read straight from their exam history.
@@ -147,18 +185,18 @@ class LetReadinessFeatureBuilder
             ->sortBy('submitted_at')
             ->values();
 
-        if ($scored->count() < self::MIN_ATTEMPTS_FOR_PREDICTION) {
+        if ($scored->count() < self::MIN_GRADED_EXAMS) {
             return [
                 'ready' => false,
                 'reason' => sprintf(
-                    'Finish at least %d graded exams to estimate 8 semesters of mock results (you have %d so far).',
-                    self::MIN_ATTEMPTS_FOR_PREDICTION,
+                    'Available after %d graded exams, about seven semesters of results (%d so far).',
+                    self::MIN_GRADED_EXAMS,
                     $scored->count(),
                 ),
             ];
         }
 
-        $bucketCount = self::MIN_ATTEMPTS_FOR_PREDICTION;
+        $bucketCount = self::SEMESTERS;
         $total = $scored->count();
         $buckets = array_fill(0, $bucketCount, []);
 
@@ -172,8 +210,7 @@ class LetReadinessFeatureBuilder
 
         $semesterFeatures = [];
         foreach ($buckets as $i => $scores) {
-            // Guaranteed non-empty: with >= 8 scored attempts spread across 8
-            // buckets by the floor() distribution above, every bucket gets >= 1.
+            // Never empty: MIN_GRADED_EXAMS is well over one attempt a bucket.
             $semesterFeatures['sem' . ($i + 1)] = round(array_sum($scores) / count($scores), 2);
         }
 

@@ -98,7 +98,7 @@ class LetModelRetrainingTest extends TestCase
         $this->cohort(15, ['Information Technology' => 90], LleResult::RESULT_PASS);
         $this->cohort(15, ['Information Technology' => 30], LleResult::RESULT_FAIL);
 
-        $current = $this->student(['Information Technology' => 90]);
+        $current = $this->fourthYear(['Information Technology' => 90]);
         Sanctum::actingAs($current);
 
         $this->getJson('/api/student/analytics')->assertJsonPath('predictive_model.prediction', 'FAIL');
@@ -187,6 +187,27 @@ class LetModelRetrainingTest extends TestCase
         $this->assertSame(1, $set['skipped']);
     }
 
+    public function test_a_graduate_is_learned_from_only_with_the_history_a_prediction_needs(): void
+    {
+        // One exam short of what a student must have to be shown a prediction.
+        $graduate = User::factory()->create(['role' => User::ROLE_STUDENT]);
+        $day = Carbon::parse('2025-02-01');
+
+        for ($index = 0; $index < LetReadinessFeatureBuilder::MIN_GRADED_EXAMS - 1; $index++) {
+            $this->attempt($graduate, self::SUBJECTS[$index % count(self::SUBJECTS)], 80, $day->copy()->addWeeks($index));
+        }
+
+        $this->recordResult($graduate, LleResult::RESULT_PASS);
+
+        $set = app(LetTrainingSetBuilder::class)->build();
+        $this->assertSame([], $set['records']);
+        $this->assertSame(1, $set['skipped']);
+
+        $this->attempt($graduate, 'Selection and Acquisition', 80, $day->copy()->addWeeks(41));
+
+        $this->assertSame(["student:{$graduate->id}"], array_column(app(LetTrainingSetBuilder::class)->build()['records'], 'key'));
+    }
+
     public function test_exams_taken_after_the_board_exam_are_left_out_of_a_graduates_record(): void
     {
         $graduate = $this->student(['Information Technology' => 90]);
@@ -204,7 +225,7 @@ class LetModelRetrainingTest extends TestCase
 
     public function test_a_graduates_record_uses_the_numbers_their_prediction_was_made_from(): void
     {
-        $student = $this->student(['Information Technology' => 88, 'Reference Services' => 61], 52);
+        $student = $this->fourthYear(['Information Technology' => 88, 'Reference Services' => 61], 52);
         Sanctum::actingAs($student);
 
         $shown = $this->getJson('/api/student/analytics')->assertOk()->json('predictive_model');
@@ -356,8 +377,9 @@ class LetModelRetrainingTest extends TestCase
     }
 
     /**
-     * A student with two graded mock exams in each of the six subjects, taken
-     * through 2025 with Information Technology first each round.
+     * A student with a whole degree of graded exams: the six subjects eight
+     * times over, a week apart through 2025, Information Technology first
+     * each round.
      *
      * @param  array<string, int>  $scores
      * @param  array<string, mixed>  $attributes
@@ -367,7 +389,7 @@ class LetModelRetrainingTest extends TestCase
         $student = User::factory()->create(['role' => User::ROLE_STUDENT] + $attributes);
         $day = Carbon::parse('2025-02-01');
 
-        foreach ([1, 2] as $round) {
+        for ($round = 1; $round <= 8; $round++) {
             foreach (self::SUBJECTS as $subject) {
                 $this->attempt($student, $subject, $scores[$subject] ?? $other, $day->copy());
                 $day->addWeek();
@@ -375,6 +397,17 @@ class LetModelRetrainingTest extends TestCase
         }
 
         return $student;
+    }
+
+    /**
+     * The same history on someone still enrolled, in the year a prediction
+     * is shown from.
+     *
+     * @param  array<string, int>  $scores
+     */
+    private function fourthYear(array $scores, int $other = 40): User
+    {
+        return $this->student($scores, $other, ['year_level' => 4]);
     }
 
     private function attempt(User $student, string $subject, int $score, Carbon $when): void
