@@ -411,6 +411,7 @@ Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exa
 
 Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exam) use (
     $isStaffMasterExaminer,
+    $isAdmin,
     $ensureActive,
     $normalizeDeliveryMode
 ) {
@@ -420,11 +421,15 @@ Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exa
 
     $user = $request->user();
 
-    if (!$isStaffMasterExaminer($user)) {
+    // The teacher who owns both the exam and the room, or an administrator,
+    // who oversees every room and reads the board without owning either.
+    $overseesAllRooms = $isAdmin($user);
+
+    if (!$overseesAllRooms && !$isStaffMasterExaminer($user)) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    if ((int) $exam->created_by !== (int) $user->id) {
+    if (!$overseesAllRooms && (int) $exam->created_by !== (int) $user->id) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -440,7 +445,7 @@ Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exa
         return response()->json(['message' => 'Room not found.'], 404);
     }
 
-    if ((int) $room->created_by !== (int) $user->id) {
+    if (!$overseesAllRooms && (int) $room->created_by !== (int) $user->id) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

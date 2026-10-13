@@ -247,7 +247,7 @@
               </button>
             </div>
 
-            <article v-if="isStaffRole" class="surface-card rooms-exams-card">
+            <article v-if="isManagementRole" class="surface-card rooms-exams-card">
               <div class="rooms-exams-head">
                 <div>
                   <h5>Room Exams</h5>
@@ -302,8 +302,10 @@
                     </span>
 
                     <!-- Room -> Exam, the mirror of the Exams page's room
-                         chips: one click to see everywhere this exam runs. -->
+                         chips: one click to see everywhere this exam runs.
+                         Teachers only: the Exams page is theirs. -->
                     <RouterLink
+                      v-if="isStaffRole"
                       class="assignment-chip is-link"
                       :to="{ name: 'dashboard-exams', query: { exam: exam.id } }"
                       :title="`Open ${exam.title} on the Exams page`"
@@ -372,7 +374,16 @@
               <div v-for="member in selectedRoomCurrentMembers" :key="member.id" class="rooms-roster-item">
                 <span class="rooms-roster-avatar"><CircleUserRound :size="22" /></span>
                 <div class="rooms-roster-item-copy">
-                  <strong>{{ member.name }}</strong>
+                  <!-- The name opens the student's profile, as it does in
+                       the Students directory. The room goes along in the
+                       address so the profile can lead back here. -->
+                  <RouterLink
+                    class="rooms-roster-profile-link"
+                    :to="{ name: 'dashboard-student-profile', params: { studentId: member.id }, query: { room: selectedRoom.id } }"
+                    :title="`Open the profile of ${member.name}`"
+                  >
+                    <strong>{{ member.name }}</strong>
+                  </RouterLink>
                   <p v-if="member.student_id">Student ID: {{ member.student_id }}</p>
                   <p v-else>{{ member.email }}</p>
                 </div>
@@ -394,7 +405,7 @@
             </div>
           </article>
 
-          <article v-if="isStaffRole" class="rooms-summary-card">
+          <article v-if="isManagementRole" class="rooms-summary-card">
             <p class="rooms-summary-title">Room Overview</p>
 
             <div class="rooms-summary-row">
@@ -597,6 +608,7 @@ const showArchivedExams = ref(false)
 
 const {
   isStaffRole,
+  isManagementRole,
   canCreateRooms,
   canViewExamResults,
   roomName,
@@ -726,10 +738,10 @@ function backToRoomList() {
   router.replace(withoutRoomInAddress())
 }
 
-// A teacher's room has two long lists, its students and its exams. An admin
-// sees no exams here, so there is nothing to switch between.
+// A room has two long lists, its students and its exams, so on a narrow
+// screen they are two tabs.
 const roomTab = ref('students')
-const showRoomTabs = computed(() => isCompact.value && isStaffRole.value && Boolean(selectedRoom.value))
+const showRoomTabs = computed(() => isCompact.value && isManagementRole.value && Boolean(selectedRoom.value))
 const roomTabs = computed(() => [
   { key: 'students', label: 'Students', icon: Users, count: selectedRoomCurrentMembers.value.length },
   { key: 'exams', label: 'Exams', icon: FileText, count: selectedRoomActiveExams.value.length },
@@ -1381,6 +1393,26 @@ const roomExamCoveragePercent = computed(() => {
   white-space: nowrap;
 }
 
+/* The name is a link, but reads as the name it always was until pointed at. */
+.rooms-roster-profile-link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.rooms-roster-profile-link:hover strong,
+.rooms-roster-profile-link:focus-visible strong {
+  color: var(--lnu-navy-light);
+  text-decoration: underline;
+}
+
+.rooms-roster-profile-link:focus-visible {
+  outline: 2px solid var(--lnu-navy-light);
+  outline-offset: 2px;
+}
+
 .rooms-roster-item-copy p {
   margin: 1px 0 0;
   font-size: 11px;
@@ -1538,8 +1570,14 @@ const roomExamCoveragePercent = computed(() => {
  * The same on any wider screen that is short. A 1366x768 laptop shows a
  * page about 640px of height once the browser's own bars are counted, and
  * pinned to that the class list was a 221px window.
+ *
+ * Short stops at 700px. It was 760px, which also took in a 1920x1080 screen
+ * at Windows' usual 125% scaling: about 1534x728 of page, where the three
+ * columns fit with five students in view. There the loose layout left the
+ * room list, the exams and the class list ending at three different heights
+ * and the overview below the fold.
  */
-@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 759px) {
+@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 699px) {
   .room-view,
   .rooms-grid {
     flex: none;

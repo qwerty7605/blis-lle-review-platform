@@ -93,47 +93,45 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
         ->orderBy('users.name')
         ->get();
 
-    $assignedExams = collect();
-    $archivedExams = collect();
+    // Everyone who may open the room sees its exams. Administrators were
+    // left out, so the room they oversee showed its students and nothing
+    // about what those students were being examined on.
+    $loadRoomExams = static function ($relation, bool $archived) use ($normalizeDeliveryMode) {
+        return $relation
+            ->with([
+                'questionBank:id,title,subject,total_items',
+                'questionBanks:id,title,subject,total_items',
+            ])
+            ->select(
+                'exams.id',
+                'exams.title',
+                'exams.subject',
+                'exams.question_bank_id',
+                'exams.total_items',
+                'exams.duration_minutes',
+                'exams.scheduled_at',
+                'exams.schedule_start_at',
+                'exams.schedule_end_at',
+                'exams.delivery_mode',
+                'exams.one_take_only',
+                'exams.shuffle_questions',
+                'exam_room.created_at as assigned_at',
+                'exam_room.archived_at as room_archived_at'
+            )
+            ->orderByDesc($archived ? 'exam_room.archived_at' : 'exam_room.created_at')
+            ->get()
+            ->map(function ($assignedExam) use ($normalizeDeliveryMode, $archived) {
+                $assignedExam->delivery_mode = $normalizeDeliveryMode($assignedExam->delivery_mode);
+                $assignedExam->question_bank_ids = $assignedExam->resolvedQuestionBankIds();
+                $assignedExam->room_assignment_archived = $archived;
 
-    if (!$isAdmin($user)) {
-        $loadRoomExams = static function ($relation, bool $archived) use ($normalizeDeliveryMode) {
-            return $relation
-                ->with([
-                    'questionBank:id,title,subject,total_items',
-                    'questionBanks:id,title,subject,total_items',
-                ])
-                ->select(
-                    'exams.id',
-                    'exams.title',
-                    'exams.subject',
-                    'exams.question_bank_id',
-                    'exams.total_items',
-                    'exams.duration_minutes',
-                    'exams.scheduled_at',
-                    'exams.schedule_start_at',
-                    'exams.schedule_end_at',
-                    'exams.delivery_mode',
-                    'exams.one_take_only',
-                    'exams.shuffle_questions',
-                    'exam_room.created_at as assigned_at',
-                    'exam_room.archived_at as room_archived_at'
-                )
-                ->orderByDesc($archived ? 'exam_room.archived_at' : 'exam_room.created_at')
-                ->get()
-                ->map(function ($assignedExam) use ($normalizeDeliveryMode, $archived) {
-                    $assignedExam->delivery_mode = $normalizeDeliveryMode($assignedExam->delivery_mode);
-                    $assignedExam->question_bank_ids = $assignedExam->resolvedQuestionBankIds();
-                    $assignedExam->room_assignment_archived = $archived;
+                return $assignedExam;
+            })
+            ->values();
+    };
 
-                    return $assignedExam;
-                })
-                ->values();
-        };
-
-        $assignedExams = $loadRoomExams($room->activeExams(), false);
-        $archivedExams = $loadRoomExams($room->archivedExams(), true);
-    }
+    $assignedExams = $loadRoomExams($room->activeExams(), false);
+    $archivedExams = $loadRoomExams($room->archivedExams(), true);
 
     if (
         !$canManageRooms($user)
