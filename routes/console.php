@@ -14,3 +14,6 @@ Artisan::command('inspire', function () {
 // term. NOTE: nothing runs this yet -- it needs a cron entry on the server
 // invoking `php artisan schedule:run` every minute.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Sign-ups whose verification link expired unopened; see the command.
+Schedule::command('registrations:prune-unverified')->hourly();

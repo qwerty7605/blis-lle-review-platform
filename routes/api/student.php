@@ -38,6 +38,8 @@ Route::get('/student/dashboard', function (Request $request) use ($canManageRoom
         )
         ->with('creator:id,name')
         ->withCount(['members', 'exams'])
+        // An archived room's exams are no longer the student's to take.
+        ->whereNull('rooms.archived_at')
         ->orderByDesc('room_user.created_at')
         ->get();
 
@@ -562,6 +564,14 @@ Route::post('/student/exams/{exam}/start', function (
         return response()->json([
             'message' => 'You are not a member of the selected room.',
         ], 403);
+    }
+
+    // A room cannot be archived while anyone is mid-exam in it, so there is
+    // no attempt here to resume: an archived room starts nothing.
+    if (Room::query()->whereKey($roomId)->whereNotNull('archived_at')->exists()) {
+        return response()->json([
+            'message' => 'This room has been archived by your teacher.',
+        ], 422);
     }
 
     $assignment = DB::table('exam_room')

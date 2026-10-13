@@ -119,6 +119,10 @@ export function useReviewBotAdminModule() {
   const coverageError = ref('')
   const coverageOpen = ref(false)
   const selectedIds = ref([])
+  // How many questions this file has in each status, for the tab counts.
+  const statusCounts = ref({ draft: 0, published: 0, rejected: 0 })
+  // What the last bulk action did, e.g. "12 questions published."
+  const actionMessage = ref('')
 
   const editing = reactive({})
   const savingQuestionId = ref(null)
@@ -142,6 +146,24 @@ export function useReviewBotAdminModule() {
     filteredQuestions.value.length > 0
     && filteredQuestions.value.every((question) => selectedIds.value.includes(question.id))
   ))
+
+  // Each bulk action applies only to the selected questions it can change:
+  // a published question cannot be published again, and a declined one comes
+  // back as a draft first. The buttons count these, not the whole selection.
+  const selectedByStatus = computed(() => {
+    const groups = { draft: [], published: [], rejected: [] }
+
+    for (const question of filteredQuestions.value) {
+      if (selectedIds.value.includes(question.id)) groups[question.status]?.push(question.id)
+    }
+
+    return groups
+  })
+
+  const publishableIds = computed(() => selectedByStatus.value.draft)
+  const unpublishableIds = computed(() => selectedByStatus.value.published)
+  const declinableIds = computed(() => [...selectedByStatus.value.draft, ...selectedByStatus.value.published])
+  const restorableIds = computed(() => selectedByStatus.value.rejected)
 
   async function loadCuratedTopics() {
     catalogLoading.value = true
@@ -220,6 +242,7 @@ export function useReviewBotAdminModule() {
       if (selectedBankId.value !== bankId) return
 
       questions.value = asList(data?.questions).map(normalizeQuestion)
+      if (data?.counts) statusCounts.value = { ...statusCounts.value, ...data.counts }
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
 
       noteGenerationState(Boolean(data?.generating), sentAt)
@@ -329,7 +352,9 @@ export function useReviewBotAdminModule() {
     coverageOpen.value = false
     generateError.value = ''
     generateMessage.value = ''
+    actionMessage.value = ''
     selectedIds.value = []
+    statusCounts.value = { draft: 0, published: 0, rejected: 0 }
 
     // If a run for this file is still going, loadQuestions() hears so from
     // the server and picks the wait back up.
@@ -346,6 +371,7 @@ export function useReviewBotAdminModule() {
     selectedIds.value = []
     generateError.value = ''
     generateMessage.value = ''
+    actionMessage.value = ''
   }
 
   // Generate Review Exam: one click, no setup. The backend reads the whole
@@ -463,27 +489,66 @@ export function useReviewBotAdminModule() {
     }
   }
 
-  async function publishSelected() {
-    if (selectedIds.value.length === 0) return
+  // One bulk action: send the ids it applies to, reload, and say what moved
+  // -- the questions leave the tab being looked at, so without the message a
+  // publish looked the same as nothing happening.
+  async function runBulkAction(ids, send, describe, failure) {
+    if (ids.length === 0) return
 
+    const count = ids.length
     questionsError.value = ''
+    actionMessage.value = ''
 
     try {
-      await reviewBotAdminApi.publish(selectedIds.value)
+      await send(ids)
       selectedIds.value = []
       await loadQuestions()
+      actionMessage.value = describe(`${count} question${count === 1 ? '' : 's'}`)
       // These all move an item between covered and not, so a stale panel
       // would contradict the list right next to it.
       if (coverageOpen.value) await loadCoverage()
     } catch (error) {
-      questionsError.value = firstApiError(error, 'Unable to publish the selected questions.')
+      questionsError.value = firstApiError(error, failure)
     }
   }
+
+  const publishSelected = () => runBulkAction(
+    publishableIds.value,
+    reviewBotAdminApi.publish,
+    (what) => `${what} published. Students can now practise with ${what.startsWith('1 ') ? 'it' : 'them'}.`,
+    'Unable to publish the selected questions.',
+  )
+
+  const rejectSelected = () => runBulkAction(
+    declinableIds.value,
+    reviewBotAdminApi.reject,
+    (what) => `${what} declined. You can restore ${what.startsWith('1 ') ? 'it' : 'them'} from the Declined tab.`,
+    'Unable to decline the selected questions.',
+  )
+
+  const unpublishSelected = () => runBulkAction(
+    unpublishableIds.value,
+    reviewBotAdminApi.unpublish,
+    (what) => `${what} unpublished and moved back to Draft.`,
+    'Unable to unpublish the selected questions.',
+  )
+
+  // The same request as unpublishing: both put a question back to a draft.
+  const restoreSelected = () => runBulkAction(
+    restorableIds.value,
+    reviewBotAdminApi.unpublish,
+    (what) => `${what} restored to Draft.`,
+    'Unable to restore the selected questions.',
+  )
 
   // Switching into or out of the declined view changes what the server sends,
   // so that one crossing has to refetch. Draft/published/all are filtered from
   // the same payload and must not.
   watch(statusFilter, (next, previous) => {
+    // A selection made on one tab must not be acted on from another, where
+    // those questions are no longer on screen.
+    selectedIds.value = []
+
     if (!selectedBankId.value) return
     if (next === 'rejected' || previous === 'rejected') loadQuestions()
   })
@@ -526,40 +591,6 @@ export function useReviewBotAdminModule() {
 
     if (coverageOpen.value && coverage.value.length === 0) {
       await loadCoverage()
-    }
-  }
-
-  async function rejectSelected() {
-    if (selectedIds.value.length === 0) return
-
-    questionsError.value = ''
-
-    try {
-      await reviewBotAdminApi.reject(selectedIds.value)
-      selectedIds.value = []
-      await loadQuestions()
-      // These all move an item between covered and not, so a stale panel
-      // would contradict the list right next to it.
-      if (coverageOpen.value) await loadCoverage()
-    } catch (error) {
-      questionsError.value = firstApiError(error, 'Unable to decline the selected questions.')
-    }
-  }
-
-  async function unpublishSelected() {
-    if (selectedIds.value.length === 0) return
-
-    questionsError.value = ''
-
-    try {
-      await reviewBotAdminApi.unpublish(selectedIds.value)
-      selectedIds.value = []
-      await loadQuestions()
-      // These all move an item between covered and not, so a stale panel
-      // would contradict the list right next to it.
-      if (coverageOpen.value) await loadCoverage()
-    } catch (error) {
-      questionsError.value = firstApiError(error, 'Unable to unpublish the selected questions.')
     }
   }
 
@@ -621,6 +652,13 @@ export function useReviewBotAdminModule() {
     statusFilter,
     selectedIds,
     allFilteredSelected,
+    statusCounts,
+    actionMessage,
+    publishableIds,
+    unpublishableIds,
+    declinableIds,
+    restorableIds,
+    restoreSelected,
     editing,
     savingQuestionId,
     loadLibraryBanks,

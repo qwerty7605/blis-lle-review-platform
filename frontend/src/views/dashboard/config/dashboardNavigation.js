@@ -132,7 +132,7 @@ export const dashboardModules = {
     routeName: 'dashboard-settings',
     label: 'Settings',
     title: 'Settings',
-    sub: 'Manage preferences and account behavior',
+    sub: 'Your name, sign-in details and password',
     icon: Settings,
   },
   users: {
@@ -165,7 +165,7 @@ export const dashboardModules = {
 }
 
 const dashboardNavKeysByRole = {
-  student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult'],
+  student: ['dashboard', 'rooms', 'reviewBot', 'analytics', 'examResult', 'settings'],
   staff_master_examiner: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
   faculty: ['reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams', 'settings'],
   admin: ['users', 'yearEnd', 'room', 'students', 'studentProfile', 'licensure', 'settings', 'audit'],

@@ -414,7 +414,7 @@
                   <div class="library-bank-question-pills">
                     <span class="pill neutral">{{ (question.question_type || 'multiple_choice').replace('_', ' ') }}</span>
                     <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
-                    <span v-if="question.difficulty" class="pill success">{{ question.difficulty }}</span>
+                    <span v-if="question.difficulty" class="pill pill-cap success">{{ question.difficulty }}</span>
                     <span v-if="question.cognitive_level" class="pill neutral">{{ cognitiveLevelLabel(question.cognitive_level) }}</span>
                     <span v-if="question.tag_status === 'pending_review'" class="pill neutral">Tag pending review</span>
                   </div>

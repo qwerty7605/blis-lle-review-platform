@@ -1,5 +1,12 @@
 <template>
   <section class="room-view">
+    <!-- Everyone's own account first; the platform's settings follow for the
+         administrator, who is the only one able to change them. -->
+    <AccountSettings />
+    <ExamDefaultsCard v-if="isTeacher" />
+    <AccountSessions />
+
+    <template v-if="isAdmin">
     <div v-if="settingsMessage" class="feedback success">
       <CheckCircle2 :size="15" />
       <span>{{ settingsMessage }}</span>
@@ -101,13 +108,23 @@
         </div>
       </template>
     </article>
+    </template>
   </section>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
+import { useAuthStore } from '@/store/auth.store'
 import { useSettingsModule } from '../composables/useSettingsModule'
+import AccountSessions from './AccountSessions.vue'
+import AccountSettings from './AccountSettings.vue'
+import ExamDefaultsCard from './ExamDefaultsCard.vue'
+
+const role = computed(() => String(useAuthStore().user?.role ?? '').toLowerCase())
+const isAdmin = computed(() => role.value === 'admin')
+// Administrators make no exams.
+const isTeacher = computed(() => ['staff_master_examiner', 'faculty'].includes(role.value))
 
 const {
   settingsLoading,
@@ -118,7 +135,7 @@ const {
   settingsForm,
   loadSystemSettings,
   saveSystemSettings,
-} = useSettingsModule()
+} = useSettingsModule({ enabled: () => isAdmin.value })
 
 const readOnlyDocuments = computed(() => [
   { label: 'Announcement Banner', text: settingsForm.announcement_banner },

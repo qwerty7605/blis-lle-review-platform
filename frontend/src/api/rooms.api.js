@@ -5,6 +5,19 @@ class RoomsApi {
     return http.get('/rooms')
   }
 
+  // Rooms put away with their results (staff and administrators).
+  listArchived() {
+    return http.get('/rooms', { params: { archived: 1 } })
+  }
+
+  archive(roomId) {
+    return http.post(`/rooms/${roomId}/archive`)
+  }
+
+  restore(roomId) {
+    return http.post(`/rooms/${roomId}/restore`)
+  }
+
   detail(roomId) {
     return http.get(`/rooms/${roomId}`)
   }

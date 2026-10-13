@@ -86,9 +86,11 @@ class ExamAndRoomDeletionTest extends TestCase
         $this->assertDatabaseHas('room_user', ['room_id' => $room->id, 'user_id' => $student->id]);
     }
 
-    public function test_a_room_with_no_attempts_can_still_be_deleted(): void
+    public function test_a_room_with_no_attempts_and_nothing_pending_can_still_be_deleted(): void
     {
         [$staff, $student, $room, $exam] = $this->scenario();
+        // Its window has closed, so the class has nothing left to sit here.
+        $exam->update(['schedule_start_at' => now()->subDays(3), 'schedule_end_at' => now()->subDay()]);
 
         Sanctum::actingAs($staff);
 

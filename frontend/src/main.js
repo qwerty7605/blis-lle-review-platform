@@ -6,6 +6,7 @@ import router from './router'
 import { setSessionEndedHandler } from './api/http'
 import { useAuthStore } from './store/auth.store'
 import { keepInStepWithUpdates } from './utils/appVersion'
+import { watchForIdle } from './utils/idleSignOut'
 
 const app = createApp(App)
 app.use(createPinia())
@@ -26,6 +27,18 @@ setSessionEndedHandler((reason) => {
 
   router.replace({ name: 'login', query: { ended: reason === 'disabled' ? 'disabled' : '1' } })
 })
+
+// A sign-in made without "Remember me", left alone for too long.
+watchForIdle(
+  () => useAuthStore().user?.session_idle_minutes ?? null,
+  async () => {
+    const auth = useAuthStore()
+    if (!auth.isAuthenticated || auth.signingOut) return
+
+    await auth.logout()
+    router.replace({ name: 'login', query: { ended: 'idle' } })
+  },
+)
 
 keepInStepWithUpdates(router)
 

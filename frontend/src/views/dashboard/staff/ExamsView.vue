@@ -652,8 +652,18 @@
           </header>
 
           <p class="muted">
-            Delete <strong>{{ selectedExam?.title }}</strong>? This also removes its room assignments.
+            Delete <strong>{{ selectedExam?.title }}</strong>? This cannot be undone.
           </p>
+
+          <!-- Nobody has started it, or it could not be deleted at all; but a
+               class may still be waiting for it. -->
+          <div v-if="examDeleteRooms.length > 0" class="feedback info" role="note">
+            <AlertCircle :size="15" />
+            <span>
+              It is still {{ examDeleteIsUpcoming ? 'scheduled' : 'open' }} in
+              <strong>{{ examDeleteRooms.join(', ') }}</strong>. Students there will no longer see it.
+            </span>
+          </div>
 
           <div v-if="examError" class="feedback danger" role="alert">
             <AlertCircle :size="15" />
@@ -753,6 +763,24 @@ const {
   handleSaveExam,
   handleDeleteExam,
 } = useExamsModule()
+
+// Rooms where the exam about to be deleted is still ahead of a class: it is
+// assigned there and its window has not closed.
+const examDeleteRooms = computed(() => {
+  const exam = selectedExam.value
+  if (!exam) return []
+
+  const closesAt = exam.schedule_end_at ? new Date(exam.schedule_end_at).getTime() : null
+  if (closesAt !== null && closesAt <= now()) return []
+
+  return (exam.assigned_rooms ?? []).map((room) => room.name).filter(Boolean)
+})
+
+const examDeleteIsUpcoming = computed(() => {
+  const opensAt = selectedExam.value?.schedule_start_at ?? selectedExam.value?.scheduled_at
+
+  return Boolean(opensAt) && new Date(opensAt).getTime() > now()
+})
 
 const selectedRoomName = computed(() => {
   const room = manageableRooms.value.find((entry) => String(entry.id) === selectedRoomFilter.value)

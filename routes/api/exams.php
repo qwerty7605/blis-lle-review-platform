@@ -298,6 +298,15 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
             'updated_at' => $now,
         ]])->all();
 
+        // The form lists only rooms in use, so an archived room is never in
+        // what it sends back. Its link stays: that room's results are this
+        // exam's, and restoring the room has to bring the exam back with it.
+        $syncPayload += $exam->rooms()
+            ->whereNotNull('rooms.archived_at')
+            ->pluck('rooms.id')
+            ->mapWithKeys(fn ($roomId) => [$roomId => []])
+            ->all();
+
         $exam->rooms()->sync($syncPayload);
     }
 
