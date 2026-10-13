@@ -319,7 +319,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const isStaffRole = computed(() => ['staff_master_examiner', 'faculty'].includes(normalizedRole.value))
   const isManagementRole = computed(() => isAdminRole.value || isStaffRole.value)
   const canCreateRooms = computed(() => isStaffRole.value)
-  const canViewExamResults = computed(() => isStaffRole.value)
+  // A room's exams and their Live Board: the teacher's own rooms, and every
+  // room for an administrator. Setting an exam up stays with its teacher.
+  const canViewExamResults = computed(() => isManagementRole.value)
 
   const roomCollectionLabel = computed(() => {
     if (isAdminRole.value) return 'All rooms in the platform'
@@ -1846,6 +1848,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isManagementView,
     isAdminRole,
     isStaffRole,
+    isManagementRole,
     canCreateRooms,
     canViewExamResults,
     roomName,
