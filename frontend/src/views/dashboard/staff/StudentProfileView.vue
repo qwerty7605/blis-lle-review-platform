@@ -1,8 +1,8 @@
 <template>
   <section class="dashboard-view profile-page">
-    <RouterLink :to="{ name: 'dashboard-students' }" class="profile-back">
+    <RouterLink :to="backTarget.to" class="profile-back">
       <ArrowLeft :size="15" />
-      Back to Students
+      {{ backTarget.label }}
     </RouterLink>
 
     <div v-if="loading && !profile" class="profile-state">
@@ -219,6 +219,16 @@ import { formatCompactDate } from '../composables/useDashboardFormatters'
  * Reached by clicking a name in the Students directory.
  */
 const route = useRoute()
+
+// Opened from a room's Class List, the way back is that room; otherwise it
+// is the Students directory.
+const backTarget = computed(() => {
+  const roomId = Number(route.query.room)
+
+  return Number.isFinite(roomId) && roomId > 0
+    ? { label: 'Back to Room', to: { name: 'dashboard-room-management', query: { room: roomId } } }
+    : { label: 'Back to Students', to: { name: 'dashboard-students' } }
+})
 
 const profile = ref(null)
 const loading = ref(false)

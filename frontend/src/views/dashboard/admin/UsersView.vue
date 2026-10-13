@@ -169,7 +169,7 @@
                       <span>{{ userRowMeta(user) }}</span>
                     </span>
                     <span
-                      v-if="accountState(user).label !== 'Active'"
+                      v-if="!accountState(user).usable"
                       class="pill"
                       :class="accountState(user).tone"
                     >
@@ -686,12 +686,16 @@ const isTightTable = computed(() => (
  * plausible but non-existent institutional address appeared as a green
  * "Active" 4th-year student while being unable to log in at all. Staff
  * counting enrolled students were counting phantoms.
+ *
+ * The usable state reads "Verified", the answer to "Pending": what moved the
+ * account out of Pending is that its email was verified. `usable` is for the
+ * code, so nothing has to compare against the wording.
  */
 function accountState(user) {
-  if (!user.is_active) return { label: 'Inactive', short: 'Inactive', tone: 'neutral' }
-  if (!user.email_verified_at) return { label: 'Pending verification', short: 'Pending', tone: 'gold' }
+  if (!user.is_active) return { label: 'Inactive', short: 'Inactive', tone: 'neutral', usable: false }
+  if (!user.email_verified_at) return { label: 'Pending verification', short: 'Pending', tone: 'gold', usable: false }
 
-  return { label: 'Active', short: 'Active', tone: 'success' }
+  return { label: 'Verified', short: 'Verified', tone: 'success', usable: true }
 }
 
 function isStudent(user) {
