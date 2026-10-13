@@ -66,6 +66,7 @@ export function useDashboardDataServices() {
     updateUser: (userId, payload) => usersApi.update(userId, payload),
     archiveUser: (userId) => usersApi.archive(userId),
     restoreUser: (userId) => usersApi.restore(userId),
+    verifyUserEmail: (userId) => usersApi.verifyEmail(userId),
     recoverUserAccount: (userId, payload) => usersApi.recoverAccount(userId, payload),
 
     getAuditLogs: (params) => auditApi.list(params),

@@ -256,6 +256,20 @@
                         <Pencil :size="15" />
                         <span class="directory-action-label">Edit</span>
                       </button>
+                      <!-- Only while the account is waiting on its emailed
+                           link, which some people have no mailbox to get. -->
+                      <button
+                        v-if="!user.email_verified_at"
+                        type="button"
+                        class="ghost-btn"
+                        :disabled="usersSaving"
+                        :aria-label="`Verify the email of ${user.name}`"
+                        title="Verify email"
+                        @click="handleVerifyUserEmail(user)"
+                      >
+                        <MailCheck :size="15" />
+                        <span class="directory-action-label">Verify</span>
+                      </button>
                       <template v-if="section.key !== 'management'">
                         <button
                           type="button"
@@ -395,6 +409,14 @@
             <label class="check-item">
               <input v-model="userForm.is_active" type="checkbox" />
               <span>Account active</span>
+            </label>
+            <label
+              v-if="userForm.id"
+              class="check-item"
+              title="Signing in needs a verified email. Tick this for someone who cannot open the emailed link."
+            >
+              <input v-model="userForm.email_verified" type="checkbox" />
+              <span>Email verified</span>
             </label>
           </div>
 
@@ -562,6 +584,16 @@
             <Pencil :size="18" />
             <span>Edit details</span>
           </button>
+          <button
+            v-if="!actionUser.email_verified_at"
+            type="button"
+            class="user-action-item"
+            :disabled="usersSaving"
+            @click="runUserAction(handleVerifyUserEmail)"
+          >
+            <MailCheck :size="18" />
+            <span>Mark email as verified</span>
+          </button>
           <template v-if="isStudent(actionUser)">
             <button
               type="button"
@@ -596,6 +628,7 @@ import {
   CheckCircle2,
   Ellipsis,
   GraduationCap,
+  MailCheck,
   Pencil,
   Plus,
   RefreshCw,
@@ -743,6 +776,7 @@ const {
   loadMoreUsers,
   handleSaveUser,
   handleToggleUserArchive,
+  handleVerifyUserEmail,
   handleRecoverUserAccount,
 } = useUsersModule({ loadMoreMode: useRows })
 
