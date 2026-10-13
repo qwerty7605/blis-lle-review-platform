@@ -37,7 +37,7 @@ This file is for coding agents. Keep it short, execution-focused, and updated wh
   - Backend: `admin`, `staff_master_examiner`, and legacy `faculty` string.
   - Frontend: same set for management sidebar.
 - Admin-only modules:
-  - User management (`/api/admin/users`)
+  - User management (`/api/admin/users`). `PATCH /api/admin/users/{user}` takes `email_verified` (boolean): an administrator vouching for an address in place of the emailed link, for someone who cannot open it. Taking it back signs the account out; an administrator cannot unverify themselves. On the Users page: a Verify button on rows still "Pending", and an "Email verified" box in the Edit dialog. Accounts an administrator creates are verified from the start.
   - Audit logs (`/api/admin/audit-logs`)
   - Global room oversight (`/api/rooms` for admin, or `/api/admin/rooms`)
 

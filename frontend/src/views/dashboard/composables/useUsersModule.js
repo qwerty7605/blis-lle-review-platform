@@ -145,6 +145,7 @@ export function useUsersModule(options = {}) {
     student_status: 'enrolled',
     admission_year: '',
     is_active: true,
+    email_verified: true,
     archived: false,
     password: '',
   })
@@ -410,6 +411,7 @@ export function useUsersModule(options = {}) {
     userForm.student_status = 'enrolled'
     userForm.admission_year = ''
     userForm.is_active = true
+    userForm.email_verified = true
     userForm.archived = false
     userForm.password = ''
   }
@@ -431,6 +433,7 @@ export function useUsersModule(options = {}) {
     userForm.student_status = user.student_status ?? 'enrolled'
     userForm.admission_year = user.admission_year ? String(user.admission_year) : ''
     userForm.is_active = Boolean(user.is_active)
+    userForm.email_verified = Boolean(user.email_verified_at)
     userForm.archived = Boolean(user.archived_at)
     userForm.password = ''
     usersError.value = ''
@@ -635,6 +638,10 @@ export function useUsersModule(options = {}) {
 
         const editedOwnAccount = Number(userForm.id) === Number(auth.user?.id)
 
+        // Only on an edit: an account the admin creates is verified by being
+        // created (the server sets that itself).
+        payload.email_verified = Boolean(userForm.email_verified)
+
         await services.updateUser(userForm.id, payload)
         usersMessage.value = 'User updated successfully.'
 
@@ -737,6 +744,35 @@ export function useUsersModule(options = {}) {
     }
   }
 
+  /**
+   * Lets an account sign in without the emailed link. For someone whose
+   * address cannot receive it: no mailbox on the school's domain, or a link
+   * that never arrived.
+   */
+  async function handleVerifyUserEmail(user) {
+    if (!isAdminRole.value) return
+
+    const userId = Number(user?.id ?? 0)
+    if (!Number.isFinite(userId) || userId < 1) return
+
+    const userName = String(user?.name ?? 'This account').trim() || 'This account'
+
+    usersSaving.value = true
+    usersError.value = ''
+    usersMessage.value = ''
+
+    try {
+      await services.verifyUserEmail(userId)
+      usersMessage.value = `${userName} is verified and can sign in now.`
+
+      await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
+    } catch (error) {
+      usersError.value = firstApiError(error, 'Unable to verify this account.')
+    } finally {
+      usersSaving.value = false
+    }
+  }
+
   watch(
     () => [userFilters.role, userFilters.status, userFilters.year_level, userFilters.archive_state],
     async () => {
@@ -825,6 +861,7 @@ export function useUsersModule(options = {}) {
     loadMoreUsers,
     handleSaveUser,
     handleToggleUserArchive,
+    handleVerifyUserEmail,
     handleRecoverUserAccount,
   }
 }

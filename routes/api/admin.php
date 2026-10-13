@@ -290,6 +290,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             'is_active' => ['sometimes', 'required', 'boolean'],
             'password' => ['sometimes', 'required', 'string', PasswordRule::defaults()],
             'archived' => ['sometimes', 'boolean'],
+            'email_verified' => ['sometimes', 'required', 'boolean'],
         ]);
 
         if (array_key_exists('student_id', $validated)) {
@@ -308,7 +309,11 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             ? (is_null($validated['year_level']) ? null : (int) $validated['year_level'])
             : $user->year_level;
 
-        if ($resolvedRole === User::ROLE_STUDENT && blank($resolvedStudentId)) {
+        // Verifying an email says nothing about the student record, so gaps in
+        // an older record (no student ID, no year level) must not refuse it.
+        $onlyVerification = array_keys($validated) === ['email_verified'];
+
+        if (!$onlyVerification && $resolvedRole === User::ROLE_STUDENT && blank($resolvedStudentId)) {
             return response()->json([
                 'message' => 'Student ID is required for student accounts.',
             ], 422);
@@ -322,7 +327,8 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         // a graduate forced staff to leave a stale level on records that had
         // moved on, which is how a graduate ends up indistinguishable from a
         // real fourth year.
-        if ($resolvedRole === User::ROLE_STUDENT
+        if (!$onlyVerification
+            && $resolvedRole === User::ROLE_STUDENT
             && User::isEnrolledStatus($resolvedStatus)
             && blank($resolvedYearLevel)) {
             return response()->json([
@@ -348,9 +354,17 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                     'message' => 'You cannot remove your own admin role.',
                 ], 422);
             }
+
+            // Sign-in refuses an unverified account, so this would lock the
+            // administrator out the moment the request finished.
+            if (($validated['email_verified'] ?? true) === false) {
+                return response()->json([
+                    'message' => 'You cannot mark your own email as unverified.',
+                ], 422);
+            }
         }
 
-        $fillPayload = collect($validated)->except(['password', 'archived', 'student_status'])->all();
+        $fillPayload = collect($validated)->except(['password', 'archived', 'student_status', 'email_verified'])->all();
 
         if (array_key_exists('year_level', $fillPayload) && !is_null($fillPayload['year_level'])) {
             $fillPayload['year_level'] = (int) $fillPayload['year_level'];
@@ -380,9 +394,26 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
             $user->password = $validated['password'];
         }
 
+        // An administrator vouching for the address stands in for the emailed
+        // link: someone without a mailbox on the school's domain has no link
+        // to open. Set only when it changes, so verifying an account that is
+        // already verified does not move the date it was verified on.
+        $verificationWithdrawn = false;
+
+        if (array_key_exists('email_verified', $validated)) {
+            if ($validated['email_verified'] && !$user->hasVerifiedEmail()) {
+                $user->email_verified_at = now();
+            } elseif (!$validated['email_verified'] && $user->hasVerifiedEmail()) {
+                $user->email_verified_at = null;
+                $verificationWithdrawn = true;
+            }
+        }
+
         $user->save();
 
-        if (array_key_exists('is_active', $validated) && $validated['is_active'] === false) {
+        // Both leave an account that sign-in would refuse, so a session
+        // opened before the change must not outlive it.
+        if ((array_key_exists('is_active', $validated) && $validated['is_active'] === false) || $verificationWithdrawn) {
             $user->tokens()->delete();
         }
 
@@ -397,6 +428,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
                 'student_id' => $user->student_id,
                 'year_level' => $user->year_level,
                 'is_active' => $user->is_active,
+                'email_verified' => $user->hasVerifiedEmail(),
                 'archived_at' => $user->archived_at,
                 'updated_fields' => array_keys($validated),
             ],
