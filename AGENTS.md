@@ -33,13 +33,14 @@ This file is for coding agents. Keep it short, execution-focused, and updated wh
   - `staff_master_examiner` (teacher/faculty-equivalent)
   - `admin`
 - Public registration always creates `student` (`POST /api/auth/register`).
+- Sign-in page, "Resend verification email" (`LoginView.vue`): 20 seconds between one resend and the next, and the fourth press within an hour for one address says "Too many attempts. Try again later." without being sent. The times are kept per address in `sessionStorage`; the server's own limit (3 an hour per mailbox, the `verification` limiter) is what the count mirrors, and its 429 shows the same message.
 - Management behavior checks include:
   - Backend: `admin`, `staff_master_examiner`, and legacy `faculty` string.
   - Frontend: same set for management sidebar.
 - Admin-only modules:
   - User management (`/api/admin/users`). `PATCH /api/admin/users/{user}` takes `email_verified` (boolean): an administrator vouching for an address in place of the emailed link, for someone who cannot open it. Taking it back signs the account out; an administrator cannot unverify themselves. On the Users page: a Verify button on rows still "Pending", and an "Email verified" box in the Edit dialog. Accounts an administrator creates are verified from the start.
   - Audit logs (`/api/admin/audit-logs`)
-  - Global room oversight (`/api/rooms` for admin, or `/api/admin/rooms`)
+  - Global room oversight (`/api/rooms` for admin, or `/api/admin/rooms`). In any room an administrator sees what its teacher sees: `GET /api/rooms/{room}` returns the room's current and archived exams with "n / m submitted", and `GET /api/exams/{exam}/live-dashboard` answers an administrator for any exam and room (a teacher still only for their own). Setting an exam up stays with its teacher: the Exams page and its routes are staff only, so the room page's "Exam setup" link is hidden for administrators.
 
 ## Current Seed Users (Local Dev)
 
@@ -88,7 +89,7 @@ Defined in `database/seeders/DatabaseSeeder.php`:
 - Never put `min-height: 0` on rows inside a list with a `max-height`: the rows collapse to their padding once they no longer fit (this was the overlapping room list in the exam form).
 - The exam a student is taking (`.exam-attempt-*`, in the "EXAM OVERLAY REFRESH" block of `dashboard.css`): its header and buttons are pinned, so their height comes out of the question. Up to 640px the header is one row (64px) and the buttons two (113px); from 641px one row each. Measure both before adding anything to either.
 - A row that scrolls sideways with its scrollbar hidden (tabs, filter chips) takes `v-scroll-hint` (`frontend/src/utils/scrollHint.js`), which fades the edge that has more beyond it.
-- The Rooms pages and the Review Bot pin themselves to the screen height only where that leaves their lists room: Rooms from 1201px wide and 760px tall, Review Bot from 1001px wide. Below that the page scrolls. A 1366x768 laptop shows about 640px of page height, so check fill-screen layouts at 1366x640, not 1366x768.
+- The Rooms pages and the Review Bot pin themselves to the screen height only where that leaves their lists room: Rooms from 1201px wide and 700px tall, Review Bot from 1001px wide. Below that the page scrolls. A 1366x768 laptop shows about 640px of page height, so check fill-screen layouts at 1366x640, not 1366x768; a 1920x1080 screen at 125% scaling shows about 1534x728, which is why the Rooms limit is 700 and not higher (there the three columns must end on one line).
 - No text under 11px. The trend chart (`ScoreTrendChart.vue`) draws at its real width so its labels are not scaled down with it, and `JsChart.vue` wraps the category names of a sideways bar chart.
 - `GET /api/admin/users` returns rows in directory order (current students by year, archived by year, staff, admins; then name) plus `group_totals` for the headings; phones grow the list with `per_page` instead of paging. `GET /api/admin/audit-logs` pages with `page`/`per_page` (legacy `limit` still works) and returns `meta`.
 
@@ -147,7 +148,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
   - Limits live in `AppServiceProvider::configureRateLimiting()`. Per-IP tiers are sized for a campus behind one address (about 230 students): 120 sign-ins and 600 signed-out requests a minute, 30 registrations a minute and 150 an hour, 30 resend/reset emails an hour. The tight tiers are per account (5 sign-in tries a minute) and per mailbox (3 emails an hour). Signed-in users are counted per user (120 a minute). Covered by `tests/Feature/CampusRateLimitTest.php`.
 - New backend modules (API-backed):
   - Staff student directory: `/api/students/directory`
-  - Student profile (staff and admin only): `GET /api/students/{student}/analytics` returns `student` plus the same payload as `/api/student/analytics` (both built by `$buildStudentAnalytics` in `routes/api/student.php`). Page: `frontend/src/views/dashboard/staff/StudentProfileView.vue` at `/dashboard/students/:studentId`, opened by clicking a name in the Students directory; it is a hidden nav module (`studentProfile`).
+  - Student profile (staff and admin only): `GET /api/students/{student}/analytics` returns `student` plus the same payload as `/api/student/analytics` (both built by `$buildStudentAnalytics` in `routes/api/student.php`). Page: `frontend/src/views/dashboard/staff/StudentProfileView.vue` at `/dashboard/students/:studentId`, opened by clicking a name in the Students directory or in a room's Class List (`RoomManagementView.vue`); it is a hidden nav module (`studentProfile`). From a room the link carries `?room=`, and the profile's back link then reads "Back to Room" and returns to that room.
   - Exams: `/api/exams` (CRUD + room assignment + optional `scheduled_at` datetime)
     - Exams now support optional `question_bank_id`.
     - Room assignments can be archived/restored without deleting the historical exam-session link.
