@@ -429,11 +429,14 @@ $buildStudentAnalytics = function (User $student) use ($dashboardAnalyticsServic
         });
 
     $letFeatureBuilder = new \App\Services\MachineLearning\LetReadinessFeatureBuilder();
-    $letFeatureResult = $letFeatureBuilder->build(
-        $attempts,
-        $subjectProfiles,
-        $scoreValues->isNotEmpty() ? (float) $scoreValues->avg() : null,
-    );
+    $letHeldReason = $letFeatureBuilder->reasonToHold($student);
+    $letFeatureResult = $letHeldReason !== null
+        ? ['ready' => false, 'reason' => $letHeldReason]
+        : $letFeatureBuilder->build(
+            $attempts,
+            $subjectProfiles,
+            $scoreValues->isNotEmpty() ? (float) $scoreValues->avg() : null,
+        );
 
     if ($letFeatureResult['ready']) {
         $letPredictor = new \App\Services\MachineLearning\LetPredictionService();
