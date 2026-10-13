@@ -82,6 +82,10 @@ Route::get('/library/review-bot/questions', function (
         // keeps reading this list for as long as it is true.
         'generating' => filled($validated['source_bank_id'] ?? null)
             && $reviewBotAdminService->isGenerating((int) $validated['source_bank_id']),
+        // Every status, whichever one was asked for: the tabs show all three.
+        'counts' => filled($validated['source_bank_id'] ?? null)
+            ? $reviewBotAdminService->statusCounts((int) $validated['source_bank_id'])
+            : null,
     ]);
 });
 

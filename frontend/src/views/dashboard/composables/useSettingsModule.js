@@ -10,7 +10,9 @@ function firstApiError(error, fallbackMessage) {
 // Heard by DashboardLayout.vue.
 export const ANNOUNCEMENT_CHANGED_EVENT = 'lle:announcement-changed'
 
-export function useSettingsModule() {
+// `enabled` says whether this reader is shown the platform's settings at all:
+// a student may not even read them, and a teacher has nothing to do there.
+export function useSettingsModule({ enabled = () => true } = {}) {
   const services = useDashboardDataServices()
 
   const settingsLoading = ref(false)
@@ -90,7 +92,7 @@ export function useSettingsModule() {
   }
 
   onMounted(async () => {
-    await loadSystemSettings()
+    if (enabled()) await loadSystemSettings()
   })
 
   return {

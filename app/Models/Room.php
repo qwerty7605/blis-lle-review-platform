@@ -24,6 +24,16 @@ class Room extends Model
     ];
 
     /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'archived_at' => 'datetime',
+        ];
+    }
+
+    /**
      * Room creator (staff/admin).
      */
     public function creator(): BelongsTo
@@ -89,10 +99,42 @@ class Room extends Model
     }
 
     /**
+     * Exams the class still has ahead of it here: assigned, not archived from
+     * the room, and with a window that has not closed. An exam with no closing
+     * time stays open, so it counts until it is archived from the room.
+     * Removing the room would take these away from its students.
+     */
+    public function pendingExams(): BelongsToMany
+    {
+        return $this->activeExams()
+            ->where(fn ($query) => $query
+                ->whereNull('exams.schedule_end_at')
+                ->orWhere('exams.schedule_end_at', '>', now()));
+    }
+
+    /**
      * Exam attempts taken in this room.
      */
     public function examAttempts(): HasMany
     {
         return $this->hasMany(ExamAttempt::class);
+    }
+
+    /**
+     * Attempts a student is in the middle of right now: started, not
+     * submitted, and with time left on the clock.
+     */
+    public function attemptsInProgress(): HasMany
+    {
+        return $this->examAttempts()
+            ->where('status', ExamAttempt::STATUS_IN_PROGRESS)
+            ->where(fn ($query) => $query
+                ->whereNull('expires_at')
+                ->orWhere('expires_at', '>', now()));
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->archived_at !== null;
     }
 }

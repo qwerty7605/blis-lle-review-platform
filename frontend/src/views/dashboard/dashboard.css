@@ -5708,6 +5708,12 @@ a.ghost-btn {
   letter-spacing: 0;
 }
 
+/* A pill showing a stored value ("easy", "analysis") starts each word with a
+   capital, like the pills whose wording is written out in the page. */
+.pill.pill-cap {
+  text-transform: capitalize;
+}
+
 /* ---- Feedback banners ---- */
 .feedback {
   border-radius: 14px;
@@ -6024,17 +6030,6 @@ a.ghost-btn {
   padding: 11px;
   gap: 10px;
   overflow: hidden;
-}
-
-/* "Hide Question List" has to do something at every width. The collapsed
-   rule used to sit inside a media query, so on a desktop the button changed
-   its own label and nothing else. */
-.exam-attempt-sidebar.is-collapsed {
-  display: none;
-}
-
-.exam-attempt-layout.is-list-hidden {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .exam-status-legend {

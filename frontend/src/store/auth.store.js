@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authApi } from '@/api/auth.api'
+import { noteActivity } from '@/utils/idleSignOut'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -13,8 +14,13 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!user.value)
 
   // ─── actions ─────────────────────────────────────────────────────────────────
-  async function login(identifier, password) {
-    const { data } = await authApi.login({ identifier, password })
+  // `remember` is the sign-in page's "Remember me": seven days signed in when
+  // ticked; unticked, until the browser closes or eight hours pass with
+  // nothing done (the server decides both, see utils/idleSignOut.js).
+  async function login(identifier, password, remember = false) {
+    const { data } = await authApi.login({ identifier, password, remember })
+    // Signing in is the first thing done, whatever an earlier visit left.
+    noteActivity({ force: true })
     user.value = data.user
     initialized.value = true
   }

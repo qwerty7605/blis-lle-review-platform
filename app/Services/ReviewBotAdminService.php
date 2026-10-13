@@ -601,19 +601,47 @@ class ReviewBotAdminService
         return $question->refresh();
     }
 
+    /**
+     * How many review questions made from a Library file are in each status,
+     * for the counts on the page's Draft / Published / Declined tabs.
+     *
+     * @return array<string, int>
+     */
+    public function statusCounts(int $sourceBankId): array
+    {
+        $counts = QuestionBankQuestion::query()
+            ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
+            ->whereHas('sourceQuestion', fn ($query) => $query->where('question_bank_id', $sourceBankId))
+            ->groupBy('status')
+            ->selectRaw('status, COUNT(*) as total')
+            ->pluck('total', 'status');
+
+        return [
+            QuestionBankQuestion::STATUS_DRAFT => (int) ($counts[QuestionBankQuestion::STATUS_DRAFT] ?? 0),
+            QuestionBankQuestion::STATUS_PUBLISHED => (int) ($counts[QuestionBankQuestion::STATUS_PUBLISHED] ?? 0),
+            QuestionBankQuestion::STATUS_REJECTED => (int) ($counts[QuestionBankQuestion::STATUS_REJECTED] ?? 0),
+        ];
+    }
+
+    // publish, unpublish and reject each leave out the rows already in the
+    // status they set, so the number they return (and the audit log repeats)
+    // is how many questions actually changed.
     public function publish(array $questionIds, int $teacherId): int
     {
         return QuestionBankQuestion::query()
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->whereIn('id', $questionIds)
+            ->where('status', '!=', QuestionBankQuestion::STATUS_PUBLISHED)
             ->update(['status' => QuestionBankQuestion::STATUS_PUBLISHED]);
     }
 
+    /** Back to a draft: takes a published question down, or restores a declined one. */
     public function unpublish(array $questionIds): int
     {
         return QuestionBankQuestion::query()
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->whereIn('id', $questionIds)
+            ->where('status', '!=', QuestionBankQuestion::STATUS_DRAFT)
             ->update(['status' => QuestionBankQuestion::STATUS_DRAFT]);
     }
 
@@ -636,6 +664,7 @@ class ReviewBotAdminService
         return QuestionBankQuestion::query()
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->whereIn('id', $questionIds)
+            ->where('status', '!=', QuestionBankQuestion::STATUS_REJECTED)
             ->update(['status' => QuestionBankQuestion::STATUS_REJECTED]);
     }
 
