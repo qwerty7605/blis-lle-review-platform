@@ -534,6 +534,7 @@
                     {{ student.name }} ({{ student.student_id || 'No ID' }})
                   </option>
                 </select>
+                <small class="muted">{{ reportStudentHint }}</small>
               </label>
 
               <div class="field-stack">
@@ -920,6 +921,16 @@ const selectedReportRoom = computed(() => (
 const selectedReportStudent = computed(() => (
   reportExportStudents.value.find((student) => String(student.id) === String(reportExportForm.student_id)) ?? null
 ))
+
+// Under the Student field: why it is empty, or what picking one is for. The
+// other downloads cover the whole room whether or not a student is picked.
+const reportStudentHint = computed(() => {
+  if (!reportExportForm.room_id) return 'Choose a room to list its students.'
+  if (reportStudentsLoading.value) return 'Loading the room\'s students...'
+  if (reportExportStudents.value.length === 0) return 'This room has no current students.'
+
+  return 'Only for Student PDF and Email Student PDF. The other exports cover the whole room.'
+})
 </script>
 
 <style scoped src="../dashboard.css"></style>
