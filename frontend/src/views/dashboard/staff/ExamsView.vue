@@ -446,6 +446,31 @@
                     </div>
 
                     <div class="field-stack">
+                      <span class="field-label">School Year And Semester</span>
+                      <div class="exam-schedule-row">
+                        <label class="field-stack">
+                          <span class="field-label">School Year</span>
+                          <select v-model.number="examForm.school_year" class="text-input" @change="markExamTermChosen">
+                            <option v-for="year in examSchoolYearOptions" :key="year.value" :value="year.value">
+                              {{ year.label }}
+                            </option>
+                          </select>
+                        </label>
+                        <label class="field-stack">
+                          <span class="field-label">Semester</span>
+                          <select v-model.number="examForm.semester" class="text-input" @change="markExamTermChosen">
+                            <option :value="1">1st Semester</option>
+                            <option :value="2">2nd Semester</option>
+                          </select>
+                        </label>
+                      </div>
+                      <small class="muted">
+                        The semester this exam counts toward in a student's Estimated Outcome. Filled in from the
+                        start date; change it for a make-up exam.
+                      </small>
+                    </div>
+
+                    <div class="field-stack">
                       <span class="field-label">Exam Attempt Options</span>
                       <div class="exam-policy-list">
                         <label class="check-item exam-policy-item">
@@ -658,6 +683,18 @@
             Delete <strong>{{ selectedExam?.title }}</strong>? This cannot be undone.
           </p>
 
+          <!-- The other way to retire it, and the only one once students
+               have taken it. -->
+          <p class="muted">
+            <template v-if="examCanBeArchived">
+              To keep the exam and its results, archive it instead. It leaves the current list of
+              {{ examArchiveRoomsLabel }} and can be restored from there.
+            </template>
+            <template v-else>
+              It is not in any room now, so there is nothing to archive.
+            </template>
+          </p>
+
           <!-- Nobody has started it, or it could not be deleted at all; but a
                class may still be waiting for it. -->
           <div v-if="examDeleteRooms.length > 0" class="feedback info" role="note">
@@ -675,6 +712,16 @@
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="examSaving" @click="closeDeleteExamModal">Cancel</button>
+            <button
+              type="button"
+              class="ghost-btn"
+              :disabled="examSaving || !examCanBeArchived"
+              :title="examCanBeArchived ? '' : 'This exam is not in any room'"
+              @click="handleArchiveExam"
+            >
+              <Archive :size="15" />
+              Archive
+            </button>
             <button type="button" class="danger-btn" :disabled="examSaving" @click="handleDeleteExam">
               <Trash2 :size="15" />
               Delete
@@ -753,6 +800,8 @@ const {
   selectedQuestionBankSubject,
   selectedQuestionBankTotalItems,
   createExamScheduleMin,
+  examSchoolYearOptions,
+  markExamTermChosen,
   createExamScheduleEndMin,
   examLoading,
   examSaving,
@@ -773,7 +822,18 @@ const {
   closeDeleteExamModal,
   handleSaveExam,
   handleDeleteExam,
+  handleArchiveExam,
 } = useExamsModule()
+
+// Archiving takes the exam off the rooms it is still in. One that is in none
+// has nothing to archive.
+const examCanBeArchived = computed(() => (selectedExam.value?.assigned_rooms ?? []).length > 0)
+
+const examArchiveRoomsLabel = computed(() => {
+  const names = (selectedExam.value?.assigned_rooms ?? []).map((room) => room.name).filter(Boolean)
+
+  return names.length > 3 ? `its ${names.length} rooms` : names.join(', ')
+})
 
 // Rooms where the exam about to be deleted is still ahead of a class: it is
 // assigned there and its window has not closed.

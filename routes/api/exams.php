@@ -75,6 +75,9 @@ Route::post('/exams', function (Request $request) use (
         'one_take_only' => ['nullable', 'boolean'],
         'shuffle_questions' => ['nullable', 'boolean'],
         'results_visibility_mode' => ['nullable', Rule::in(['hidden', 'visible'])],
+        // Left out, they are taken from the exam's date (see Exam::booted()).
+        'school_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+        'semester' => ['nullable', Rule::in(Exam::SEMESTERS)],
         'room_ids' => ['nullable', 'array'],
         'room_ids.*' => ['integer', 'exists:rooms,id'],
     ]);
@@ -118,6 +121,8 @@ Route::post('/exams', function (Request $request) use (
         'one_take_only' => (bool) ($validated['one_take_only'] ?? false),
         'shuffle_questions' => (bool) ($validated['shuffle_questions'] ?? false),
         'results_visibility_mode' => $validated['results_visibility_mode'] ?? 'hidden',
+        'school_year' => $validated['school_year'] ?? null,
+        'semester' => $validated['semester'] ?? null,
         'created_by' => $user->id,
     ]);
 
@@ -222,6 +227,8 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
         'one_take_only' => ['sometimes', 'boolean'],
         'shuffle_questions' => ['sometimes', 'boolean'],
         'results_visibility_mode' => ['sometimes', Rule::in(['hidden', 'visible'])],
+        'school_year' => ['sometimes', 'required', 'integer', 'min:2000', 'max:2100'],
+        'semester' => ['sometimes', 'required', Rule::in(Exam::SEMESTERS)],
         'room_ids' => ['sometimes', 'array'],
         'room_ids.*' => ['integer', 'exists:rooms,id'],
     ]);
@@ -393,6 +400,65 @@ Route::delete('/exams/{exam}', function (Request $request, Exam $exam) use ($can
     );
 
     return response()->json(['message' => 'Exam deleted']);
+});
+
+/*
+ * Retire an exam without deleting it: it is archived from every room it is
+ * still in, in one go. The exam, its attempts and its results all stay, and
+ * each room can restore it. This is what the Delete Exam dialog offers beside
+ * Delete, and the way out for an exam students have already taken, which
+ * cannot be deleted.
+ */
+Route::post('/exams/{exam}/archive', function (Request $request, Exam $exam) use ($canTeach, $oversees, $ensureActive, $recordAudit) {
+    if ($inactiveResponse = $ensureActive($request)) {
+        return $inactiveResponse;
+    }
+
+    $user = $request->user();
+
+    if (!$canTeach($user)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    if (!$oversees($user, $exam->created_by)) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    $active = DB::table('exam_room')->where('exam_id', $exam->id)->whereNull('archived_at');
+    $roomIds = (clone $active)->pluck('room_id')->map(fn ($id) => (int) $id)->all();
+
+    if ($roomIds === []) {
+        return response()->json([
+            'message' => 'This exam is not in any room, or is already archived from all of them, so there is nothing to archive.',
+        ], 422);
+    }
+
+    $archivedAt = now();
+
+    $active->update([
+        'archived_at' => $archivedAt,
+        'archived_by' => $user->id,
+        'updated_at' => $archivedAt,
+    ]);
+
+    $recordAudit(
+        $user,
+        'exam.archive',
+        'exam',
+        $exam->id,
+        'Exam archived from its rooms',
+        ['title' => $exam->title, 'owner_id' => $exam->created_by, 'room_ids' => $roomIds],
+        $request,
+    );
+
+    return response()->json([
+        'message' => sprintf(
+            'Exam archived from %d %s. Its results are kept, and each room can restore it.',
+            count($roomIds),
+            count($roomIds) === 1 ? 'room' : 'rooms',
+        ),
+        'archived_rooms' => count($roomIds),
+    ]);
 });
 
 Route::get('/exams/{exam}/item-analytics', function (Request $request, Exam $exam) use (

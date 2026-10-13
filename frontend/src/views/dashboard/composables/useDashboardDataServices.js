@@ -41,6 +41,7 @@ export function useDashboardDataServices() {
     createExam: (payload) => examsApi.create(payload),
     updateExam: (examId, payload) => examsApi.update(examId, payload),
     deleteExam: (examId) => examsApi.remove(examId),
+    archiveExam: (examId) => examsApi.archive(examId),
     getLiveBoard: (examId, roomId) => examsApi.liveBoard(examId, roomId),
     getItemAnalytics: (examId) => examsApi.itemAnalytics(examId),
 
@@ -53,7 +54,7 @@ export function useDashboardDataServices() {
     removeLleResult: (id) => lleResultsApi.remove(id),
     getLetModelStatus: () => lleResultsApi.modelStatus(),
     retrainLetModel: () => lleResultsApi.retrainModel(),
-    revertLetModel: () => lleResultsApi.revertModel(),
+    activateLetModel: (version) => lleResultsApi.activateModel(version),
     exportCompleteResultsXlsx: (examId, roomId) => reportsApi.completeResultsXlsx(examId, roomId),
     exportCompleteResultsCsv: (examId, roomId) => reportsApi.completeResultsCsv(examId, roomId),
     exportResultsSummaryPdf: (examId, roomId) => reportsApi.resultsSummaryPdf(examId, roomId),

@@ -27,19 +27,19 @@ class LleResultsApi {
     return http.delete(`/lle-results/${id}`)
   }
 
-  /** Which Exam Outcome model is in use, and what there is to retrain it on. */
+  /** Which version of the Exam Outcome model is in use, and every version with its figures. */
   modelStatus() {
     return http.get('/predictions/let/model')
   }
 
-  /** Retrains now; the server keeps the current model unless the new one does at least as well. */
+  /** Admin only: retrains now; the server keeps the current model unless the new one passes its checks. */
   retrainModel() {
     return http.post('/predictions/let/model/retrain')
   }
 
-  /** Admin only: go back to the model before the one in use. */
-  revertModel() {
-    return http.post('/predictions/let/model/revert')
+  /** Admin only: put an earlier version back into use (1 is the original model). */
+  activateModel(version) {
+    return http.post('/predictions/let/model/activate', { version })
   }
 }
 

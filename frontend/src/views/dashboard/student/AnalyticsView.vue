@@ -276,7 +276,7 @@
         <article class="analytics-card analytics-prediction-card" aria-labelledby="analytics-let-heading">
           <header class="analytics-card-head is-stacked">
             <h2 id="analytics-let-heading" class="analytics-card-title">Estimated Outcome</h2>
-            <p class="analytics-card-sub">Based on recent exam performance</p>
+            <p class="analytics-card-sub">From your latest complete semester</p>
           </header>
 
           <EstimatedOutcome
@@ -285,18 +285,6 @@
             :focus-subjects-count="stats.focus_subjects_count"
           />
 
-          <template v-if="predictivePanel.isConnected">
-            <details v-if="predictivePanel.decision_rules?.length > 0" class="prediction-reasoning">
-              <summary>Why this estimate?</summary>
-              <ul>
-                <li v-for="(rule, index) in predictivePanel.decision_rules" :key="index">{{ rule }}</li>
-              </ul>
-            </details>
-
-            <p class="prediction-note">
-              Treat this as a rough signal<template v-if="predictivePanel.support">, based on {{ predictivePanel.support }} similar past cases</template>.
-            </p>
-          </template>
         </article>
 
         <!-- What to review next -->
@@ -1255,34 +1243,6 @@ function trendToneClass(subject) {
   color: var(--a-muted);
 }
 
-/* ---- Exam outcome ---- */
-/* Amber regardless of the PASS/FAIL call -- this is a "how sure is the
-   model" number, and colouring it red/green makes it read as a second
-   verdict competing with the headline right above it. */
-.prediction-reasoning summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lnu-navy);
-}
-
-.prediction-reasoning ul {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 5px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--a-muted);
-}
-
-.prediction-note {
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--lnu-text-muted);
-}
-
 /* ---- What to review next ---- */
 .analytics-guidance-card {
   gap: 13px;
@@ -1803,12 +1763,6 @@ function trendToneClass(subject) {
 
   .plan-review-btn {
     min-height: 44px;
-  }
-
-  /* "Why this estimate?" was a 19px line of text to tap. Padding, not a
-     flex box, so the summary keeps its arrow. */
-  .prediction-reasoning > summary {
-    padding-block: 12px;
   }
 }
 

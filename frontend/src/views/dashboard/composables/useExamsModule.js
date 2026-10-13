@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { examDefaultsFor } from '@/utils/examDefaults'
 import { useLiveRefresh } from '@/utils/liveRefresh'
@@ -28,6 +28,19 @@ function toExamSchedulePayload(value) {
   if (Number.isNaN(date.getTime())) return null
 
   return date.toISOString()
+}
+
+// The school year and semester a date falls in: August to December is the
+// first semester of the school year starting that August, January to July the
+// second semester of the one before. The server files an exam the same way
+// (Exam::termForDate).
+function termForDate(value) {
+  const date = value ? new Date(value) : new Date()
+  const at = Number.isNaN(date.getTime()) ? new Date() : date
+
+  return at.getMonth() >= 7
+    ? { school_year: at.getFullYear(), semester: 1 }
+    : { school_year: at.getFullYear() - 1, semester: 2 }
 }
 
 function currentDateTimeLocalValue() {
@@ -140,7 +153,33 @@ export function useExamsModule() {
     one_take_only: false,
     shuffle_questions: false,
     results_visibility_mode: 'hidden',
+    // Which semester the exam's score counts toward in the Estimated Outcome.
+    school_year: termForDate().school_year,
+    semester: termForDate().semester,
     room_ids: [],
+  })
+
+  // The two follow the start date until the teacher picks them, as for a
+  // make-up exam held after its semester ended. An exam being edited keeps
+  // what it was filed under.
+  const examTermChosen = ref(false)
+
+  function markExamTermChosen() {
+    examTermChosen.value = true
+  }
+
+  watch(() => examForm.schedule_start_at, (start) => {
+    if (!examTermChosen.value) Object.assign(examForm, termForDate(start))
+  })
+
+  // A few school years either side of this one, and the exam's own.
+  const examSchoolYearOptions = computed(() => {
+    const current = termForDate().school_year
+    const years = new Set([Number(examForm.school_year)])
+    for (let year = current - 5; year <= current + 1; year++) years.add(year)
+
+    return [...years].filter(Number.isFinite).sort((left, right) => right - left)
+      .map((year) => ({ value: year, label: `${year}-${year + 1}` }))
   })
 
   const groupedExamQuestionBanks = computed(() => {
@@ -205,6 +244,8 @@ export function useExamsModule() {
     examForm.question_bank_ids = []
     examForm.schedule_start_at = currentDateTimeLocalValue()
     examForm.schedule_end_at = ''
+    examTermChosen.value = false
+    Object.assign(examForm, termForDate())
     examForm.room_ids = []
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
@@ -240,6 +281,10 @@ export function useExamsModule() {
     examForm.one_take_only = Boolean(exam.one_take_only)
     examForm.shuffle_questions = Boolean(exam.shuffle_questions)
     examForm.results_visibility_mode = exam.results_visibility_mode || 'hidden'
+    examTermChosen.value = true
+    Object.assign(examForm, exam.school_year && exam.semester
+      ? { school_year: Number(exam.school_year), semester: Number(exam.semester) }
+      : termForDate(exam.schedule_start_at ?? exam.scheduled_at ?? exam.created_at))
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examError.value = ''
     examMessage.value = ''
@@ -427,6 +472,8 @@ export function useExamsModule() {
       one_take_only: Boolean(examForm.one_take_only),
       shuffle_questions: Boolean(examForm.shuffle_questions),
       results_visibility_mode: examForm.results_visibility_mode,
+      school_year: Number(examForm.school_year),
+      semester: Number(examForm.semester),
       room_ids: [...examForm.room_ids],
     }
 
@@ -470,6 +517,27 @@ export function useExamsModule() {
     }
   }
 
+  // From the Delete dialog: retire the exam instead of deleting it. It comes
+  // off every room it is still in, and its results stay.
+  async function handleArchiveExam() {
+    if (!selectedExam.value?.id) return
+
+    examSaving.value = true
+    examError.value = ''
+    examMessage.value = ''
+
+    try {
+      const { data } = await services.archiveExam(selectedExam.value.id)
+      closeDeleteExamModal()
+      await loadExams()
+      examMessage.value = data?.message ?? 'Exam archived.'
+    } catch (error) {
+      examError.value = firstApiError(error, 'Unable to archive exam.')
+    } finally {
+      examSaving.value = false
+    }
+  }
+
   function examQuestionBankCount(exam) {
     return questionBanksForExam(exam).length
   }
@@ -496,6 +564,8 @@ export function useExamsModule() {
     selectedQuestionBankTotalItems,
     createExamScheduleMin,
     createExamScheduleEndMin,
+    examSchoolYearOptions,
+    markExamTermChosen,
     examLoading,
     examSaving,
     examError,
@@ -516,5 +586,6 @@ export function useExamsModule() {
     closeDeleteExamModal,
     handleSaveExam,
     handleDeleteExam,
+    handleArchiveExam,
   }
 }
