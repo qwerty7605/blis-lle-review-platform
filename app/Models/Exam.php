@@ -35,6 +35,8 @@ class Exam extends Model
         'one_take_only',
         'shuffle_questions',
         'results_visibility_mode',
+        'school_year',
+        'semester',
         'created_by',
     ];
 
@@ -49,7 +51,50 @@ class Exam extends Model
         'schedule_end_at' => 'datetime',
         'one_take_only' => 'boolean',
         'shuffle_questions' => 'boolean',
+        'school_year' => 'integer',
+        'semester' => 'integer',
     ];
+
+    public const SEMESTERS = [1, 2];
+
+    /**
+     * The school year and semester an exam is filed under decide which
+     * semester its score belongs to in the board exam prediction (see
+     * LetReadinessFeatureBuilder). The teacher sets them on the exam form;
+     * an exam saved without them takes them from its date.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Exam $exam): void {
+            if ($exam->school_year && $exam->semester) {
+                return;
+            }
+
+            $term = self::termForDate($exam->schedule_start_at ?? $exam->scheduled_at ?? $exam->created_at ?? now());
+            $exam->school_year = $exam->school_year ?: $term['school_year'];
+            $exam->semester = $exam->semester ?: $term['semester'];
+        });
+    }
+
+    /**
+     * The term a date falls in: August to December is the first semester of
+     * the school year starting that August, January to July the second
+     * semester of the one that started the August before.
+     *
+     * @return array{school_year: int, semester: int}
+     */
+    public static function termForDate(CarbonInterface $date): array
+    {
+        return $date->month >= 8
+            ? ['school_year' => $date->year, 'semester' => 1]
+            : ['school_year' => $date->year - 1, 'semester' => 2];
+    }
+
+    /** "1st Semester, AY 2026-2027": a school year is named by the year it starts in. */
+    public static function termLabel(int $schoolYear, int $semester): string
+    {
+        return sprintf('%s Semester, AY %d-%d', $semester === 1 ? '1st' : '2nd', $schoolYear, $schoolYear + 1);
+    }
 
     /**
      * Exam creator (staff/admin).

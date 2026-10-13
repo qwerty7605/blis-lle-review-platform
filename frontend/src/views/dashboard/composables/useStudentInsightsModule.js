@@ -36,14 +36,6 @@ function bandLabel(band) {
   return 'No Data'
 }
 
-function humanizeFeatureKey(feature) {
-  return String(feature ?? '')
-    .split('_')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
-
 export function useStudentInsightsModule() {
   const analyticsLoading = ref(false)
   const analyticsLoaded = ref(false)
@@ -64,16 +56,9 @@ export function useStudentInsightsModule() {
   const studyPlanRows = ref([])
   const actionPlanRows = ref([])
   const weakAreaRaw = ref(null)
-  const predictiveModel = ref({
-    status: 'awaiting_ml_api',
-    title: 'Exam Outcome Model',
-    description: 'Prepared for future J48 (C4.5) and logistic regression API integration.',
-    ml_api_endpoint: null,
-    expected_inputs: [],
-    probability_percent: null,
-    risk_band: null,
-    decision_rules: [],
-  })
+  // The board exam model's answer for this student, as the server words it
+  // (BoardExamOutlook.php); null until the first load.
+  const predictiveModel = ref(null)
 
   const subjects = computed(() => {
     const incoming = new Map(
@@ -357,25 +342,7 @@ export function useStudentInsightsModule() {
     return { empty: false, headline, points }
   })
 
-  const predictivePanel = computed(() => {
-    const status = predictiveModel.value.status
-
-    const statusLabel = status === 'connected'
-      ? 'Connected'
-      : status === 'insufficient_history'
-        ? 'Needs More Data'
-        : 'Coming Soon'
-
-    return {
-      ...predictiveModel.value,
-      status,
-      statusLabel,
-      isConnected: status === 'connected',
-      isInsufficientHistory: status === 'insufficient_history',
-      featureLabels: asList(predictiveModel.value.expected_inputs).map(humanizeFeatureKey),
-      predictionTone: predictiveModel.value.prediction === 'PASS' ? 'success' : 'danger',
-    }
-  })
+  const predictivePanel = computed(() => predictiveModel.value)
 
   const hasAttemptData = computed(() => (stats.value.completed_attempts ?? 0) > 0)
 
@@ -412,7 +379,6 @@ export function useStudentInsightsModule() {
       actionPlanRows.value = asList(data?.action_plan)
       weakAreaRaw.value = data?.weak_area ?? null
       predictiveModel.value = {
-        ...predictiveModel.value,
         ...(data?.predictive_model ?? {}),
       }
     } catch (error) {

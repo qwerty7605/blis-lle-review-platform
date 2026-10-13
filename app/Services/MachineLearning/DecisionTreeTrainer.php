@@ -3,16 +3,21 @@
 namespace App\Services\MachineLearning;
 
 /**
- * Grows a pass/fail decision tree from numeric features, the way Weka's J48
- * (C4.5) grew the tree LetPredictionService shipped with: splits chosen by
- * gain ratio, at least two examples on each side of a split, and branches
- * pruned back when they are not expected to do better than a single leaf.
+ * Grows a pass/fail decision tree from numeric features the way Weka's J48
+ * (C4.5) does with its options `-C 0.25 -M 2`: splits chosen by gain ratio, at
+ * least two examples on each side of a split, branches pruned back (or
+ * replaced by their larger half) when that is not expected to do worse.
+ *
+ * A score that is missing stays missing. As in C4.5, a row with no value for
+ * the attribute being split on takes no part in choosing the split, and then
+ * goes down both sides, in the proportion the rows with a value did. It is
+ * never read as zero.
  *
  * Written here because the app has no Java to run Weka with, and a model that
  * can only be retrained on somebody's laptop does not get retrained. The
  * output is the same nested array LetPredictionService walks.
  *
- * `ml/tools/CompareWithWeka.java` trains J48 on the same file so the two can
+ * `ml/tools/CompareWithWeka.java` trains J48 on the same files so the two can
  * be compared; see ml/README.md.
  */
 class DecisionTreeTrainer
@@ -26,152 +31,123 @@ class DecisionTreeTrainer
     /** The normal deviate for PRUNING_CONFIDENCE, i.e. normalInverse(0.75). */
     private const PRUNING_Z = 0.6744897501960817;
 
+    /** Weka's tolerance when it compares two numbers (Utils.SMALL). */
+    private const SMALL = 1e-6;
+
+    /** @var array<int, string> */
+    private array $attributes = [];
+
+    /** @var array<int, string> every outcome in the data, in the order ties are broken */
+    private array $labels = [];
+
+    /** @var array<string, array<int, float>> each attribute's known values across the whole data, lowest first */
+    private array $seen = [];
+
     /**
-     * @param  array<int, array{features: array<string, float|int>, label: string}>  $rows
+     * @param  array<int, array{features: array<string, float|int|null>, label: string, weight?: float}>  $rows
      * @param  array<int, string>  $attributes  feature names a split may use
      * @return array<string, mixed> a node: ['attribute', 'threshold', 'le', 'gt'] or ['leaf', 'instances', 'errors']
      */
     public function train(array $rows, array $attributes): array
     {
-        $rows = array_values($rows);
+        $this->attributes = array_values($attributes);
+        $this->seen = [];
 
-        // Every score seen for each feature, lowest first: a cut is always
-        // placed at one of them (see bestSplit()).
-        $seen = [];
-        foreach ($attributes as $attribute) {
-            $values = array_map(static fn (array $row): float => (float) $row['features'][$attribute], $rows);
-            sort($values);
-            $seen[$attribute] = $values;
+        $prepared = [];
+        $labels = [];
+
+        foreach (array_values($rows) as $row) {
+            $features = [];
+            foreach ($this->attributes as $attribute) {
+                $value = $row['features'][$attribute] ?? null;
+                $features[$attribute] = is_numeric($value) ? (float) $value : null;
+
+                if ($features[$attribute] !== null) {
+                    $this->seen[$attribute][] = $features[$attribute];
+                }
+            }
+
+            $prepared[] = ['features' => $features, 'label' => (string) $row['label'], 'weight' => (float) ($row['weight'] ?? 1.0)];
+            $labels[(string) $row['label']] = true;
         }
 
-        return $this->prune($this->collapse($this->grow($rows, $attributes, $seen)));
+        // On a tie the label that sorts first wins, so the same data always
+        // gives the same tree (and FAIL comes before PASS, as in the model's
+        // own class order).
+        $this->labels = array_keys($labels);
+        sort($this->labels);
+
+        foreach ($this->attributes as $attribute) {
+            $this->seen[$attribute] ??= [];
+            sort($this->seen[$attribute]);
+        }
+
+        $tree = $this->grow($prepared);
+        $tree = $this->collapse($tree);
+        $tree = $this->prune($tree);
+
+        return $this->finish($tree);
     }
 
     /**
-     * @param  array<int, array{features: array<string, float|int>, label: string}>  $rows
-     * @param  array<int, string>  $attributes
-     * @param  array<string, array<int, float>>  $seen
+     * @param  array<int, array{features: array<string, ?float>, label: string, weight: float}>  $rows
      * @return array<string, mixed>
      */
-    private function grow(array $rows, array $attributes, array $seen): array
+    private function grow(array $rows): array
     {
-        $counts = $this->countLabels($rows);
-        $total = count($rows);
+        $counts = $this->counts($rows);
+        $total = array_sum($counts);
+        $node = ['rows' => $rows, 'counts' => $counts];
 
-        if (count($counts) <= 1 || $total < 2 * self::MIN_PER_BRANCH) {
-            return $this->leaf($counts);
+        if ($total < 2 * self::MIN_PER_BRANCH - self::SMALL || abs($total - max($counts ?: [0])) < self::SMALL) {
+            return $node + ['leaf' => true];
         }
 
-        $split = $this->bestSplit($rows, $attributes, $counts, $seen);
+        $split = $this->bestSplit($rows, $total);
         if ($split === null) {
-            return $this->leaf($counts);
+            return $node + ['leaf' => true];
         }
 
-        $left = [];
-        $right = [];
-        foreach ($rows as $row) {
-            if ((float) $row['features'][$split['attribute']] <= $split['threshold']) {
-                $left[] = $row;
-            } else {
-                $right[] = $row;
+        // The cut found lies halfway between two neighbouring scores in this
+        // node. It is moved down to a score some student really had: the
+        // highest one in the whole training set that is not above it.
+        $threshold = -INF;
+        foreach ($this->seen[$split['attribute']] as $value) {
+            if ($value > $split['threshold'] + self::SMALL) {
+                break;
             }
-        }
 
-        return [
-            'attribute' => $split['attribute'],
-            'threshold' => $split['threshold'],
-            'le' => $this->grow($left, $attributes, $seen),
-            'gt' => $this->grow($right, $attributes, $seen),
-            // Kept until pruning has run: what this node would be as a leaf.
-            'counts' => $counts,
-        ];
+            $threshold = $value;
+        }
+        $split['threshold'] = $threshold === -INF ? $split['threshold'] : $threshold;
+
+        $node += ['leaf' => false, 'attribute' => $split['attribute'], 'threshold' => $split['threshold']];
+        $node['bags'] = $this->bagWeights($rows, $split['attribute'], $split['threshold']);
+
+        [$left, $right] = $this->divide($rows, $split['attribute'], $split['threshold'], $node['bags']);
+        $node['le'] = $this->grow($left);
+        $node['gt'] = $this->grow($right);
+
+        return $node;
     }
 
     /**
      * The split C4.5 would take: of the attributes whose information gain is
      * at least average, the one with the highest gain ratio.
      *
-     * @param  array<int, array{features: array<string, float|int>, label: string}>  $rows
-     * @param  array<int, string>  $attributes
-     * @param  array<string, int>  $counts
-     * @param  array<string, array<int, float>>  $seen
+     * @param  array<int, array{features: array<string, ?float>, label: string, weight: float}>  $rows
      * @return array{attribute: string, threshold: float}|null
      */
-    private function bestSplit(array $rows, array $attributes, array $counts, array $seen): ?array
+    private function bestSplit(array $rows, float $total): ?array
     {
-        $total = count($rows);
-        $baseEntropy = $this->entropy($counts, $total);
         $candidates = [];
 
-        // A large node may not shave off a sliver: each side needs a tenth of
-        // the node per outcome, capped at 25 (and never under the minimum).
-        $minPerBranch = min(25, max(self::MIN_PER_BRANCH, 0.1 * $total / count($counts)));
+        foreach ($this->attributes as $attribute) {
+            $candidate = $this->splitOn($rows, $attribute, $total);
 
-        foreach ($attributes as $attribute) {
-            $values = [];
-            foreach ($rows as $row) {
-                $values[] = [(float) $row['features'][$attribute], $row['label']];
+            if ($candidate !== null) {
+                $candidates[] = $candidate;
             }
-            usort($values, static fn (array $left, array $right): int => $left[0] <=> $right[0]);
-
-            $leftCounts = [];
-            $best = null;
-            $thresholds = 0;
-
-            for ($index = 0; $index < $total - 1; $index++) {
-                $leftCounts[$values[$index][1]] = ($leftCounts[$values[$index][1]] ?? 0) + 1;
-
-                if ($values[$index][0] === $values[$index + 1][0]) {
-                    continue; // a threshold cannot fall between equal values
-                }
-
-                $leftTotal = $index + 1;
-                $rightTotal = $total - $leftTotal;
-                if ($leftTotal < $minPerBranch || $rightTotal < $minPerBranch) {
-                    continue;
-                }
-
-                $thresholds++;
-
-                $rightCounts = [];
-                foreach ($counts as $label => $count) {
-                    $rightCounts[$label] = $count - ($leftCounts[$label] ?? 0);
-                }
-
-                $gain = $baseEntropy
-                    - ($leftTotal / $total) * $this->entropy($leftCounts, $leftTotal)
-                    - ($rightTotal / $total) * $this->entropy($rightCounts, $rightTotal);
-
-                if ($best === null || $gain > $best['gain'] + 1e-12) {
-                    $best = [
-                        'gain' => $gain,
-                        'threshold' => ($values[$index][0] + $values[$index + 1][0]) / 2,
-                        'left' => $leftTotal,
-                    ];
-                }
-            }
-
-            if ($best === null) {
-                continue;
-            }
-
-            // C4.5 charges a numeric attribute for the number of places it
-            // could have been cut, so that one with many distinct values does
-            // not win on chance alone.
-            $gain = $best['gain'] - log($thresholds, 2) / $total;
-            if ($gain <= 1e-9) {
-                continue;
-            }
-
-            $leftShare = $best['left'] / $total;
-            $splitInfo = -($leftShare * log($leftShare, 2) + (1 - $leftShare) * log(1 - $leftShare, 2));
-
-            $candidates[] = [
-                'attribute' => $attribute,
-                'threshold' => $best['threshold'],
-                'gain' => $gain,
-                'ratio' => $gain / $splitInfo,
-            ];
         }
 
         if ($candidates === []) {
@@ -180,34 +156,177 @@ class DecisionTreeTrainer
 
         $averageGain = array_sum(array_column($candidates, 'gain')) / count($candidates);
         $chosen = null;
+        $bestRatio = 0.0;
 
         foreach ($candidates as $candidate) {
-            if ($candidate['gain'] < $averageGain - 1e-3) {
-                continue;
-            }
-
-            if ($chosen === null || $candidate['ratio'] > $chosen['ratio'] + 1e-12) {
+            if ($candidate['gain'] >= $averageGain - 1e-3 && $candidate['ratio'] - $bestRatio > self::SMALL) {
                 $chosen = $candidate;
+                $bestRatio = $candidate['ratio'];
             }
         }
 
-        if ($chosen === null) {
+        return $chosen;
+    }
+
+    /**
+     * The best place to cut one attribute, judged on the rows that have a
+     * value for it.
+     *
+     * @param  array<int, array{features: array<string, ?float>, label: string, weight: float}>  $rows
+     * @return array{attribute: string, threshold: float, gain: float, ratio: float}|null
+     */
+    private function splitOn(array $rows, string $attribute, float $total): ?array
+    {
+        $known = array_values(array_filter($rows, static fn (array $row): bool => $row['features'][$attribute] !== null));
+        usort($known, static fn (array $left, array $right): int => $left['features'][$attribute] <=> $right['features'][$attribute]);
+
+        $knownCount = count($known);
+        $knownCounts = $this->counts($known);
+        $knownWeight = array_sum($knownCounts);
+
+        // A large node may not shave off a sliver: each side needs a tenth of
+        // the node per outcome, capped at 25 (and never under the minimum).
+        $minPerBranch = 0.1 * $knownWeight / max(1, count($this->labels));
+        if ($minPerBranch <= self::MIN_PER_BRANCH + self::SMALL) {
+            $minPerBranch = self::MIN_PER_BRANCH;
+        } elseif ($minPerBranch > 25 + self::SMALL) {
+            $minPerBranch = 25;
+        }
+
+        if ($knownCount < 2 * $minPerBranch - self::SMALL) {
             return null;
         }
 
-        // The cut found lies halfway between two neighbouring scores in this
-        // node. It is moved down to a score some student really had: the
-        // highest one in the whole training set that is not above it.
-        $threshold = $chosen['threshold'];
-        foreach ($seen[$chosen['attribute']] as $value) {
-            if ($value > $chosen['threshold']) {
-                break;
+        $oldEntropy = $this->spread($knownCounts);
+        $leftCounts = array_fill_keys($this->labels, 0.0);
+        $rightCounts = $knownCounts + array_fill_keys($this->labels, 0.0);
+        $leftWeight = 0.0;
+
+        $bestGain = 0.0;
+        $bestIndex = -1;
+        $bestLeft = 0.0;
+        $places = 0;
+        $moved = 0;
+
+        for ($next = 1; $next < $knownCount; $next++) {
+            if ($known[$next - 1]['features'][$attribute] + 1e-5 >= $known[$next]['features'][$attribute]) {
+                continue; // a threshold cannot fall between equal values
             }
 
-            $threshold = $value;
+            for (; $moved < $next; $moved++) {
+                $leftCounts[$known[$moved]['label']] += $known[$moved]['weight'];
+                $rightCounts[$known[$moved]['label']] -= $known[$moved]['weight'];
+                $leftWeight += $known[$moved]['weight'];
+            }
+
+            $rightWeight = $knownWeight - $leftWeight;
+            if ($leftWeight < $minPerBranch - self::SMALL || $rightWeight < $minPerBranch - self::SMALL) {
+                continue;
+            }
+
+            // The gain among the rows with a value, scaled down by the share
+            // of the node that has none.
+            $gain = ($oldEntropy - $this->spread($leftCounts) - $this->spread($rightCounts)) * ($knownWeight / $total);
+            $gain = abs($gain) < self::SMALL ? 0.0 : $gain / $knownWeight;
+
+            if ($gain - $bestGain > self::SMALL) {
+                $bestGain = $gain;
+                $bestIndex = $next - 1;
+                $bestLeft = $leftWeight;
+            }
+
+            $places++;
         }
 
-        return ['attribute' => $chosen['attribute'], 'threshold' => $threshold];
+        if ($places === 0 || $bestIndex < 0) {
+            return null;
+        }
+
+        // C4.5 charges a numeric attribute for the number of places it could
+        // have been cut, so that one with many distinct values does not win
+        // on chance alone.
+        $gain = $bestGain - log($places, 2) / $total;
+        if ($gain <= self::SMALL) {
+            return null;
+        }
+
+        $lower = $known[$bestIndex]['features'][$attribute];
+        $upper = $known[$bestIndex + 1]['features'][$attribute];
+        $threshold = ($lower + $upper) / 2;
+        if ($threshold === $upper) {
+            $threshold = $lower;
+        }
+
+        // The split is also charged for how it scatters the node, the rows
+        // with no value counting as a group of their own.
+        $splitInfo = ($this->xlogx($total)
+            - $this->xlogx($bestLeft)
+            - $this->xlogx($knownWeight - $bestLeft)
+            - $this->xlogx($total - $knownWeight)) / log(2);
+
+        if (abs($splitInfo) < self::SMALL) {
+            return null;
+        }
+
+        return [
+            'attribute' => $attribute,
+            'threshold' => $threshold,
+            'gain' => $gain,
+            'ratio' => $gain / ($splitInfo / $total),
+        ];
+    }
+
+    /**
+     * How much of a node's weight lies on each side of a cut, counting only
+     * the rows that have a value. Rows without one follow these proportions.
+     *
+     * @param  array<int, array{features: array<string, ?float>, label: string, weight: float}>  $rows
+     * @return array{0: float, 1: float}
+     */
+    private function bagWeights(array $rows, string $attribute, float $threshold): array
+    {
+        $bags = [0.0, 0.0];
+
+        foreach ($rows as $row) {
+            $value = $row['features'][$attribute];
+
+            if ($value !== null) {
+                $bags[$value <= $threshold ? 0 : 1] += $row['weight'];
+            }
+        }
+
+        return $bags;
+    }
+
+    /**
+     * @param  array<int, array{features: array<string, ?float>, label: string, weight: float}>  $rows
+     * @param  array{0: float, 1: float}  $bags
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>}
+     */
+    private function divide(array $rows, string $attribute, float $threshold, array $bags): array
+    {
+        $sides = [[], []];
+        $known = $bags[0] + $bags[1];
+
+        foreach ($rows as $row) {
+            $value = $row['features'][$attribute];
+
+            if ($value !== null) {
+                $sides[$value <= $threshold ? 0 : 1][] = $row;
+
+                continue;
+            }
+
+            foreach ([0, 1] as $side) {
+                $share = $known > 0 ? $bags[$side] / $known : 0.0;
+
+                if ($share > self::SMALL) {
+                    $sides[$side][] = ['weight' => $row['weight'] * $share] + $row;
+                }
+            }
+        }
+
+        return $sides;
     }
 
     /**
@@ -219,14 +338,12 @@ class DecisionTreeTrainer
      */
     private function collapse(array $node): array
     {
-        if (isset($node['leaf'])) {
+        if ($node['leaf']) {
             return $node;
         }
 
-        $asLeaf = $this->leaf($node['counts']);
-
-        if ($this->trainingErrors($node) >= $asLeaf['errors'] - 1e-3) {
-            return $asLeaf;
+        if ($this->trainingErrors($node) >= $this->incorrect($node['counts']) - 1e-3) {
+            return $this->asLeaf($node);
         }
 
         $node['le'] = $this->collapse($node['le']);
@@ -240,36 +357,69 @@ class DecisionTreeTrainer
      */
     private function trainingErrors(array $node): float
     {
-        return isset($node['leaf'])
-            ? $node['errors']
+        return $node['leaf']
+            ? $this->incorrect($node['counts'])
             : $this->trainingErrors($node['le']) + $this->trainingErrors($node['gt']);
     }
 
     /**
-     * Replace a subtree with a leaf wherever the leaf is not expected to make
-     * more mistakes on unseen students than the subtree does. The expectation
-     * is C4.5's: the mistakes made in training, plus a margin that is larger
-     * the fewer examples stand behind them.
+     * Replace a subtree with a leaf, or with its own larger branch, wherever
+     * that is not expected to make more mistakes on unseen students than the
+     * subtree does. The expectation is C4.5's: the mistakes made in training,
+     * plus a margin that is larger the fewer examples stand behind them.
      *
      * @param  array<string, mixed>  $node
      * @return array<string, mixed>
      */
     private function prune(array $node): array
     {
-        if (isset($node['leaf'])) {
+        if ($node['leaf']) {
             return $node;
         }
 
         $node['le'] = $this->prune($node['le']);
         $node['gt'] = $this->prune($node['gt']);
 
-        $asLeaf = $this->leaf($node['counts']);
+        $largest = $node['bags'][1] > $node['bags'][0] ? 'gt' : 'le';
+        $errorsLargestBranch = $this->expectedErrorsOn($node[$largest], $node['rows']);
+        $errorsLeaf = $this->expectedErrorsOf($node['counts']);
+        $errorsTree = $this->expectedErrors($node);
 
-        if ($this->expectedErrors($asLeaf) <= $this->expectedErrors($node) + 0.1) {
-            return $asLeaf;
+        if ($errorsLeaf <= $errorsTree + 0.1 + self::SMALL && $errorsLeaf <= $errorsLargestBranch + 0.1 + self::SMALL) {
+            return $this->asLeaf($node);
         }
 
-        unset($node['counts']);
+        // The larger branch, given every example that reached this node, is
+        // expected to do as well as the two branches together: it takes
+        // their place (C4.5's subtree raising).
+        if ($errorsLargestBranch <= $errorsTree + 0.1 + self::SMALL) {
+            return $this->prune($this->redistribute($node[$largest], $node['rows']));
+        }
+
+        return $node;
+    }
+
+    /**
+     * The same subtree, with $rows sent down it in place of the examples it
+     * was grown from.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, mixed>
+     */
+    private function redistribute(array $node, array $rows): array
+    {
+        $node['rows'] = $rows;
+        $node['counts'] = $this->counts($rows);
+
+        if ($node['leaf']) {
+            return $node;
+        }
+
+        $node['bags'] = $this->bagWeights($rows, $node['attribute'], $node['threshold']);
+        [$left, $right] = $this->divide($rows, $node['attribute'], $node['threshold'], $node['bags']);
+        $node['le'] = $this->redistribute($node['le'], $left);
+        $node['gt'] = $this->redistribute($node['gt'], $right);
 
         return $node;
     }
@@ -279,11 +429,42 @@ class DecisionTreeTrainer
      */
     private function expectedErrors(array $node): float
     {
-        if (!isset($node['leaf'])) {
-            return $this->expectedErrors($node['le']) + $this->expectedErrors($node['gt']);
+        return $node['leaf']
+            ? $this->expectedErrorsOf($node['counts'])
+            : $this->expectedErrors($node['le']) + $this->expectedErrors($node['gt']);
+    }
+
+    /**
+     * What $node would be expected to get wrong if $rows were its examples.
+     *
+     * @param  array<string, mixed>  $node
+     * @param  array<int, array<string, mixed>>  $rows
+     */
+    private function expectedErrorsOn(array $node, array $rows): float
+    {
+        if ($node['leaf']) {
+            return $this->expectedErrorsOf($this->counts($rows));
         }
 
-        return $node['errors'] + $this->addedErrors($node['instances'], $node['errors']);
+        $bags = $this->bagWeights($rows, $node['attribute'], $node['threshold']);
+        [$left, $right] = $this->divide($rows, $node['attribute'], $node['threshold'], $bags);
+
+        return $this->expectedErrorsOn($node['le'], $left) + $this->expectedErrorsOn($node['gt'], $right);
+    }
+
+    /**
+     * @param  array<string, float>  $counts
+     */
+    private function expectedErrorsOf(array $counts): float
+    {
+        $total = array_sum($counts);
+        if (abs($total) < self::SMALL) {
+            return 0.0;
+        }
+
+        $errors = $this->incorrect($counts);
+
+        return $errors + $this->addedErrors($total, $errors);
     }
 
     /**
@@ -316,58 +497,97 @@ class DecisionTreeTrainer
     }
 
     /**
-     * @param  array<string, int>  $counts
-     * @return array{leaf: string, instances: float, errors: float}
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
      */
-    private function leaf(array $counts): array
+    private function asLeaf(array $node): array
     {
-        // On a tie the label that sorts first wins, so the same data always
-        // gives the same tree.
-        ksort($counts);
-        $label = (string) array_key_first($counts);
-        foreach ($counts as $candidate => $count) {
-            if ($count > $counts[$label]) {
-                $label = (string) $candidate;
-            }
+        return ['rows' => $node['rows'], 'counts' => $node['counts'], 'leaf' => true];
+    }
+
+    /**
+     * The tree as it is stored: no training rows, and each leaf with the
+     * outcome it gives and what stands behind it.
+     *
+     * @param  array<string, mixed>  $node
+     * @return array<string, mixed>
+     */
+    private function finish(array $node): array
+    {
+        if ($node['leaf']) {
+            return [
+                'leaf' => $this->majority($node['counts']),
+                'instances' => round(array_sum($node['counts']), 6),
+                'errors' => round($this->incorrect($node['counts']), 6),
+            ];
         }
 
-        $total = array_sum($counts);
-
         return [
-            'leaf' => $label,
-            'instances' => (float) $total,
-            'errors' => (float) ($total - ($counts[$label] ?? 0)),
+            'attribute' => $node['attribute'],
+            'threshold' => $node['threshold'],
+            'le' => $this->finish($node['le']),
+            'gt' => $this->finish($node['gt']),
         ];
     }
 
     /**
-     * @param  array<int, array{label: string}>  $rows
-     * @return array<string, int>
+     * @param  array<string, float>  $counts
      */
-    private function countLabels(array $rows): array
+    private function majority(array $counts): string
     {
-        $counts = [];
+        $label = $this->labels[0] ?? '';
+
+        foreach ($this->labels as $candidate) {
+            if (($counts[$candidate] ?? 0.0) > ($counts[$label] ?? 0.0)) {
+                $label = $candidate;
+            }
+        }
+
+        return $label;
+    }
+
+    /**
+     * @param  array<string, float>  $counts
+     */
+    private function incorrect(array $counts): float
+    {
+        return array_sum($counts) - ($counts[$this->majority($counts)] ?? 0.0);
+    }
+
+    /**
+     * The weight of each outcome among $rows.
+     *
+     * @param  array<int, array{label: string, weight: float}>  $rows
+     * @return array<string, float>
+     */
+    private function counts(array $rows): array
+    {
+        $counts = array_fill_keys($this->labels, 0.0);
+
         foreach ($rows as $row) {
-            $counts[$row['label']] = ($counts[$row['label']] ?? 0) + 1;
+            $counts[$row['label']] += $row['weight'];
         }
 
         return $counts;
     }
 
     /**
-     * @param  array<string, int>  $counts
+     * Entropy times weight, in bits: what C4.5 adds up to compare splits.
+     *
+     * @param  array<string, float>  $counts
      */
-    private function entropy(array $counts, int $total): float
+    private function spread(array $counts): float
     {
-        $entropy = 0.0;
-
+        $sum = 0.0;
         foreach ($counts as $count) {
-            if ($count > 0) {
-                $share = $count / $total;
-                $entropy -= $share * log($share, 2);
-            }
+            $sum -= $this->xlogx($count);
         }
 
-        return $entropy;
+        return ($sum + $this->xlogx(array_sum($counts))) / log(2);
+    }
+
+    private function xlogx(float $value): float
+    {
+        return $value < self::SMALL ? 0.0 : $value * log($value);
     }
 }
