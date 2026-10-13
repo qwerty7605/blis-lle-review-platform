@@ -1590,8 +1590,11 @@ const examTimerTone = computed(() => {
  * The same on any wider screen that is short. A 1366x768 laptop shows a
  * page about 640px of height once the browser's own bars are counted, and
  * pinned to that the exam list was a 284px window.
+ *
+ * Short stops at 700px, not 760px: see the staff page for the screen that
+ * moved it.
  */
-@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 759px) {
+@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 699px) {
   .room-view,
   .rooms-grid {
     flex: none;
