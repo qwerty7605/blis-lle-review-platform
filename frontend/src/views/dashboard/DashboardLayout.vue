@@ -126,7 +126,7 @@
           </div>
         </div>
 
-        <button class="logout-btn" @click="showLogoutModal = true">
+        <button class="logout-btn" @click="openLogoutModal">
           <LogOut :size="16" />
           Log out
         </button>
@@ -441,6 +441,13 @@ useLiveRefresh(loadAnnouncement, { every: 5 * 60 * 1000 })
 
 const showLogoutModal = ref(false)
 const loggingOut = ref(false)
+
+// On a phone the button is in the slide-over menu, which would sit on top
+// of the dialog: the menu closes first.
+function openLogoutModal() {
+  mobileNavOpen.value = false
+  showLogoutModal.value = true
+}
 
 function closeLogoutModal() {
   if (!loggingOut.value) showLogoutModal.value = false
