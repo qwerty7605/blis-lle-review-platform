@@ -542,10 +542,13 @@ class ReportExportService
             ->whereIn('question_bank_id', $questionBankIds)
             ->with('options:id,question_bank_question_id,option_label,option_text,is_correct')
             ->get()
+            // Each entry of a multi-key sortBy() compares two questions; a
+            // one-argument function here sorted the key out of order.
             ->sortBy([
-                fn (QuestionBankQuestion $question) => $orderLookup[(int) $question->question_bank_id] ?? PHP_INT_MAX,
-                fn (QuestionBankQuestion $question) => (int) $question->item_number,
-                fn (QuestionBankQuestion $question) => (int) $question->id,
+                fn (QuestionBankQuestion $a, QuestionBankQuestion $b) => ($orderLookup[(int) $a->question_bank_id] ?? PHP_INT_MAX)
+                    <=> ($orderLookup[(int) $b->question_bank_id] ?? PHP_INT_MAX),
+                fn (QuestionBankQuestion $a, QuestionBankQuestion $b) => (int) $a->item_number <=> (int) $b->item_number,
+                fn (QuestionBankQuestion $a, QuestionBankQuestion $b) => (int) $a->id <=> (int) $b->id,
             ]);
 
         if ((int) $exam->total_items > 0) {
