@@ -122,6 +122,7 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                 'exams.scheduled_at',
                 'exams.schedule_start_at',
                 'exams.schedule_end_at',
+                'exams.ends_at_close',
                 'exams.delivery_mode',
                 'exams.one_take_only',
                 'exams.shuffle_questions',
@@ -161,7 +162,7 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
                 ExamAttempt::STATUS_IN_PROGRESS,
                 ExamAttempt::STATUS_SUBMITTED,
             ])
-            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at', 'score_percent')
+            ->select('id', 'exam_id', 'room_id', 'status', 'submitted_at', 'started_at', 'expires_at', 'score_percent')
             ->orderByDesc('started_at')
             ->orderByDesc('id')
             ->get()
@@ -198,6 +199,8 @@ Route::get('/rooms/{room}', function (Request $request, Room $room) use ($canMan
 
                     $assignedExam->student_attempt_state = $attemptState;
                     $assignedExam->student_attempt_id = $latestAttemptId;
+                    // Resume stays open after the exam closes until this passes.
+                    $assignedExam->student_attempt_expires_at = $inProgressAttempt?->expires_at;
                     $assignedExam->student_submitted_at = $submittedAttempt?->submitted_at;
                     $assignedExam->student_submitted_attempts = $submittedAttemptCount;
                     // The latest sitting's, which is the score that counts.
