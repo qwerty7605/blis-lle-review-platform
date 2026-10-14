@@ -72,6 +72,7 @@ Route::post('/exams', function (Request $request) use (
         'scheduled_at' => ['nullable', 'date'],
         'schedule_start_at' => ['nullable', 'date'],
         'schedule_end_at' => ['nullable', 'date'],
+        'ends_at_close' => ['nullable', 'boolean'],
         'one_take_only' => ['nullable', 'boolean'],
         'shuffle_questions' => ['nullable', 'boolean'],
         'results_visibility_mode' => ['nullable', Rule::in(['hidden', 'visible'])],
@@ -117,6 +118,7 @@ Route::post('/exams', function (Request $request) use (
         'scheduled_at' => $scheduleStartAt,
         'schedule_start_at' => $scheduleStartAt,
         'schedule_end_at' => $scheduleEndAt,
+        'ends_at_close' => (bool) ($validated['ends_at_close'] ?? false),
         'delivery_mode' => $deliveryMode,
         'one_take_only' => (bool) ($validated['one_take_only'] ?? false),
         'shuffle_questions' => (bool) ($validated['shuffle_questions'] ?? false),
@@ -173,6 +175,7 @@ Route::post('/exams', function (Request $request) use (
             'scheduled_at' => $exam->scheduled_at,
             'schedule_start_at' => $exam->schedule_start_at,
             'schedule_end_at' => $exam->schedule_end_at,
+            'ends_at_close' => (bool) $exam->ends_at_close,
             'delivery_mode' => $normalizeDeliveryMode($exam->delivery_mode),
             'question_bank_id' => $exam->question_bank_id,
             'question_bank_ids' => $exam->question_bank_ids,
@@ -224,6 +227,7 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
         'scheduled_at' => ['sometimes', 'nullable', 'date'],
         'schedule_start_at' => ['sometimes', 'nullable', 'date'],
         'schedule_end_at' => ['sometimes', 'nullable', 'date'],
+        'ends_at_close' => ['sometimes', 'boolean'],
         'one_take_only' => ['sometimes', 'boolean'],
         'shuffle_questions' => ['sometimes', 'boolean'],
         'results_visibility_mode' => ['sometimes', Rule::in(['hidden', 'visible'])],
@@ -282,6 +286,12 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
     $exam->save();
     $exam->syncQuestionBanks($resolvedQuestionBankIds);
 
+    // A new closing time, or a change of what it means, reaches the students
+    // already taking the exam: their deadlines are worked out again.
+    if ($exam->wasChanged(['schedule_end_at', 'ends_at_close'])) {
+        $exam->refreshOpenAttemptDeadlines();
+    }
+
     if (array_key_exists('room_ids', $validated)) {
         $roomIds = collect($validated['room_ids'] ?? [])->unique()->values();
 
@@ -336,6 +346,7 @@ Route::patch('/exams/{exam}', function (Request $request, Exam $exam) use (
             'scheduled_at' => $exam->scheduled_at,
             'schedule_start_at' => $exam->schedule_start_at,
             'schedule_end_at' => $exam->schedule_end_at,
+            'ends_at_close' => (bool) $exam->ends_at_close,
             'delivery_mode' => $normalizeDeliveryMode($exam->delivery_mode),
             'question_bank_id' => $exam->question_bank_id,
             'question_bank_ids' => $exam->question_bank_ids,
@@ -714,6 +725,7 @@ Route::get('/exams/{exam}/live-dashboard', function (Request $request, Exam $exa
             'scheduled_at' => $exam->scheduled_at,
             'schedule_start_at' => $exam->schedule_start_at,
             'schedule_end_at' => $exam->schedule_end_at,
+            'ends_at_close' => (bool) $exam->ends_at_close,
             'delivery_mode' => $deliveryMode,
             'shuffle_questions' => (bool) $exam->shuffle_questions,
             'one_take_only' => (bool) $exam->one_take_only,

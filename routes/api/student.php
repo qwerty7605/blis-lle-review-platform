@@ -594,13 +594,6 @@ Route::post('/student/exams/{exam}/start', function (
         ], 422);
     }
 
-    if ($scheduleEndAt && now()->gt($scheduleEndAt)) {
-        return response()->json([
-            'message' => 'This exam is no longer available because the schedule window has ended.',
-            'available_until' => $scheduleEndAt,
-        ], 422);
-    }
-
     $questionBankIds = $exam->resolvedQuestionBankIds();
 
     if ($questionBankIds === []) {
@@ -650,6 +643,7 @@ Route::post('/student/exams/{exam}/start', function (
         $maxAllowedAttempts,
         $durationMinutes,
         $assignmentArchived,
+        $scheduleEndAt,
         $autoSubmitExpiredAttempt
     ): array {
         User::query()->whereKey($user->id)->lockForUpdate()->first();
@@ -684,6 +678,14 @@ Route::post('/student/exams/{exam}/start', function (
 
         if ($openElsewhere) {
             return ['open_elsewhere', $openElsewhere];
+        }
+
+        // Checked only now, after the look for an attempt under way: the
+        // closing time stops new starts, but someone who started before it
+        // comes back to finish (or, with ends_at_close, finds the attempt
+        // already handed in at the closing time).
+        if ($scheduleEndAt && now()->gt($scheduleEndAt)) {
+            return ['closed', null];
         }
 
         // The room page stops listing an archived exam, but that is the page.
@@ -742,7 +744,7 @@ Route::post('/student/exams/{exam}/start', function (
             'answered_count' => 0,
             'correct_answers' => 0,
             'started_at' => $startedAt,
-            'expires_at' => $startedAt->copy()->addMinutes($durationMinutes),
+            'expires_at' => $exam->attemptDeadline($startedAt, $durationMinutes),
         ]);
 
         $rows = [];
@@ -778,6 +780,13 @@ Route::post('/student/exams/{exam}/start', function (
             'message' => $otherRoomName
                 ? "You already have this exam in progress in {$otherRoomName}. Finish it there first."
                 : 'You already have this exam in progress in another room. Finish it there first.',
+        ], 422);
+    }
+
+    if ($outcome === 'closed') {
+        return response()->json([
+            'message' => 'This exam is no longer available because the schedule window has ended.',
+            'available_until' => $scheduleEndAt,
         ], 422);
     }
 
