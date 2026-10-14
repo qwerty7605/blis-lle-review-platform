@@ -31,6 +31,7 @@ class Exam extends Model
         'scheduled_at',
         'schedule_start_at',
         'schedule_end_at',
+        'ends_at_close',
         'delivery_mode',
         'one_take_only',
         'shuffle_questions',
@@ -49,6 +50,7 @@ class Exam extends Model
         'scheduled_at' => 'datetime',
         'schedule_start_at' => 'datetime',
         'schedule_end_at' => 'datetime',
+        'ends_at_close' => 'boolean',
         'one_take_only' => 'boolean',
         'shuffle_questions' => 'boolean',
         'school_year' => 'integer',
@@ -226,6 +228,42 @@ class Exam extends Model
         }
 
         return !($closesAt && now()->gt($closesAt));
+    }
+
+    /**
+     * When an attempt started at $startedAt must be handed in: its full
+     * duration, or the closing time if the exam ends there (ends_at_close)
+     * and that comes first.
+     */
+    public function attemptDeadline(CarbonInterface $startedAt, int $durationMinutes): CarbonInterface
+    {
+        $deadline = $startedAt->copy()->addMinutes($durationMinutes);
+
+        if ($this->ends_at_close && $this->schedule_end_at && $this->schedule_end_at->lt($deadline)) {
+            return $this->schedule_end_at->copy();
+        }
+
+        return $deadline;
+    }
+
+    /**
+     * Works out again the deadline of every attempt still under way, after
+     * the closing time or ends_at_close changed. Moving the closing time
+     * later, or switching ends_at_close off, gives back time it had cut.
+     */
+    public function refreshOpenAttemptDeadlines(): void
+    {
+        $this->attempts()
+            ->where('status', ExamAttempt::STATUS_IN_PROGRESS)
+            ->whereNotNull('started_at')
+            ->get()
+            ->each(function (ExamAttempt $attempt): void {
+                $deadline = $this->attemptDeadline($attempt->started_at, max(1, (int) $attempt->duration_minutes));
+
+                if (!$attempt->expires_at || !$attempt->expires_at->eq($deadline)) {
+                    $attempt->forceFill(['expires_at' => $deadline])->save();
+                }
+            });
     }
 
     public function hasQuestionSet(): bool

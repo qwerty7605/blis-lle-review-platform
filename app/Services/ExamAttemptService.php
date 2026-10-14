@@ -63,7 +63,7 @@ class ExamAttemptService
     public function buildAttemptPayload(ExamAttempt $attempt): array
     {
         $attempt->loadMissing([
-            'exam:id,title,subject,question_bank_id,total_items,duration_minutes,scheduled_at,schedule_start_at,schedule_end_at,delivery_mode,one_take_only,shuffle_questions,results_visibility_mode',
+            'exam:id,title,subject,question_bank_id,total_items,duration_minutes,scheduled_at,schedule_start_at,schedule_end_at,ends_at_close,delivery_mode,one_take_only,shuffle_questions,results_visibility_mode',
             'exam.questionBanks:id,title,subject,total_items',
             'room:id,name,code',
             'attemptQuestions.question.options:id,question_bank_question_id,option_label,option_text,is_correct',
@@ -189,6 +189,7 @@ class ExamAttemptService
                 'scheduled_at' => $attempt->exam?->scheduled_at,
                 'schedule_start_at' => $attempt->exam?->schedule_start_at,
                 'schedule_end_at' => $attempt->exam?->schedule_end_at,
+                'ends_at_close' => (bool) ($attempt->exam?->ends_at_close ?? false),
                 'delivery_mode' => $deliveryMode,
                 'one_take_only' => (bool) ($attempt->exam?->one_take_only ?? false),
                 'shuffle_questions' => (bool) ($attempt->exam?->shuffle_questions ?? false),

@@ -102,8 +102,30 @@ export function canStudentTakeExam(exam) {
   return true
 }
 
+/*
+ * The deadline of an attempt still under way, while it has not passed. After
+ * the exam's end time this is what lets a student who started before it come
+ * back to finish: their full duration, or the end time itself when the exam
+ * ends for everyone there (ends_at_close; the server set the deadline so).
+ */
+export function studentAttemptFinishBy(exam) {
+  if (!isStudentExamInProgress(exam)) return null
+
+  const deadline = parseDateTime(exam?.student_attempt_expires_at)
+  if (!deadline) return null
+
+  if (deadline.getTime() <= now()) return null
+  beatAt(deadline.getTime())
+
+  return exam.student_attempt_expires_at
+}
+
 export function canStudentOpenExam(exam) {
   if (isStudentExamRetakeLimitReached(exam) && studentSubmittedAttemptId(exam)) {
+    return true
+  }
+
+  if (isStudentExamEnded(exam) && studentAttemptFinishBy(exam)) {
     return true
   }
 
