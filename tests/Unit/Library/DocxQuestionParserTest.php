@@ -180,4 +180,65 @@ class DocxQuestionParserTest extends TestCase
         $this->assertNull($result['questions'][2]['answer_label']);
         $this->assertContains('Question 3 answer key "F" does not match any option label.', $result['warnings']);
     }
+
+    public function test_form_lines_and_blank_lines_are_skipped_and_a_wrapped_question_is_joined(): void
+    {
+        $result = $this->parse($this->lines([
+            'Name: ______________',
+            '',
+            'Which of the following is a union catalog',
+            'used by many libraries in the region',
+            'a. WorldCat',
+            'b. OPAC',
+            'c. ILS',
+            'd. MARC',
+            'What does MARC stand for?',
+            'a. Machine Readable Cataloging',
+            'b. Main Record',
+            'c. Map',
+            'd. None',
+        ]));
+
+        $this->assertCount(2, $result['questions']);
+        $this->assertSame('Which of the following is a union catalog used by many libraries in the region', $result['questions'][0]['text']);
+        $this->assertSame(['WorldCat', 'OPAC', 'ILS', 'MARC'], array_column($result['questions'][0]['options'], 'text'));
+    }
+
+    public function test_a_line_after_word_numbered_choices_is_left_out_with_a_warning(): void
+    {
+        $path = $this->document(function (Section $section, PhpWord $word): void {
+            $word->addNumberingStyle('exam', ['type' => 'multilevel', 'levels' => [
+                ['format' => 'decimal', 'text' => '%1.', 'left' => 360, 'hanging' => 360],
+                ['format' => 'lowerLetter', 'text' => '%2.', 'left' => 720, 'hanging' => 360],
+            ]]);
+            foreach ([1, 2, 3] as $number) {
+                $section->addListItem("Which is a reference source number {$number}?", 0, null, 'exam');
+                foreach (['Almanac', 'Novel', 'Poem'] as $choice) {
+                    $section->addListItem($choice, 1, null, 'exam');
+                }
+            }
+            $section->addText('Good luck everyone, do your best');
+        });
+
+        $result = $this->parse($path);
+
+        $this->assertCount(3, $result['questions']);
+        $this->assertSame(['A', 'B', 'C'], array_column($result['questions'][2]['options'], 'label'));
+        $this->assertContains('A line after question 3 is not part of any question and was left out: "Good luck everyone, do your best"', $result['warnings']);
+    }
+
+    public function test_bold_on_every_choice_of_a_question_is_not_an_answer_mark_there(): void
+    {
+        $path = $this->document(function (Section $section): void {
+            foreach ([1, 2, 3, 4] as $number) {
+                $section->addText("{$number}. Which is right for {$number}?");
+                foreach (['a', 'b', 'c', 'd'] as $letter) {
+                    $bold = $number === 4 || $letter === 'a';
+                    $section->addText("{$letter}. Choice {$letter}{$number}", $bold ? ['bold' => true] : []);
+                }
+            }
+        });
+
+        $this->assertSame(['A', 'A', 'A', null], array_column($this->parse($path)['questions'], 'answer_label'));
+    }
 }
