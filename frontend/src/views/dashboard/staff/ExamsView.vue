@@ -509,6 +509,29 @@
                         </label>
                       </div>
                     </div>
+
+                    <div class="field-stack" style="margin-top: 16px;">
+                      <span class="field-label">At The End Time</span>
+                      <div class="exam-policy-list" :class="{ 'is-disabled': !examForm.schedule_end_at }">
+                        <label class="check-item exam-policy-item">
+                          <input v-model="examForm.ends_at_close" type="radio" :value="false" :disabled="!examForm.schedule_end_at" />
+                          <span>
+                            <strong>Let them finish</strong>
+                            <small>No new starts after the end time. Anyone who started before it keeps their full duration.</small>
+                          </span>
+                        </label>
+                        <label class="check-item exam-policy-item">
+                          <input v-model="examForm.ends_at_close" type="radio" :value="true" :disabled="!examForm.schedule_end_at" />
+                          <span>
+                            <strong>End for everyone</strong>
+                            <small>Every attempt is submitted at the end time, even if its duration has not run out.</small>
+                          </span>
+                        </label>
+                      </div>
+                      <small v-if="!examForm.schedule_end_at" class="muted">
+                        Set an End time in the Schedule Window to choose this. With no end time, everyone gets the full duration.
+                      </small>
+                    </div>
                   </div>
                 </section>
 
@@ -599,6 +622,13 @@
                   <div class="exam-summary-block">
                     <span class="exam-summary-label">Schedule</span>
                     <p>{{ formatExamSchedule(examForm.schedule_start_at, examForm.schedule_end_at) }}</p>
+                    <small v-if="examForm.schedule_end_at">
+                      {{
+                        examForm.ends_at_close
+                          ? 'Every attempt ends at the end time.'
+                          : 'Students who start before the end time get their full duration.'
+                      }}
+                    </small>
                     <small>
                       {{
                         examForm.one_take_only
@@ -1916,5 +1946,13 @@ onBeforeUnmount(() => {
     width: 100%;
     justify-content: center;
   }
+}
+
+.exam-policy-list.is-disabled {
+  opacity: 0.55;
+}
+
+.exam-policy-list.is-disabled .exam-policy-item {
+  cursor: not-allowed;
 }
 </style>

@@ -150,6 +150,7 @@ export function useExamsModule() {
     duration_minutes: 90,
     schedule_start_at: '',
     schedule_end_at: '',
+    ends_at_close: false,
     one_take_only: false,
     shuffle_questions: false,
     results_visibility_mode: 'hidden',
@@ -244,6 +245,7 @@ export function useExamsModule() {
     examForm.question_bank_ids = []
     examForm.schedule_start_at = currentDateTimeLocalValue()
     examForm.schedule_end_at = ''
+    examForm.ends_at_close = false
     examTermChosen.value = false
     Object.assign(examForm, termForDate())
     examForm.room_ids = []
@@ -278,6 +280,7 @@ export function useExamsModule() {
     examForm.duration_minutes = Number(exam.duration_minutes ?? 1)
     examForm.schedule_start_at = toDateTimeLocalValue(exam.schedule_start_at ?? exam.scheduled_at)
     examForm.schedule_end_at = toDateTimeLocalValue(exam.schedule_end_at)
+    examForm.ends_at_close = Boolean(exam.ends_at_close)
     examForm.one_take_only = Boolean(exam.one_take_only)
     examForm.shuffle_questions = Boolean(exam.shuffle_questions)
     examForm.results_visibility_mode = exam.results_visibility_mode || 'hidden'
@@ -469,6 +472,7 @@ export function useExamsModule() {
       scheduled_at: scheduleStartAt,
       schedule_start_at: scheduleStartAt,
       schedule_end_at: scheduleEndAt,
+      ends_at_close: Boolean(scheduleEndAt && examForm.ends_at_close),
       one_take_only: Boolean(examForm.one_take_only),
       shuffle_questions: Boolean(examForm.shuffle_questions),
       results_visibility_mode: examForm.results_visibility_mode,

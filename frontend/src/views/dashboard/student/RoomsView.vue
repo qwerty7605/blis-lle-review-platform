@@ -148,7 +148,13 @@
                     <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
                   </div>
 
-                  <div v-if="isStudentExamEnded(exam)" class="rooms-exam-window">
+                  <div v-if="isStudentExamEnded(exam) && studentAttemptFinishBy(exam)" class="rooms-exam-window">
+                    <span class="rooms-exam-window-label">Finish By</span>
+                    <span class="rooms-exam-window-date">
+                      {{ formatLongDate(studentAttemptFinishBy(exam)) }} at {{ formatTimeOnly(studentAttemptFinishBy(exam)) }}
+                    </span>
+                  </div>
+                  <div v-else-if="isStudentExamEnded(exam)" class="rooms-exam-window">
                     <span class="rooms-exam-window-label">Window Ended</span>
                     <span class="rooms-exam-window-date">
                       {{ formatLongDate(examScheduleEnd(exam)) }} at {{ formatTimeOnly(examScheduleEnd(exam)) }}
@@ -709,7 +715,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatLongDate, formatRemainingDuration, formatTimeOnly } from '../composables/useDashboardFormatters'
-import { examScheduleEnd, isStudentExamEnded } from '../composables/studentExamAvailability'
+import { examScheduleEnd, isStudentExamEnded, studentAttemptFinishBy } from '../composables/studentExamAvailability'
 import { useRoomsModule } from '../composables/useRoomsModule'
 import { useCompactLayout } from '../composables/useViewport'
 import BottomSheet from '@/components/BottomSheet.vue'
