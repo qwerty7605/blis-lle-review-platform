@@ -131,4 +131,24 @@ class RemainingRouteGapsTest extends TestCase
 
         $this->artisan('demo:purge')->expectsOutput('No demo data found.')->assertSuccessful();
     }
+
+    public function test_a_student_cannot_open_a_room_they_are_not_in(): void
+    {
+        $room = $this->makeRoom($this->makeTeacher());
+        Sanctum::actingAs($this->makeStudent());
+
+        $this->getJson("/api/rooms/{$room->id}")->assertForbidden();
+    }
+
+    public function test_a_disabled_account_is_signed_out_of_the_reports_overview(): void
+    {
+        Sanctum::actingAs($this->makeTeacher(['is_active' => false]));
+
+        $this->getJson('/api/reports/overview')->assertForbidden()->assertJsonPath('message', 'Account is disabled.');
+    }
+
+    public function test_the_inspire_command_prints_a_quote(): void
+    {
+        $this->artisan('inspire')->assertSuccessful();
+    }
 }
