@@ -126,7 +126,7 @@
           </div>
         </div>
 
-        <button class="logout-btn" @click="handleLogout">
+        <button class="logout-btn" @click="showLogoutModal = true">
           <LogOut :size="16" />
           Log out
         </button>
@@ -187,6 +187,30 @@
         <RouterView />
       </main>
     </section>
+
+    <!-- One stray click on Log out used to end the session at once. -->
+    <teleport to="body">
+      <div v-if="showLogoutModal" class="modal-backdrop" @click.self="closeLogoutModal">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="logout-dialog-title">
+          <header class="modal-head">
+            <h4 id="logout-dialog-title">Log Out</h4>
+            <button type="button" class="modal-close" aria-label="Close" @click="closeLogoutModal">
+              <X :size="16" />
+            </button>
+          </header>
+
+          <p class="muted">Are you sure you want to log out?</p>
+
+          <div class="modal-actions">
+            <button type="button" class="ghost-btn" :disabled="loggingOut" @click="closeLogoutModal">Cancel</button>
+            <button type="button" class="danger-btn" :disabled="loggingOut" @click="handleLogout">
+              <LogOut :size="16" />
+              {{ loggingOut ? 'Logging Out...' : 'Log Out' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
   </div>
 </template>
 
@@ -415,9 +439,22 @@ onBeforeUnmount(() => {
 // once when the Settings page saves one (ANNOUNCEMENT_CHANGED_EVENT).
 useLiveRefresh(loadAnnouncement, { every: 5 * 60 * 1000 })
 
+const showLogoutModal = ref(false)
+const loggingOut = ref(false)
+
+function closeLogoutModal() {
+  if (!loggingOut.value) showLogoutModal.value = false
+}
+
 async function handleLogout() {
-  await auth.logout()
-  await router.push('/login')
+  loggingOut.value = true
+  try {
+    await auth.logout()
+    showLogoutModal.value = false
+    await router.push('/login')
+  } finally {
+    loggingOut.value = false
+  }
 }
 
 // The page behind an open drawer should not scroll under the reader's thumb.
