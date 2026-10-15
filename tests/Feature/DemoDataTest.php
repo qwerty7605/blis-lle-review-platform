@@ -10,6 +10,7 @@ use App\Models\Room;
 use App\Models\Topic;
 use App\Models\User;
 use App\Services\Demo\DemoData;
+use App\Services\Demo\DemoDataPurger;
 use Database\Seeders\ShowcaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -235,6 +236,40 @@ class DemoDataTest extends TestCase
 
         $this->assertSame($demoAccounts, User::query()->where('email', 'like', '%@' . DemoData::EMAIL_DOMAIN)->count());
         $this->assertDatabaseHas('exam_attempts', ['id' => $attempt->id]);
+    }
+
+    public function test_the_purger_itself_refuses_while_real_attempts_sit_in_a_demo_room(): void
+    {
+        $real = $this->realCourse();
+        $this->seed(ShowcaseSeeder::class);
+        $demoRoom = Room::query()->where('name', 'BLIS 4-A')->whereKeyNot($real['room']->id)->firstOrFail();
+        DB::table('exam_room')->insert(['exam_id' => $real['exam']->id, 'room_id' => $demoRoom->id, 'assigned_by' => $real['teacher']->id]);
+        $this->makeAttempt($real['exam'], $demoRoom, $real['student']);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Demo data was not removed, because real records would go with it');
+
+        (new DemoDataPurger())->purge();
+    }
+
+    public function test_declining_the_production_prompt_removes_nothing(): void
+    {
+        $this->seed(ShowcaseSeeder::class);
+        $accounts = User::query()->where('email', 'like', '%@' . DemoData::EMAIL_DOMAIN)->count();
+        $this->app['env'] = 'production';
+
+        $this->artisan('demo:purge')
+            ->expectsConfirmation('Are you sure you want to run this command?', 'no')
+            ->assertFailed();
+
+        $this->assertSame($accounts, User::query()->where('email', 'like', '%@' . DemoData::EMAIL_DOMAIN)->count());
+    }
+
+    public function test_an_address_with_no_at_sign_is_not_a_demo_address(): void
+    {
+        $this->assertFalse(DemoData::isDemoEmail('not-an-address'));
+        $this->assertFalse(DemoData::isDemoEmail(null));
+        $this->assertTrue(DemoData::isDemoEmail('someone@' . DemoData::EMAIL_DOMAIN));
     }
 
     public function test_dry_run_removes_nothing(): void
