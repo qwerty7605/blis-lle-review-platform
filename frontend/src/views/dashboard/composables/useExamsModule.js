@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { examDefaultsFor } from '@/utils/examDefaults'
 import { useLiveRefresh } from '@/utils/liveRefresh'
@@ -154,34 +154,13 @@ export function useExamsModule() {
     one_take_only: false,
     shuffle_questions: false,
     results_visibility_mode: 'hidden',
-    // Which semester the exam's score counts toward in the Estimated Outcome.
-    school_year: termForDate().school_year,
-    semester: termForDate().semester,
     room_ids: [],
   })
 
-  // The two follow the start date until the teacher picks them, as for a
-  // make-up exam held after its semester ended. An exam being edited keeps
-  // what it was filed under.
-  const examTermChosen = ref(false)
-
-  function markExamTermChosen() {
-    examTermChosen.value = true
-  }
-
-  watch(() => examForm.schedule_start_at, (start) => {
-    if (!examTermChosen.value) Object.assign(examForm, termForDate(start))
-  })
-
-  // A few school years either side of this one, and the exam's own.
-  const examSchoolYearOptions = computed(() => {
-    const current = termForDate().school_year
-    const years = new Set([Number(examForm.school_year)])
-    for (let year = current - 5; year <= current + 1; year++) years.add(year)
-
-    return [...years].filter(Number.isFinite).sort((left, right) => right - left)
-      .map((year) => ({ value: year, label: `${year}-${year + 1}` }))
-  })
+  // The semester an exam counts toward in the Estimated Outcome is not on the
+  // form: a new exam is filed by the server from its start date, and an
+  // edited one keeps its own unless its start date moves.
+  let examStartAsOpened = ''
 
   const groupedExamQuestionBanks = computed(() => {
     const groups = new Map()
@@ -246,8 +225,6 @@ export function useExamsModule() {
     examForm.schedule_start_at = currentDateTimeLocalValue()
     examForm.schedule_end_at = ''
     examForm.ends_at_close = false
-    examTermChosen.value = false
-    Object.assign(examForm, termForDate())
     examForm.room_ids = []
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
@@ -284,10 +261,7 @@ export function useExamsModule() {
     examForm.one_take_only = Boolean(exam.one_take_only)
     examForm.shuffle_questions = Boolean(exam.shuffle_questions)
     examForm.results_visibility_mode = exam.results_visibility_mode || 'hidden'
-    examTermChosen.value = true
-    Object.assign(examForm, exam.school_year && exam.semester
-      ? { school_year: Number(exam.school_year), semester: Number(exam.semester) }
-      : termForDate(exam.schedule_start_at ?? exam.scheduled_at ?? exam.created_at))
+    examStartAsOpened = examForm.schedule_start_at
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examError.value = ''
     examMessage.value = ''
@@ -476,9 +450,11 @@ export function useExamsModule() {
       one_take_only: Boolean(examForm.one_take_only),
       shuffle_questions: Boolean(examForm.shuffle_questions),
       results_visibility_mode: examForm.results_visibility_mode,
-      school_year: Number(examForm.school_year),
-      semester: Number(examForm.semester),
       room_ids: [...examForm.room_ids],
+    }
+
+    if (examForm.id && scheduleStartAt && examForm.schedule_start_at !== examStartAsOpened) {
+      Object.assign(payload, termForDate(scheduleStartAt))
     }
 
     try {
@@ -568,8 +544,6 @@ export function useExamsModule() {
     selectedQuestionBankTotalItems,
     createExamScheduleMin,
     createExamScheduleEndMin,
-    examSchoolYearOptions,
-    markExamTermChosen,
     examLoading,
     examSaving,
     examError,

@@ -445,30 +445,6 @@
                       <small class="muted">Leave both blank for always-available exams.</small>
                     </div>
 
-                    <div class="field-stack">
-                      <span class="field-label">School Year And Semester</span>
-                      <div class="exam-schedule-row">
-                        <label class="field-stack">
-                          <span class="field-label">School Year</span>
-                          <select v-model.number="examForm.school_year" class="text-input" @change="markExamTermChosen">
-                            <option v-for="year in examSchoolYearOptions" :key="year.value" :value="year.value">
-                              {{ year.label }}
-                            </option>
-                          </select>
-                        </label>
-                        <label class="field-stack">
-                          <span class="field-label">Semester</span>
-                          <select v-model.number="examForm.semester" class="text-input" @change="markExamTermChosen">
-                            <option :value="1">1st Semester</option>
-                            <option :value="2">2nd Semester</option>
-                          </select>
-                        </label>
-                      </div>
-                      <small class="muted">
-                        The semester this exam counts toward in a student's Estimated Outcome. Filled in from the
-                        start date; change it for a make-up exam.
-                      </small>
-                    </div>
 
                     <div class="field-stack">
                       <span class="field-label">Exam Attempt Options</span>
@@ -830,8 +806,6 @@ const {
   selectedQuestionBankSubject,
   selectedQuestionBankTotalItems,
   createExamScheduleMin,
-  examSchoolYearOptions,
-  markExamTermChosen,
   createExamScheduleEndMin,
   examLoading,
   examSaving,
