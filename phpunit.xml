@@ -32,5 +32,11 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- The demo's addresses and passwords come from a developer's .env; the tests expect the built-in ones. -->
+        <env name="DEMO_ADMIN_EMAIL" value=""/>
+        <env name="DEMO_ADMIN_PASSWORD" value=""/>
+        <env name="DEMO_TEACHER_EMAIL" value=""/>
+        <env name="DEMO_STUDENT_EMAIL" value=""/>
+        <env name="DEMO_SEED_PASSWORD" value=""/>
     </php>
 </phpunit>
