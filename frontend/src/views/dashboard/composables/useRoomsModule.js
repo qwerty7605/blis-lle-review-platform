@@ -822,7 +822,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       return 'post-answered'
     }
 
-    if (studentExamCurrentIndex.value === index) return 'pre-current'
+    // Current is a ring drawn over whichever of these it is (is-current),
+    // so the question being read still shows whether it is answered.
     if (hasAnswer) return 'pre-answered'
     if (isQuestionVisited(question.question_id)) return 'pre-blank'
     return 'pre-pending'
@@ -2021,6 +2022,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     isStudentOpenNavigationMode,
     isCurrentQuestionInputLocked,
     studentExamUnansweredCount,
+    questionHasAnswer,
     displayMemberRole,
     yearLevelLabel,
     canRemoveRoomMember,
