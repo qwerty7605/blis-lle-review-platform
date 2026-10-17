@@ -433,31 +433,57 @@
             >
               <div class="exam-status-legend">
                 <template v-if="!isStudentExamSubmitted">
-                  <span class="legend-item"><i class="legend-dot current" /> Current</span>
-                  <span class="legend-item"><i class="legend-dot answered" /> Answered</span>
-                  <span class="legend-item"><i class="legend-dot blank" /> Blank</span>
-                  <span class="legend-item"><i class="legend-ribbon" /> Bookmarked</span>
+                  <span class="legend-item"><i class="legend-swatch answered" /> Answered</span>
+                  <span class="legend-item"><i class="legend-swatch unanswered" /> Unanswered</span>
+                  <span class="legend-item"><i class="legend-swatch current" /> Current</span>
+                  <span class="legend-item"><i class="legend-ribbon" /> Marked</span>
                 </template>
                 <template v-else>
                   <span class="legend-item"><i class="legend-dot current-outline" /> Current</span>
                   <span class="legend-item"><i class="legend-dot answered" /> Answered</span>
                   <span class="legend-item"><i class="legend-dot missed" /> Not answered</span>
-                  <span class="legend-item"><i class="legend-ribbon" /> Bookmarked</span>
+                  <span class="legend-item"><i class="legend-ribbon" /> Marked</span>
                 </template>
               </div>
 
-              <div v-if="isStudentOpenNavigationMode || isStudentExamSubmitted" class="exam-question-jump immersive">
+              <!-- Show only what is left to do. -->
+              <div v-if="!isStudentExamSubmitted" class="exam-list-filters" role="group" aria-label="Show questions">
                 <button
-                  v-for="(question, index) in studentExamQuestions"
-                  :key="question.question_id"
+                  v-for="filter in examListFilters"
+                  :key="filter.value"
                   type="button"
-                  class="exam-jump-btn"
-                  :class="questionPaletteClass(question, index)"
-                  :disabled="studentExamSaving || studentExamSubmitting || studentExamBookmarking || (!isStudentOpenNavigationMode && !isStudentExamSubmitted)"
-                  @click="pickStudentExamQuestionFromList(index)"
+                  class="exam-list-filter"
+                  :class="{ active: examListFilter === filter.value }"
+                  :aria-pressed="examListFilter === filter.value ? 'true' : 'false'"
+                  @click="examListFilter = filter.value"
                 >
-                  {{ question.item_number }}
+                  <span>{{ filter.label }}</span>
+                  <strong>{{ filter.count }}</strong>
                 </button>
+              </div>
+
+              <div
+                v-if="isStudentOpenNavigationMode || isStudentExamSubmitted"
+                class="exam-question-jump immersive"
+                :class="{ 'is-dense': studentExamQuestions.length > 40 }"
+              >
+                <template v-for="(question, index) in studentExamQuestions" :key="question.question_id">
+                  <button
+                    v-if="examListShows(question)"
+                    type="button"
+                    class="exam-jump-btn"
+                    :class="questionPaletteClass(question, index)"
+                    :aria-label="examJumpLabel(question, index)"
+                    :aria-current="studentExamCurrentIndex === index && !examReviewOpen ? 'step' : undefined"
+                    :disabled="studentExamSaving || studentExamSubmitting || studentExamBookmarking || (!isStudentOpenNavigationMode && !isStudentExamSubmitted)"
+                    @click="openExamQuestion(index)"
+                  >
+                    {{ question.item_number }}
+                  </button>
+                </template>
+                <p v-if="examListFilter !== 'all' && examListFilterCount === 0" class="exam-list-empty">
+                  {{ examListFilter === 'unanswered' ? 'Every question is answered.' : 'No questions marked for review.' }}
+                </p>
               </div>
 
               <!-- From 901px up Submit sits under the list, as in Moodle's quiz
@@ -471,10 +497,10 @@
                   type="button"
                   class="primary-btn"
                   :disabled="studentExamSubmitting"
-                  @click="openStudentExamSubmitConfirm"
+                  @click="openExamReview"
                 >
                   <RefreshCw v-if="studentExamSubmitting" :size="14" class="spin-soft" />
-                  <span>{{ studentExamSubmitting ? 'Submitting...' : 'Submit Exam' }}</span>
+                  <span>{{ studentExamSubmitting ? 'Submitting...' : 'Review & Submit' }}</span>
                 </button>
               </div>
             </component>
@@ -484,6 +510,88 @@
                 <RefreshCw :size="16" class="spin-soft" />
                 <span>Taking you to your results...</span>
               </div>
+
+              <!-- The last step before submitting, as in most exam software:
+                   what is unanswered and what is marked, each a click away. -->
+              <section
+                v-else-if="examReviewOpen && !isStudentExamSubmitted"
+                class="exam-review-screen"
+                aria-labelledby="exam-review-title"
+              >
+                <p class="exam-review-kicker">Before you submit</p>
+                <h3 id="exam-review-title">Review Your Answers</h3>
+
+                <dl class="exam-review-stats">
+                  <div>
+                    <dt>Answered</dt>
+                    <dd>{{ studentExamQuestions.length - studentExamUnansweredCount }}<small> / {{ studentExamQuestions.length }}</small></dd>
+                  </div>
+                  <div :class="{ 'is-attention': studentExamUnansweredCount > 0 }">
+                    <dt>Unanswered</dt>
+                    <dd>{{ studentExamUnansweredCount }}</dd>
+                  </div>
+                  <div>
+                    <dt>Marked for review</dt>
+                    <dd>{{ examMarkedIndexes.length }}</dd>
+                  </div>
+                </dl>
+
+                <div v-if="examUnansweredIndexes.length > 0" class="exam-review-group">
+                  <h4>Unanswered</h4>
+                  <div class="exam-review-numbers">
+                    <button
+                      v-for="index in examUnansweredIndexes"
+                      :key="`u-${index}`"
+                      type="button"
+                      class="exam-jump-btn pre-blank"
+                      :class="{ 'has-bookmark': studentExamQuestions[index].is_bookmarked }"
+                      @click="openExamQuestion(index)"
+                    >
+                      {{ studentExamQuestions[index].item_number }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="examMarkedIndexes.length > 0" class="exam-review-group">
+                  <h4>Marked for review</h4>
+                  <div class="exam-review-numbers">
+                    <button
+                      v-for="index in examMarkedIndexes"
+                      :key="`m-${index}`"
+                      type="button"
+                      class="exam-jump-btn has-bookmark"
+                      :class="questionPaletteClass(studentExamQuestions[index], -1)"
+                      @click="openExamQuestion(index)"
+                    >
+                      {{ studentExamQuestions[index].item_number }}
+                    </button>
+                  </div>
+                </div>
+
+                <p v-if="examUnansweredIndexes.length === 0 && examMarkedIndexes.length === 0" class="exam-review-clear">
+                  <CheckCircle2 :size="18" /> Every question is answered and none is marked for review.
+                </p>
+
+                <p class="exam-review-note">The timer keeps running while you review. Submitting is final.</p>
+
+                <div class="exam-review-actions">
+                  <button type="button" class="ghost-btn" @click="closeExamReview">
+                    <ArrowLeft :size="16" /> Question {{ currentStudentExamQuestion?.item_number }}
+                  </button>
+                  <button
+                    v-if="examUnansweredIndexes.length > 0"
+                    type="button"
+                    class="ghost-btn"
+                    @click="openExamQuestion(examUnansweredIndexes[0])"
+                  >
+                    First Unanswered
+                  </button>
+                  <button type="button" class="primary-btn" :disabled="studentExamSubmitting" @click="openStudentExamSubmitConfirm">
+                    <RefreshCw v-if="studentExamSubmitting" :size="14" class="spin-soft" />
+                    <span>{{ studentExamSubmitting ? 'Submitting...' : 'Submit Exam' }}</span>
+                  </button>
+                </div>
+              </section>
 
               <article v-else-if="currentStudentExamQuestion" class="exam-attempt-card immersive">
                 <header class="surface-head">
@@ -535,6 +643,11 @@
                     />
                     <span class="exam-option-letter" aria-hidden="true">{{ option.label }}</span>
                     <span class="exam-option-text">{{ option.text }}</span>
+                    <CheckCircle2
+                      v-if="!isStudentExamSubmitted && studentAnswerDraft.selected_option_id === option.id"
+                      class="exam-option-check"
+                      aria-hidden="true"
+                    />
                   </label>
                 </div>
 
@@ -557,7 +670,7 @@
                 </div>
               </article>
 
-              <div v-if="!isStudentExamResultSummaryVisible" class="exam-attempt-footer">
+              <div v-if="!isStudentExamResultSummaryVisible && !examReviewOpen" class="exam-attempt-footer">
                 <button
                   v-if="isStudentExamSubmitted"
                   type="button"
@@ -573,7 +686,7 @@
                   class="bookmark-toggle-btn"
                   :class="{ 'is-bookmarked': currentStudentExamQuestion.is_bookmarked, 'is-loading': studentExamBookmarking }"
                   :aria-pressed="currentStudentExamQuestion.is_bookmarked ? 'true' : 'false'"
-                  :title="currentStudentExamQuestion.is_bookmarked ? 'Remove bookmark' : 'Bookmark this question'"
+                  :title="currentStudentExamQuestion.is_bookmarked ? 'Remove the mark' : 'Mark this question to come back to it'"
                   :disabled="studentExamSaving || studentExamSubmitting || studentExamBookmarking"
                   @click="toggleCurrentQuestionBookmark"
                 >
@@ -581,7 +694,7 @@
                   <BookmarkCheck v-else-if="currentStudentExamQuestion.is_bookmarked" :size="14" />
                   <Bookmark v-else :size="14" />
                   <span class="bookmark-toggle-label">
-                    {{ currentStudentExamQuestion.is_bookmarked ? 'Bookmarked' : 'Bookmark' }}
+                    {{ currentStudentExamQuestion.is_bookmarked ? 'Marked for Review' : 'Mark for Review' }}
                   </span>
                 </button>
 
@@ -606,13 +719,16 @@
                   >
                     Previous
                   </button>
+                  <!-- On the last question Next becomes the way to the review
+                       screen; after submitting it simply stops there. -->
                   <button
                     type="button"
                     class="ghost-btn"
-                    :disabled="studentExamCurrentIndex >= studentExamQuestions.length - 1 || studentExamSaving || studentExamSubmitting || studentExamBookmarking"
-                    @click="goToStudentExamQuestion(1)"
+                    :class="{ 'is-review-step': isLastExamQuestion && !isStudentExamSubmitted }"
+                    :disabled="(isLastExamQuestion && isStudentExamSubmitted) || studentExamSaving || studentExamSubmitting || studentExamBookmarking"
+                    @click="isLastExamQuestion ? openExamReview() : goToStudentExamQuestion(1)"
                   >
-                    Next
+                    {{ isLastExamQuestion && !isStudentExamSubmitted ? 'Review Answers' : 'Next' }}
                   </button>
                 </div>
 
@@ -621,22 +737,47 @@
                   type="button"
                   class="primary-btn"
                   :disabled="studentExamSubmitting"
-                  @click="openStudentExamSubmitConfirm"
+                  @click="openExamReview"
                 >
                   <RefreshCw v-if="studentExamSubmitting" :size="14" class="spin-soft" />
-                  <span>{{ studentExamSubmitting ? 'Submitting...' : 'Submit Exam' }}</span>
+                  <span>{{ studentExamSubmitting ? 'Submitting...' : 'Finish' }}</span>
                 </button>
               </div>
 
-              <p v-if="!isExamMobileViewport && !isStudentExamResultSummaryVisible" class="exam-key-hint">
-                <kbd aria-label="Left arrow"><ArrowLeft :size="11" /></kbd> <kbd aria-label="Right arrow"><ArrowRight :size="11" /></kbd> previous / next question
-                <span aria-hidden="true">·</span>
-                <template v-if="!isStudentExamSubmitted">
-                  <kbd aria-label="Up arrow"><ArrowUp :size="11" /></kbd> <kbd aria-label="Down arrow"><ArrowDown :size="11" /></kbd> or <kbd>A</kbd>–<kbd>{{ lastOptionLetter }}</kbd> choose an answer
-                  <span aria-hidden="true">·</span>
-                </template>
-                <kbd>Enter</kbd> next question
-              </p>
+              <!-- Shortcuts behind a link (or "?"), not a line always on screen. -->
+              <div v-if="!isExamMobileViewport && !isStudentExamResultSummaryVisible && !examReviewOpen" class="exam-shortcuts">
+                <button
+                  type="button"
+                  class="exam-shortcuts-toggle"
+                  :aria-expanded="examShortcutsOpen ? 'true' : 'false'"
+                  aria-controls="exam-shortcuts-list"
+                  @click="examShortcutsOpen = !examShortcutsOpen"
+                >
+                  <Keyboard :size="15" /> Keyboard shortcuts
+                </button>
+                <dl v-if="examShortcutsOpen" id="exam-shortcuts-list" class="exam-shortcuts-list">
+                  <div>
+                    <dt><kbd aria-label="Left arrow"><ArrowLeft :size="12" /></kbd><kbd aria-label="Right arrow"><ArrowRight :size="12" /></kbd></dt>
+                    <dd>Previous / next question</dd>
+                  </div>
+                  <div v-if="!isStudentExamSubmitted">
+                    <dt><kbd aria-label="Up arrow"><ArrowUp :size="12" /></kbd><kbd aria-label="Down arrow"><ArrowDown :size="12" /></kbd></dt>
+                    <dd>Move the answer up or down</dd>
+                  </div>
+                  <div v-if="!isStudentExamSubmitted">
+                    <dt><kbd>A</kbd>–<kbd>{{ lastOptionLetter }}</kbd></dt>
+                    <dd>Choose that answer</dd>
+                  </div>
+                  <div>
+                    <dt><kbd>Enter</kbd></dt>
+                    <dd>{{ isStudentExamSubmitted ? 'Next question' : 'Next question; on the last, review your answers' }}</dd>
+                  </div>
+                  <div>
+                    <dt><kbd>?</kbd></dt>
+                    <dd>Show or hide this list</dd>
+                  </div>
+                </dl>
+              </div>
             </section>
           </div>
         </div>
@@ -752,6 +893,7 @@ import {
   CircleUserRound,
   Clock3,
   DoorOpen,
+  Keyboard,
   LogOut,
   RefreshCw,
   Search,
@@ -825,6 +967,7 @@ const {
   isStudentOpenNavigationMode,
   isCurrentQuestionInputLocked,
   studentExamUnansweredCount,
+  questionHasAnswer,
   yearLevelLabel,
   canStudentOpenExam,
   isStudentExamInProgress,
@@ -917,12 +1060,93 @@ const lastOptionLetter = computed(() => {
 
 const examBusy = computed(() => studentExamSaving.value || studentExamSubmitting.value || studentExamBookmarking.value)
 
+// ---------------------------------------------- question list and review
+const examReviewOpen = ref(false)
+const examShortcutsOpen = ref(false)
+const examListFilter = ref('all')
+
+const isLastExamQuestion = computed(() => (
+  studentExamQuestions.value.length > 0 && studentExamCurrentIndex.value >= studentExamQuestions.value.length - 1
+))
+
+const examUnansweredIndexes = computed(() => studentExamQuestions.value
+  .map((question, index) => (questionHasAnswer(question) ? -1 : index))
+  .filter((index) => index >= 0))
+
+const examMarkedIndexes = computed(() => studentExamQuestions.value
+  .map((question, index) => (question.is_bookmarked ? index : -1))
+  .filter((index) => index >= 0))
+
+const examListFilters = computed(() => [
+  { value: 'all', label: 'All', count: studentExamQuestions.value.length },
+  { value: 'unanswered', label: 'Unanswered', count: examUnansweredIndexes.value.length },
+  { value: 'marked', label: 'Marked', count: examMarkedIndexes.value.length },
+])
+
+const examListFilterCount = computed(() => (
+  examListFilters.value.find((filter) => filter.value === examListFilter.value)?.count ?? 0
+))
+
+function examListShows(question) {
+  if (isStudentExamSubmitted.value || examListFilter.value === 'all') return true
+  if (examListFilter.value === 'marked') return Boolean(question.is_bookmarked)
+
+  return !questionHasAnswer(question)
+}
+
+function examJumpLabel(question, index) {
+  const parts = [`Question ${question.item_number}`]
+  if (!isStudentExamSubmitted.value) parts.push(questionHasAnswer(question) ? 'answered' : 'unanswered')
+  if (question.is_bookmarked) parts.push('marked for review')
+  if (index === studentExamCurrentIndex.value) parts.push('current')
+
+  return parts.join(', ')
+}
+
+function openExamQuestion(index) {
+  examReviewOpen.value = false
+  pickStudentExamQuestionFromList(index)
+}
+
+function openExamReview() {
+  if (isStudentExamSubmitted.value || examBusy.value) return
+
+  examShortcutsOpen.value = false
+  examReviewOpen.value = true
+  // On a phone the question list is a sheet; the review replaces it.
+  if (isExamMobileViewport.value) setExamQuestionListOpen(false)
+}
+
+function closeExamReview() {
+  examReviewOpen.value = false
+}
+
+// A new exam, or one just submitted, starts on its questions, unfiltered.
+watch(() => studentExamAttempt.value?.id, () => {
+  examReviewOpen.value = false
+  examListFilter.value = 'all'
+})
+
+watch(isStudentExamSubmitted, (submitted) => {
+  if (submitted) examReviewOpen.value = false
+})
+
 // A key pressed while the answer just chosen is still saving is kept, and
 // acted on once it has saved, so a quick "B then Enter" is not lost.
 let pendingExamStep = 0
 
 function stepExamQuestion(step) {
   const target = studentExamCurrentIndex.value + step
+  // Past the last question is the review screen (never a submit).
+  if (step > 0 && target > studentExamQuestions.value.length - 1 && !isStudentExamSubmitted.value) {
+    if (examBusy.value) {
+      pendingExamStep = step
+      return
+    }
+
+    openExamReview()
+    return
+  }
   if (target < 0 || target > studentExamQuestions.value.length - 1) return
 
   if (examBusy.value) {
@@ -960,6 +1184,26 @@ function handleExamKeydown(event) {
   if (target?.closest?.('textarea, select, [contenteditable="true"], input:not([type="radio"])')) return
   // A focused button keeps its own Enter and Space.
   if ((event.key === 'Enter' || event.key === ' ') && target?.closest?.('button, a')) return
+
+  if (event.key === '?') {
+    event.preventDefault()
+    if (!examReviewOpen.value && !isExamMobileViewport.value) examShortcutsOpen.value = !examShortcutsOpen.value
+    return
+  }
+
+  if (event.key === 'Escape' && examShortcutsOpen.value) {
+    examShortcutsOpen.value = false
+    return
+  }
+
+  // On the review screen only "back" means anything; Enter never submits.
+  if (examReviewOpen.value) {
+    if (event.key === 'ArrowLeft' || event.key === 'Escape') {
+      event.preventDefault()
+      closeExamReview()
+    }
+    return
+  }
 
   const question = currentStudentExamQuestion.value
   const options = question.question_type === 'open_ended' ? [] : (question.options ?? [])
