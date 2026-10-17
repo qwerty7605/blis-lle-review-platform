@@ -29,6 +29,7 @@ const SettingsView = () => import('../views/dashboard/shared/SettingsView.vue')
 const UsersView = () => import('../views/dashboard/admin/UsersView.vue')
 const YearEndView = () => import('../views/dashboard/admin/YearEndView.vue')
 const AuditView = () => import('../views/dashboard/admin/AuditView.vue')
+const FeedbackView = () => import('../views/dashboard/admin/FeedbackView.vue')
 
 function dashboardRouteMeta(key) {
   const moduleMeta = getDashboardModuleMeta(key)
@@ -151,6 +152,12 @@ const routes = [
         name: 'dashboard-audit',
         component: AuditView,
         meta: dashboardRouteMeta('audit'),
+      },
+      {
+        path: 'feedback',
+        name: 'dashboard-feedback',
+        component: FeedbackView,
+        meta: dashboardRouteMeta('feedback'),
       },
     ],
   },
