@@ -8108,14 +8108,14 @@ a.assignment-chip.is-link:hover {
   /* A long exam: smaller cells, more of them to a row, so a 100-question
      exam fits the list on a full-HD screen without scrolling. */
   .exam-attempt-sidebar .exam-question-jump.immersive.is-dense {
-    grid-template-columns: repeat(auto-fill, minmax(clamp(30px, 1vw + 11px, 40px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(clamp(34px, 1vw + 14px, 42px), 1fr));
     gap: clamp(4px, 0.3vw, 6px);
   }
 
   .exam-attempt-sidebar .exam-question-jump.immersive.is-dense .exam-jump-btn {
-    min-height: clamp(28px, 2.9vh, 38px);
+    min-height: clamp(32px, 3.3vh, 40px);
     border-radius: 7px;
-    font-size: clamp(11.5px, 0.25vw + 7.5px, 14px);
+    font-size: clamp(13px, 0.25vw + 8.5px, 14.5px);
   }
 
   .exam-attempt-sidebar .exam-list-filter {
