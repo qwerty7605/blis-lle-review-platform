@@ -7518,47 +7518,186 @@ a.assignment-chip.is-link:hover {
 }
 
 /*
- * The exam on a desktop (901px and up): the question, its choices and the
- * row of Bookmark / Previous / Next sit together in one centred column, the
- * card only as tall as the question, so the buttons are right under the
- * last choice instead of at the bottom of the screen. Submit is under the
- * question list (.exam-sidebar-submit). Phones keep the pinned row.
+ * The exam on a desktop (901px and up). No boxes around the question or
+ * its buttons: the white of the screen is the page, and the question, its
+ * choices and Bookmark / Previous / Next read down one centred column. The
+ * column, the type and the controls all grow with the screen, the column
+ * only up to a comfortable reading width (a line much past 90 characters is
+ * hard to follow back to its start). Submit is under the question list
+ * (.exam-sidebar-submit). Phones keep their own layout above.
  */
 @media (min-width: 901px) {
+  .exam-attempt-layout {
+    grid-template-columns: clamp(220px, 17vw, 300px) minmax(0, 1fr);
+    gap: clamp(14px, 2vw, 40px);
+  }
+
   .exam-attempt-main {
     align-items: center;
-    padding-top: clamp(0px, 2.5vh, 28px);
+    gap: 0;
+    /* More room above on a tall screen, so the question sits nearer the
+       middle without jumping about as questions change length. */
+    padding: clamp(4px, 7vh, 110px) clamp(0px, 1vw, 16px) 0;
   }
 
   .exam-attempt-main > .exam-attempt-card.immersive,
   .exam-attempt-main > .exam-attempt-footer,
   .exam-attempt-main > .exam-key-hint {
-    width: min(100%, 900px);
+    width: min(100%, clamp(720px, 58vw, 1120px));
   }
 
+  /* The question: no frame, it scrolls on its own if it is very long. */
   .exam-attempt-main > .exam-attempt-card.immersive {
     flex: 0 1 auto;
-    padding: clamp(18px, 2.4vw, 28px) clamp(18px, 2.6vw, 32px);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    gap: clamp(14px, 2.4vh, 28px);
+  }
+
+  .exam-attempt-card.immersive .surface-head h4 {
+    font-size: clamp(13px, 0.55vw + 7px, 17px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .exam-question-of {
+    font-weight: 600;
+  }
+
+  .exam-attempt-card.immersive .exam-attempt-question-text {
+    font-size: clamp(18px, 0.85vw + 9px, 28px);
+    line-height: 1.5;
+    font-weight: 500;
+    color: var(--lnu-navy-deep);
+  }
+
+  .exam-attempt-card.immersive .exam-question-list {
+    font-size: clamp(16px, 0.6vw + 8px, 22px);
   }
 
   .exam-attempt-main > .exam-attempt-card.immersive .exam-option-grid {
     max-width: none;
+    gap: clamp(8px, 1.3vh, 14px);
   }
 
+  .exam-attempt-card.immersive .exam-option-card {
+    gap: clamp(12px, 1vw, 18px);
+    padding: clamp(11px, 1.7vh, 20px) clamp(14px, 1.2vw, 22px);
+    border-radius: clamp(10px, 0.8vw, 14px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-text {
+    font-size: clamp(15px, 0.5vw + 9px, 21px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-letter {
+    width: clamp(28px, 1.3vw + 10px, 38px);
+    height: clamp(28px, 1.3vw + 10px, 38px);
+    border-radius: clamp(8px, 0.6vw, 10px);
+    font-size: clamp(12.5px, 0.4vw + 7px, 16px);
+  }
+
+  .exam-attempt-card.immersive .exam-question-review-panel {
+    font-size: clamp(14px, 0.4vw + 9px, 18px);
+  }
+
+  /* The buttons: a plain row under the choices, set off by a rule. */
   .exam-attempt-main > .exam-attempt-footer {
     flex: 0 0 auto;
-    background: var(--surface);
+    margin-top: clamp(18px, 3vh, 36px);
+    padding: clamp(14px, 2.2vh, 24px) 0 0;
+    border: 0;
+    border-top: 1px solid var(--border-soft);
+    border-radius: 0;
+    background: none;
+    gap: clamp(8px, 0.8vw, 14px);
   }
 
   /* With Submit gone from the row, Previous and Next sit on the right,
      under where a right hand ends a choice. */
   .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav {
     margin-left: auto;
+    gap: clamp(8px, 0.8vw, 14px);
   }
 
-  .exam-attempt-main > .exam-attempt-footer .ghost-btn {
-    min-width: 104px;
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn,
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    min-width: clamp(104px, 7.5vw, 150px);
+    padding: 0 clamp(14px, 1.2vw, 24px);
     justify-content: center;
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn svg,
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn svg {
+    width: clamp(14px, 1vw, 18px);
+    height: clamp(14px, 1vw, 18px);
+  }
+
+  /* Next is the move made most, so it is the filled one. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled) {
+    border-color: var(--lnu-navy);
+    background: var(--lnu-navy);
+    color: var(--lnu-gold-light);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled):hover {
+    border-color: var(--lnu-navy-light);
+    background: var(--lnu-navy-light);
+    color: var(--lnu-gold-light);
+  }
+
+  .exam-attempt-main > .exam-key-hint {
+    margin-top: clamp(10px, 1.6vh, 18px);
+    font-size: clamp(11.5px, 0.35vw + 7px, 14px);
+  }
+
+  .exam-attempt-main > .exam-key-hint kbd {
+    min-width: clamp(20px, 1.2vw + 4px, 26px);
+    line-height: clamp(18px, 1vw + 4px, 22px);
+    font-size: clamp(11px, 0.3vw + 6.5px, 13px);
+  }
+
+  /* The question list grows with the screen too. */
+  .exam-attempt-sidebar .exam-question-jump.immersive {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(38px, 2.4vw, 50px), 1fr));
+    gap: clamp(6px, 0.45vw, 9px);
+  }
+
+  .exam-attempt-sidebar .exam-jump-btn {
+    min-height: clamp(36px, 4.2vh, 48px);
+    font-size: clamp(13px, 0.35vw + 8px, 16px);
+  }
+
+  .exam-attempt-sidebar .legend-item {
+    font-size: clamp(11px, 0.3vw + 6.5px, 13.5px);
+  }
+
+  .exam-sidebar-submit p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-sidebar-submit .primary-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-head-copy h3 {
+    font-size: clamp(15px, 0.5vw + 9px, 20px);
+  }
+
+  .exam-head-copy p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-timer-value {
+    font-size: clamp(16px, 0.6vw + 9px, 22px);
   }
 }
 

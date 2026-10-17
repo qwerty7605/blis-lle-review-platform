@@ -487,7 +487,10 @@
 
               <article v-else-if="currentStudentExamQuestion" class="exam-attempt-card immersive">
                 <header class="surface-head">
-                  <h4>Question {{ currentStudentExamQuestion.item_number }}</h4>
+                  <h4>
+                    Question {{ currentStudentExamQuestion.item_number }}
+                    <span class="exam-question-of">of {{ studentExamQuestions.length }}</span>
+                  </h4>
                 </header>
 
                 <div v-if="currentQuestionStem.numberedItems.length > 0" class="exam-question-stem">
