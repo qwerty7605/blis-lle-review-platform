@@ -239,6 +239,12 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perHour(60)->by($request->ip());
         });
 
+        // Feedback is emailed to the developers, so one account cannot flood
+        // their inbox (or the administrator's list).
+        RateLimiter::for('feedback', function (Request $request): Limit {
+            return Limit::perHour(5)->by('feedback|'.($request->user()?->id ?? $request->ip()));
+        });
+
         RateLimiter::for('api', function (Request $request): Limit {
             // The default guard is 'web' (session), which never resolves for
             // token traffic -- ask the sanctum guard explicitly instead.
