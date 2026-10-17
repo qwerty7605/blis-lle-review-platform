@@ -75,20 +75,17 @@
                 <p>No published questions yet. Check back after your teacher publishes some.</p>
               </div>
 
-              <div v-else class="review-subject-list" role="radiogroup" aria-label="Subject">
+              <div v-else class="review-subject-grid">
                 <button
                   v-for="subject in readySubjects"
                   :key="subject.subject"
                   type="button"
-                  role="radio"
-                  class="review-subject-option"
+                  class="review-subject-chip"
                   :class="{ 'is-selected': form.subject === subject.subject }"
-                  :aria-checked="(form.subject === subject.subject).toString()"
+                  :aria-pressed="(form.subject === subject.subject).toString()"
                   @click="selectSubject(subject.subject)"
                 >
-                  <span class="review-subject-name">{{ subject.subject }}</span>
-                  <span class="review-subject-count">{{ subject.questionCount }} {{ subject.questionCount === 1 ? 'question' : 'questions' }}</span>
-                  <Check v-if="form.subject === subject.subject" :size="15" class="review-subject-check" aria-hidden="true" />
+                  {{ shortSubjectLabel(subject.subject) }}
                 </button>
               </div>
             </section>
@@ -339,7 +336,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { AlertCircle, BookOpen, Check, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
+import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
 
 // Kept in step with the 1000px rule in this file's styles: from there down
@@ -419,6 +416,19 @@ const progressPercent = computed(() => {
 
   return Math.round((answeredCount.value / total) * 100)
 })
+
+const shortSubjectLookup = {
+  'Cataloging and Classification': 'Cataloging',
+  'Indexing and Abstracting': 'Indexing',
+  'Information Technology': 'IT',
+  'Reference Services': 'Reference',
+  'Library Management': 'Management',
+  'Selection and Acquisition': 'Acquisition',
+}
+
+function shortSubjectLabel(subject) {
+  return shortSubjectLookup[subject] ?? subject
+}
 
 function scoreToneClass(score) {
   if (score >= 85) return 'strong'
@@ -699,59 +709,35 @@ function recommendationHeading(action) {
   line-height: 1.5;
 }
 
-/* ---- Subject list ----
-   One subject is picked, so it reads as a radio list: full name, how many
-   questions it has, a tick on the chosen one. */
-.review-subject-list {
+/* ---- Subject chips ----
+   No colour per subject: white like the other chips, navy once chosen. */
+.review-subject-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
 }
 
-.review-subject-option {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 15px;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 11px;
-  border: 1px solid rgba(13, 21, 71, 0.12);
+.review-subject-chip {
   border-radius: 10px;
+  padding: 9px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid rgba(13, 21, 71, 0.12);
   background: #fff;
-  color: var(--lnu-text);
-  text-align: left;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  color: var(--lnu-navy-deep);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.review-subject-option:hover:not(.is-selected) {
+.review-subject-chip:hover:not(.is-selected) {
   border-color: rgba(13, 21, 71, 0.26);
   background: #f6f7f9;
 }
 
-.review-subject-option.is-selected {
+.review-subject-chip.is-selected {
+  background: var(--lnu-navy);
   border-color: var(--lnu-navy);
-  box-shadow: inset 0 0 0 1px var(--lnu-navy);
-  background: rgba(26, 35, 126, 0.04);
-}
-
-.review-subject-name {
-  min-width: 0;
-  font-size: 12.5px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--lnu-navy-deep);
-}
-
-.review-subject-count {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--lnu-text-muted);
-  white-space: nowrap;
-}
-
-.review-subject-check {
-  grid-column: 3;
-  color: var(--lnu-navy);
+  color: #fff;
 }
 
 /* ---- Shared chips (topic, subtopic, difficulty, item count) ---- */
@@ -1243,12 +1229,9 @@ function recommendationHeading(action) {
     font-size: 13px;
   }
 
-  .review-subject-option {
+  .review-subject-chip {
     min-height: 44px;
-  }
-
-  .review-subject-name {
-    font-size: 13.5px;
+    font-size: 13px;
   }
 
   .review-chip {
