@@ -7516,3 +7516,632 @@ a.assignment-chip.is-link:hover {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/*
+ * The exam on a desktop (901px and up). No boxes around the question or
+ * its buttons: the white of the screen is the page, and the question, its
+ * choices and Bookmark / Previous / Next read down one centred column. The
+ * column, the type and the controls all grow with the screen, the column
+ * only up to a comfortable reading width (a line much past 90 characters is
+ * hard to follow back to its start). Submit is under the question list
+ * (.exam-sidebar-submit). Phones keep their own layout above.
+ */
+@media (min-width: 901px) {
+  .exam-attempt-layout {
+    grid-template-columns: clamp(220px, 17vw, 300px) minmax(0, 1fr);
+    gap: clamp(14px, 2vw, 40px);
+  }
+
+  .exam-attempt-main {
+    align-items: center;
+    gap: 0;
+    /* More room above on a tall screen, so the question sits nearer the
+       middle without jumping about as questions change length. */
+    padding: clamp(4px, 7vh, 110px) clamp(0px, 1vw, 16px) 0;
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive,
+  .exam-attempt-main > .exam-attempt-footer,
+  .exam-attempt-main > .exam-shortcuts,
+  .exam-attempt-main > .exam-review-screen {
+    width: min(100%, clamp(720px, 58vw, 1120px));
+  }
+
+  /* The question: no frame, it scrolls on its own if it is very long. */
+  .exam-attempt-main > .exam-attempt-card.immersive {
+    flex: 0 1 auto;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    gap: clamp(14px, 2.4vh, 28px);
+  }
+
+  .exam-attempt-card.immersive .surface-head h4 {
+    font-size: clamp(13px, 0.55vw + 7px, 17px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .exam-question-of {
+    font-weight: 600;
+  }
+
+  .exam-attempt-card.immersive .exam-attempt-question-text {
+    font-size: clamp(18px, 0.85vw + 9px, 28px);
+    line-height: 1.5;
+    font-weight: 500;
+    color: var(--lnu-navy-deep);
+  }
+
+  .exam-attempt-card.immersive .exam-question-list {
+    font-size: clamp(16px, 0.6vw + 8px, 22px);
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive .exam-option-grid {
+    max-width: none;
+    gap: clamp(8px, 1.3vh, 14px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-card {
+    gap: clamp(12px, 1vw, 18px);
+    padding: clamp(11px, 1.7vh, 20px) clamp(14px, 1.2vw, 22px);
+    border-radius: clamp(10px, 0.8vw, 14px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-text {
+    font-size: clamp(15px, 0.5vw + 9px, 21px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-letter {
+    width: clamp(28px, 1.3vw + 10px, 38px);
+    height: clamp(28px, 1.3vw + 10px, 38px);
+    border-radius: clamp(8px, 0.6vw, 10px);
+    font-size: clamp(12.5px, 0.4vw + 7px, 16px);
+  }
+
+  .exam-attempt-card.immersive .exam-question-review-panel {
+    font-size: clamp(14px, 0.4vw + 9px, 18px);
+  }
+
+  /* The buttons: a plain row under the choices, set off by a rule. */
+  .exam-attempt-main > .exam-attempt-footer {
+    flex: 0 0 auto;
+    margin-top: clamp(18px, 3vh, 36px);
+    padding: clamp(14px, 2.2vh, 24px) 0 0;
+    border: 0;
+    border-top: 1px solid var(--border-soft);
+    border-radius: 0;
+    background: none;
+    gap: clamp(8px, 0.8vw, 14px);
+  }
+
+  /* With Submit gone from the row, Previous and Next sit on the right,
+     under where a right hand ends a choice. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav {
+    margin-left: auto;
+    gap: clamp(8px, 0.8vw, 14px);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn,
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    min-width: clamp(104px, 7.5vw, 150px);
+    padding: 0 clamp(14px, 1.2vw, 24px);
+    justify-content: center;
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn svg,
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn svg {
+    width: clamp(14px, 1vw, 18px);
+    height: clamp(14px, 1vw, 18px);
+  }
+
+  /* Next is the move made most, so it is the filled one. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled) {
+    border-color: var(--lnu-navy);
+    background: var(--lnu-navy);
+    color: var(--lnu-gold-light);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled):hover {
+    border-color: var(--lnu-navy-light);
+    background: var(--lnu-navy-light);
+    color: var(--lnu-gold-light);
+  }
+
+
+
+  /* The question list grows with the screen too. */
+  .exam-attempt-sidebar .exam-question-jump.immersive {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(38px, 2.4vw, 50px), 1fr));
+    gap: clamp(6px, 0.45vw, 9px);
+  }
+
+  .exam-attempt-sidebar .exam-jump-btn {
+    min-height: clamp(36px, 4.2vh, 48px);
+    font-size: clamp(13px, 0.35vw + 8px, 16px);
+  }
+
+  .exam-attempt-sidebar .legend-item {
+    font-size: clamp(11px, 0.3vw + 6.5px, 13.5px);
+  }
+
+  .exam-sidebar-submit p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-sidebar-submit .primary-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-head-copy h3 {
+    font-size: clamp(15px, 0.5vw + 9px, 20px);
+  }
+
+  .exam-head-copy p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-timer-value {
+    font-size: clamp(16px, 0.6vw + 9px, 22px);
+  }
+}
+
+/* Legend, the numbers (which scroll), and Submit pinned under them. */
+.exam-attempt-sidebar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.exam-sidebar-submit {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.exam-sidebar-submit p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.exam-sidebar-submit .primary-btn {
+  width: 100%;
+  justify-content: center;
+  height: var(--control-height);
+}
+
+/* =======================================================================
+   EXAM: QUESTION LIST, REVIEW SCREEN, SHORTCUTS
+   While the exam is under way the list says only answered (filled navy) or
+   not yet (white, outlined), with a gold ring on the question being read
+   and the gold corner on one marked for review. No red: an unanswered
+   question is not a mistake, and red against green is the pair colour-
+   blind students cannot tell apart. After submitting, the list shows right
+   and wrong as before.
+   ======================================================================= */
+.exam-jump-btn.pre-answered {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #ffffff;
+}
+
+.exam-jump-btn.pre-blank,
+.exam-jump-btn.pre-pending,
+.exam-jump-btn.is-current.pre-blank,
+.exam-jump-btn.is-current.pre-pending {
+  background: #ffffff;
+  border-color: rgba(13, 21, 71, 0.26);
+  color: var(--lnu-navy-deep);
+}
+
+.exam-jump-btn.is-current.pre-answered {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #ffffff;
+}
+
+.exam-jump-btn.is-current.post-correct {
+  background: #e8f6ee;
+  border-color: #93cfae;
+  color: #1e6943;
+}
+
+.exam-jump-btn.is-current.post-incorrect {
+  background: #fdeeed;
+  border-color: #f0a9a7;
+  color: #a8302f;
+}
+
+.exam-jump-btn.is-current.post-missed {
+  background: #f1edef;
+  border-color: #cbb8bf;
+  color: #7e5964;
+}
+
+.exam-jump-btn.is-current.post-answered {
+  background: #eaf2fb;
+  border-color: #a6c6e4;
+  color: #225b8c;
+}
+
+.exam-jump-btn.is-current {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--lnu-gold);
+  z-index: 1;
+}
+
+.exam-jump-btn.pre-blank:hover:not(:disabled),
+.exam-jump-btn.pre-pending:hover:not(:disabled) {
+  border-color: var(--lnu-navy);
+  background: #f5f6fc;
+}
+
+/* Room for the current question's ring at the edges of the list. */
+.exam-question-jump.immersive {
+  padding: 4px;
+}
+
+.exam-question-jump.immersive .exam-list-empty {
+  grid-column: 1 / -1;
+  margin: 8px 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(13, 21, 71, 0.3);
+  background: #ffffff;
+}
+
+.legend-swatch.answered {
+  border-color: var(--lnu-navy);
+  background: var(--lnu-navy);
+}
+
+.legend-swatch.current {
+  box-shadow: 0 0 0 1.5px #ffffff, 0 0 0 3px var(--lnu-gold);
+}
+
+/* All / Unanswered / Marked */
+.exam-list-filters {
+  flex-shrink: 0;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: rgba(13, 21, 71, 0.06);
+}
+
+.exam-list-filter {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  display: grid;
+  justify-items: center;
+  cursor: pointer;
+}
+
+.exam-list-filter span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-list-filter strong {
+  font-size: 1.15em;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-list-filter.active {
+  background: #ffffff;
+  color: var(--lnu-navy-deep);
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.12);
+}
+
+.exam-list-filter:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 1px;
+}
+
+/* Legend, filters, the numbers (which scroll), and Submit under them; one
+   column no wider than the panel, whatever is in it. */
+.exam-attempt-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+/* The chosen answer: a firmer outline and a tick, seen at a glance. */
+.exam-option-card.selected {
+  background: rgba(26, 35, 126, 0.07);
+  box-shadow: inset 0 0 0 2px var(--lnu-navy);
+}
+
+.exam-option-check {
+  flex: none;
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  color: var(--lnu-navy);
+}
+
+/* The review screen before submitting. */
+.exam-review-screen {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 16px;
+  padding: 4px 2px 8px;
+}
+
+.exam-review-kicker {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.exam-review-screen h3 {
+  margin: -8px 0 0;
+  font-size: clamp(22px, 1vw + 12px, 32px);
+  color: var(--lnu-navy-deep);
+}
+
+.exam-review-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.exam-review-stats > div {
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+
+.exam-review-stats > div.is-attention {
+  border-color: rgba(201, 138, 30, 0.55);
+  background: rgba(201, 138, 30, 0.07);
+}
+
+.exam-review-stats dt {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.exam-review-stats dd {
+  margin: 2px 0 0;
+  font-size: clamp(22px, 0.8vw + 14px, 30px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--lnu-navy-deep);
+}
+
+.exam-review-stats dd small {
+  font-size: 0.55em;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.exam-review-group h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--lnu-navy-deep);
+}
+
+.exam-review-numbers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+  padding: 4px;
+}
+
+.exam-review-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+  color: var(--lnu-navy-deep);
+}
+
+.exam-review-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.exam-review-actions {
+  /* Stays in sight under a long list of numbers. */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface);
+}
+
+.exam-review-actions .primary-btn {
+  margin-left: auto;
+}
+
+.exam-review-actions .ghost-btn,
+.exam-review-actions .primary-btn {
+  height: var(--control-height);
+  justify-content: center;
+}
+
+/* Keyboard shortcuts, behind a link. */
+.exam-shortcuts {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.exam-shortcuts-list {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.exam-shortcuts-list > div {
+  display: contents;
+}
+
+.exam-shortcuts-list dt {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.exam-shortcuts-list dd {
+  margin: 0;
+  align-self: center;
+  color: var(--ink);
+}
+
+.exam-shortcuts-list kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  color: var(--lnu-navy-deep);
+}
+
+@media (min-width: 901px) {
+  .exam-attempt-main > .exam-shortcuts {
+    margin-top: clamp(10px, 1.6vh, 18px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-check {
+    width: clamp(18px, 0.6vw + 12px, 24px);
+    height: clamp(18px, 0.6vw + 12px, 24px);
+  }
+
+  .exam-shortcuts-list {
+    font-size: clamp(12.5px, 0.3vw + 8px, 15px);
+  }
+
+  .exam-review-group h4 {
+    font-size: clamp(14px, 0.3vw + 9.5px, 17px);
+  }
+
+  .exam-review-numbers .exam-jump-btn {
+    min-height: clamp(36px, 4.2vh, 46px);
+    font-size: clamp(13px, 0.35vw + 8px, 16px);
+  }
+
+  .exam-attempt-main > .exam-review-screen {
+    flex: 0 1 auto;
+  }
+
+  /* A long exam: smaller cells, more of them to a row, so a 100-question
+     exam fits the list on a full-HD screen without scrolling. */
+  .exam-attempt-sidebar .exam-question-jump.immersive.is-dense {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(34px, 1vw + 14px, 42px), 1fr));
+    gap: clamp(4px, 0.3vw, 6px);
+  }
+
+  .exam-attempt-sidebar .exam-question-jump.immersive.is-dense .exam-jump-btn {
+    min-height: clamp(32px, 3.3vh, 40px);
+    border-radius: 7px;
+    font-size: clamp(13px, 0.25vw + 8.5px, 14.5px);
+  }
+
+  .exam-attempt-sidebar .exam-list-filter {
+    font-size: clamp(11.5px, 0.25vw + 7.5px, 13.5px);
+    min-height: clamp(34px, 4vh, 44px);
+  }
+}
+
+@media (max-width: 900px) {
+  /* Here the whole exam screen scrolls, so the review must not scroll on
+     its own: its buttons then stay pinned to the bottom of the screen. */
+  .exam-attempt-main > .exam-review-screen {
+    overflow: visible;
+    padding: 12px 12px 0;
+  }
+
+  .exam-review-actions {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 640px) {
+  .exam-review-stats {
+    gap: 6px;
+  }
+
+  .exam-review-stats > div {
+    padding: 10px;
+  }
+
+  .exam-review-actions > .ghost-btn {
+    flex: 1 1 40%;
+    padding: 0 8px;
+  }
+
+  .exam-review-actions > .primary-btn {
+    flex: 1 1 100%;
+  }
+
+  .exam-review-actions .primary-btn {
+    margin-left: 0;
+  }
+}
+
+/* Fixed rows, so the list keeps the stretching row when the filters are
+   not there (after submitting). */
+.exam-attempt-sidebar > .exam-status-legend { grid-row: 1; }
+.exam-attempt-sidebar > .exam-list-filters { grid-row: 2; }
+.exam-attempt-sidebar > .exam-question-jump { grid-row: 3; }
+.exam-attempt-sidebar > .exam-sidebar-submit { grid-row: 4; }
