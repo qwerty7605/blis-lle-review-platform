@@ -440,7 +440,6 @@
                 <div class="library-bank-question-head">
                   <strong>#{{ question.item_number }} {{ question.question_text }}</strong>
                   <div class="library-bank-question-pills">
-                    <span class="pill neutral">{{ (question.question_type || 'multiple_choice').replace('_', ' ') }}</span>
                     <span v-if="question.topic?.name" class="pill navy">{{ question.topic.name }}</span>
                     <span v-if="question.subtopic?.name" class="pill neutral">{{ question.subtopic.name }}</span>
                     <span v-if="question.difficulty" class="pill pill-cap success">{{ question.difficulty }}</span>
