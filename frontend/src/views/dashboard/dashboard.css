@@ -7502,3 +7502,17 @@ a.assignment-chip.is-link:hover {
     flex-basis: 180px;
   }
 }
+
+/* The exam a student is taking: its text cannot be selected (so not copied
+   into a search), on touch screens too. A written answer stays editable. */
+.exam-no-copy {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.exam-no-copy input,
+.exam-no-copy textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
