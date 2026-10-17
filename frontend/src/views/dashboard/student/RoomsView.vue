@@ -335,7 +335,17 @@
     </teleport>
 
     <teleport to="body">
-      <div v-if="showExamSimulationModal" class="exam-attempt-backdrop">
+      <!-- Questions cannot be selected, copied or dragged out, so they are not
+           pasted into a search; a written answer's own box still works. -->
+      <div
+        v-if="showExamSimulationModal"
+        class="exam-attempt-backdrop exam-no-copy"
+        @copy="blockExamCopy"
+        @cut="blockExamCopy"
+        @contextmenu="blockExamCopy"
+        @dragstart="blockExamCopy"
+        @selectstart="blockExamCopy"
+      >
         <div class="exam-attempt-shell" role="dialog" aria-modal="true" aria-labelledby="exam-attempt-title">
           <header class="exam-attempt-head">
             <div class="exam-head-copy">
@@ -719,6 +729,14 @@ import { examScheduleEnd, isStudentExamEnded, studentAttemptFinishBy } from '../
 import { useRoomsModule } from '../composables/useRoomsModule'
 import { useCompactLayout } from '../composables/useViewport'
 import BottomSheet from '@/components/BottomSheet.vue'
+
+// Inside the exam: copying or selecting the questions is refused, except in a
+// field the student types into (a written answer).
+function blockExamCopy(event) {
+  if (event.target?.closest?.('input, textarea, [contenteditable="true"]')) return
+
+  event.preventDefault()
+}
 
 // The room picker lives in the nav drawer at this width (see
 // DashboardLayout), so the page's Join Room action moves to the app bar --
