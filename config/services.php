@@ -28,6 +28,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    // Where feedback for the developers goes: a problem report as soon as
+    // it is sent, anything else once the administrator sends it on.
+    'feedback' => [
+        'developer_email' => env('FEEDBACK_DEVELOPER_EMAIL', 'person2@example.com'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

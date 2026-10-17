@@ -5,6 +5,7 @@
     <AccountSettings />
     <ExamDefaultsCard v-if="isTeacher" />
     <AccountSessions />
+    <FeedbackCard />
 
     <template v-if="isAdmin">
     <div v-if="settingsMessage" class="feedback success">
@@ -120,6 +121,7 @@ import { useSettingsModule } from '../composables/useSettingsModule'
 import AccountSessions from './AccountSessions.vue'
 import AccountSettings from './AccountSettings.vue'
 import ExamDefaultsCard from './ExamDefaultsCard.vue'
+import FeedbackCard from './FeedbackCard.vue'
 
 const role = computed(() => String(useAuthStore().user?.role ?? '').toLowerCase())
 const isAdmin = computed(() => role.value === 'admin')

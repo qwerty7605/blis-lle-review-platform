@@ -710,6 +710,7 @@ Route::middleware('auth:sanctum')->group(function () use (
 ) {
     require __DIR__ . '/api/auth.php';
     require __DIR__ . '/api/account.php';
+    require __DIR__ . '/api/feedback.php';
     require __DIR__ . '/api/rooms.php';
     require __DIR__ . '/api/student.php';
     require __DIR__ . '/api/library.php';

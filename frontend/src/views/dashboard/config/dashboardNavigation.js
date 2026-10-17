@@ -7,6 +7,7 @@ import {
   FileText,
   GraduationCap,
   LayoutDashboard,
+  MessageSquareText,
   Settings,
   Sparkles,
   UserRound,
@@ -132,7 +133,7 @@ export const dashboardModules = {
     routeName: 'dashboard-settings',
     label: 'Settings',
     title: 'Settings',
-    sub: 'Your name, sign-in details and password',
+    sub: 'Your account, sign-in details and feedback',
     icon: Settings,
   },
   users: {
@@ -162,6 +163,14 @@ export const dashboardModules = {
     sub: 'Track key system actions and account activity',
     icon: ClipboardList,
   },
+  feedback: {
+    key: 'feedback',
+    routeName: 'dashboard-feedback',
+    label: 'Feedback',
+    title: 'Feedback',
+    sub: 'Read what people send, answer it, and decide what goes to the developers',
+    icon: MessageSquareText,
+  },
 }
 
 const dashboardNavKeysByRole = {
@@ -171,7 +180,7 @@ const dashboardNavKeysByRole = {
   // Administration first, so signing in still lands on Users; then
   // everything a teacher has, over every teacher's work.
   admin: [
-    'users', 'yearEnd', 'audit', 'settings',
+    'users', 'yearEnd', 'audit', 'feedback', 'settings',
     'reports', 'library', 'reviewBotGenerator', 'room', 'students', 'studentProfile', 'licensure', 'exams',
   ],
 }
