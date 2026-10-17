@@ -744,18 +744,9 @@
                 </button>
               </div>
 
-              <!-- Shortcuts behind a link (or "?"), not a line always on screen. -->
-              <div v-if="!isExamMobileViewport && !isStudentExamResultSummaryVisible && !examReviewOpen" class="exam-shortcuts">
-                <button
-                  type="button"
-                  class="exam-shortcuts-toggle"
-                  :aria-expanded="examShortcutsOpen ? 'true' : 'false'"
-                  aria-controls="exam-shortcuts-list"
-                  @click="examShortcutsOpen = !examShortcutsOpen"
-                >
-                  <Keyboard :size="15" /> Keyboard shortcuts
-                </button>
-                <dl v-if="examShortcutsOpen" id="exam-shortcuts-list" class="exam-shortcuts-list">
+              <!-- Shown only by pressing "?": no link on screen, as most exam sites have none. -->
+              <div v-if="examShortcutsOpen && !isExamMobileViewport && !isStudentExamResultSummaryVisible && !examReviewOpen" class="exam-shortcuts">
+                <dl id="exam-shortcuts-list" class="exam-shortcuts-list">
                   <div>
                     <dt><kbd aria-label="Left arrow"><ArrowLeft :size="12" /></kbd><kbd aria-label="Right arrow"><ArrowRight :size="12" /></kbd></dt>
                     <dd>Previous / next question</dd>
@@ -893,7 +884,6 @@ import {
   CircleUserRound,
   Clock3,
   DoorOpen,
-  Keyboard,
   LogOut,
   RefreshCw,
   Search,
