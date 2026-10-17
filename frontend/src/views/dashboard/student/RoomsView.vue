@@ -459,6 +459,24 @@
                   {{ question.item_number }}
                 </button>
               </div>
+
+              <!-- From 901px up Submit sits under the list, as in Moodle's quiz
+                   navigation, away from Next so it is never pressed for it. -->
+              <div v-if="!isExamMobileViewport && !isStudentExamSubmitted" class="exam-sidebar-submit">
+                <p v-if="studentExamUnansweredCount > 0">
+                  {{ studentExamUnansweredCount }} {{ studentExamUnansweredCount === 1 ? 'question' : 'questions' }} unanswered
+                </p>
+                <p v-else>All questions answered</p>
+                <button
+                  type="button"
+                  class="primary-btn"
+                  :disabled="studentExamSubmitting"
+                  @click="openStudentExamSubmitConfirm"
+                >
+                  <RefreshCw v-if="studentExamSubmitting" :size="14" class="spin-soft" />
+                  <span>{{ studentExamSubmitting ? 'Submitting...' : 'Submit Exam' }}</span>
+                </button>
+              </div>
             </component>
 
             <section class="exam-attempt-main">
@@ -596,7 +614,7 @@
                 </div>
 
                 <button
-                  v-if="!isStudentExamSubmitted"
+                  v-if="!isStudentExamSubmitted && isExamMobileViewport"
                   type="button"
                   class="primary-btn"
                   :disabled="studentExamSubmitting"
@@ -606,6 +624,16 @@
                   <span>{{ studentExamSubmitting ? 'Submitting...' : 'Submit Exam' }}</span>
                 </button>
               </div>
+
+              <p v-if="!isExamMobileViewport && !isStudentExamResultSummaryVisible" class="exam-key-hint">
+                <kbd aria-label="Left arrow"><ArrowLeft :size="11" /></kbd> <kbd aria-label="Right arrow"><ArrowRight :size="11" /></kbd> previous / next question
+                <span aria-hidden="true">·</span>
+                <template v-if="!isStudentExamSubmitted">
+                  <kbd aria-label="Up arrow"><ArrowUp :size="11" /></kbd> <kbd aria-label="Down arrow"><ArrowDown :size="11" /></kbd> or <kbd>A</kbd>–<kbd>{{ lastOptionLetter }}</kbd> choose an answer
+                  <span aria-hidden="true">·</span>
+                </template>
+                <kbd>Enter</kbd> next question
+              </p>
             </section>
           </div>
         </div>
@@ -706,12 +734,16 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  BookOpen,
   Bookmark,
   BookmarkCheck,
-  BookOpen,
   CheckCircle2,
   ChevronRight,
   CircleUserRound,
@@ -868,6 +900,100 @@ const examQuestionListContainerProps = computed(() => {
       : 'This exam moves one question at a time.',
   }
 })
+
+// ------------------------------------------------------------- keyboard
+// As in most computer-based exams: left and right (and Enter) move between
+// questions, up and down or a choice's letter pick the answer. Enter only
+// ever moves on; it never submits. Nothing here acts while the student is
+// typing a written answer, or while a dialog or the phone's list is open.
+const lastOptionLetter = computed(() => {
+  const options = currentStudentExamQuestion.value?.options ?? []
+
+  return String(options[options.length - 1]?.label ?? 'D').toUpperCase()
+})
+
+const examBusy = computed(() => studentExamSaving.value || studentExamSubmitting.value || studentExamBookmarking.value)
+
+// A key pressed while the answer just chosen is still saving is kept, and
+// acted on once it has saved, so a quick "B then Enter" is not lost.
+let pendingExamStep = 0
+
+function stepExamQuestion(step) {
+  const target = studentExamCurrentIndex.value + step
+  if (target < 0 || target > studentExamQuestions.value.length - 1) return
+
+  if (examBusy.value) {
+    pendingExamStep = step
+    return
+  }
+
+  goToStudentExamQuestion(step)
+}
+
+watch(examBusy, (busy) => {
+  if (busy || !pendingExamStep) return
+
+  const step = pendingExamStep
+  pendingExamStep = 0
+  stepExamQuestion(step)
+})
+
+function chooseExamOption(option) {
+  if (!option || isCurrentQuestionInputLocked.value) return
+  if (studentAnswerDraft.selected_option_id === option.id) return
+
+  handleStudentOptionSelect(option.id)
+}
+
+function handleExamKeydown(event) {
+  if (!showExamSimulationModal.value || studentExamLoading.value || !studentExamAttempt.value) return
+  if (isStudentExamResultSummaryVisible.value || !currentStudentExamQuestion.value) return
+  if (showStudentSubmitConfirmModal.value || showStudentExitConfirmModal.value) return
+  if (isExamMobileViewport.value && !examAttemptSidebarCollapsed.value) return
+  if (document.querySelector('body > .modal-backdrop')) return
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
+
+  const target = event.target
+  if (target?.closest?.('textarea, select, [contenteditable="true"], input:not([type="radio"])')) return
+  // A focused button keeps its own Enter and Space.
+  if ((event.key === 'Enter' || event.key === ' ') && target?.closest?.('button, a')) return
+
+  const question = currentStudentExamQuestion.value
+  const options = question.question_type === 'open_ended' ? [] : (question.options ?? [])
+
+  switch (event.key) {
+    case 'ArrowLeft':
+      event.preventDefault()
+      stepExamQuestion(-1)
+      return
+    case 'ArrowRight':
+    case 'Enter':
+      event.preventDefault()
+      stepExamQuestion(1)
+      return
+    case 'ArrowUp':
+    case 'ArrowDown': {
+      if (options.length === 0) return
+      event.preventDefault()
+      const current = options.findIndex((option) => option.id === studentAnswerDraft.selected_option_id)
+      const next = current < 0
+        ? (event.key === 'ArrowDown' ? 0 : options.length - 1)
+        : Math.min(Math.max(current + (event.key === 'ArrowDown' ? 1 : -1), 0), options.length - 1)
+      chooseExamOption(options[next])
+      return
+    }
+    default: {
+      if (event.key.length !== 1 || options.length === 0) return
+      const option = options.find((candidate) => String(candidate.label ?? '').toLowerCase() === event.key.toLowerCase())
+      if (!option) return
+      event.preventDefault()
+      chooseExamOption(option)
+    }
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleExamKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleExamKeydown))
 
 /*
  * Amber under five minutes, red under one. Time pressure should be readable
