@@ -81,7 +81,7 @@
                   :key="subject.subject"
                   type="button"
                   class="review-subject-chip"
-                  :class="[`tone-${subjectToneKey(subject.subject)}`, { 'is-selected': form.subject === subject.subject }]"
+                  :class="{ 'is-selected': form.subject === subject.subject }"
                   :aria-pressed="(form.subject === subject.subject).toString()"
                   @click="selectSubject(subject.subject)"
                 >
@@ -417,15 +417,6 @@ const progressPercent = computed(() => {
   return Math.round((answeredCount.value / total) * 100)
 })
 
-const subjectToneLookup = {
-  'Cataloging and Classification': 'cataloging',
-  'Indexing and Abstracting': 'indexing',
-  'Information Technology': 'technology',
-  'Reference Services': 'reference',
-  'Library Management': 'management',
-  'Selection and Acquisition': 'acquisition',
-}
-
 const shortSubjectLookup = {
   'Cataloging and Classification': 'Cataloging',
   'Indexing and Abstracting': 'Indexing',
@@ -433,10 +424,6 @@ const shortSubjectLookup = {
   'Reference Services': 'Reference',
   'Library Management': 'Management',
   'Selection and Acquisition': 'Acquisition',
-}
-
-function subjectToneKey(subject) {
-  return subjectToneLookup[subject] ?? 'cataloging'
 }
 
 function shortSubjectLabel(subject) {
@@ -518,12 +505,11 @@ function recommendationHeading(action) {
   overflow: hidden;
 }
 
-.review-setup {
-  background: #fffdf7;
-}
-
+/* Plain white panels, one accent (navy) for what is chosen: the page used to
+   give every subject its own colour, which read as decoration, not meaning. */
+.review-setup,
 .review-session {
-  background: #fcfdff;
+  background: #fff;
 }
 
 /* ---- Panel head ---- */
@@ -649,7 +635,7 @@ function recommendationHeading(action) {
   padding: 0;
   font-size: 11px;
   font-weight: 700;
-  color: var(--lnu-info);
+  color: var(--lnu-navy);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -695,8 +681,8 @@ function recommendationHeading(action) {
   gap: 3px;
   padding: 11px 12px;
   border-radius: 10px;
-  background: #eef3ff;
-  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
+  background: #f6f7f9;
+  border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
 .review-weak-kicker {
@@ -723,7 +709,8 @@ function recommendationHeading(action) {
   line-height: 1.5;
 }
 
-/* ---- Subject chips ---- */
+/* ---- Subject chips ----
+   No colour per subject: white like the other chips, navy once chosen. */
 .review-subject-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -736,15 +723,21 @@ function recommendationHeading(action) {
   font-size: 12px;
   font-weight: 700;
   text-align: center;
-  border: 1px solid transparent;
-  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  background: #fff;
+  color: var(--lnu-navy-deep);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-/* currentColor picks up whichever tone-* palette the chip carries, so the
-   selected ring matches the subject instead of one shared blue. */
+.review-subject-chip:hover:not(.is-selected) {
+  border-color: rgba(13, 21, 71, 0.26);
+  background: #f6f7f9;
+}
+
 .review-subject-chip.is-selected {
-  border-color: currentColor;
-  box-shadow: inset 0 0 0 1px currentColor;
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
 }
 
 /* ---- Shared chips (topic, subtopic, difficulty, item count) ---- */
@@ -779,8 +772,8 @@ function recommendationHeading(action) {
 }
 
 .review-chip:hover:not(.is-selected) {
-  border-color: rgba(49, 92, 191, 0.3);
-  background: #f2f6ff;
+  border-color: rgba(13, 21, 71, 0.26);
+  background: #f6f7f9;
 }
 
 .review-chip.is-selected {
@@ -855,9 +848,9 @@ function recommendationHeading(action) {
   margin: 12px 15px 0;
   padding: 9px 11px;
   border-radius: 10px;
-  background: rgba(var(--lnu-info-rgb), 0.07);
-  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
-  color: var(--lnu-info);
+  background: #f6f7f9;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  color: #46526b;
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -881,8 +874,8 @@ function recommendationHeading(action) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--lnu-info-rgb), 0.1);
-  color: var(--lnu-info);
+  background: rgba(13, 21, 71, 0.06);
+  color: var(--lnu-navy);
 }
 
 .review-empty h3 {
@@ -911,9 +904,10 @@ function recommendationHeading(action) {
   border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
-.review-result.strong { background: #eaf7ef; border-color: rgba(63, 146, 94, 0.22); }
-.review-result.steady { background: #eef3ff; border-color: rgba(49, 92, 191, 0.2); }
-.review-result.focus { background: #fff6e0; border-color: rgba(205, 151, 43, 0.26); }
+/* The score is the same neutral box whatever it is; the number says enough. */
+.review-result {
+  background: #f8f9fb;
+}
 
 .review-result-score {
   display: grid;
@@ -967,11 +961,12 @@ function recommendationHeading(action) {
 .review-improved {
   font-size: 11px;
   font-weight: 800;
-  color: #226b3f;
+  color: #3949ab;
 }
 
+/* Amber, not red: the app's below-passing colour (see JsChart.vue). */
 .review-improved.down {
-  color: #ad5340;
+  color: #96600f;
 }
 
 .review-result-actions {
@@ -1056,12 +1051,13 @@ function recommendationHeading(action) {
 }
 
 .review-option:hover:not(.is-selected) {
-  background: #f7f9ff;
+  background: #f6f7f9;
 }
 
 .review-option.is-selected {
-  border-color: rgba(var(--lnu-info-rgb), 0.32);
-  background: #ebf1ff;
+  border-color: var(--lnu-navy);
+  box-shadow: inset 0 0 0 1px var(--lnu-navy);
+  background: rgba(26, 35, 126, 0.04);
 }
 
 .review-option input {
@@ -1075,7 +1071,7 @@ function recommendationHeading(action) {
   gap: 3px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f6f8fd;
+  background: #f6f7f9;
   border: 1px solid rgba(13, 21, 71, 0.1);
 }
 
@@ -1111,14 +1107,6 @@ function recommendationHeading(action) {
 .review-session-foot .primary-btn {
   height: 34px;
 }
-
-/* ---- Subject tones ---- */
-.tone-cataloging { background: #e4edff; color: var(--lnu-info); }
-.tone-indexing { background: #def3f6; color: #1c7286; }
-.tone-technology { background: #fff0ca; color: #966112; }
-.tone-reference { background: #ffe6e1; color: #ad5340; }
-.tone-management { background: #e2f4e7; color: #267242; }
-.tone-acquisition { background: #f7ead8; color: #83551e; }
 
 /* ---- Responsive ----
    Below 1000px the two panels can't both hold a usable width, so the page
@@ -1183,7 +1171,7 @@ function recommendationHeading(action) {
   }
 
   .review-setup-foot {
-    background: #fffdf7;
+    background: #fff;
   }
 
   .review-session-foot {

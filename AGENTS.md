@@ -116,6 +116,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
 - Signed-out pages share `frontend/src/views/auth/AuthLayout.vue` + `auth.css`; logos are in `frontend/src/assets/`.
 - Dashboard pages get the look from the "BRAND LAYER" block in `dashboard.css` (shared primitives: `.surface-card`, `.primary-btn`, `.text-input`, `.pill`, tables, modals). Restyle there before adding per-page CSS.
 - Charts: `frontend/src/components/charts/JsChart.vue` wraps Chart.js (bar and line, pass-mark line, value labels, tooltips) and is used on the teacher dashboard. Below-passing is amber `#c98a1e` and passing is indigo `#3949ab`, a pair checked for colour-blind separation; do not swap in red/green. `ConfidenceGauge.vue` is a hand-built SVG gauge.
+- Subjects get no colour of their own. The student Review Bot (`student/ReviewBotView.vue`) is white panels with navy for what is chosen: subjects are two columns of short names, white and navy once picked, like the other chips; the score box is neutral whatever the score. An earlier per-subject palette was taken out at the user's request as too colourful.
 - Any `display: grid` list that can hold a long one-line string needs `grid-template-columns: minmax(0, 1fr)`, or the row widens the page on phones.
 
 ## Docker/Runtime Notes
