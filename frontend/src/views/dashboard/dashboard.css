@@ -7516,3 +7516,106 @@ a.assignment-chip.is-link:hover {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/*
+ * The exam on a desktop (901px and up): the question, its choices and the
+ * row of Bookmark / Previous / Next sit together in one centred column, the
+ * card only as tall as the question, so the buttons are right under the
+ * last choice instead of at the bottom of the screen. Submit is under the
+ * question list (.exam-sidebar-submit). Phones keep the pinned row.
+ */
+@media (min-width: 901px) {
+  .exam-attempt-main {
+    align-items: center;
+    padding-top: clamp(0px, 2.5vh, 28px);
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive,
+  .exam-attempt-main > .exam-attempt-footer,
+  .exam-attempt-main > .exam-key-hint {
+    width: min(100%, 900px);
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive {
+    flex: 0 1 auto;
+    padding: clamp(18px, 2.4vw, 28px) clamp(18px, 2.6vw, 32px);
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive .exam-option-grid {
+    max-width: none;
+  }
+
+  .exam-attempt-main > .exam-attempt-footer {
+    flex: 0 0 auto;
+    background: var(--surface);
+  }
+
+  /* With Submit gone from the row, Previous and Next sit on the right,
+     under where a right hand ends a choice. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav {
+    margin-left: auto;
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn {
+    min-width: 104px;
+    justify-content: center;
+  }
+}
+
+.exam-key-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.exam-key-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: 1px;
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  color: var(--lnu-navy-deep);
+}
+
+/* Legend, the numbers (which scroll), and Submit pinned under them. */
+.exam-attempt-sidebar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.exam-sidebar-submit {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.exam-sidebar-submit p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.exam-sidebar-submit .primary-btn {
+  width: 100%;
+  justify-content: center;
+  height: var(--control-height);
+}
+
+.exam-key-hint > span {
+  margin: 0 6px;
+}
