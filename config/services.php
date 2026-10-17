@@ -29,9 +29,11 @@ return [
     ],
 
     // Where feedback for the developers goes: a problem report as soon as
-    // it is sent, anything else once the administrator sends it on.
+    // it is sent, anything else once the administrator sends it on. Set in
+    // the server's .env, so only whoever runs the server changes it; the
+    // administrator sees it on the Feedback page but cannot.
     'feedback' => [
-        'developer_email' => env('FEEDBACK_DEVELOPER_EMAIL', 'person2@example.com'),
+        'developer_email' => env('FEEDBACK_DEVELOPER_EMAIL'),
     ],
 
     'slack' => [

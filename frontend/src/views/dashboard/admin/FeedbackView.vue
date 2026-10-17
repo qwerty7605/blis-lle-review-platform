@@ -36,6 +36,9 @@
       <p class="fb-intro">
         Problems go to the developers as soon as they are reported. Ideas, questions and everything else wait here
         for you: answer them, close them, or send them on to the developers.
+        <template v-if="developerEmail">
+          <br />Developer email: <strong>{{ developerEmail }}</strong> (set on the server).
+        </template>
       </p>
 
       <div v-scroll-hint class="fb-tabs" role="tablist" aria-label="Filter by status">
@@ -258,6 +261,7 @@ const items = ref([])
 const counts = ref({})
 const meta = ref(null)
 const developerEmailSet = ref(null)
+const developerEmail = ref('')
 const loading = ref(false)
 const loadingMore = ref(false)
 const listError = ref('')
@@ -341,6 +345,7 @@ async function load({ silent = false } = {}) {
     counts.value = data?.counts ?? {}
     meta.value = data?.meta ?? null
     developerEmailSet.value = data?.developer_email_set ?? null
+    developerEmail.value = data?.developer_email ?? ''
   } catch (error) {
     if (!silent) listError.value = error?.response?.data?.message ?? 'Unable to load feedback.'
   } finally {
