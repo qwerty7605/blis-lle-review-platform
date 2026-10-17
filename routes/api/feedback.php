@@ -120,6 +120,7 @@ Route::get('/admin/feedback', function (Request $request, FeedbackService $feedb
         'feedback' => collect($page->items())->map(fn (Feedback $feedback) => $feedbackService->forAdmin($feedback))->values(),
         'counts' => collect(Feedback::STATUSES)->mapWithKeys(fn ($status) => [$status => (int) ($counts[$status] ?? 0)]),
         'developer_email_set' => $feedbackService->developerEmail() !== null,
+        'developer_email' => $feedbackService->developerEmail(),
         'meta' => [
             'current_page' => $page->currentPage(),
             'last_page' => $page->lastPage(),

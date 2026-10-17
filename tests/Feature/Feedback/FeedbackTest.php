@@ -195,7 +195,7 @@ class FeedbackTest extends TestCase
         $this->assertSame('No developer email address is set.', Feedback::firstOrFail()->developer_email_error);
 
         Sanctum::actingAs($this->makeAdmin());
-        $this->getJson('/api/admin/feedback')->assertOk()->assertJsonPath('developer_email_set', false);
+        $this->getJson('/api/admin/feedback')->assertOk()->assertJsonPath('developer_email_set', false)->assertJsonPath('developer_email', null);
     }
 
     public function test_the_administrator_s_list_filters_and_counts_by_status(): void
