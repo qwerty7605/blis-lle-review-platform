@@ -470,7 +470,6 @@
               <article v-else-if="currentStudentExamQuestion" class="exam-attempt-card immersive">
                 <header class="surface-head">
                   <h4>Question {{ currentStudentExamQuestion.item_number }}</h4>
-                  <span class="pill neutral">{{ currentStudentExamQuestion.question_type.replace('_', ' ') }}</span>
                 </header>
 
                 <div v-if="currentQuestionStem.numberedItems.length > 0" class="exam-question-stem">
