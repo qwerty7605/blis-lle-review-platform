@@ -206,7 +206,6 @@ $systemSettingDefaults = [
     'platform_name' => 'LNU LLE Platform',
     'academic_term' => 'AY 2025-2026',
     'allow_public_registration' => true,
-    'maintenance_mode' => false,
     'announcement_banner' => '',
     'terms_of_use_text' => $defaultTermsOfUseText,
     'privacy_policy_text' => $defaultPrivacyPolicyText,
@@ -214,7 +213,6 @@ $systemSettingDefaults = [
 
 $systemSettingBooleanKeys = [
     'allow_public_registration',
-    'maintenance_mode',
 ];
 
 $findAccessibleQuestionBank = static function (User $user, int $bankId, bool $admin): ?QuestionBank {
@@ -668,17 +666,15 @@ Route::get('/settings/public/legal', function () use ($systemSettingDefaults) {
 });
 
 /*
- * The two settings every signed-in user has to see, on an endpoint they can
+ * The announcement every signed-in user has to see, on an endpoint they can
  * actually reach: /settings/system is staff-and-admin only, so until this
  * existed an announcement written by an administrator was readable by nobody
  * but the person who typed it. Public and unauthenticated on purpose -- it
- * carries no private data, and the login screen needs the maintenance notice
- * before anyone has signed in.
+ * carries no private data.
  */
 Route::get('/settings/public/notice', function (SystemSettings $settings) {
     return response()->json([
         'announcement_banner' => $settings->announcementBanner(),
-        'maintenance_mode' => $settings->maintenanceMode(),
     ]);
 });
 

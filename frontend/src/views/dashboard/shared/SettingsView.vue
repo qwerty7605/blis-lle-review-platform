@@ -47,11 +47,6 @@
             <span>Allow public student registration</span>
           </label>
 
-          <label class="check-item">
-            <input v-model="settingsForm.maintenance_mode" type="checkbox" :disabled="!settingsCanEdit" />
-            <span>Enable maintenance mode</span>
-          </label>
-
           <template v-if="settingsCanEdit">
             <label class="field-stack">
               <span class="field-label">Announcement Banner</span>
