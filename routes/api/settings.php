@@ -66,7 +66,6 @@ Route::put('/settings/system', function (Request $request) use (
         'platform_name' => ['sometimes', 'required', 'string', 'max:255'],
         'academic_term' => ['sometimes', 'required', 'string', 'max:255'],
         'allow_public_registration' => ['sometimes', 'required', 'boolean'],
-        'maintenance_mode' => ['sometimes', 'required', 'boolean'],
         'announcement_banner' => ['sometimes', 'nullable', 'string', 'max:500'],
         'terms_of_use_text' => ['sometimes', 'required', 'string', 'max:20000'],
         'privacy_policy_text' => ['sometimes', 'required', 'string', 'max:20000'],
@@ -86,8 +85,8 @@ Route::put('/settings/system', function (Request $request) use (
         );
     }
 
-    // The maintenance middleware memoises its read per request; drop it so the
-    // response to the request that just flipped the switch already reflects it.
+    // SystemSettings memoises its read per request; drop it so anything later
+    // in this request reads what was just saved.
     app(SystemSettings::class)->forget();
 
     $recordAudit(

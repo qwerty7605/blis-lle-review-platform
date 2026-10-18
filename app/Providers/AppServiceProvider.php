@@ -26,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Scoped, not a singleton: the maintenance lookup is memoised for the
+        // Scoped, not a singleton: the settings lookup is memoised for the
         // life of one request and thrown away after it, so a persistent worker
         // never serves the next request yesterday's answer.
         $this->app->scoped(SystemSettings::class);

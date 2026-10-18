@@ -10,14 +10,12 @@ use Throwable;
  * settings screen has to act on.
  *
  * The settings endpoints own the full key list and its defaults; this is
- * deliberately only the ones the middleware and the public notice endpoint
- * need, so there is no second copy of the legal text to keep in step.
+ * deliberately only the one the public notice endpoint needs, so there is no
+ * second copy of the legal text to keep in step.
  *
  * Registered as a container-scoped binding (see AppServiceProvider), not a
- * static: the maintenance check runs on every API call, so the lookup is
- * memoised, and memoising it on a static would carry one request's answer into
- * the next under a persistent worker -- leaving the platform stuck in (or out
- * of) maintenance until the worker recycled.
+ * static: the lookup is memoised, and memoising it on a static would carry one
+ * request's answer into the next under a persistent worker.
  */
 class SystemSettings
 {
@@ -25,17 +23,12 @@ class SystemSettings
     private ?array $cache = null;
 
     /**
-     * Drop the memo after a write, so the response to the request that just
-     * flipped the switch already reflects it.
+     * Drop the memo after a write, so the rest of the request that saved a
+     * setting reads the new value.
      */
     public function forget(): void
     {
         $this->cache = null;
-    }
-
-    public function maintenanceMode(): bool
-    {
-        return filter_var($this->raw('maintenance_mode', '0'), FILTER_VALIDATE_BOOLEAN);
     }
 
     public function announcementBanner(): string
@@ -48,14 +41,12 @@ class SystemSettings
         if ($this->cache === null) {
             try {
                 $this->cache = SystemSetting::query()
-                    ->whereIn('key', ['maintenance_mode', 'announcement_banner'])
+                    ->whereIn('key', ['announcement_banner'])
                     ->pluck('value', 'key')
                     ->all();
             } catch (Throwable) {
                 // Before the table exists (a fresh install mid-migration) the
-                // safe answer is "not in maintenance, no banner" -- refusing
-                // every request because a settings lookup failed would be a
-                // worse outage than the one the setting exists to announce.
+                // safe answer is "no banner", not an error on every page.
                 $this->cache = [];
             }
         }
