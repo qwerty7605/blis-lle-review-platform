@@ -28,7 +28,6 @@ return Application::configure(basePath: dirname(__DIR__))
         // -- /auth/login and /auth/register carry much stricter limiters.
         $middleware->api(append: [
             'throttle:api',
-            \App\Http\Middleware\EnforceMaintenanceMode::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

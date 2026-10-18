@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * SystemSettings reads maintenance mode and the announcement once per
+ * SystemSettings reads the announcement once per
  * request, and treats a missing settings table as "nothing set".
  */
 class SystemSettingsTest extends TestCase
@@ -18,12 +18,10 @@ class SystemSettingsTest extends TestCase
 
     public function test_saved_settings_are_read(): void
     {
-        SystemSetting::create(['key' => 'maintenance_mode', 'value' => 'true']);
         SystemSetting::create(['key' => 'announcement_banner', 'value' => '  Exam week  ']);
 
         $settings = new SystemSettings();
 
-        $this->assertTrue($settings->maintenanceMode());
         $this->assertSame('Exam week', $settings->announcementBanner());
     }
 
@@ -33,7 +31,6 @@ class SystemSettingsTest extends TestCase
 
         $settings = new SystemSettings();
 
-        $this->assertFalse($settings->maintenanceMode());
         $this->assertSame('', $settings->announcementBanner());
     }
 }

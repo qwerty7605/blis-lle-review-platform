@@ -166,7 +166,7 @@ class ModelRelationshipsTest extends TestCase
     public function test_settings_and_models_name_who_changed_them(): void
     {
         $admin = $this->makeAdmin();
-        $setting = SystemSetting::create(['key' => 'maintenance_mode', 'value' => 'false', 'updated_by' => $admin->id]);
+        $setting = SystemSetting::create(['key' => 'announcement_banner', 'value' => 'Exam week', 'updated_by' => $admin->id]);
         $model = LetModel::create([
             'status' => 'retired', 'version' => 2, 'trained_by' => $admin->id,
             'training_count' => 10, 'graduate_count' => 0, 'imported_count' => 0, 'training_keys' => [], 'metrics' => [], 'trigger' => 'manual', 'tree' => ['leaf' => 'PASSED'],
