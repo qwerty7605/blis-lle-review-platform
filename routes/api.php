@@ -412,7 +412,7 @@ Route::post('/auth/register', function (Request $request) use ($recordAudit, $au
     ], 201);
 })->middleware('throttle:register');
 
-Route::post('/auth/login', function (Request $request) use ($authTokenCookieService) {
+Route::post('/auth/login', function (Request $request) use ($authTokenCookieService, $recordAudit) {
     $validated = $request->validate([
         'identifier' => ['required', 'string'],
         'password' => ['required'],
@@ -423,17 +423,42 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
         ->orWhere('student_id', $validated['identifier'])
         ->first();
 
+    // A refused sign-in is logged too: repeated failures on one account are
+    // what an administrator looks for after "someone got into my account".
+    // What was typed in the identifier box is kept; the password never is.
+    $logFailure = function (string $reason) use ($user, $validated, $request, $recordAudit): void {
+        $recordAudit(
+            $user,
+            'auth.login_failed',
+            $user ? 'user' : null,
+            $user?->id,
+            match ($reason) {
+                'account_disabled' => 'Sign-in refused: the account is disabled',
+                'email_not_verified' => 'Sign-in refused: the email is not verified yet',
+                default => $user ? 'Sign-in failed: wrong password' : 'Sign-in failed: no account matches',
+            },
+            ['identifier' => Str::limit($validated['identifier'], 120, ''), 'reason' => $reason],
+            $request,
+        );
+    };
+
     if (!$user || !Hash::check($validated['password'], $user->password)) {
+        $logFailure('invalid_credentials');
+
         return response()->json(['message' => 'Invalid credentials'], 401);
     }
 
     if (!$user->is_active) {
+        $logFailure('account_disabled');
+
         return response()->json(['message' => 'Account is disabled. Contact an administrator.'], 403);
     }
 
     // Reached only after the password checks out, so this reveals nothing to
     // someone who does not already hold the credentials.
     if (!$user->hasVerifiedEmail()) {
+        $logFailure('email_not_verified');
+
         return response()->json([
             'message' => 'Please verify your email address first. Check your inbox for the verification link.',
             'unverified' => true,
@@ -456,6 +481,10 @@ Route::post('/auth/login', function (Request $request) use ($authTokenCookieServ
         'user_agent' => Str::limit((string) $request->userAgent(), 500, ''),
         'ip_address' => $request->ip(),
     ])->save();
+
+    $recordAudit($user, 'auth.login', 'user', $user->id, $remember ? 'Signed in (remember me)' : 'Signed in', [
+        'remember' => $remember,
+    ], $request);
 
     $response = response()->json([
         'user' => array_merge($user->toArray(), [

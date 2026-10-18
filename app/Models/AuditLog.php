@@ -23,6 +23,7 @@ class AuditLog extends Model
         'description',
         'metadata',
         'ip_address',
+        'user_agent',
     ];
 
     /**

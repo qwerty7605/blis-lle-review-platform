@@ -3,7 +3,10 @@
 use App\Models\AuditLog;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\AuditLogBrowser;
 use App\Services\SchoolYearEndService;
+use App\Support\AuditEvents;
+use App\Support\AuditTargets;
 use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -528,7 +531,13 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         ]);
     });
 
-    Route::get('/audit-logs', function (Request $request) use ($ensureActive, $isAdmin) {
+    /*
+     * The audit log, newest first, filtered as the Audit page asks: a search
+     * across the description, action, address and who did it; a group of
+     * events; one person; one target; a time range. Read-only: no route edits
+     * or deletes an entry.
+     */
+    Route::get('/audit-logs', function (Request $request, AuditLogBrowser $browser) use ($ensureActive, $isAdmin) {
         if ($inactiveResponse = $ensureActive($request)) {
             return $inactiveResponse;
         }
@@ -538,6 +547,7 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         }
 
         $validated = $request->validate([
+            ...AuditLogBrowser::filterRules(),
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:200'],
             // The old name for per_page, still honoured.
@@ -547,24 +557,64 @@ Route::middleware([])->prefix('/admin')->group(function () use ($ensureActive, $
         $perPage = (int) ($validated['per_page'] ?? $validated['limit'] ?? 80);
         $perPage = max(1, min(200, $perPage));
 
-        $logs = AuditLog::query()
-            ->with('actor:id,name,email,role')
-            ->latest()
-            // Seeded and imported entries can share a timestamp; without a
-            // tie-breaker the order between pages is undefined and "load
-            // more" can skip or repeat rows.
-            ->orderByDesc('id')
+        $logs = $browser->query($validated)
             ->paginate($perPage, ['*'], 'page', (int) ($validated['page'] ?? 1));
 
+        // Names for the "who" and "what" filters, which the page sets by id.
+        $actorName = !empty($validated['actor_id'])
+            ? User::query()->whereKey($validated['actor_id'])->value('name')
+            : null;
+        $targetName = null;
+        if (!empty($validated['target_type']) && !empty($validated['target_id'])) {
+            $probe = new AuditLog(['target_type' => $validated['target_type'], 'target_id' => $validated['target_id']]);
+            $probe->id = 0;
+            $targetName = AuditTargets::describe(collect([$probe]))[0]['name'] ?? null;
+        }
+
         return response()->json([
-            'logs' => $logs->items(),
+            'logs' => $browser->present(collect($logs->items())),
             'meta' => [
                 'current_page' => $logs->currentPage(),
                 'last_page' => $logs->lastPage(),
                 'per_page' => $logs->perPage(),
                 'total' => $logs->total(),
             ],
+            'categories' => AuditEvents::categoryList(),
+            'filter_names' => [
+                'actor' => $actorName,
+                'target' => $targetName,
+                'target_type' => AuditTargets::typeLabel($validated['target_type'] ?? null),
+            ],
         ]);
+    });
+
+    /*
+     * The same filtered log as a CSV file, for keeping or handing on. The
+     * export is itself an audit entry: who took a copy, and of what.
+     */
+    Route::get('/audit-logs/export', function (Request $request, AuditLogBrowser $browser) use ($ensureActive, $isAdmin, $recordAudit) {
+        if ($inactiveResponse = $ensureActive($request)) {
+            return $inactiveResponse;
+        }
+
+        if (!$isAdmin($request->user())) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            ...AuditLogBrowser::filterRules(),
+            'tz' => ['nullable', 'timezone:all'],
+        ]);
+
+        $filters = collect($validated)->except('tz')->filter(fn ($value) => $value !== null && $value !== '')->all();
+        $count = min($browser->query($filters)->count(), AuditLogBrowser::EXPORT_LIMIT);
+
+        $recordAudit($request->user(), 'audit.export', null, null, "Exported {$count} audit log entries", [
+            'rows' => $count,
+            'filters' => $filters,
+        ], $request);
+
+        return $browser->exportCsv($filters, $validated['tz'] ?? config('app.timezone'));
     });
 
     /*
