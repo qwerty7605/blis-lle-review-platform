@@ -119,7 +119,6 @@
                 <th scope="col">Actor</th>
                 <th scope="col">Event</th>
                 <th scope="col">Target</th>
-                <th scope="col">Source</th>
                 <th scope="col" class="audit-expand-col"><span class="visually-hidden">Details</span></th>
               </tr>
             </thead>
@@ -152,10 +151,6 @@
                     </template>
                     <span v-else class="muted">—</span>
                   </td>
-                  <td class="audit-source-cell">
-                    <span>{{ log.ip_address || '—' }}</span>
-                    <small>{{ log.device || '' }}</small>
-                  </td>
                   <td class="audit-expand-col">
                     <button
                       type="button"
@@ -169,7 +164,7 @@
                   </td>
                 </tr>
                 <tr v-if="openId === log.id" class="audit-detail-row">
-                  <td colspan="6">
+                  <td colspan="5">
                     <AuditDetails :log="log" @filter="applyFromDetails" />
                   </td>
                 </tr>
@@ -224,8 +219,8 @@ import { estimatePageWidth, useCompactLayout, useElementWidth } from '../composa
 const isCompact = useCompactLayout()
 const pageRef = ref(null)
 const pageWidth = useElementWidth(pageRef, estimatePageWidth())
-// Six columns need about this much; narrower, each entry is a row.
-const useRows = computed(() => pageWidth.value < 900)
+// Five columns need about this much; narrower, each entry is a row.
+const useRows = computed(() => pageWidth.value < 760)
 
 const {
   auditLogs,
@@ -381,13 +376,14 @@ function applyFromDetails(changes) {
   text-transform: uppercase;
 }
 
-/* With a fixed 44px last column these leave room to spare, so the table
+/* The standard four: when, who, what, to what. The address and device are in
+   an entry's details (campus traffic mostly shares one address anyway).
+   With a fixed 44px last column these leave room to spare, so the table
    never runs wider than its box. */
-.audit-table th:nth-child(1) { width: 15%; }
-.audit-table th:nth-child(2) { width: 18%; }
-.audit-table th:nth-child(3) { width: 22%; }
-.audit-table th:nth-child(4) { width: 24%; }
-.audit-table th:nth-child(5) { width: 15%; }
+.audit-table th:nth-child(1) { width: 16%; }
+.audit-table th:nth-child(2) { width: 21%; }
+.audit-table th:nth-child(3) { width: 25%; }
+.audit-table th:nth-child(4) { width: 33%; }
 .audit-table .audit-expand-col { width: 44px; text-align: right; }
 
 .audit-table td {
@@ -417,11 +413,6 @@ function applyFromDetails(changes) {
 .audit-time-cell time {
   color: var(--lnu-text);
   font-variant-numeric: tabular-nums;
-}
-
-.audit-source-cell span {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
 }
 
 .audit-row {
