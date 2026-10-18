@@ -14,10 +14,10 @@
     <!-- What this page is, the totals, and the one action that adds to it -->
     <header class="examlist-hero">
       <div class="examlist-hero-copy">
-        <h2 class="examlist-hero-title">Exams</h2>
-        <p class="examlist-hero-body">
-          Build an exam from your question banks, then assign it to one or more rooms.
-        </p>
+        <h2 class="examlist-hero-title">
+          Exams
+          <InfoTip on-dark text="Build an exam from your question banks, then assign it to one or more rooms." />
+        </h2>
 
         <ul v-if="exams.length > 0" class="examlist-hero-stats">
           <li><FileText :size="13" />{{ exams.length }} {{ exams.length === 1 ? 'exam' : 'exams' }}</li>
@@ -286,8 +286,10 @@
                 <span class="pill success">{{ examForm.id ? 'Edit mode' : 'New exam' }}</span>
                 <span class="pill neutral">{{ examQuestionBanks.length }} saved question set(s)</span>
               </div>
-              <h4 id="exam-form-title">{{ examForm.id ? 'Update Exam Setup' : 'Create Exam Setup' }}</h4>
-              <p>Build the exam in sections, then review the live summary before saving.</p>
+              <h4 id="exam-form-title">
+                {{ examForm.id ? 'Update Exam Setup' : 'Create Exam Setup' }}
+                <InfoTip text="Build the exam in sections, then review the live summary before saving." />
+              </h4>
             </div>
             <button type="button" class="modal-close" aria-label="Close" @click="closeExamModal">
               <X :size="16" />
@@ -300,8 +302,7 @@
                 <section class="exam-modal-panel">
                   <div class="exam-panel-head">
                     <span class="exam-panel-kicker">Section 1</span>
-                    <h5>Core Details</h5>
-                    <p>Give the exam a clear identity and set the base workload.</p>
+                    <h5>Core Details <InfoTip text="Give the exam a clear identity and set the base workload." /></h5>
                   </div>
 
                   <div class="exam-panel-grid single">
@@ -331,8 +332,7 @@
                 <section class="exam-modal-panel">
                   <div class="exam-panel-head">
                     <span class="exam-panel-kicker">Section 2</span>
-                    <h5>Question Set Mix</h5>
-                    <p>Choose one or more sources. Students will receive items from the combined pool.</p>
+                    <h5>Question Set Mix <InfoTip text="Choose one or more sources. Students will receive items from the combined pool." /></h5>
                   </div>
 
                   <div class="exam-selection-note">
@@ -415,8 +415,7 @@
                 <section class="exam-modal-panel">
                   <div class="exam-panel-head">
                     <span class="exam-panel-kicker">Section 3</span>
-                    <h5>Availability And Rules</h5>
-                    <p>Control when the exam opens and how many times students can take it.</p>
+                    <h5>Availability And Rules <InfoTip text="Control when the exam opens and how many times students can take it." /></h5>
                   </div>
 
                   <div class="exam-panel-grid">
@@ -459,8 +458,7 @@
                         <label class="check-item exam-policy-item">
                           <input v-model="examForm.shuffle_questions" type="checkbox" />
                           <span>
-                            <strong>Shuffle questions</strong>
-                            <small>Each attempt gets a randomized order when possible.</small>
+                            <strong>Shuffle questions <InfoTip text="Each attempt gets a randomized order when possible." /></strong>
                           </span>
                         </label>
                       </div>
@@ -740,6 +738,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
@@ -1138,13 +1137,6 @@ onBeforeUnmount(() => {
   line-height: 1.25;
 }
 
-.examlist-hero-body {
-  margin: 6px 0 0;
-  max-width: 60ch;
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-}
 
 .examlist-hero-stats {
   list-style: none;
@@ -1854,10 +1846,6 @@ onBeforeUnmount(() => {
   }
 
   .exam-modal-top-pills,
-  .exam-modal-title-wrap p {
-    display: none;
-  }
-
   .exam-modal-title-wrap h4 {
     font-size: 18px;
     line-height: 1.3;
@@ -1880,10 +1868,6 @@ onBeforeUnmount(() => {
 
   .exam-panel-head h5 {
     font-size: 16px;
-  }
-
-  .exam-panel-head p {
-    font-size: 13px;
   }
 
   /* Items and Minutes are two short numbers: side by side. */

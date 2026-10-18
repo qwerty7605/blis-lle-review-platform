@@ -2,7 +2,10 @@
   <div class="lleb">
     <div class="lleb-setup">
       <label class="field-stack">
-        <span class="field-label">Batch</span>
+        <span class="field-label">
+          Batch
+          <InfoTip text="A batch is the year its students were admitted. Choose one to list its students, then mark each as passed or failed from the published list. Leave a student blank if they did not take the exam." />
+        </span>
         <select v-model="admissionYear" class="text-input" :disabled="batchesLoading">
           <option value="">{{ batchesLoading ? 'Loading batches...' : 'Choose a batch' }}</option>
           <option v-for="batch in batches" :key="batch.admission_year" :value="String(batch.admission_year)">
@@ -24,10 +27,6 @@
 
     <div v-if="loadError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ loadError }}</span></div>
 
-    <p v-if="!admissionYear" class="muted lleb-hint">
-      A batch is the year its students were admitted. Choose one to list its students, then mark each as passed or
-      failed from the published list. Leave a student blank if they did not take the exam.
-    </p>
 
     <div v-else-if="rosterLoading" class="room-detail-loading">
       <RefreshCw :size="15" class="spin-soft" />
@@ -92,11 +91,11 @@
     <div v-else-if="saveNotice" class="feedback success" role="status"><CheckCircle2 :size="15" /><span>{{ saveNotice }}</span></div>
 
     <div v-if="rows.length > 0" class="management-toolbar">
-      <p class="muted">
-        Only students marked passed or failed are saved. A student already on record for {{ examYear || 'this year' }} is
-        corrected, not added twice.
-      </p>
       <div class="management-actions">
+        <InfoTip
+          :text="`Only students marked passed or failed are saved. A student already on record for ${examYear || 'this year'} is corrected, not added twice.`"
+          label="About saving results"
+        />
         <button type="button" class="primary-btn" :disabled="!canSave" @click="save">
           <Save :size="14" />
           {{ saving ? 'Saving...' : `Record ${changedEntries.length} ${changedEntries.length === 1 ? 'Result' : 'Results'}` }}
@@ -107,6 +106,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw, Save, Search } from 'lucide-vue-next'
 import { useDashboardDataServices } from '../composables/useDashboardDataServices'

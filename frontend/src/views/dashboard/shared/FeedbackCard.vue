@@ -1,13 +1,15 @@
 <template>
   <article class="surface-card account-card">
     <header class="account-card-head">
-      <h3>Send Feedback</h3>
-      <p>Report a problem, suggest an improvement or ask a question. Every message is read.</p>
+      <h3>Send Feedback <InfoTip text="Report a problem, suggest an improvement or ask a question. Every message is read." /></h3>
     </header>
 
     <form class="account-form" novalidate @submit.prevent="sendFeedback">
       <fieldset class="feedback-fieldset">
-        <legend class="field-label">What is it about?</legend>
+        <legend class="field-label">
+          What is it about?
+          <InfoTip text="A problem goes straight to the developers and to the administrator, so it can be fixed quickly. Anything else is read by the administrator, the head of BLIS, who decides whether it goes to the developers." label="Where your feedback goes" />
+        </legend>
         <div class="feedback-types" role="radiogroup">
           <label v-for="type in feedbackTypes" :key="type.value" class="feedback-type" :class="{ selected: form.type === type.value }">
             <input v-model="form.type" type="radio" name="feedback-type" :value="type.value" />
@@ -68,16 +70,10 @@
         <span>You may contact me about this at <strong>{{ auth.user?.email }}</strong></span>
       </label>
 
-      <!-- Where it goes, said before it is sent. -->
+      <!-- What is sent with it stays on the page; where it goes is behind the (i) by the type. -->
       <div class="feedback-route">
         <Info :size="16" aria-hidden="true" />
         <div>
-          <p v-if="form.type === 'problem'">
-            Goes straight to the developers and to the administrator, so it can be fixed quickly.
-          </p>
-          <p v-else>
-            The administrator, the head of BLIS, reads it first and decides whether it goes to the developers.
-          </p>
           <p class="feedback-route-small">
             Sent with it: the page you came from, your browser and device, your screen size and the app version.
             {{ form.may_contact ? 'Your name and email are shared with the developers.' : 'The developers do not see your name or email.' }}
@@ -122,6 +118,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { AlertCircle, CheckCircle2, Info, RefreshCw, Send } from 'lucide-vue-next'
 import { feedbackApi } from '@/api/feedback.api'
@@ -404,8 +401,7 @@ useLiveRefresh(loadHistory, { when: () => !sending.value })
 }
 
 .feedback-route .feedback-route-small {
-  margin-top: 4px;
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--ink-soft);
 }
 

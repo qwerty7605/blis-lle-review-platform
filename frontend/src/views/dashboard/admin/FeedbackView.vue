@@ -33,12 +33,11 @@
         </Teleport>
       </header>
 
+      <!-- Here rather than by the heading, which phones do not show. -->
       <p class="fb-intro">
-        Problems go to the developers as soon as they are reported. Ideas, questions and everything else wait here
-        for you: answer them, close them, or send them on to the developers.
-        <template v-if="developerEmail">
-          <br />Developer email: <strong>{{ developerEmail }}</strong> (set on the server).
-        </template>
+        <template v-if="developerEmail">Developer email: <strong>{{ developerEmail }}</strong> (set on the server).</template>
+        <template v-else>How feedback is handled</template>
+        <InfoTip text="Problems go to the developers as soon as they are reported. Ideas, questions and everything else wait here for you: answer them, close them, or send them on to the developers." label="How feedback is handled" />
       </p>
 
       <div v-scroll-hint class="fb-tabs" role="tablist" aria-label="Filter by status">
@@ -224,6 +223,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {

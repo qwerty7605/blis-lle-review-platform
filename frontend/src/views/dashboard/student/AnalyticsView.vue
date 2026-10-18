@@ -11,8 +11,10 @@
       <div class="analytics-hero-col">
         <article class="analytics-hero-card">
           <h1 class="analytics-hero-title">Analytics</h1>
-          <p class="analytics-hero-subtitle">Track Your Performance</p>
-          <p class="analytics-hero-body">Deep dive into your scores and subject mastery across all examinations.</p>
+          <p class="analytics-hero-subtitle">
+            Track Your Performance
+            <InfoTip on-dark text="Your scores and subject mastery across all your exams." />
+          </p>
         </article>
 
         <!-- One section of the page at a time, instead of all three stacked
@@ -224,11 +226,10 @@
              attempt before it. The figures above use the latest of each. -->
         <section v-show="activeTab === 'history'" class="analytics-section" aria-labelledby="analytics-history-heading">
           <header class="analytics-section-head">
-            <h3 id="analytics-history-heading">Exam History</h3>
-            <p>
-              Every exam you have submitted, newest first. Where you took an exam twice, your latest attempt is the
-              score that counts.
-            </p>
+            <h3 id="analytics-history-heading">
+              Exam History
+              <InfoTip text="Every exam you have submitted, newest first. Where you took an exam twice, your latest attempt is the score that counts." />
+            </h3>
           </header>
 
           <div v-if="examHistory.length === 0" class="analytics-empty">
@@ -290,8 +291,10 @@
         <!-- What to review next -->
         <article class="analytics-card analytics-guidance-card" aria-labelledby="analytics-review-heading">
           <header class="analytics-card-head is-stacked">
-            <h2 id="analytics-review-heading" class="analytics-card-title">What To Review Next</h2>
-            <p class="analytics-card-sub">Do these in order. Each one opens a short practice set on that topic.</p>
+            <h2 id="analytics-review-heading" class="analytics-card-title">
+              What To Review Next
+              <InfoTip text="Do these in order. Each one opens a short practice set on that topic." />
+            </h2>
           </header>
 
           <div v-if="isInitialLoading" class="analytics-empty is-inline">
@@ -386,6 +389,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
   AlertCircle,
@@ -777,13 +781,6 @@ function trendToneClass(subject) {
   line-height: 1.3;
 }
 
-.analytics-hero-body {
-  margin: 6px 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.78);
-  max-width: 40ch;
-}
 
 .analytics-overview-card {
   border-radius: var(--radius-md);
