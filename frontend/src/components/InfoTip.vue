@@ -236,19 +236,28 @@ defineExpose({ close })
   z-index: 3000;
   width: max-content;
   max-width: min(300px, calc(100vw - 24px));
-  padding: 9px 12px;
+  padding: 10px 14px;
   border-radius: 10px;
-  background: var(--lnu-navy-deep, #0d1547);
-  color: #fff;
+  /* White card, dark text: reads clearly on the cream page and the navy
+     panels alike, where the old navy bubble blended into the navy. */
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  border-top: 3px solid var(--lnu-gold, #d4a72c);
+  background: #fff;
+  color: #1f2433;
   font-family: var(--font-body, inherit);
   font-size: 12.5px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.55;
   letter-spacing: normal;
   text-transform: none;
-  text-align: left;
+  /* Straight edges on both sides; hyphenation keeps a narrow line from
+     opening wide gaps, and the last line stays left-aligned. */
+  text-align: justify;
+  text-align-last: left;
+  hyphens: auto;
+  -webkit-hyphens: auto;
   white-space: normal;
-  box-shadow: 0 8px 24px rgba(13, 21, 71, 0.22);
+  box-shadow: 0 10px 28px rgba(13, 21, 71, 0.18), 0 2px 6px rgba(13, 21, 71, 0.08);
 }
 
 /* Touch screens: a 44px tap target around the same 15px icon. */
