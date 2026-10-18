@@ -24,7 +24,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     platform_name: '',
     academic_term: '',
     allow_public_registration: true,
-    maintenance_mode: false,
     announcement_banner: '',
     terms_of_use_text: '',
     privacy_policy_text: '',
@@ -42,7 +41,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
       settingsForm.platform_name = settings.platform_name ?? ''
       settingsForm.academic_term = settings.academic_term ?? ''
       settingsForm.allow_public_registration = Boolean(settings.allow_public_registration)
-      settingsForm.maintenance_mode = Boolean(settings.maintenance_mode)
       settingsForm.announcement_banner = settings.announcement_banner ?? ''
       settingsForm.terms_of_use_text = settings.terms_of_use_text ?? ''
       settingsForm.privacy_policy_text = settings.privacy_policy_text ?? ''
@@ -74,7 +72,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
         platform_name: settingsForm.platform_name.trim(),
         academic_term: settingsForm.academic_term.trim(),
         allow_public_registration: settingsForm.allow_public_registration,
-        maintenance_mode: settingsForm.maintenance_mode,
         announcement_banner: settingsForm.announcement_banner.trim(),
         terms_of_use_text: termsOfUse,
         privacy_policy_text: privacyPolicy,

@@ -33,7 +33,7 @@ class PublicNoticeTest extends TestCase
         $this->getJson('/api/settings/public/notice')
             ->assertOk()
             ->assertJsonPath('announcement_banner', 'Server upgrade at 9 PM.')
-            ->assertJsonPath('maintenance_mode', false);
+            ->assertJsonMissingPath('maintenance_mode');
     }
 
     public function test_a_student_can_read_the_announcement_an_admin_saved(): void
@@ -57,19 +57,5 @@ class PublicNoticeTest extends TestCase
         $this->getJson('/api/settings/public/notice')
             ->assertOk()
             ->assertJsonPath('announcement_banner', '');
-    }
-
-    public function test_the_notice_stays_readable_during_maintenance(): void
-    {
-        // This is the one moment the banner matters most, so it must not be
-        // behind the switch it is explaining.
-        SystemSetting::updateOrCreate(['key' => 'maintenance_mode'], ['value' => '1']);
-        SystemSetting::updateOrCreate(['key' => 'announcement_banner'], ['value' => 'Back at 11 PM.']);
-        app(SystemSettings::class)->forget();
-
-        $this->getJson('/api/settings/public/notice')
-            ->assertOk()
-            ->assertJsonPath('maintenance_mode', true)
-            ->assertJsonPath('announcement_banner', 'Back at 11 PM.');
     }
 }
