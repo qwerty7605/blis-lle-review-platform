@@ -3,8 +3,14 @@
     <!-- Name -->
     <article class="surface-card account-card">
       <header class="account-card-head">
-        <h3>Your Name</h3>
-        <p>Shown on class lists, exam results and reports.</p>
+        <h3>
+          Your Name
+          <InfoTip
+            :text="isStudent
+              ? 'Shown on class lists, exam results and reports. Your student ID, year level and email are kept by the school; ask an administrator if one of them is wrong.'
+              : 'Shown on class lists, exam results and reports.'"
+          />
+        </h3>
       </header>
 
       <form class="account-form" novalidate @submit.prevent="saveProfile">
@@ -43,9 +49,6 @@
             <dd>{{ auth.user?.email }}</dd>
           </div>
         </dl>
-        <p v-if="isStudent" class="account-note">
-          Your student ID, year level and email are kept by the school. Ask an administrator if one of them is wrong.
-        </p>
 
         <div v-if="profileMessage" class="feedback success" role="status"><CheckCircle2 :size="15" /><span>{{ profileMessage }}</span></div>
         <div v-if="profileError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ profileError }}</span></div>
@@ -62,11 +65,8 @@
     <!-- Email: staff and administrators -->
     <article v-if="!isStudent" class="surface-card account-card">
       <header class="account-card-head">
-        <h3>Sign-In Email</h3>
-        <p>
-          You sign in with <strong>{{ auth.user?.email }}</strong>. To change it we send a link to the new address;
-          nothing changes until you open it.
-        </p>
+        <h3>Sign-In Email <InfoTip text="To change it we send a link to the new address; nothing changes until you open it." /></h3>
+        <p>You sign in with <strong>{{ auth.user?.email }}</strong>.</p>
       </header>
 
       <form class="account-form" novalidate @submit.prevent="requestEmailChange">
@@ -156,6 +156,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, Circle, RefreshCw } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'

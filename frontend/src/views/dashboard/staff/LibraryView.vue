@@ -12,10 +12,10 @@
     <!-- What this page is, the totals, and the one action that adds to it -->
     <header class="library-hero">
       <div class="library-hero-copy">
-        <h2 class="library-hero-title">Assessment Library</h2>
-        <p class="library-hero-body">
-          Your question banks. Upload a DOCX and its questions are saved here, ready to build exams from.
-        </p>
+        <h2 class="library-hero-title">
+          Assessment Library
+          <InfoTip on-dark text="Your question banks. Upload a DOCX and its questions are saved here, ready to build exams from." />
+        </h2>
 
         <ul v-if="libraryQuestionBanks.length > 0" class="library-hero-stats">
           <li><Layers :size="13" />{{ libraryQuestionBanks.length }} {{ libraryQuestionBanks.length === 1 ? 'bank' : 'banks' }}</li>
@@ -38,8 +38,7 @@
 
     <div v-else-if="libraryQuestionBanks.length === 0" class="library-state">
       <span class="library-state-icon"><BookOpen :size="24" /></span>
-      <strong>No question banks yet</strong>
-      <p>Upload a DOCX of numbered questions. They are converted and tagged by topic for you.</p>
+      <strong>No question banks yet <InfoTip text="Upload a DOCX of numbered questions. They are converted and tagged by topic for you." /></strong>
       <button type="button" class="primary-btn" @click="openLibraryQuestionModal">
         <Plus :size="16" />
         Add Questions
@@ -257,8 +256,7 @@
         <div class="modal-card library-modal-card">
           <header class="modal-head library-modal-head">
             <div class="library-modal-title-wrap">
-              <h4>Add Assessment Questions</h4>
-              <p>Pick a DOCX. The name and item mapping are handled on save; the core subject is detected and yours to change.</p>
+              <h4>Add Assessment Questions <InfoTip text="Pick a DOCX. The name and item mapping are handled on save; the core subject is detected and yours to change." /></h4>
             </div>
             <button type="button" class="modal-close" @click="closeLibraryQuestionModal">
               <X :size="16" />
@@ -268,7 +266,10 @@
           <div class="library-modal-body">
             <section class="library-form-panel">
               <label class="field-stack">
-                <span class="field-label">Upload a DOCX file (Questions)</span>
+                <span class="field-label">
+                  Upload a DOCX file (Questions)
+                  <InfoTip text="Use numbered questions with optional choices like A., B., C." />
+                </span>
                 <div class="library-upload-panel">
                   <input
                     :key="libraryFileInputKey"
@@ -278,9 +279,6 @@
                     :disabled="libraryParsing"
                     @change="handleLibraryDocxChange"
                   />
-                  <p class="library-upload-note">
-                    Use numbered questions with optional choices like <code>A.</code>, <code>B.</code>, <code>C.</code>.
-                  </p>
                 </div>
               </label>
 
@@ -639,10 +637,10 @@
 
           <div class="library-edit-questions">
             <div class="library-edit-questions-text">
-              <span class="field-label">Questions and Mapping</span>
-              <p class="library-upload-note">
-                Open the questions to edit each one's wording, answer, topic, subtopic, difficulty and cognitive level.
-              </p>
+              <span class="field-label">
+                Questions and Mapping
+                <InfoTip text="Open the questions to edit each one's wording, answer, topic, subtopic, difficulty and cognitive level." />
+              </span>
             </div>
             <button
               type="button"
@@ -714,6 +712,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
   AlertCircle,
@@ -1136,13 +1135,6 @@ function mappingState(bank) {
   line-height: 1.25;
 }
 
-.library-hero-body {
-  margin: 6px 0 0;
-  max-width: 60ch;
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.82);
-}
 
 .library-hero-stats {
   list-style: none;

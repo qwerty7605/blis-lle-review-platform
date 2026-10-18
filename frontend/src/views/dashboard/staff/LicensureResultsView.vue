@@ -9,15 +9,13 @@
       <header class="room-page-head">
         <div class="room-page-title">
           <Award :size="18" />
-          <h3>Record a licensure result</h3>
+          <h3>
+            Record a licensure result
+            <InfoTip text="Board results are published by the PRC, so they are transcribed here once a batch has sat the exam. Each recorded outcome pairs with that graduate's fourth-year subject scores to form one training row for the Exam Outcome model." />
+          </h3>
         </div>
       </header>
 
-      <p class="muted lle-intro">
-        Board results are published by the PRC, so they are transcribed here once a batch has
-        sat the exam. Each recorded outcome pairs with that graduate's fourth-year subject scores
-        to form one training row for the Exam Outcome model.
-      </p>
 
       <!-- One at a time, for a late result or a correction; or a whole batch
            from the published list, without looking each student up. -->
@@ -118,10 +116,8 @@
       </div>
 
       <div class="management-toolbar">
-        <p class="muted">
-          Recording the same student and exam year again corrects that record rather than adding a second one.
-        </p>
         <div class="management-actions">
+          <InfoTip text="Recording the same student and exam year again corrects that record rather than adding a second one." label="About saving a result" />
           <button type="button" class="primary-btn" :disabled="!canSubmit" @click="submitResult">
             <Save :size="14" />
             {{ saving ? 'Saving…' : 'Record result' }}
@@ -135,7 +131,10 @@
       <header class="room-page-head is-inline">
         <div class="room-page-title">
           <BrainCircuit :size="18" />
-          <h3>Exam Outcome model</h3>
+          <h3>
+            Exam Outcome model
+            <InfoTip text="It is retrained only when an administrator asks, on the original records plus every graduate with a confirmed board result. A new version is used only if its accuracy is at least the baseline and its Kappa at least that of the version in use." />
+          </h3>
         </div>
         <button
           v-if="canManageModel"
@@ -157,9 +156,7 @@
 
       <template v-else-if="modelStatus">
         <p class="muted lle-intro">
-          {{ modelInUse }} It is retrained only when an administrator asks, on the original records plus
-          every graduate with a confirmed board result, and a new version is used only if its accuracy is
-          at least the baseline and its Kappa at least that of the version in use.
+          {{ modelInUse }}
         </p>
 
         <dl class="lle-model-facts">
@@ -201,10 +198,16 @@
                 <th scope="col">Trained</th>
                 <th scope="col" class="numeric">Rows</th>
                 <th scope="col" class="numeric">Failed rows</th>
-                <th scope="col" class="numeric">Accuracy</th>
+                <th scope="col" class="numeric">
+                  Accuracy
+                  <InfoTip text="Accuracy, Kappa and Failed recall are from 10-fold cross-validation with random seed 1." label="How these figures are measured" />
+                </th>
                 <th scope="col" class="numeric">Kappa</th>
                 <th scope="col" class="numeric">Failed recall</th>
-                <th scope="col" class="numeric">Baseline</th>
+                <th scope="col" class="numeric">
+                  Baseline
+                  <InfoTip text="The share of rows that passed: what always answering &quot;passed&quot; would score." label="What Baseline means" />
+                </th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -242,10 +245,6 @@
           </table>
         </div>
 
-        <p class="muted lle-intro">
-          Accuracy, Kappa and Failed recall are from 10-fold cross-validation with random seed 1. Baseline is the
-          share of rows that passed, which is what always answering "passed" would score.
-        </p>
       </template>
 
       <div v-if="modelError" class="feedback danger" role="alert">
@@ -421,6 +420,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
   AlertCircle,

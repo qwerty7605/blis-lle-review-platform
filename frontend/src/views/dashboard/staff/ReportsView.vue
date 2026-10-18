@@ -474,8 +474,7 @@
         <summary class="collapsible-summary">
           <div class="surface-head-copy">
             <span class="section-kicker">Export Center</span>
-            <h3>Generate Session Reports</h3>
-            <p>Download or email result files only when you need them, without crowding the main report view.</p>
+            <h3>Generate Session Reports <InfoTip text="Download or email result files only when you need them, without crowding the main report view." /></h3>
           </div>
 
           <div class="collapsible-summary-meta">
@@ -557,8 +556,7 @@
             <div class="report-action-sections">
               <section class="action-section">
                 <header class="action-section-head">
-                  <h4>Downloads</h4>
-                  <p>Use these when you need printable or downloadable files for the panel or class records.</p>
+                  <h4>Downloads <InfoTip text="Printable or downloadable files for the panel or class records." /></h4>
                 </header>
 
                 <div class="report-action-grid">
@@ -621,8 +619,7 @@
 
               <section class="action-section">
                 <header class="action-section-head">
-                  <h4>Email Delivery</h4>
-                  <p>Use these only when you are ready to send finalized student reports.</p>
+                  <h4>Email Delivery <InfoTip text="Use these only when you are ready to send finalized student reports." /></h4>
                 </header>
 
                 <div class="report-action-grid">
@@ -689,6 +686,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref, watch } from 'vue'
 import {
   AlertCircle,

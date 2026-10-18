@@ -15,8 +15,7 @@
       <aside class="surface-card review-panel review-setup" aria-labelledby="review-setup-heading">
         <header class="review-panel-head">
           <div class="review-panel-head-copy">
-            <h2 id="review-setup-heading">Setup</h2>
-            <p>Questions your teachers already published.</p>
+            <h2 id="review-setup-heading">Setup <InfoTip text="Practice sets are drawn from the review questions your teachers have published." /></h2>
           </div>
           <span class="review-head-badge">{{ form.questionCount }} items</span>
         </header>
@@ -335,6 +334,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
