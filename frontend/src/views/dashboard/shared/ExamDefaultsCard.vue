@@ -1,8 +1,7 @@
 <template>
   <article class="surface-card account-card">
     <header class="account-card-head">
-      <h3>New Exam Defaults</h3>
-      <p>What the New Exam form starts with. You can still change any of it for a single exam.</p>
+      <h3>New Exam Defaults <InfoTip text="What the New Exam form starts with. You can still change any of it for a single exam." /></h3>
     </header>
 
     <form class="account-form" novalidate @submit.prevent="save">
@@ -59,6 +58,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'

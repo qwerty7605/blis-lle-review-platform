@@ -157,8 +157,11 @@
         </button>
 
         <div class="layout-topbar-copy">
-          <h1>{{ pageTitle }}</h1>
-          <p>{{ pageSubtitle }}</p>
+          <!-- What the page is for sits behind the (i), not in a line under the title. -->
+          <div class="layout-title-row">
+            <h1>{{ pageTitle }}</h1>
+            <InfoTip class="layout-title-tip" :text="pageSubtitle" :label="`About ${pageTitle}`" :size="16" :on-dark="isMobileViewport" />
+          </div>
         </div>
 
         <!-- Pages move their main action up here on narrow screens. -->
@@ -217,6 +220,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import InfoTip from '@/components/InfoTip.vue'
 import { roomsApi } from '@/api/rooms.api'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
@@ -840,10 +844,11 @@ onBeforeUnmount(() => {
   color: #0b0d17;
 }
 
-.layout-topbar p {
-  margin: 4px 0 0;
-  font-size: 13.5px;
-  color: var(--lnu-text-muted);
+.layout-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .layout-topbar-copy {
@@ -895,11 +900,6 @@ onBeforeUnmount(() => {
 
 .layout-topbar.is-fill-screen h1 {
   font-size: 18px;
-}
-
-.layout-topbar.is-fill-screen p {
-  margin-top: 2px;
-  font-size: 12px;
 }
 
 .layout-content {
@@ -1203,8 +1203,8 @@ onBeforeUnmount(() => {
 
   /* Each page's own header says what the page is for; the app bar only
      needs to say where you are. */
-  .layout-topbar p {
-    display: none;
+  .layout-title-row h1 {
+    flex: 0 1 auto;
   }
 
   /* The document scrolls here, not this box. Left as a scroll container

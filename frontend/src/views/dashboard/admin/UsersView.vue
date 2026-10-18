@@ -381,7 +381,10 @@
           </label>
 
           <label v-if="userForm.role === 'student'" class="field-stack">
-            <span class="field-label">Year Level</span>
+            <span class="field-label">
+              Year Level
+              <InfoTip text="Required while enrolled. Levels past 4th exist for irregular students; leave it blank once they have graduated or left." />
+            </span>
             <select v-model="userForm.year_level" class="text-input">
               <option value="">Not applicable</option>
               <option v-for="option in yearLevelOptions" :key="option.value" :value="option.value">
@@ -391,10 +394,6 @@
                 {{ level }}th Year (irregular)
               </option>
             </select>
-            <small class="muted">
-              Required while enrolled. Levels past 4th exist for irregular students; leave it blank once
-              they have graduated or left.
-            </small>
           </label>
 
           <div class="inline-form">
@@ -422,21 +421,22 @@
 
           <div v-if="userForm.role === 'student'" class="inline-form">
             <label class="field-stack grow">
-              <span class="field-label">Status</span>
+              <span class="field-label">
+                Status
+                <InfoTip text="Anything other than Enrolled takes the student off class lists. Graduated and Dropped out are kept apart on purpose: a student who left never sat the board exam, so they are not a failure." />
+              </span>
               <select v-model="userForm.student_status" class="text-input">
                 <option v-for="option in studentStatusOptions" :key="option.value" :value="option.value">
                   {{ option.label }}
                 </option>
               </select>
-              <small class="muted">
-                Anything other than Enrolled takes the student off class lists. Graduated and Dropped out
-                are kept apart on purpose &mdash; a student who left never sat the board exam, so they are
-                not a failure.
-              </small>
             </label>
 
             <label class="field-stack grow">
-              <span class="field-label">Admission Year</span>
+              <span class="field-label">
+                Admission Year
+                <InfoTip text="The batch they entered with. Fixed for life, unlike year level." />
+              </span>
               <input
                 v-model="userForm.admission_year"
                 type="number"
@@ -445,7 +445,6 @@
                 max="2999"
                 placeholder="e.g. 2026"
               />
-              <small class="muted">The batch they entered with. Fixed for life, unlike year level.</small>
             </label>
           </div>
 
@@ -621,6 +620,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref, watch } from 'vue'
 import {
   AlertCircle,
