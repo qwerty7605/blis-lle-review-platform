@@ -214,6 +214,7 @@ class SchoolYearEndService
                     'skipped' => count($skipped),
                 ]),
                 'ip_address' => $request?->ip(),
+                'user_agent' => AuditLogService::userAgentOf($request),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -293,6 +294,7 @@ class SchoolYearEndService
             // insert() bypasses the model's array cast, so encode it here.
             'metadata' => json_encode($metadata),
             'ip_address' => $request?->ip(),
+            'user_agent' => AuditLogService::userAgentOf($request),
             'created_at' => $at,
             'updated_at' => $at,
         ];

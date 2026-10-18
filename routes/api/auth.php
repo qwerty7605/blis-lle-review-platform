@@ -13,10 +13,12 @@ Route::get('/auth/me', function (Request $request) use ($ensureActive, $authToke
     ]));
 });
 
-Route::post('/auth/logout', function (Request $request) use ($ensureActive, $authTokenCookieService) {
+Route::post('/auth/logout', function (Request $request) use ($ensureActive, $authTokenCookieService, $recordAudit) {
     if ($inactiveResponse = $ensureActive($request)) {
         return $inactiveResponse;
     }
+
+    $recordAudit($request->user(), 'auth.logout', 'user', $request->user()->id, 'Signed out', [], $request);
 
     $request->user()->currentAccessToken()?->delete();
 
