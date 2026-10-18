@@ -17,8 +17,7 @@
 
     <div v-else-if="rooms.length === 0" class="surface-card rooms-empty-card">
       <DoorOpen :size="42" />
-      <h4>Join a Room</h4>
-      <p>Use your room code to join and view assigned exams and enrolled classmates.</p>
+      <h4>Join a Room <InfoTip text="Use the room code from your teacher to join and see the exams assigned to you and your classmates." /></h4>
       <button class="primary-btn rooms-join-btn" :disabled="roomLoading" @click="openJoinRoomModal">
         <DoorOpen :size="16" />
         Join Room
@@ -869,6 +868,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AlertCircle,

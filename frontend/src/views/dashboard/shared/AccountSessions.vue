@@ -1,8 +1,7 @@
 <template>
   <article class="surface-card account-card">
     <header class="account-card-head">
-      <h3>Where You're Signed In</h3>
-      <p>Every browser this account is signed in on. Sign out any you do not recognise or no longer use.</p>
+      <h3>Where You're Signed In <InfoTip text="Every browser this account is signed in on. Sign out any you do not recognise or no longer use." /></h3>
     </header>
 
     <div v-if="loading && sessions.length === 0" class="room-detail-loading">
@@ -58,6 +57,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, ref } from 'vue'
 import { AlertCircle, CheckCircle2, Monitor, RefreshCw, Smartphone } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'

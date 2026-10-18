@@ -101,8 +101,10 @@
         <!-- By subject -->
         <article class="profile-card" aria-labelledby="profile-subjects-heading">
           <header class="profile-card-head">
-            <h3 id="profile-subjects-heading"><LayoutGrid :size="17" />Subjects</h3>
-            <p>Average score across every finished exam in each subject. The pass mark is {{ stats.passing_threshold }}%.</p>
+            <h3 id="profile-subjects-heading">
+              <LayoutGrid :size="17" />Subjects
+              <InfoTip :text="`Average score across every finished exam in each subject. The pass mark is ${stats.passing_threshold}%.`" />
+            </h3>
           </header>
 
           <ul class="profile-subjects">
@@ -188,6 +190,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {

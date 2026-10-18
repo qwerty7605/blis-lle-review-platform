@@ -2,11 +2,10 @@
   <section class="rbg-view">
     <article class="surface-card rbg-head">
       <p class="rbg-kicker">Review Bot Question Generator</p>
-      <h3>Turn your Library files into Review Bot questions</h3>
-      <p>
-        Pick a file. The Review Bot reads it — subject, and each question's own topic/subtopic mapping —
-        and generates a fresh, original review set on its own. Review and publish when you're happy with it.
-      </p>
+      <h3>
+        Turn your Library files into Review Bot questions
+        <InfoTip text="Pick a file. The Review Bot reads it (the subject, and each question's own topic and subtopic) and generates a fresh, original review set on its own. Students see the questions only after you review and publish them." />
+      </h3>
     </article>
 
     <div v-if="catalogError" class="feedback danger"><AlertCircle :size="15" /><span>{{ catalogError }}</span></div>
@@ -365,6 +364,7 @@
 </template>
 
 <script setup>
+import InfoTip from '@/components/InfoTip.vue'
 import { computed } from 'vue'
 import { AlertCircle, BookOpen, CheckCircle2, ChevronRight, FileText, ListChecks, RefreshCw, Sparkles } from 'lucide-vue-next'
 import { useReviewBotAdminModule } from '../composables/useReviewBotAdminModule'
