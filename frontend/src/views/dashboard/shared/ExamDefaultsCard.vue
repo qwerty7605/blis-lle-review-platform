@@ -128,5 +128,4 @@ async function save() {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped src="./accountSettings.css"></style>

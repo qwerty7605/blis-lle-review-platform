@@ -350,8 +350,6 @@ useLiveRefresh(async () => {
 watch(() => route.params.studentId, loadProfile, { immediate: true })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /*
  * Same visual language as the student dashboard (student/dashboardHome.css):

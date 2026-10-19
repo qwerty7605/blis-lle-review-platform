@@ -203,7 +203,8 @@
   color: var(--lnu-navy-deep);
 }
 
-.account-session-copy span {
+/* Direct children only: the "This Device" pill inside the name keeps its own colours. */
+.account-session-copy > span {
   font-size: 12.5px;
   line-height: 1.4;
   color: var(--ink-soft);

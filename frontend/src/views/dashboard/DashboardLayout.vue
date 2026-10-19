@@ -218,6 +218,10 @@
 </template>
 
 <script setup>
+// The shared dashboard stylesheet, loaded once for every dashboard page. It
+// used to be a <style scoped src> in each of 25 components, which put a full
+// copy (165 KB) into each one's CSS: the Settings page alone loaded four.
+import './dashboard.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import InfoTip from '@/components/InfoTip.vue'
@@ -557,7 +561,6 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped src="./dashboard.css"></style>
 <style scoped>
 .layout-shell {
   min-height: 100vh;

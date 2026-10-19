@@ -531,8 +531,6 @@ function percent(value) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .lle-mode {
   display: inline-flex;

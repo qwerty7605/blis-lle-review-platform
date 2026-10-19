@@ -141,5 +141,4 @@ onMounted(load)
 useLiveRefresh(() => load({ silent: true }), { when: () => busyId.value === null && !signingOutOthers.value })
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped src="./accountSettings.css"></style>

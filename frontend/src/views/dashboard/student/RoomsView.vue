@@ -1247,7 +1247,6 @@ const examTimerTone = computed(() => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped>
 /*
   This page's layout is built entirely with its own classes below rather

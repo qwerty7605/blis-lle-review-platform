@@ -380,8 +380,6 @@ watch(() => route.params.attemptId, (next, previous) => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .exam-result-view {
   display: grid;

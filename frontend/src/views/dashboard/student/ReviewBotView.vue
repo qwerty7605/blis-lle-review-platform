@@ -457,8 +457,6 @@ function recommendationHeading(action) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /*
   Fits one screen with no page-level scroll: .review-bot-view fills the

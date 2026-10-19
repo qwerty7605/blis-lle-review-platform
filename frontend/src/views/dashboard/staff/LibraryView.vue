@@ -953,7 +953,6 @@ function mappingState(bank) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped>
 .management-meta-grid .pill {
   display: inline-flex;

@@ -453,8 +453,6 @@ const emptyListMessage = computed(() => ({
 }[statusFilter.value]))
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .rbg-coverage {
   display: grid;

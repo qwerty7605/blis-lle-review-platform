@@ -464,8 +464,6 @@ useLiveRefresh(() => load({ silent: true }), {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .fb-intro {
   margin: 0;

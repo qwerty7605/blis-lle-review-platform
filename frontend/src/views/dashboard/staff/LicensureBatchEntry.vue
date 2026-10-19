@@ -301,8 +301,6 @@ async function save() {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .lleb {
   display: grid;

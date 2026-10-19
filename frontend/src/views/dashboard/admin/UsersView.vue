@@ -830,8 +830,6 @@ watch(useRows, () => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /* Sized by its columns. The shared table rule holds every table to 1080px;
    this one is narrower than that with its buttons as icons, and held to it

@@ -4354,7 +4354,7 @@
   background: linear-gradient(180deg, rgba(26, 35, 126, 0.06), rgba(201, 168, 76, 0.12));
 }
 
-.placeholder-card :deep(svg) {
+.placeholder-card svg {
   color: var(--lnu-navy-light);
 }
 
@@ -5165,8 +5165,9 @@
    Everything here is single-class specificity, so the contextual overrides
    further up the file (`.modal-actions .ghost-btn`, `.report-action-grid
    .ghost-btn`, and the responsive blocks) still win, and any page's own
-   `<style scoped>` still wins over all of it (dashboard.css is imported
-   before a component's own styles).
+   `<style scoped>` still wins over all of it (dashboard.css is loaded once,
+   unscoped, by DashboardLayout.vue, so a component's scoped rule of the same
+   classes is the more specific).
 
    What it fixes:
      - a gold wash sitting on every card, ghost button, pill and modal,
