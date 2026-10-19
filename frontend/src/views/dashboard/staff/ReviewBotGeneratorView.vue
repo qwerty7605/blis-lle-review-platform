@@ -43,7 +43,6 @@
               </span>
               <small v-if="bank.sourceFilename" :title="bank.sourceFilename">{{ bank.sourceFilename }}</small>
             </span>
-            <span class="pill pill-cap" :class="bank.mappingStatus === 'completed' ? 'success' : 'gold'">{{ bank.mappingStatus.replace(/_/g, ' ') }}</span>
             <ChevronRight :size="18" class="rbg-file-chevron" aria-hidden="true" />
           </button>
         </li>
@@ -614,7 +613,7 @@ const emptyListMessage = computed(() => ({
   width: 100%;
   min-height: 64px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px 12px;
   padding: 12px 14px;
@@ -675,10 +674,6 @@ const emptyListMessage = computed(() => ({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.rbg-file-row > .pill {
-  flex-shrink: 0;
 }
 
 .rbg-file-chevron {
@@ -1007,23 +1002,6 @@ const emptyListMessage = computed(() => ({
   .rbg-selected-file-actions .primary-btn {
     flex: 1;
     justify-content: center;
-  }
-
-  /* The status moves under the name. Beside it, a 320px phone had 50px
-     left for the name itself. */
-  .rbg-file-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-  }
-
-  .rbg-file-row > .pill {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .rbg-file-chevron {
-    grid-column: 3;
-    grid-row: 1 / span 2;
   }
 
   /* The introduction is read once; the file list is the page. */
