@@ -617,8 +617,6 @@ function trendToneClass(subject) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .analytics-page {
   --a-ink: #102149;

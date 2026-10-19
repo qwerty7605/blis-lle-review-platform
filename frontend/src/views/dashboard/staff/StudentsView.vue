@@ -656,8 +656,6 @@ watch(useRows, () => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /* A student's name opens their profile. */
 .directory-profile-link {

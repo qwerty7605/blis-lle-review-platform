@@ -1097,8 +1097,6 @@ onBeforeUnmount(() => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /* =====================================================================
    Exam list: a navy header with the totals, a search and room filter,

@@ -141,8 +141,6 @@ const readOnlyDocuments = computed(() => [
 ])
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /* The two documents are pages long. Where the browser can size a field to
    its content the box grows with the text and the page scrolls; elsewhere

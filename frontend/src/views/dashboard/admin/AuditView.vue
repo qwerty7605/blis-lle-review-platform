@@ -254,7 +254,6 @@ function applyFromDetails(changes) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped>
 .audit-head-actions {
   display: flex;

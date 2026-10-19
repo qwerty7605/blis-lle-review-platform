@@ -228,8 +228,6 @@ onMounted(loadHistory)
 useLiveRefresh(loadHistory, { when: () => !sending.value })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped src="./accountSettings.css"></style>
 
 <style scoped>

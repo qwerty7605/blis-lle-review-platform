@@ -23,8 +23,6 @@ defineProps({
 defineEmits(['update:modelValue'])
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .owner-filter {
   display: inline-flex;

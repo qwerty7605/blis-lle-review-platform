@@ -245,6 +245,4 @@ function goToAnalytics() {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped src="./dashboardHome.css"></style>

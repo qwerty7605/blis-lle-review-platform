@@ -940,7 +940,6 @@ const roomExamCoveragePercent = computed(() => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
 <style scoped>
 /* Archive, archived rooms, and why a room cannot be deleted. */
 .rooms-archived-btn {

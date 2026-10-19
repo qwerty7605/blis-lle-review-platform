@@ -407,8 +407,6 @@ function formatCount(value) {
 }
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 .year-end-view {
   gap: 14px;

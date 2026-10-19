@@ -931,8 +931,6 @@ const reportStudentHint = computed(() => {
 })
 </script>
 
-<style scoped src="../dashboard.css"></style>
-
 <style scoped>
 /* Sits beside a section title, same muted register as the panel subheads. */
 .section-note {
