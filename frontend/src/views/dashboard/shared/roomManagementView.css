@@ -1,0 +1,1012 @@
+/* Archive, archived rooms, and why a room cannot be deleted. */
+.rooms-archived-btn {
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.room-removal-reasons {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.archived-room-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+}
+
+.archived-room-list:empty {
+  display: none;
+}
+
+.archived-room {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+
+.archived-room + .archived-room {
+  border-top: 1px solid var(--border-soft);
+}
+
+.archived-room-copy {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.archived-room-copy strong {
+  font-size: 13.5px;
+  color: var(--lnu-navy-deep);
+  overflow-wrap: anywhere;
+}
+
+.archived-room-copy span {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.archived-room .ghost-btn {
+  flex: none;
+}
+
+/*
+  Mirrors RoomsView.vue's (student) redesign class-for-class so both roles
+  see the same room-browsing layout, with staff-only actions layered on top
+  (Add/Edit/Delete/Export in the banner, Archive/Restore/Live Board on each
+  exam row, a Room Overview card instead of a per-student completion bar).
+  Kept local rather than folded into the shared .room-list-panel/.detail-
+  card/.exam-card family in dashboard.css -- those classes are reused by
+  other pages too, so restyling them there would have changed those pages
+  as well. Keeping this local avoids that entirely, same reasoning as the
+  student page's own local style block.
+*/
+
+.room-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-empty-card {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--lnu-text-muted);
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-empty-card h4 {
+  margin: 0;
+  color: var(--lnu-text);
+}
+
+.rooms-empty-card p {
+  margin: 0;
+  max-width: 320px;
+}
+
+.rooms-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1.4fr) 260px;
+  align-items: stretch;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.room-detail-column,
+.room-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- Room list card ---- */
+.rooms-list-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  background: #fff;
+}
+
+.rooms-list-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rooms-list-label {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-count-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  color: var(--lnu-navy);
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rooms-join-btn {
+  flex-shrink: 0;
+  width: 100%;
+  height: 36px;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rooms-search {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  background: #f7f8fb;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--lnu-text);
+  outline: none;
+}
+
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-list-item {
+  flex-shrink: 0;
+  text-align: left;
+  border: 1px solid rgba(26, 35, 126, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rooms-list-item:hover:not(.active) {
+  background: rgba(26, 35, 126, 0.04);
+}
+
+.rooms-list-item.active {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+}
+
+.rooms-list-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.rooms-list-item strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rooms-list-chevron {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.rooms-list-code {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  opacity: 0.75;
+}
+
+.rooms-list-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.rooms-list-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.rooms-list-by {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.rooms-list-empty {
+  padding: 10px 2px;
+  font-size: 13px;
+}
+
+/* ---- Room banner ---- */
+.room-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  background: var(--panel-navy);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
+}
+
+.room-banner-copy h4 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.room-banner-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.room-banner-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.room-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.room-banner-action-btn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Ghost buttons default to a navy-on-white look, which reads as nearly
+   invisible against this banner's dark gradient -- a translucent white
+   pill (matching .room-banner-pill's own treatment) keeps them legible
+   without needing a one-off variant per button. The delete action stays
+   plain .danger-btn red, which already has enough contrast here on its own. */
+.room-banner-actions .ghost-btn.room-banner-action-btn {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.room-banner-actions .ghost-btn.room-banner-action-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---- Room exams ---- */
+.rooms-exams-card {
+  padding: 18px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.rooms-exams-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rooms-exams-head h5 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--lnu-navy);
+}
+
+.rooms-exams-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-link-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--lnu-navy);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rooms-link-btn:hover {
+  color: var(--lnu-navy-light);
+}
+
+.rooms-exam-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-exam-list.archived {
+  flex: none;
+  max-height: 260px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(26, 35, 126, 0.14);
+}
+
+.rooms-exam-row {
+  flex-shrink: 0;
+  border: 1px solid rgba(26, 35, 126, 0.12);
+  border-radius: 14px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fafbfd;
+}
+
+.rooms-exam-row.archived {
+  background: #f4f5f8;
+}
+
+.rooms-exam-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.rooms-exam-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--lnu-navy);
+  line-height: 1.3;
+}
+
+.rooms-exam-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-exam-row-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rooms-exam-row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rooms-exam-window-fallback {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-exam-btn {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  white-space: nowrap;
+  background: linear-gradient(135deg, var(--lnu-navy), var(--lnu-navy-light));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.15s ease;
+}
+
+.rooms-exam-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--lnu-navy-light), var(--lnu-navy));
+}
+
+.rooms-exam-btn:disabled {
+  background: #f4f5f8;
+  border-color: rgba(26, 35, 126, 0.14);
+  color: var(--lnu-text-muted);
+  cursor: not-allowed;
+}
+
+.rooms-exam-icon-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  background: #fff;
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.rooms-exam-icon-btn:hover:not(:disabled) {
+  background: rgba(26, 35, 126, 0.06);
+  border-color: rgba(26, 35, 126, 0.28);
+  color: var(--lnu-navy);
+}
+
+.rooms-exam-icon-btn.restore {
+  border-color: rgba(15, 157, 120, 0.3);
+  color: #0f9d78;
+}
+
+.rooms-exam-icon-btn.restore:hover:not(:disabled) {
+  background: rgba(15, 157, 120, 0.08);
+  border-color: rgba(15, 157, 120, 0.5);
+}
+
+.rooms-exam-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rooms-detail-loading,
+.rooms-detail-empty {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--lnu-text-muted);
+  background: #fff;
+  flex: 1;
+  min-height: 0;
+}
+
+.rooms-detail-empty h4 {
+  margin: 0;
+  color: var(--lnu-text);
+}
+
+.rooms-detail-empty p {
+  margin: 0;
+  max-width: 260px;
+}
+
+/* ---- Class list + room overview ---- */
+.rooms-roster-card {
+  padding: 16px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.rooms-roster-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--lnu-navy);
+}
+
+.rooms-roster-head h5 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.rooms-roster-tags {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rooms-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.rooms-tag.success { background: rgba(46, 125, 50, 0.14); color: var(--lnu-success); }
+.rooms-tag.neutral { background: rgba(26, 35, 126, 0.08); color: var(--lnu-text-muted); }
+
+.rooms-tag.small {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.rooms-roster-copy {
+  flex-shrink: 0;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.rooms-roster-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.rooms-roster-item {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f7f8fb;
+}
+
+.rooms-roster-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-text-muted);
+}
+
+.rooms-roster-item-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.rooms-roster-item-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--lnu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The name is a link, but reads as the name it always was until pointed at. */
+.rooms-roster-profile-link {
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+.rooms-roster-profile-link:hover strong,
+.rooms-roster-profile-link:focus-visible strong {
+  color: var(--lnu-navy-light);
+  text-decoration: underline;
+}
+
+.rooms-roster-profile-link:focus-visible {
+  outline: 2px solid var(--lnu-navy-light);
+  outline-offset: 2px;
+}
+
+.rooms-roster-item-copy p {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--lnu-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rooms-summary-card {
+  flex-shrink: 0;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: rgba(var(--lnu-info-rgb), 0.08);
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.16);
+}
+
+.rooms-summary-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lnu-navy);
+}
+
+.rooms-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--lnu-text);
+}
+
+.rooms-summary-row strong {
+  color: var(--lnu-navy);
+  font-size: 15px;
+}
+
+.rooms-summary-bar {
+  margin-top: 8px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.12);
+  overflow: hidden;
+}
+
+.rooms-summary-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--lnu-navy);
+  transition: width 0.3s ease;
+}
+
+.rooms-summary-stats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rooms-summary-stat {
+  display: grid;
+  gap: 2px;
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
+}
+
+.rooms-summary-stat strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--lnu-navy);
+}
+
+.rooms-summary-stat span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--lnu-text-muted);
+}
+
+.rooms-back-btn {
+  display: none;
+}
+
+/* ---- Students / Exams switch inside a room (900px and under) ---- */
+.rooms-pane-tabs {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-muted);
+}
+
+.rooms-pane-tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.rooms-pane-tab.active {
+  background: var(--surface);
+  color: var(--lnu-navy);
+  box-shadow: 0 1px 3px rgba(13, 21, 71, 0.14);
+}
+
+.rooms-pane-tab:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.rooms-pane-tab-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1200px) {
+  .rooms-grid {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .room-side-column {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Between 901px and 1200px the panels sit in two rows, and two rows cannot
+ * share one screen: at 1024x768 the exam list was an 84px window and the
+ * class list showed three students. Here the page stops pinning itself to
+ * the screen height. Each list gets a workable window and the page scrolls
+ * from the room down to its class list.
+ *
+ * The same on any wider screen that is short. A 1366x768 laptop shows a
+ * page about 640px of height once the browser's own bars are counted, and
+ * pinned to that the class list was a 221px window.
+ *
+ * Short stops at 700px. It was 760px, which also took in a 1920x1080 screen
+ * at Windows' usual 125% scaling: about 1534x728 of page, where the three
+ * columns fit with five students in view. There the loose layout left the
+ * room list, the exams and the class list ending at three different heights
+ * and the overview below the fold.
+ */
+@media (min-width: 901px) and (max-width: 1200px), (min-width: 901px) and (max-height: 699px) {
+  .room-view,
+  .rooms-grid {
+    flex: none;
+  }
+
+  .rooms-grid {
+    align-items: start;
+  }
+
+  .rooms-list-card {
+    max-height: 560px;
+  }
+
+  .rooms-exam-list {
+    max-height: 360px;
+  }
+
+  .rooms-roster-list {
+    max-height: 460px;
+  }
+}
+
+/* Only where the side panels are a two-column grid. From 1201px they are a
+   column, and there this would let each card take the width of its longest
+   name instead of the column's. */
+@media (min-width: 901px) and (max-width: 1200px) {
+  .room-side-column {
+    align-items: start;
+  }
+}
+
+@media (max-width: 900px) {
+  /* minmax(0, ...), not a bare 1fr: a bare one cannot shrink below its
+     widest unbreakable line, and a creator's name on a room card was enough
+     to push the page 30-50px past the edge of a phone. */
+  .rooms-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .room-side-column {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One pane at a time -- see compactPane in the script. */
+  .rooms-grid.is-pane-list .room-detail-column,
+  .rooms-grid.is-pane-list .room-side-column,
+  .rooms-grid.is-pane-detail .rooms-list-card {
+    display: none;
+  }
+
+  /* ...and inside a teacher's room, one list at a time. The overview is
+     about exams, so it keeps them company. */
+  .rooms-grid.is-tab-students .rooms-exams-card,
+  .rooms-grid.is-tab-students .rooms-summary-card,
+  .rooms-grid.is-tab-exams .rooms-roster-card {
+    display: none;
+  }
+
+  .rooms-back-btn {
+    display: inline-flex;
+    align-self: flex-start;
+    gap: 4px;
+    padding-left: 8px;
+  }
+
+  .room-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .room-banner-actions {
+    width: 100%;
+  }
+
+  .room-banner-action-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Tablets and phones turned sideways: the list has the whole width to
+   itself now, so it runs two cards across and is half as long. */
+@media (min-width: 641px) and (max-width: 900px) {
+  .rooms-grid.is-pane-list .rooms-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+  }
+}
+
+@media (max-width: 640px) {
+  /* The title on a line of its own: beside the Live Board button it had a
+     third of the row and broke into four lines. */
+  .rooms-exam-row-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .rooms-exam-row-actions .rooms-exam-btn {
+    flex: 1;
+  }
+
+  /* Two-line rows: name, then code, members and owner on one line. */
+  .rooms-list-item {
+    min-height: 64px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 10px 12px;
+  }
+
+  .rooms-list-item-head {
+    width: 100%;
+  }
+
+  .rooms-list-item strong {
+    font-size: 15px;
+  }
+
+  .rooms-list-meta {
+    margin-top: 0;
+  }
+
+  .rooms-list-by {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+@media (pointer: coarse) {
+  .rooms-search {
+    height: var(--control-height);
+  }
+
+  /* iOS Safari zooms the page into any field under 16px. The field fills
+     the box around it, so a tap anywhere in the box lands in the field. */
+  .rooms-search input {
+    align-self: stretch;
+    font-size: 16px;
+  }
+
+  .rooms-join-btn,
+  .room-banner-action-btn {
+    height: var(--control-height);
+  }
+
+  .rooms-pane-tab {
+    min-height: 44px;
+  }
+}

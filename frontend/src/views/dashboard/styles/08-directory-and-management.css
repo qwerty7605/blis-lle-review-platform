@@ -1,0 +1,512 @@
+.management-toolbar {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(249, 248, 244, 0.92));
+}
+
+.users-pagination {
+  border-top: 1px solid rgba(13, 21, 71, 0.12);
+  border-bottom: 0;
+  justify-content: space-between;
+}
+
+.users-pagination p {
+  margin: 0;
+}
+
+.management-list {
+  padding: 14px 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.user-directory-shell {
+  padding: 14px 18px 18px;
+  display: grid;
+  gap: 16px;
+}
+
+/* 140px, not 150px: four cards then stay on one row down to the width
+   where phones take over with two. At 150px a 1024px laptop with the
+   sidebar open showed three and left the fourth alone on a second row. */
+.user-directory-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.user-directory-summary-card {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 24px;
+  display: grid;
+  gap: 8px;
+}
+
+.user-directory-summary-card span,
+.user-directory-summary-card small {
+  color: var(--lnu-text-muted);
+}
+
+.user-directory-summary-card strong {
+  font-size: 28px;
+  /* 1 clipped the top and bottom of the digits in this font. */
+  line-height: 1.2;
+  color: var(--lnu-navy-deep);
+}
+
+.user-directory-summary-card.is-success {
+  background: linear-gradient(180deg, rgba(236, 250, 242, 0.98), rgba(230, 246, 236, 0.96));
+}
+
+.user-directory-summary-card.is-neutral {
+  background: linear-gradient(180deg, rgba(244, 246, 250, 0.98), rgba(238, 241, 247, 0.96));
+}
+
+.user-directory-summary-card.is-navy {
+  background: linear-gradient(180deg, rgba(236, 241, 252, 0.98), rgba(228, 235, 248, 0.96));
+}
+
+.user-directory-summary-card.is-danger {
+  background: linear-gradient(180deg, rgba(255, 241, 241, 0.98), rgba(250, 234, 234, 0.96));
+}
+
+/* The Average Score card asks for this tone; without the rule it fell back to
+   the plain card background while every other card was tinted. */
+.user-directory-summary-card.is-gold {
+  background: linear-gradient(180deg, rgba(253, 247, 232, 0.98), rgba(250, 242, 220, 0.96));
+}
+
+.directory-section {
+  display: grid;
+  gap: 12px;
+}
+
+.directory-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.directory-section-head h4 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--lnu-navy-deep);
+}
+
+.directory-section-head p {
+  margin: 4px 0 0;
+  color: var(--lnu-text-muted);
+  font-size: 14px;
+}
+
+.directory-group-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.directory-group-card {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 248, 244, 0.95));
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.directory-group-card.archived {
+  background: linear-gradient(180deg, rgba(243, 245, 249, 0.98), rgba(236, 239, 245, 0.96));
+}
+
+.directory-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.directory-group-head strong {
+  color: var(--lnu-navy-deep);
+  font-size: 16px;
+}
+
+.directory-group-head p {
+  margin: 4px 0 0;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+}
+
+.directory-table-wrap {
+  margin: 14px 18px;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 18px;
+  background: #ffffff;
+  max-height: min(62vh, 660px);
+  overflow: auto;
+}
+
+.directory-table {
+  width: 100%;
+  min-width: 1080px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.directory-table th,
+.directory-table td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  white-space: nowrap;
+}
+
+.directory-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0;
+  background: linear-gradient(180deg, #e4e5f0, #fbfbfd);
+  color: var(--lnu-navy-deep);
+}
+
+/*
+ * The admin Users table. Narrower than the Students table above because it
+ * carries eight columns rather than twelve, but it reuses every other
+ * .directory-table rule so the two user lists in this system read the same.
+ */
+.users-directory-table {
+  min-width: 1060px;
+}
+
+/* thead cells carry no padding (the sort button supplies it on the Students
+   table); this one has plain text headers, so the padding goes back. */
+.users-directory-table thead th {
+  padding: 11px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * One line per person. The shared .directory-table rule aligns cells to the
+ * top, which is right for the Students table (its cells stack a value over a
+ * caption) but leaves a row of single-line chips looking unbalanced here.
+ */
+.users-directory-table tbody td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  vertical-align: middle;
+}
+
+.users-directory-table tbody tr:hover {
+  background: rgba(26, 35, 126, 0.035);
+}
+
+/* An address is the one cell that can be arbitrarily long; it truncates and
+   keeps its full value in a title attribute rather than widening the row. */
+.directory-table-email-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-table-actions-col {
+  text-align: right;
+}
+
+/*
+ * Specificity is deliberate: .management-actions sets flex-wrap: wrap and is
+ * defined further down this file, so a single-class rule here lost to it and
+ * the three buttons wrapped onto a second line -- which is what made every
+ * row of this table about 120px tall instead of about 48px.
+ */
+.users-directory-table .directory-table-actions.management-actions {
+  width: auto;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.directory-table-actions .ghost-btn {
+  white-space: nowrap;
+  padding: 0 9px;
+}
+
+/* The identity column stays pinned so scrolling right never leaves a row anonymous. */
+.directory-table-name-cell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 220px;
+  background: #ffffff;
+  box-shadow: 1px 0 0 rgba(13, 21, 71, 0.1);
+}
+
+.directory-table thead .directory-table-name-cell {
+  z-index: 3;
+}
+
+.directory-table-name-cell strong {
+  display: block;
+  color: var(--lnu-navy-deep);
+  font-size: 14px;
+  white-space: normal;
+}
+
+.directory-table-name-cell .pill {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.directory-sort-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.directory-sort-btn:hover {
+  background: rgba(26, 35, 126, 0.07);
+  color: var(--lnu-navy);
+}
+
+.directory-sort-arrow {
+  font-size: 11px;
+  color: var(--lnu-navy);
+}
+
+.directory-table th.numeric .directory-sort-btn {
+  justify-content: flex-end;
+}
+
+.directory-table td.numeric {
+  text-align: right;
+}
+
+.directory-table td small.muted {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+}
+
+.directory-table-sections {
+  display: block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-table-email-cell {
+  color: var(--lnu-text-muted);
+}
+
+.directory-table tbody tr.is-archived td {
+  background: #f6f7fa;
+}
+
+.directory-table tbody tr.is-archived .directory-table-name-cell {
+  background: #f2f4f8;
+}
+
+.directory-table tbody tr:hover td,
+.directory-table tbody tr:hover .directory-table-name-cell {
+  background: #eef3fc;
+}
+
+.management-item {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.management-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(13, 21, 71, 0.08);
+}
+
+.management-item-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.management-item-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.management-item-main strong {
+  font-size: 15px;
+  color: var(--lnu-navy-deep);
+}
+
+.management-item-main p {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 14px;
+}
+
+.management-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.management-item-list-meta {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+.management-item-list-meta p {
+  font-size: 14px;
+  margin: 0;
+}
+.management-item-list-meta strong {
+  color: var(--lnu-text);
+  font-weight: 600;
+}
+
+.management-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.management-meta-grid.three-up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.management-meta-grid small {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--lnu-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.management-meta-grid strong {
+  display: block;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.exam-question-bank-summary {
+  margin-top: 8px;
+}
+
+.exam-question-bank-list {
+  margin-top: 8px;
+}
+
+.exam-bank-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.exam-bank-group {
+  display: grid;
+  gap: 8px;
+}
+
+.exam-bank-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lnu-text-muted);
+}
+
+.exam-bank-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.exam-bank-choice {
+  align-items: flex-start;
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 12px;
+  min-height: 0;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.exam-bank-choice:hover {
+  border-color: rgba(26, 35, 126, 0.24);
+  background: rgba(255, 255, 255, 0.99);
+}
+
+.exam-bank-choice.is-selected {
+  border-color: rgba(26, 35, 126, 0.3);
+  background: rgba(26, 35, 126, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(26, 35, 126, 0.04);
+}
+
+.exam-bank-choice input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.exam-bank-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.exam-bank-copy strong {
+  color: var(--lnu-text);
+  font-size: 14px;
+}
+
+.exam-bank-copy small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+}
+
+.management-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.management-actions.compact {
+  width: 100%;
+  justify-content: flex-start;
+}
+

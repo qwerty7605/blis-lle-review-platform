@@ -1,0 +1,929 @@
+/* =======================================================================
+   PHONE LAYOUTS
+   =======================================================================
+   The admin directory, student directory, licensure results and audit log
+   on narrow screens. What changed, and why:
+     - the page's action moves into the app bar (DashboardLayout.vue) and
+       the header that only repeated the page title hides
+     - lists are 64px rows instead of 217px cards, with actions one tap
+       away in a sheet (components/BottomSheet.vue)
+     - filters collapse into one search row plus a Filters sheet, active
+       filters showing as removable chips
+     - summary tiles sit two by two instead of one per row
+     - touch screens get 44px controls and 16px field text (iOS Safari
+       zooms the whole page into any field under 16px)
+   ======================================================================= */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Actions moved into the navy app bar ---- */
+.primary-btn.appbar-action {
+  height: 40px;
+  padding: 0 14px 0 11px;
+  border-radius: 999px;
+  background: var(--lnu-gold-light);
+  color: var(--lnu-navy-deep);
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.primary-btn.appbar-action:hover:not(:disabled) {
+  background: #f5dc9c;
+}
+
+.primary-btn.appbar-action:focus-visible,
+.appbar-icon-action:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
+.appbar-icon-action {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appbar-icon-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.appbar-icon-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---- Filters: one trigger, a count, and removable chips ---- */
+.filter-trigger {
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.filter-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--lnu-navy);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-chip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  scrollbar-width: none;
+}
+
+.filter-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.filter-chip {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 10px 0 13px;
+  border: 1px solid rgba(26, 35, 126, 0.28);
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.07);
+  color: var(--lnu-navy-deep);
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-chip:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---- Rows: the phone replacement for cards and tables ---- */
+.directory-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.directory-row-list > li + li {
+  border-top: 1px solid var(--border-soft);
+}
+
+.directory-row {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.directory-row:hover {
+  background: rgba(26, 35, 126, 0.04);
+}
+
+.directory-row:active {
+  background: rgba(26, 35, 126, 0.08);
+}
+
+.directory-row:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.directory-row-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.directory-row-copy strong,
+.directory-row-copy span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directory-row-copy strong {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--lnu-navy-deep);
+}
+
+.directory-row-copy span {
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.directory-row > .pill {
+  flex-shrink: 0;
+}
+
+.directory-row-more {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+}
+
+/* Rows that open in place to show the rest of the record. */
+.directory-row-details > summary {
+  list-style: none;
+}
+
+.directory-row-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.directory-row-chevron {
+  transition: transform 0.2s ease;
+}
+
+.directory-row-details[open] .directory-row-chevron {
+  transform: rotate(180deg);
+}
+
+.directory-row-details[open] > summary,
+.directory-row-facts,
+.directory-row-actions {
+  background: var(--surface-muted);
+}
+
+.directory-row-details.is-archived .directory-row-copy strong {
+  color: var(--ink-muted);
+}
+
+.directory-row-facts {
+  margin: 0;
+  padding: 4px 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.directory-row-facts > div {
+  min-width: 0;
+}
+
+.directory-row-facts > .is-wide,
+.directory-row-facts > .is-full {
+  grid-column: 1 / -1;
+}
+
+/* The same rows on a tablet or a small laptop, wherever a table does not
+   fit its page: four facts across instead of two, and a wide one takes two
+   of the four. */
+@media (min-width: 641px) {
+  .directory-row-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .directory-row-facts > .is-wide {
+    grid-column: span 2;
+  }
+}
+
+.directory-row-facts dt {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.directory-row-facts dd {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.directory-row-facts dd small {
+  display: block;
+  font-size: 12px;
+}
+
+.directory-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px 14px;
+}
+
+/* ---- "Load more" / range footer ---- */
+.directory-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.directory-load-more .muted {
+  font-size: 13px;
+}
+
+/* ---- Per-user action sheet ---- */
+.user-action-tags {
+  gap: 6px;
+}
+
+.user-action-list {
+  display: grid;
+  gap: 2px;
+  margin: 0 -8px;
+}
+
+.user-action-item {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.user-action-item svg {
+  flex-shrink: 0;
+  color: var(--lnu-navy);
+}
+
+.user-action-item:hover:not(:disabled),
+.user-action-item:active:not(:disabled) {
+  background: rgba(26, 35, 126, 0.06);
+}
+
+.user-action-item:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: -2px;
+}
+
+.user-action-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Up to 900px: the app bar names the page ---- */
+@media (max-width: 900px) {
+  .room-page-head.is-page-title {
+    display: none;
+  }
+}
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  /* The shell card was meant to have no padding (its header and toolbar
+     are full-width bands with their own), but .surface-card's padding in
+     the refresh block above comes later and wins. On a phone that was 34px
+     of a 390px screen, so the pages rebuilt for phones opt back out. clip
+     rather than hidden keeps the rounded corners without stopping the
+     directory's year headings from sticking. */
+  .room-shell-card.is-flush {
+    padding: 0;
+    overflow: hidden;
+    overflow: clip;
+  }
+
+  .room-shell-card.is-flush > .feedback {
+    margin: 0 16px 14px;
+  }
+
+  .room-shell-card.is-flush > .user-directory-summary {
+    padding: 12px 12px 0;
+    margin-bottom: 12px;
+  }
+
+  .room-page-head.is-inline {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .room-shell-card.is-flush > .room-page-head.is-inline + .management-toolbar {
+    margin-top: -14px;
+  }
+
+  /* In a column, flex: 1 sizes the height, not the width: the basis of 0
+     overrode every control's height and squashed them to 18-20px. */
+  .management-toolbar > .text-input,
+  .management-toolbar > .narrow,
+  .management-toolbar > .management-actions {
+    flex: 0 0 auto;
+  }
+
+  /* A text field's natural width at 16px is about 340px, and a column that
+     is allowed to wrap takes its widest item's width: on the Licensure page
+     the search field ran past the edge of a 360px screen. */
+  .management-toolbar:not(.is-search-row) {
+    flex-wrap: nowrap;
+  }
+
+  .management-toolbar:not(.is-search-row) > .text-input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .management-toolbar.is-search-row {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 10px 12px;
+  }
+
+  .management-toolbar.is-search-row > .text-input {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .user-directory-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .user-directory-summary-card {
+    padding: 10px 12px;
+    gap: 2px;
+    border-radius: 14px;
+  }
+
+  .user-directory-summary-card span {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .user-directory-summary-card strong {
+    font-size: 20px;
+  }
+
+  .user-directory-summary-card small {
+    font-size: 11px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* The directory flattens from card-in-card-in-card to one list, with
+     each year heading sticking under the app bar while its rows scroll. */
+  .user-directory-shell {
+    padding: 12px 0 0;
+    gap: 16px;
+  }
+
+  .user-directory-shell > .user-directory-summary {
+    padding: 0 12px;
+  }
+
+  .directory-section {
+    gap: 0;
+  }
+
+  .directory-section-head {
+    padding: 0 12px 8px;
+  }
+
+  .directory-section-head h4 {
+    font-size: 16px;
+  }
+
+  .directory-section-head p {
+    display: none;
+  }
+
+  .directory-group-stack {
+    gap: 0;
+  }
+
+  .directory-group-card,
+  .directory-group-card.archived {
+    padding: 0;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .directory-group-head {
+    position: sticky;
+    top: var(--appbar-height, 0px);
+    z-index: 2;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-soft);
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--surface-muted);
+  }
+
+  .directory-group-head strong {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .directory-group-head p {
+    margin: 1px 0 0;
+    font-size: 12px;
+  }
+
+  /* "30 of 331 students shown" already carries the total. */
+  .directory-group-head > .pill {
+    display: none;
+  }
+
+  .directory-load-more {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 14px 12px 16px;
+  }
+
+  .directory-load-more .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Audit log: a divided list rather than a stack of 158px cards. */
+  .audit-list {
+    padding: 0;
+    gap: 0;
+  }
+
+  .audit-list .management-item {
+    padding: 12px;
+    border: 0;
+    border-bottom: 1px solid var(--border-soft);
+    border-radius: 0;
+  }
+
+  .audit-list .management-item:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .audit-list .management-item-main strong {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .audit-list .management-item-main p {
+    font-size: 12px;
+  }
+
+  .audit-list .pill {
+    padding: 3px 8px;
+    font-size: 11px;
+  }
+
+  /* Dialogs had no height limit, so a long form (Create User is ~1,140px)
+     ran off both ends of an 844px screen: no title, no buttons, no way to
+     scroll to them. On phones they rise from the bottom like the sheets,
+     scroll inside, and keep their buttons pinned in reach. The exam and
+     library dialogs have their own phone layouts and are left alone. */
+  .modal-backdrop:not(.exam-modal-backdrop) {
+    align-items: flex-end;
+    padding: 12px 0 0;
+  }
+
+  /* margin-top: auto is what puts the card on the bottom edge. The shared
+     `margin: auto` centres it whatever align-items says, which left a
+     sheet with square bottom corners floating in the middle of the screen. */
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) {
+    --modal-pad: 18px;
+    width: 100%;
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+    margin: auto 0 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-radius: 18px 18px 0 0;
+    padding: var(--modal-pad);
+    padding-bottom: calc(var(--modal-pad) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal):has(> .modal-actions:last-child) {
+    padding-bottom: 0;
+  }
+
+  /* The button bar runs edge to edge, so its side margins have to match the
+     card's padding (they were 18px against a 24px card). */
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: 0 calc(-1 * var(--modal-pad));
+    padding: 12px var(--modal-pad) calc(12px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
+  }
+}
+
+/* ---- Dialogs taller than the screen (tablets and laptops) ----
+   The same contract as on a phone, in the middle of the screen: the dialog
+   is never taller than what is visible, what is in it scrolls, and its
+   buttons stay at its bottom edge. Before, the whole overlay scrolled, and
+   on a 768px-high laptop a long form's heading and its Save button were
+   never on screen together.
+
+   At rest nothing looks different: the button bar sits where it sat (the
+   margin takes back what its padding adds) and carries no line above it,
+   only a fade that shows once something scrolls underneath. */
+@media (min-width: 641px) {
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) {
+    --modal-pad: 24px;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--modal-pad);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal):has(> .modal-actions:last-child) {
+    padding-bottom: 0;
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    margin: -12px calc(-1 * var(--modal-pad)) 0;
+    padding: 12px var(--modal-pad) var(--modal-pad);
+    background: var(--surface);
+  }
+
+  .modal-card:not(.exam-modal-card):not(.library-modal-card):not(.library-bank-view-modal) > .modal-actions:last-child::before {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 100%;
+    left: 0;
+    height: 18px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--surface));
+    pointer-events: none;
+  }
+}
+
+/* ---- Rows that scroll sideways ----
+   Tabs and filter chips on a phone sit in one row with its scrollbar
+   hidden, and what does not fit is cut off at the screen's edge with nothing
+   to say there is more. The row fades out at an edge while something lies
+   beyond it; utils/scrollHint.js (v-scroll-hint) adds and removes the two
+   classes as the row is scrolled. */
+.has-more-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+
+.has-more-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+
+.has-more-start.has-more-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+
+/* ---- Touch screens ---- */
+@media (pointer: coarse) {
+  .text-input,
+  .textarea-input {
+    font-size: 16px;
+  }
+
+  .member-kick-icon-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+
+  /* The X that closes a dialog was 34px, on every dialog. */
+  .modal-close {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* A checkbox and its label are one target. The row was 19px tall. */
+  .check-item {
+    min-height: 44px;
+  }
+
+  .check-item input[type='checkbox'],
+  .check-item input[type='radio'] {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Tablets: the 16px text above no longer fits a 160px filter select
+   ("Current record…"). Phones already give them the full width. */
+@media (pointer: coarse) and (min-width: 641px) {
+  .narrow {
+    width: 180px;
+    min-width: 180px;
+    flex-basis: 180px;
+  }
+}
+
+/* The exam a student is taking: its text cannot be selected (so not copied
+   into a search), on touch screens too. A written answer stays editable. */
+.exam-no-copy {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.exam-no-copy input,
+.exam-no-copy textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/*
+ * The exam on a desktop (901px and up). No boxes around the question or
+ * its buttons: the white of the screen is the page, and the question, its
+ * choices and Bookmark / Previous / Next read down one centred column. The
+ * column, the type and the controls all grow with the screen, the column
+ * only up to a comfortable reading width (a line much past 90 characters is
+ * hard to follow back to its start). Submit is under the question list
+ * (.exam-sidebar-submit). Phones keep their own layout above.
+ */
+@media (min-width: 901px) {
+  .exam-attempt-layout {
+    grid-template-columns: clamp(220px, 17vw, 300px) minmax(0, 1fr);
+    gap: clamp(14px, 2vw, 40px);
+  }
+
+  .exam-attempt-main {
+    align-items: center;
+    gap: 0;
+    /* More room above on a tall screen, so the question sits nearer the
+       middle without jumping about as questions change length. */
+    padding: clamp(4px, 7vh, 110px) clamp(0px, 1vw, 16px) 0;
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive,
+  .exam-attempt-main > .exam-attempt-footer,
+  .exam-attempt-main > .exam-shortcuts,
+  .exam-attempt-main > .exam-review-screen {
+    width: min(100%, clamp(720px, 58vw, 1120px));
+  }
+
+  /* The question: no frame, it scrolls on its own if it is very long. */
+  .exam-attempt-main > .exam-attempt-card.immersive {
+    flex: 0 1 auto;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    padding: 0;
+    gap: clamp(14px, 2.4vh, 28px);
+  }
+
+  .exam-attempt-card.immersive .surface-head h4 {
+    font-size: clamp(13px, 0.55vw + 7px, 17px);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+
+  .exam-question-of {
+    font-weight: 600;
+  }
+
+  .exam-attempt-card.immersive .exam-attempt-question-text {
+    font-size: clamp(18px, 0.85vw + 9px, 28px);
+    line-height: 1.5;
+    font-weight: 500;
+    color: var(--lnu-navy-deep);
+  }
+
+  .exam-attempt-card.immersive .exam-question-list {
+    font-size: clamp(16px, 0.6vw + 8px, 22px);
+  }
+
+  .exam-attempt-main > .exam-attempt-card.immersive .exam-option-grid {
+    max-width: none;
+    gap: clamp(8px, 1.3vh, 14px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-card {
+    gap: clamp(12px, 1vw, 18px);
+    padding: clamp(11px, 1.7vh, 20px) clamp(14px, 1.2vw, 22px);
+    border-radius: clamp(10px, 0.8vw, 14px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-text {
+    font-size: clamp(15px, 0.5vw + 9px, 21px);
+  }
+
+  .exam-attempt-card.immersive .exam-option-letter {
+    width: clamp(28px, 1.3vw + 10px, 38px);
+    height: clamp(28px, 1.3vw + 10px, 38px);
+    border-radius: clamp(8px, 0.6vw, 10px);
+    font-size: clamp(12.5px, 0.4vw + 7px, 16px);
+  }
+
+  .exam-attempt-card.immersive .exam-question-review-panel {
+    font-size: clamp(14px, 0.4vw + 9px, 18px);
+  }
+
+  /* The buttons: a plain row under the choices, set off by a rule. */
+  .exam-attempt-main > .exam-attempt-footer {
+    flex: 0 0 auto;
+    margin-top: clamp(18px, 3vh, 36px);
+    padding: clamp(14px, 2.2vh, 24px) 0 0;
+    border: 0;
+    border-top: 1px solid var(--border-soft);
+    border-radius: 0;
+    background: none;
+    gap: clamp(8px, 0.8vw, 14px);
+  }
+
+  /* With Submit gone from the row, Previous and Next sit on the right,
+     under where a right hand ends a choice. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav {
+    margin-left: auto;
+    gap: clamp(8px, 0.8vw, 14px);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn,
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    min-width: clamp(104px, 7.5vw, 150px);
+    padding: 0 clamp(14px, 1.2vw, 24px);
+    justify-content: center;
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .bookmark-toggle-btn svg,
+  .exam-attempt-main > .exam-attempt-footer .ghost-btn svg {
+    width: clamp(14px, 1vw, 18px);
+    height: clamp(14px, 1vw, 18px);
+  }
+
+  /* Next is the move made most, so it is the filled one. */
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled) {
+    border-color: var(--lnu-navy);
+    background: var(--lnu-navy);
+    color: var(--lnu-gold-light);
+  }
+
+  .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled):hover {
+    border-color: var(--lnu-navy-light);
+    background: var(--lnu-navy-light);
+    color: var(--lnu-gold-light);
+  }
+
+
+
+  /* The question list grows with the screen too. */
+  .exam-attempt-sidebar .exam-question-jump.immersive {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(38px, 2.4vw, 50px), 1fr));
+    gap: clamp(6px, 0.45vw, 9px);
+  }
+
+  .exam-attempt-sidebar .exam-jump-btn {
+    min-height: clamp(36px, 4.2vh, 48px);
+    font-size: clamp(13px, 0.35vw + 8px, 16px);
+  }
+
+  .exam-attempt-sidebar .legend-item {
+    font-size: clamp(11px, 0.3vw + 6.5px, 13.5px);
+  }
+
+  .exam-sidebar-submit p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-sidebar-submit .primary-btn {
+    height: clamp(40px, 4.6vh, 54px);
+    font-size: clamp(13.5px, 0.45vw + 8px, 17px);
+  }
+
+  .exam-head-copy h3 {
+    font-size: clamp(15px, 0.5vw + 9px, 20px);
+  }
+
+  .exam-head-copy p {
+    font-size: clamp(12px, 0.3vw + 7.5px, 14.5px);
+  }
+
+  .exam-timer-value {
+    font-size: clamp(16px, 0.6vw + 9px, 22px);
+  }
+}
+
+/* Legend, the numbers (which scroll), and Submit pinned under them. */
+.exam-attempt-sidebar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.exam-sidebar-submit {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.exam-sidebar-submit p {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.exam-sidebar-submit .primary-btn {
+  width: 100%;
+  justify-content: center;
+  height: var(--control-height);
+}
+

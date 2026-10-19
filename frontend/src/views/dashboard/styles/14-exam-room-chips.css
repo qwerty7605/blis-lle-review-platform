@@ -1,0 +1,107 @@
+/* =======================================================================
+   EXAM <-> ROOM ASSIGNMENT CHIPS
+   =======================================================================
+   One chip treatment used from both directions -- the Exams page lists the
+   rooms an exam runs in, the Rooms page links back to the exam setup -- so
+   the relationship reads as the same object wherever a teacher meets it.
+   ======================================================================= */
+
+.assignment-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 2px;
+}
+
+.assignment-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.assignment-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.assignment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(26, 35, 126, 0.2);
+  background: rgba(26, 35, 126, 0.06);
+  color: var(--lnu-navy-deep);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+a.assignment-chip:hover {
+  background: rgba(26, 35, 126, 0.12);
+  border-color: rgba(26, 35, 126, 0.4);
+}
+
+a.assignment-chip:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* The room code rides along in the same chip, dimmed -- teachers identify
+   rooms by code as often as by name, and a second chip per room would
+   double the row length for the same one fact. */
+.assignment-chip em {
+  font-style: normal;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.assignment-chip.is-archived {
+  border-color: var(--border-soft);
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+}
+
+.assignment-chip.is-link {
+  border-color: var(--border-soft);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+
+a.assignment-chip.is-link:hover {
+  border-color: rgba(26, 35, 126, 0.4);
+  background: #f2f5fd;
+  color: var(--lnu-navy);
+}
+
+/* Says "assigned nowhere" outright rather than leaving a blank slot that
+   reads as missing data. */
+.assignment-empty {
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* Target of the ?exam=<id> deep link from the Rooms page. */
+.management-item.is-highlighted {
+  border-color: rgba(26, 35, 126, 0.45);
+  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.16);
+}
+
+/* The Rooms page's exam rows put the schedule and the "Exam setup" link on
+   one line; keep them apart rather than letting the link crowd the date. */
+.rooms-exam-row-foot .assignment-chip.is-link {
+  margin-left: auto;
+}
+

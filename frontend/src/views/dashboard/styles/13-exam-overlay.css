@@ -1,0 +1,746 @@
+/* =======================================================================
+   EXAM OVERLAY REFRESH
+   =======================================================================
+   Every .exam-* class below is used by exactly one template (the exam
+   attempt overlay teleported from student/RoomsView.vue), so these rules
+   refine the originals higher up the file rather than competing with any
+   other page.
+
+   Goal: under exam conditions the question and its choices are the only
+   things that should pull the eye. The original carried six gradients (a
+   gold radial on the backdrop, plus shell, head, sidebar, card and footer
+   washes), a 30px exam title sitting above the question, answer choices in
+   two columns, and a timer rendered as an ordinary pill among four
+   identical ones. All of that is corrected here.
+
+   Layout contract: the shell is a fixed-height grid and only two things
+   scroll, each inside its own container -- the question palette and the
+   question card. Header, footer and legend never move.
+   ======================================================================= */
+
+/* Plain scrim: a decorative gold wash behind a timed exam is noise. */
+.exam-attempt-backdrop {
+  background: rgba(9, 14, 40, 0.82);
+  backdrop-filter: blur(3px);
+}
+
+.exam-attempt-shell {
+  border-radius: 20px;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(4, 8, 26, 0.4);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* ---- Header: identity left, the two live numbers right ---- */
+.exam-attempt-head {
+  align-items: center;
+  gap: 14px;
+  padding: 11px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.exam-head-copy {
+  min-width: 0;
+}
+
+/* 30px for a title you read once, directly above the question you read
+   twenty times, was the wrong way round. */
+.exam-attempt-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-attempt-head p {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exam-head-meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.exam-progress {
+  display: grid;
+  gap: 4px;
+  min-width: 124px;
+}
+
+.exam-progress-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exam-progress-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.exam-progress-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.exam-progress-value em {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.exam-progress-track {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(13, 21, 71, 0.1);
+  overflow: hidden;
+}
+
+.exam-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lnu-navy), var(--lnu-navy-light));
+  transition: width 0.3s ease;
+}
+
+/* ---- Timer: the one element that earns emphasis ---- */
+.exam-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 35, 126, 0.2);
+  background: rgba(26, 35, 126, 0.06);
+  color: var(--lnu-navy-deep);
+}
+
+/* tabular-nums stops the whole chip re-flowing every second as digit
+   widths change, which is distracting in peripheral vision. */
+.exam-timer-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.exam-timer.is-warning {
+  border-color: rgba(205, 151, 43, 0.45);
+  background: #fff6e2;
+  color: #8a6117;
+}
+
+.exam-timer.is-critical {
+  border-color: rgba(198, 40, 40, 0.45);
+  background: #fdecec;
+  color: #a8302f;
+  animation: exam-timer-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes exam-timer-pulse {
+  50% { border-color: rgba(198, 40, 40, 0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-timer.is-critical {
+    animation: none;
+  }
+}
+
+/* ---- Sidebar: legend pinned, palette scrolls on its own ---- */
+.exam-attempt-layout {
+  padding: 14px 16px 16px;
+  gap: 14px;
+  grid-template-columns: minmax(212px, 252px) minmax(0, 1fr);
+}
+
+.exam-attempt-sidebar {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  padding: 11px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.exam-status-legend {
+  flex-shrink: 0;
+  gap: 5px 9px;
+}
+
+.legend-item {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.exam-question-jump.immersive {
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+/* ---- Palette states: current / answered / blank / pending / bookmarked ---- */
+.exam-jump-btn {
+  min-height: 36px;
+  border-radius: 9px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+/* Lifting each cell on hover made the whole grid twitch while scanning it. */
+.exam-jump-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.45);
+  background: #f2f5fd;
+}
+
+.exam-jump-btn.pre-current,
+.exam-jump-btn.is-current {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.22);
+}
+
+.exam-jump-btn.pre-answered {
+  background: #e8f6ee;
+  border-color: #93cfae;
+  color: #1e6943;
+}
+
+.exam-jump-btn.pre-blank {
+  background: #fdeeed;
+  border-color: #f0a9a7;
+  color: #a8302f;
+}
+
+.exam-jump-btn.pre-pending {
+  background: var(--surface);
+  border-color: var(--border-soft);
+  color: var(--ink-muted);
+}
+
+.exam-jump-btn.post-correct {
+  background: #e8f6ee;
+  border-color: #93cfae;
+  color: #1e6943;
+}
+
+.exam-jump-btn.post-incorrect {
+  background: #fdeeed;
+  border-color: #f0a9a7;
+  color: #a8302f;
+}
+
+.exam-jump-btn.post-missed {
+  background: #f1edef;
+  border-color: #cbb8bf;
+  color: #7e5964;
+}
+
+.exam-jump-btn.post-answered {
+  background: #eaf2fb;
+  border-color: #a6c6e4;
+  color: #225b8c;
+}
+
+/* A flat corner wedge instead of the previous clip-path ribbon plus a
+   separate 2px pseudo-element pin -- same signal, far less machinery. */
+.exam-jump-btn.has-bookmark::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 12px solid #e8a71c;
+  border-left: 12px solid transparent;
+  border-radius: 0;
+  clip-path: none;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.exam-jump-btn.has-bookmark::before {
+  content: none;
+}
+
+/* ---- Question card: the focus of the screen ---- */
+.exam-attempt-card.immersive {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  padding: 18px clamp(16px, 2vw, 26px);
+  gap: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(26, 35, 126, 0.22) transparent;
+}
+
+.exam-attempt-card.immersive .surface-head {
+  margin-bottom: 0;
+}
+
+/* The heading kept the browser's own margins, about 21px above and below,
+   which on a phone is a line of the question. */
+.exam-attempt-card.immersive .surface-head h4 {
+  margin: 0;
+}
+
+.exam-attempt-question-text {
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.exam-question-list {
+  font-size: clamp(14px, 1.3vw, 16px);
+  line-height: 1.55;
+}
+
+/* ---- Answer choices ---- */
+/* One column. Two forced horizontal eye movement between choices and made
+   long options wrap against short ones, which is exactly the reading cost
+   you do not want under time pressure. */
+.exam-option-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  max-width: 860px;
+}
+
+.exam-option-card {
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  border-radius: 11px;
+  font-size: 14.5px;
+}
+
+.exam-option-card:hover {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.4);
+  background: #f7f9ff;
+}
+
+.exam-option-card:focus-within {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* The letter badge is the selection indicator, so the native control is
+   hidden visually but left in the tree -- keyboard, radio-group naming and
+   screen-reader semantics all still come from the real input. */
+.exam-option-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.exam-option-letter {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 21, 71, 0.06);
+  border: 1px solid var(--border-soft);
+  color: var(--ink-muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.exam-option-text {
+  min-width: 0;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.exam-option-card.selected {
+  border-color: var(--lnu-navy);
+  background: rgba(26, 35, 126, 0.06);
+  box-shadow: inset 0 0 0 1px var(--lnu-navy);
+}
+
+.exam-option-card.selected .exam-option-letter {
+  background: var(--lnu-navy);
+  border-color: var(--lnu-navy);
+  color: #fff;
+}
+
+.exam-option-card.submitted-correct {
+  border-color: #7bc99a;
+  background: #eaf8f0;
+  box-shadow: inset 0 0 0 1px #7bc99a;
+}
+
+.exam-option-card.submitted-correct .exam-option-letter {
+  background: #2f8a4f;
+  border-color: #2f8a4f;
+  color: #fff;
+}
+
+.exam-option-card.submitted-incorrect {
+  border-color: #e98d8a;
+  background: #fff1f0;
+  box-shadow: inset 0 0 0 1px #e98d8a;
+}
+
+.exam-option-card.submitted-incorrect .exam-option-letter {
+  background: #c9433d;
+  border-color: #c9433d;
+  color: #fff;
+}
+
+.exam-option-card.submitted-neutral {
+  background: var(--surface-muted);
+  box-shadow: none;
+}
+
+/* ---- Footer ---- */
+.exam-attempt-footer {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface-muted);
+  padding: 9px 12px;
+  gap: 8px;
+}
+
+.exam-attempt-footer .bookmark-toggle-btn {
+  height: var(--control-height);
+  min-width: 0;
+  border-radius: var(--control-radius);
+  border-color: var(--border-strong);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.exam-attempt-footer .bookmark-toggle-btn:hover:not(:disabled) {
+  transform: none;
+  border-color: rgba(26, 35, 126, 0.46);
+}
+
+.exam-attempt-footer .ghost-btn,
+.exam-attempt-footer .primary-btn {
+  height: var(--control-height);
+}
+
+/* ---- Responsive ---- */
+/* From 901px to about 980px the question list column leaves this row too
+   little room and Submit drops to a line of its own. It stays on the right
+   there, where it is at every other width. */
+@media (min-width: 901px) and (max-width: 980px) {
+  .exam-attempt-footer > .primary-btn {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .exam-attempt-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exam-head-meta {
+    gap: 8px;
+  }
+
+  .exam-progress {
+    min-width: 96px;
+  }
+
+  .exam-attempt-head h3 {
+    font-size: 14px;
+  }
+}
+
+/* Flex column, not a fixed-row grid. The shell renders two or three
+   children depending on whether the error banner and the loading box are
+   present, so any hardcoded track count mis-assigns the growing row: with
+   `auto auto 1fr` and no banner the layout landed in the second auto track
+   and stopped at content height, leaving dead space below it; with two
+   tracks and a banner showing, the banner would have taken the 1fr.
+
+   Flex has no row-count assumption -- header, banner and loading box each
+   take their natural height, and only .exam-attempt-layout is asked to
+   grow into whatever is left. Same fix already applied to the Review Bot
+   session panel for the same reason. */
+.exam-attempt-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.exam-attempt-head,
+.exam-attempt-shell > .feedback,
+.exam-attempt-loading {
+  flex-shrink: 0;
+}
+
+.exam-attempt-shell > .feedback {
+  margin: 10px 16px 0;
+}
+
+/* height:100% would resolve against the whole shell here (a definite
+   height), overshooting past the header; flex:1 is what should size it. */
+.exam-attempt-layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.exam-head-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Tablets and phones. These follow the rule above on purpose: it has to
+   lose here. */
+@media (max-width: 900px) {
+  /* The shell is what scrolls at this width, so the layout has to be as
+     tall as what is in it. Held to the visible height instead, a long
+     question left no room for anything that came after it. It still grows
+     to fill the screen when the question is short. */
+  .exam-attempt-shell {
+    overscroll-behavior: contain;
+  }
+
+  .exam-attempt-layout {
+    flex: 1 0 auto;
+    padding: 10px;
+  }
+
+  /*
+   * One row of buttons, as on a desktop. From 900px down they used to
+   * stack four deep at full width: 220px of the screen, pinned under the
+   * question, on a tablet as much as on a phone.
+   */
+  .exam-attempt-footer {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+
+  .exam-attempt-footer .ghost-btn,
+  .exam-attempt-footer .primary-btn,
+  .exam-attempt-footer .bookmark-toggle-btn {
+    flex-shrink: 0;
+    width: auto;
+  }
+
+  .exam-attempt-nav {
+    display: inline-flex;
+    width: auto;
+  }
+
+  .exam-attempt-nav .exam-sidebar-inline-toggle {
+    min-width: 0;
+  }
+}
+
+/*
+ * Phones. The header and the buttons are pinned, so every pixel they take
+ * comes out of the question: at 116px and 220px they left a 360x640 phone
+ * 304px for it, about four lines and one answer choice. Here they are 62px
+ * and 114px.
+ */
+@media (max-width: 640px) {
+  /* One row: the exam's name over the answered count, then the clock, then
+     Exit. The room line is dropped; it was read before the exam opened. */
+  .exam-attempt-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'copy timer exit'
+      'progress timer exit';
+    align-items: center;
+    gap: 3px 8px;
+    padding: 8px 12px;
+  }
+
+  .exam-head-copy {
+    grid-area: copy;
+  }
+
+  .exam-attempt-head h3 {
+    font-size: 13.5px;
+    line-height: 1.3;
+  }
+
+  .exam-attempt-head p {
+    display: none;
+  }
+
+  /* Its children are placed straight into the header's grid. */
+  .exam-head-meta {
+    display: contents;
+  }
+
+  .exam-progress,
+  .exam-head-score {
+    grid-area: progress;
+    min-width: 0;
+  }
+
+  .exam-progress {
+    gap: 3px;
+  }
+
+  .exam-progress-top {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .exam-progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .exam-progress-value em {
+    font-size: 12px;
+  }
+
+  .exam-head-score {
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .exam-head-score .pill {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+
+  .exam-timer {
+    grid-area: timer;
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .exam-head-meta > .ghost-btn {
+    grid-area: exit;
+  }
+
+  /* The buttons run edge to edge like the header, so the space around the
+     question moves from the layout onto the card. */
+  .exam-attempt-layout {
+    padding: 0;
+  }
+
+  .exam-attempt-main {
+    gap: 8px;
+  }
+
+  .exam-attempt-card.immersive,
+  .exam-attempt-main > .exam-attempt-loading {
+    margin: 8px 8px 0;
+  }
+
+  /* The question and its choices at one size. The choices were set larger
+     than the question they answer (17px against 16px). */
+  .exam-attempt-question-text {
+    line-height: 1.5;
+  }
+
+  .exam-option-card .exam-option-text {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .exam-option-card .exam-option-letter {
+    font-size: 13px;
+  }
+
+  /*
+   * Two rows, edge to edge like the header: Bookmark and the question
+   * list, then Previous, Next and Submit. The nav group dissolves so its
+   * three buttons can sit in either row.
+   */
+  .exam-attempt-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: 0;
+    background: var(--surface);
+  }
+
+  .exam-attempt-nav {
+    display: contents;
+  }
+
+  .exam-attempt-footer > .bookmark-toggle-btn,
+  .exam-attempt-footer > .ghost-btn,
+  .exam-attempt-nav .exam-sidebar-inline-toggle {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .exam-attempt-nav .ghost-btn:not(.exam-sidebar-inline-toggle) {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 8px;
+  }
+
+  .exam-attempt-footer > .primary-btn {
+    flex: 0 0 auto;
+    padding: 0 14px;
+  }
+}
+
+/* The question list inside the phone sheet (BottomSheet's body): the legend
+   stays put and the numbers scroll under it, however many there are. */
+.sheet-body .legend-item {
+  font-size: 12.5px;
+}
+
+.sheet-body .exam-question-jump.immersive {
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+  padding-right: 0;
+}
+
+.sheet-body .exam-jump-btn {
+  min-height: 44px;
+  font-size: 15px;
+}
+

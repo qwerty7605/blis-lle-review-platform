@@ -1,0 +1,813 @@
+/* =====================================================================
+   Exam list: a navy header with the totals, a search and room filter,
+   then one row per exam (cards on phones). Same visual language as the
+   rest of the dashboard (see the BRAND LAYER in dashboard.css).
+   ===================================================================== */
+.room-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* ---------- Header ---------- */
+.examlist-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 26px 28px;
+  border-radius: 22px;
+  color: #fff;
+  background: var(--panel-navy);
+  box-shadow: var(--shadow-md);
+}
+
+.examlist-hero-copy {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.examlist-hero-title {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+
+.examlist-hero-stats {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.examlist-hero-stats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.examlist-hero-stats svg {
+  color: var(--lnu-gold-light);
+}
+
+.examlist-hero-btn {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--lnu-gold-light);
+  color: var(--lnu-navy-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.examlist-hero-btn:hover {
+  background: #f6dc9a;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+
+.examlist-hero-btn:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
+/* ---------- Loading / empty ---------- */
+.examlist-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  border-radius: 20px;
+  border: 1px dashed rgba(26, 35, 126, 0.16);
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  text-align: center;
+}
+
+.examlist-state strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.examlist-state p {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.examlist-state-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+/* ---------- Search and subject filter ---------- */
+.examlist-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.examlist-search {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+.examlist-search-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--lnu-navy-light);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.examlist-search-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--lnu-text);
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+}
+
+.examlist-search-input:focus {
+  outline: none;
+  border-color: var(--lnu-navy);
+  box-shadow: var(--focus-ring);
+}
+
+.examlist-filters {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.examlist-filter {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.examlist-filter:hover:not(.active) {
+  border-color: rgba(26, 35, 126, 0.3);
+  color: var(--lnu-navy);
+}
+
+.examlist-filter.active {
+  border-color: var(--lnu-navy);
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  font-weight: 600;
+}
+
+.examlist-filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.examlist-filter.active .examlist-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ---------- Rows (wherever the table does not fit) ---------- */
+.examlist-rows-card {
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* Exam titles differ at their end ("... Mock Board Exam (AY 2015-2016)"),
+   which is exactly the part the shared one-line ellipsis cuts off. Here the
+   title wraps in full, and the row grows with it. */
+.examlist-rows .directory-row-copy strong {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #0b0d17;
+}
+
+.examlist-rows .directory-row-details.is-highlighted > summary {
+  background: rgba(240, 208, 128, 0.22);
+}
+
+.examlist-rows .examrow-rooms {
+  margin-top: 4px;
+}
+
+.examlist-row-actions {
+  gap: 8px;
+}
+
+.examlist-row-actions .primary-btn {
+  flex: 1 1 auto;
+  max-width: 240px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.examlist-row-actions .examrow-delete-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.examrow-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+.examrow-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.examrow-actions .ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Quiet until hovered: deleting is rare, and a filled red button on every
+   card made it the loudest thing on the page. */
+.examrow-delete-btn {
+  flex-shrink: 0;
+  width: var(--control-height);
+  height: var(--control-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.examrow-delete-btn:hover:not(:disabled) {
+  border-color: rgba(198, 40, 40, 0.4);
+  background: rgba(198, 40, 40, 0.08);
+  color: var(--lnu-danger);
+}
+
+.examrow-delete-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.examrow-delete-btn:focus-visible,
+.examlist-filter:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---------- Narrower screens ---------- */
+@media (max-width: 640px) {
+  .examlist-hero {
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+
+  .examlist-hero-btn {
+    width: 100%;
+  }
+
+  .examlist-search {
+    max-width: none;
+  }
+
+  /* One swipeable row of rooms instead of several wrapped lines of chips. */
+  .examlist-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .examlist-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .examlist-filter {
+    height: 40px;
+  }
+
+  .examlist-rows-card {
+    border-radius: 18px;
+  }
+}
+
+/* Touch screens: a search field under 16px makes iOS zoom the whole page in
+   when it is tapped, and a 25px room chip is hard to hit. */
+@media (pointer: coarse) {
+  .examlist-search-input {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .examlist-filter {
+    height: 40px;
+  }
+
+  /* Only the chips that are links to a room; archived ones are labels. */
+  .examlist-rows a.assignment-chip {
+    min-height: 40px;
+    padding-inline: 12px;
+  }
+
+  .exam-room-tool {
+    height: 40px;
+  }
+}
+
+/* ---------- Exam table (desktop and tablet) ---------- */
+.examlist-table-card {
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* The table keeps a readable minimum width and scrolls inside its card on a
+   narrow tablet, rather than squeezing six columns into unreadable slivers. */
+.examlist-table-scroll {
+  overflow-x: auto;
+}
+
+.examlist-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.examlist-table th,
+.examlist-table td {
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.examlist-table thead th {
+  padding-top: 13px;
+  padding-bottom: 13px;
+  background: var(--surface-muted);
+  border-bottom-color: var(--border-strong);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lnu-text-muted);
+  white-space: nowrap;
+}
+
+.examlist-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.examlist-table tbody tr:hover td {
+  background: rgba(26, 35, 126, 0.03);
+}
+
+.examlist-table .is-number {
+  text-align: right;
+}
+
+.examlist-table .is-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.examrow-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.examrow-cell .examrow-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+
+.examrow-cell-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.examrow-cell-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0b0d17;
+  overflow-wrap: anywhere;
+}
+
+.examrow-cell-copy span {
+  font-size: 12.5px;
+  color: var(--lnu-text-muted);
+}
+
+.examrow-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lnu-navy);
+}
+
+/* A text link, not another boxed button: the row already has three. */
+.examrow-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.examrow-actions .primary-btn,
+.examrow-actions .ghost-btn {
+  height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.examrow-actions .examrow-delete-btn {
+  width: 34px;
+  height: 34px;
+}
+
+.examlist-table th:first-child,
+.examlist-table td:first-child {
+  width: 34%;
+}
+
+/* ---------- Exam-specific pieces ---------- */
+.examrow-cell-copy small {
+  font-size: 12px;
+  color: var(--lnu-text-muted);
+}
+
+.examrow-muted {
+  font-size: 12.5px;
+  color: var(--lnu-text-muted);
+}
+
+.examrow-rooms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.examrow-schedule {
+  display: grid;
+  gap: 2px;
+}
+
+/* Open / Upcoming / Ended, as a dot and a word rather than colour alone. */
+.examrow-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lnu-text);
+  white-space: nowrap;
+}
+
+.examrow-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lnu-gray-dark);
+}
+
+.examrow-status.is-open i { background: var(--lnu-success); }
+.examrow-status.is-upcoming i { background: var(--lnu-navy-light); }
+.examrow-status.is-ended { color: var(--lnu-text-muted); }
+
+/* The exam a link from the Rooms page pointed at. */
+.examlist-table tbody tr.is-highlighted td {
+  background: rgba(240, 208, 128, 0.22);
+}
+
+/* =====================================================================
+   Exam form (the Create / Update dialog)
+   Its base rules are in dashboard.css. This block comes after that file
+   and settles what the shared dialog rules further down it had undone,
+   plus the layout on small screens.
+   ===================================================================== */
+
+/* Head, body and footer are full-width bands. The shared .modal-card
+   padding put a white frame around all three, 48px of a phone's width. */
+.exam-modal-card {
+  padding: 0;
+  gap: 0;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+}
+
+.exam-modal-body {
+  overscroll-behavior: contain;
+}
+
+/* Below 1200px the form is one column. The summary follows the sections it
+   summarises, next to the Save button, instead of opening the form with a
+   screenful of zeroes above the first field. */
+.exam-modal-side {
+  order: 0;
+}
+
+/* Gold on the navy card. It was navy on navy. */
+.exam-summary-kicker {
+  color: var(--lnu-gold-light);
+}
+
+.exam-summary-stat strong {
+  line-height: 1.2;
+}
+
+/* ---------- Rooms ---------- */
+.exam-room-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--lnu-text-muted);
+}
+
+.exam-room-tools span {
+  margin-right: auto;
+}
+
+.exam-room-tool {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--lnu-navy);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.exam-room-tool:hover:not(:disabled) {
+  border-color: rgba(26, 35, 126, 0.34);
+  background: #f2f5fd;
+}
+
+.exam-room-tool:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.exam-room-tool:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* Rows are sized by their content (max-content), so a list longer than its
+   window scrolls instead of squeezing the rows into each other. */
+.exam-room-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-auto-rows: max-content;
+  align-content: start;
+  max-height: 268px;
+}
+
+.exam-room-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  cursor: pointer;
+}
+
+.exam-room-choice input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.exam-room-copy {
+  min-width: 0;
+}
+
+.exam-room-copy strong,
+.exam-room-copy small {
+  overflow-wrap: anywhere;
+}
+
+.exam-room-choice:has(input:checked) {
+  border-color: rgba(26, 35, 126, 0.5);
+  background: rgba(26, 35, 126, 0.05);
+}
+
+.exam-room-choice:has(input:focus-visible) {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---------- Footer ---------- */
+.exam-modal-actions {
+  gap: 12px;
+}
+
+.exam-modal-action-note.is-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--lnu-danger);
+  font-weight: 500;
+}
+
+.exam-modal-action-note.is-error svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.exam-modal-action-buttons {
+  width: auto;
+  margin-left: auto;
+  display: inline-flex;
+  flex-wrap: nowrap;
+}
+
+.exam-modal-action-buttons .primary-btn,
+.exam-modal-action-buttons .ghost-btn {
+  width: auto;
+}
+
+/* ---------- Up to 900px: one scroll, not a box scrolling inside the form ---------- */
+@media (max-width: 900px) {
+  .exam-room-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+}
+
+/* ---------- Phones: the form is the screen ---------- */
+@media (max-width: 640px) {
+  .exam-modal-backdrop {
+    padding: 0;
+  }
+
+  /* The visible height (dvh): 100vh runs under a phone browser's toolbar
+     and took the Save button with it. */
+  .exam-modal-card {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  /* One line, title and Close. The head and footer together used to take
+     295px of an 844px screen and left the fields a 470px window. */
+  .exam-modal-head {
+    gap: 8px;
+    padding: 8px 8px 8px 16px;
+  }
+
+  .exam-modal-top-pills,
+  .exam-modal-title-wrap h4 {
+    font-size: 18px;
+    line-height: 1.3;
+  }
+
+  .exam-modal-body {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .exam-modal-main {
+    gap: 12px;
+  }
+
+  .exam-modal-panel,
+  .exam-modal-summary {
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .exam-panel-head h5 {
+    font-size: 16px;
+  }
+
+  /* Items and Minutes are two short numbers: side by side. */
+  .exam-meta-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .exam-meta-row .field-stack {
+    width: auto;
+  }
+
+  .exam-modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .exam-modal-action-note {
+    max-width: none;
+  }
+
+  /* Side by side: two stacked full-width buttons took 100px on their own. */
+  .exam-modal-action-buttons {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+    gap: 8px;
+  }
+
+  .exam-modal-action-buttons .primary-btn,
+  .exam-modal-action-buttons .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.exam-policy-list.is-disabled {
+  opacity: 0.55;
+}
+
+.exam-policy-list.is-disabled .exam-policy-item {
+  cursor: not-allowed;
+}
