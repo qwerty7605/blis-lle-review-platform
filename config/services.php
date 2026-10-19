@@ -36,6 +36,14 @@ return [
         'developer_email' => env('FEEDBACK_DEVELOPER_EMAIL'),
     ],
 
+    // Where server errors are emailed (App\Support\ErrorAlerts). Falls back to
+    // the feedback address above; with neither set no alert is sent. Local
+    // and test runs send none unless in_local is on.
+    'error_alerts' => [
+        'email' => env('ERROR_ALERT_EMAIL'),
+        'in_local' => (bool) env('ERROR_ALERT_IN_LOCAL', false),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
