@@ -42,9 +42,4 @@ class MailTestCommandTest extends TestCase
             ->expectsOutputToContain('App Password')
             ->assertFailed();
     }
-
-    public function test_the_unused_archive_rooms_command_does_nothing(): void
-    {
-        $this->artisan('app:archive-old-rooms-command')->assertSuccessful();
-    }
 }

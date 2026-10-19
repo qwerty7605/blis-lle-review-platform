@@ -146,9 +146,4 @@ class RemainingRouteGapsTest extends TestCase
 
         $this->getJson('/api/reports/overview')->assertForbidden()->assertJsonPath('message', 'Account is disabled.');
     }
-
-    public function test_the_inspire_command_prints_a_quote(): void
-    {
-        $this->artisan('inspire')->assertSuccessful();
-    }
 }

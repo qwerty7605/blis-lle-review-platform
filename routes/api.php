@@ -58,10 +58,6 @@ $isAdmin = static function (User $user) use ($roleService): bool {
     return $roleService->isAdmin($user);
 };
 
-$isStaffMasterExaminer = static function (User $user) use ($roleService): bool {
-    return $roleService->isStaffMasterExaminer($user);
-};
-
 /*
  * Teaching -- rooms, exams, the Library, the Review Bot, reports -- is open to
  * teachers and to administrators. A teacher works with what they made; an
@@ -214,14 +210,6 @@ $systemSettingDefaults = [
 $systemSettingBooleanKeys = [
     'allow_public_registration',
 ];
-
-$findAccessibleQuestionBank = static function (User $user, int $bankId, bool $admin): ?QuestionBank {
-    return QuestionBank::query()
-        ->withCount('questions')
-        ->whereKey($bankId)
-        ->when(!$admin, fn ($query) => $query->where('created_by', $user->id))
-        ->first();
-};
 
 $normalizeQuestionBankIds = static function (array $bankIds): array {
     return collect($bankIds)
@@ -712,11 +700,9 @@ Route::middleware('auth:sanctum')->group(function () use (
     $dashboardAnalyticsService,
     $ensureActive,
     $isAdmin,
-    $isStaffMasterExaminer,
     $canTeach,
     $oversees,
     $recordAudit,
-    $findAccessibleQuestionBank,
     $resolveExamQuestionBankIds,
     $findAccessibleQuestionBanks,
     $normalizeAnswerText,
