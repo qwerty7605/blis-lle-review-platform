@@ -1,0 +1,83 @@
+/* =======================================================================
+   EXAMS PAGE -- ROOM FILTER BAR
+   =======================================================================
+   Sits on the shared .management-toolbar primitive (the same strip the
+   Students and Users directories use), so it reads as part of the existing
+   page rather than a bolted-on control.
+   ======================================================================= */
+
+.exams-filter-bar {
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.exams-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.exams-filter-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.exams-filter-select {
+  flex: 0 0 auto;
+  min-width: 210px;
+  max-width: 100%;
+  font-weight: 700;
+}
+
+/* The live answer to "what am I looking at", next to the control that
+   changes it -- rather than a second heading row above the list. */
+.exams-filter-summary {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exams-filter-summary strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.exams-filter-summary span {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.exams-filter-clear {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .exams-filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exams-filter {
+    justify-content: space-between;
+  }
+
+  .exams-filter-select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .exams-filter-clear {
+    margin-left: 0;
+    justify-content: center;
+  }
+}
+

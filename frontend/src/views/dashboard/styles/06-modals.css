@@ -1,0 +1,576 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(6, 10, 30, 0.58);
+  display: flex;
+  /*
+   * flex-start here with `margin: auto` on the card below, rather than
+   * align-items: center. A centred flex item that grows taller than its
+   * container overflows equally in BOTH directions, and the half that goes
+   * past the top edge cannot be scrolled back to -- so a long form lost its
+   * heading off the top and its Save button off the bottom, with no way to
+   * reach either. `margin: auto` still centres it whenever it does fit.
+   */
+  align-items: flex-start;
+  justify-content: center;
+  padding:
+    calc(16px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(16px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.exam-attempt-modal-backdrop {
+  z-index: 90;
+}
+
+.exam-modal-backdrop {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding-block: clamp(12px, 3vh, 28px);
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  /* Centres while there is room, and simply sits at the top (scrollable)
+     once there is not -- see the note on .modal-backdrop. */
+  margin: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(253, 246, 227, 0.94));
+  box-shadow: var(--shadow-md);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.exam-modal-card {
+  width: min(1120px, 100%);
+  max-height: calc(100dvh - 24px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.exam-modal-head {
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(240, 208, 128, 0.3), transparent 28%),
+    linear-gradient(180deg, rgba(26, 35, 126, 0.09), rgba(255, 255, 255, 0.98) 74%);
+}
+
+.exam-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.exam-modal-body .inline-form.exam-meta-row {
+  margin-top: 0;
+}
+
+.exam-modal-actions {
+  border-top: 1px solid rgba(13, 21, 71, 0.12);
+  padding: 14px 22px 18px;
+  background:
+    linear-gradient(180deg, rgba(253, 246, 227, 0.45), rgba(255, 255, 255, 0.96));
+  align-items: center;
+  justify-content: space-between;
+}
+
+.exam-room-grid {
+  max-height: 280px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.exam-modal-title-wrap {
+  min-width: 0;
+}
+
+.exam-modal-top-pills {
+  margin-bottom: 8px;
+}
+
+.exam-modal-title-wrap h4 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.exam-modal-title-wrap p {
+  margin: 8px 0 0;
+  color: var(--lnu-text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 62ch;
+}
+
+.exam-modal-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.exam-modal-main {
+  display: grid;
+  gap: 14px;
+}
+
+.exam-modal-side {
+  min-width: 0;
+}
+
+.exam-modal-panel,
+.exam-modal-summary {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 248, 244, 0.95));
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.04);
+}
+
+.exam-modal-panel {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.exam-panel-head {
+  display: grid;
+  gap: 4px;
+}
+
+.exam-panel-kicker,
+.exam-summary-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lnu-navy);
+}
+
+.exam-panel-head h5 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--lnu-navy-deep);
+}
+
+.exam-panel-head p {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.exam-panel-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.exam-panel-grid.single {
+  gap: 12px;
+}
+
+.exam-selection-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  border-radius: 14px;
+  background: rgba(247, 248, 252, 0.88);
+}
+
+.exam-bank-dropdown {
+  position: relative;
+}
+
+.exam-bank-trigger {
+  width: 100%;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(247, 248, 252, 0.95));
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-align: left;
+  box-shadow: 0 10px 20px rgba(16, 24, 40, 0.04);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.exam-bank-trigger:hover,
+.exam-bank-trigger.is-open {
+  border-color: rgba(26, 35, 126, 0.28);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(244, 247, 255, 0.98));
+  box-shadow: 0 14px 28px rgba(16, 24, 40, 0.08);
+}
+
+.exam-bank-trigger-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.exam-bank-trigger-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lnu-text-muted);
+}
+
+.exam-bank-trigger-copy strong {
+  color: var(--lnu-navy-deep);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.exam-bank-trigger-copy small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.exam-bank-trigger-side {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.exam-bank-trigger-count {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.09);
+  color: var(--lnu-navy);
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exam-bank-trigger-icon {
+  color: var(--lnu-text-muted);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.exam-bank-trigger-icon.is-open {
+  color: var(--lnu-navy);
+  transform: rotate(180deg);
+}
+
+.exam-bank-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  border: 1px solid rgba(13, 21, 71, 0.14);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(249, 248, 244, 0.97));
+  box-shadow: 0 18px 40px rgba(10, 16, 52, 0.16);
+  overflow: hidden;
+}
+
+.exam-bank-menu-head {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  background: linear-gradient(180deg, rgba(26, 35, 126, 0.06), rgba(255, 255, 255, 0.98));
+}
+
+.exam-bank-menu-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.exam-bank-menu-copy strong {
+  color: var(--lnu-navy-deep);
+  font-size: 14px;
+}
+
+.exam-bank-menu-copy small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.exam-bank-clear-btn {
+  border: 1px solid rgba(26, 35, 126, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--lnu-navy);
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.exam-bank-clear-btn:hover {
+  border-color: rgba(26, 35, 126, 0.28);
+  background: #fff;
+}
+
+.exam-bank-menu-scroll {
+  max-height: min(340px, 48vh);
+  overflow: auto;
+  padding: 12px 14px;
+}
+
+.exam-bank-menu-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(13, 21, 71, 0.1);
+  background: rgba(248, 249, 252, 0.88);
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.exam-bank-menu-foot span:first-child {
+  color: var(--lnu-navy-deep);
+}
+
+.exam-policy-list {
+  display: grid;
+  gap: 8px;
+}
+
+/* No min-height: 0 here. Inside a list with a height limit it lets the
+   browser shrink every row to its padding once the rows no longer fit, and
+   their text then spills over the rows below. */
+.exam-policy-item,
+.exam-room-choice {
+  border: 1px solid rgba(13, 21, 71, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 10px 12px;
+}
+
+.exam-policy-item:hover,
+.exam-room-choice:hover {
+  border-color: rgba(26, 35, 126, 0.26);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.exam-policy-item input,
+.exam-room-choice input {
+  margin-top: 1px;
+}
+
+.exam-policy-item span,
+.exam-room-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.exam-policy-item strong,
+.exam-room-copy strong {
+  color: var(--lnu-text);
+  font-size: 14px;
+}
+
+.exam-policy-item small,
+.exam-room-copy small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.exam-modal-summary {
+  position: sticky;
+  top: 0;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.exam-summary-hero {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #142173, #2842aa 72%, #d2a73d);
+}
+
+.exam-summary-hero strong {
+  font-size: 24px;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.exam-summary-hero p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.exam-summary-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.exam-summary-stat {
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  border-radius: 14px;
+  background: rgba(248, 249, 252, 0.92);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.exam-summary-stat span,
+.exam-summary-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lnu-text-muted);
+}
+
+.exam-summary-stat strong {
+  font-size: 24px;
+  line-height: 1;
+  color: var(--lnu-navy-deep);
+}
+
+.exam-summary-block {
+  display: grid;
+  gap: 6px;
+}
+
+.exam-summary-block p {
+  margin: 0;
+  color: var(--lnu-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.exam-summary-block small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.exam-summary-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.exam-summary-stack.compact {
+  gap: 6px;
+}
+
+.exam-summary-chip {
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 10px 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.exam-summary-chip.compact {
+  padding: 8px 10px;
+}
+
+.exam-summary-chip strong {
+  color: var(--lnu-text);
+  font-size: 14px;
+}
+
+.exam-summary-chip small {
+  color: var(--lnu-text-muted);
+  font-size: 12px;
+}
+
+.exam-summary-empty {
+  padding: 10px 12px;
+  border: 1px dashed rgba(13, 21, 71, 0.18);
+  border-radius: 14px;
+  background: rgba(249, 249, 245, 0.85);
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+}
+
+.exam-modal-action-note {
+  margin: 0;
+  color: var(--lnu-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 48ch;
+}
+
+.exam-modal-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.library-modal-card {
+  width: min(980px, 100%);
+  max-height: min(92vh, 900px);
+  overflow: auto;
+  padding: 0;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-head h4 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--lnu-navy-deep);
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(13, 21, 71, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  color: var(--lnu-text);
+  border-color: rgba(13, 21, 71, 0.32);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+

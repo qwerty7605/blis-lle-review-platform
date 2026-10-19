@@ -1,0 +1,926 @@
+.management-meta-grid .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* A head, one list that scrolls, and the buttons under it, all inside the
+   screen. The list used to have its own 70vh window inside a card with no
+   height limit, which put Close below the bottom of a 768px-high laptop. */
+.library-bank-view-modal {
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.library-bank-view-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding-right: 4px;
+}
+
+.library-bank-view-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-bank-question-list {
+  display: grid;
+  gap: 14px;
+}
+
+.library-bank-question-card {
+  border: 1px solid rgba(13, 21, 71, 0.1);
+  border-radius: 20px;
+  background: #fff;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.library-bank-question-head {
+  display: grid;
+  gap: 10px;
+}
+
+.library-bank-question-head strong {
+  color: var(--lnu-navy-deep);
+  line-height: 1.45;
+}
+
+.library-bank-question-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-confirmed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.library-bank-option-list {
+  display: grid;
+  gap: 8px;
+}
+
+.library-bank-option-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(13, 21, 71, 0.04);
+  color: var(--lnu-text);
+}
+
+.library-bank-option-row.correct {
+  background: rgba(46, 125, 50, 0.08);
+  border: 1px solid rgba(46, 125, 50, 0.14);
+}
+
+.library-bank-option-label {
+  min-width: 20px;
+  font-weight: 700;
+  color: var(--lnu-navy-deep);
+}
+
+.library-bank-question-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.library-question-edit-form {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+}
+
+/* In the Edit dialog: the way to the set's questions. */
+.library-edit-questions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+}
+
+.library-edit-questions-text {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.library-question-edit-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.library-question-edit-option-row .text-input {
+  flex: 1;
+}
+
+.ghost-btn.icon-only {
+  padding: 6px;
+}
+
+/* =====================================================================
+   Library list: a navy header with the totals, a search and subject
+   filter, then one card per question bank. Same visual language as the
+   rest of the dashboard (see the BRAND LAYER in dashboard.css).
+   ===================================================================== */
+.library-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* start: the shared rule gives this page a full-height grid, which would
+     otherwise stretch the header and cards to fill a tall screen. */
+  align-content: start;
+  gap: 16px;
+}
+
+/* ---------- Header ---------- */
+.library-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 26px 28px;
+  border-radius: 22px;
+  color: #fff;
+  background: var(--panel-navy);
+  box-shadow: var(--shadow-md);
+}
+
+.library-hero-copy {
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.library-hero-title {
+  margin: 0;
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+
+.library-hero-stats {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-hero-stats li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.library-hero-stats svg {
+  color: var(--lnu-gold-light);
+}
+
+.library-hero-btn {
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--lnu-gold-light);
+  color: var(--lnu-navy-deep);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.library-hero-btn:hover {
+  background: #f6dc9a;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+}
+
+.library-hero-btn:focus-visible {
+  outline: 2px solid var(--lnu-gold-light);
+  outline-offset: 2px;
+}
+
+/* ---------- Loading / empty ---------- */
+.library-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 20px;
+  border-radius: 20px;
+  border: 1px dashed rgba(26, 35, 126, 0.16);
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  text-align: center;
+}
+
+.library-state strong {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.library-state p {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.library-state-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+/* ---------- Search and subject filter ---------- */
+/* Search on its own line, subjects under it: side by side, six subject
+   chips wrapped to three lines next to a single search box. */
+.library-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.library-search {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+.library-search-icon {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--lnu-navy-light);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.library-search-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px 0 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13.5px;
+  color: var(--lnu-text);
+  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+}
+
+.library-search-input:focus {
+  outline: none;
+  border-color: var(--lnu-navy);
+  box-shadow: var(--focus-ring);
+}
+
+.library-filters {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.library-filter {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.library-filter:hover:not(.active) {
+  border-color: rgba(26, 35, 126, 0.3);
+  color: var(--lnu-navy);
+}
+
+.library-filter.active {
+  border-color: var(--lnu-navy);
+  background: var(--lnu-navy);
+  color: var(--lnu-gold-light);
+  font-weight: 600;
+}
+
+.library-filter-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(26, 35, 126, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.library-filter.active .library-filter-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ---------- Bank table (desktop and tablet) ---------- */
+.library-table-card {
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* The table keeps a readable minimum width and scrolls inside its card on a
+   narrow tablet, rather than squeezing six columns into unreadable slivers. */
+.library-table-scroll {
+  overflow-x: auto;
+}
+
+.library-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.library-table th,
+.library-table td {
+  padding: 14px 16px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.library-table thead th {
+  padding-top: 13px;
+  padding-bottom: 13px;
+  background: var(--surface-muted);
+  border-bottom-color: var(--border-strong);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lnu-text-muted);
+  white-space: nowrap;
+}
+
+.library-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.library-table tbody tr:hover td {
+  background: rgba(26, 35, 126, 0.03);
+}
+
+.library-table .is-number {
+  text-align: right;
+}
+
+.library-table .is-date {
+  white-space: nowrap;
+}
+
+/* The name is what a teacher scans for, so it gets the spare width. */
+.library-table th:first-child,
+.library-table td:first-child {
+  width: 36%;
+}
+
+.library-table .is-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bank-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bank-cell .bank-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+
+.bank-cell-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.bank-cell-copy strong {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0b0d17;
+  overflow-wrap: anywhere;
+}
+
+.bank-cell-copy span {
+  font-size: 12.5px;
+  color: var(--lnu-text-muted);
+}
+
+.bank-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lnu-navy);
+}
+
+.bank-file {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lnu-text);
+}
+
+.bank-topics {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+}
+
+.bank-topics-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--lnu-text);
+  white-space: nowrap;
+}
+
+.bank-topics-status svg {
+  flex-shrink: 0;
+  color: var(--lnu-text-muted);
+}
+
+.bank-topics-status.is-done svg { color: var(--lnu-success); }
+.bank-topics-status.is-review svg { color: #9a6a0c; }
+.bank-topics-status.is-busy svg { color: var(--lnu-navy); }
+.bank-topics-status.is-failed svg { color: var(--lnu-danger); }
+
+/* A text link, not another boxed button: the row already has three. */
+.bank-topics-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--lnu-navy-light);
+}
+
+.bank-topics-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.bank-topics-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bank-topics-btn:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.bank-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bank-row-actions .primary-btn,
+.bank-row-actions .ghost-btn {
+  height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.bank-row-actions .bank-delete-btn {
+  width: 34px;
+  height: 34px;
+}
+
+/* ---------- Bank cards (phones) ---------- */
+.library-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* One column on a phone, two where two 340px cards fit side by side. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+}
+
+/* Each card is a column so the action row sits at the bottom of every card
+   in a row, whatever the title length. */
+.bank-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.bank-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.bank-icon {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 35, 126, 0.08);
+  color: var(--lnu-navy);
+}
+
+.bank-card-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-title {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #0b0d17;
+  overflow-wrap: anywhere;
+}
+
+.bank-subject {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--lnu-text-muted);
+}
+
+.bank-count {
+  flex-shrink: 0;
+  display: grid;
+  justify-items: end;
+  font-size: 11.5px;
+  color: var(--lnu-text-muted);
+}
+
+.bank-count strong {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--lnu-navy);
+}
+
+.bank-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.bank-facts > div {
+  min-width: 0;
+}
+
+.bank-facts dt {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lnu-text-muted);
+}
+
+.bank-facts dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lnu-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-mapping {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+  color: var(--lnu-text-muted);
+}
+
+.bank-mapping > svg {
+  flex-shrink: 0;
+}
+
+.bank-mapping.is-done > svg { color: var(--lnu-success); }
+.bank-mapping.is-review > svg { color: #9a6a0c; }
+.bank-mapping.is-busy > svg { color: var(--lnu-navy); }
+.bank-mapping.is-failed > svg { color: var(--lnu-danger); }
+
+.bank-mapping-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.bank-mapping-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0b0d17;
+}
+
+.bank-mapping-copy span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bank-mapping-btn {
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--lnu-navy);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bank-mapping-btn:hover:not(:disabled) {
+  border-color: var(--lnu-navy);
+}
+
+.bank-mapping-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bank-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bank-view-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.bank-actions .ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+/* Quiet until hovered: deleting is rare, and a filled red button on every
+   card made it the loudest thing on the page. */
+.bank-delete-btn {
+  flex-shrink: 0;
+  width: var(--control-height);
+  height: var(--control-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--lnu-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.bank-delete-btn:hover:not(:disabled) {
+  border-color: rgba(198, 40, 40, 0.4);
+  background: rgba(198, 40, 40, 0.08);
+  color: var(--lnu-danger);
+}
+
+.bank-delete-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bank-mapping-btn:focus-visible,
+.bank-delete-btn:focus-visible,
+.library-filter:focus-visible {
+  outline: 2px solid var(--lnu-navy);
+  outline-offset: 2px;
+}
+
+/* ---------- Narrower screens ---------- */
+@media (max-width: 640px) {
+  .library-hero {
+    padding: 20px 18px;
+    border-radius: 20px;
+  }
+
+  .library-hero-btn {
+    width: 100%;
+  }
+
+  .library-search {
+    max-width: none;
+  }
+
+  /* One swipeable row of subjects instead of three wrapped lines of chips. */
+  .library-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .library-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .library-filter {
+    height: 40px;
+  }
+
+  .bank-card {
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .bank-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bank-mapping {
+    flex-wrap: wrap;
+  }
+
+  .bank-mapping-btn {
+    width: 100%;
+    height: 40px;
+    justify-content: center;
+  }
+
+  .bank-actions {
+    flex-wrap: wrap;
+  }
+
+  .bank-view-btn {
+    flex: 1 1 100%;
+  }
+
+  .bank-actions .ghost-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+/* Touch screens: a search field under 16px makes iOS zoom the whole page in
+   when it is tapped. */
+@media (pointer: coarse) {
+  .library-search-input {
+    height: 44px;
+    font-size: 16px;
+  }
+
+  .library-filter {
+    height: 40px;
+  }
+
+  .bank-topics-btn {
+    min-height: 36px;
+  }
+
+  .bank-mapping-btn {
+    min-height: 40px;
+  }
+}
+
+/* =====================================================================
+   Dialogs: Add questions, View questions
+   ===================================================================== */
+
+/* Head, body and button bar run edge to edge. The shared .modal-card padding
+   had put a white frame around all three. */
+.library-modal-card {
+  padding: 0;
+  gap: 0;
+}
+
+@media (max-width: 640px) {
+  /* Both rise from the bottom edge like every other dialog on a phone. */
+  .library-modal-card,
+  .library-bank-view-modal {
+    width: 100%;
+    margin: auto 0 0;
+    border: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .library-modal-card {
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
+  /* View questions takes the whole sheet, edge to edge. */
+  .library-bank-view-modal {
+    height: calc(100vh - 12px);
+    height: calc(100dvh - 12px);
+    max-height: none;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+
+  .library-bank-view-modal > .library-modal-head {
+    position: static;
+    padding: 10px 8px 10px 16px;
+  }
+
+  .library-modal-title-wrap h4 {
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .library-modal-title-wrap p {
+    margin-top: 2px;
+    font-size: 13px;
+  }
+
+  .library-bank-view-body {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .library-bank-question-card {
+    border-radius: 16px;
+  }
+
+  .library-bank-view-modal > .modal-actions {
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
+  }
+}
