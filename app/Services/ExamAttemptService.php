@@ -54,6 +54,10 @@ class ExamAttemptService
             return $attempt;
         }
 
+        // It ended at its deadline, not whenever somebody next looked at it:
+        // a student who closed the tab is submitted at the time they ran out.
+        $attempt->submitted_at = $attempt->expires_at;
+
         return $this->refreshMetrics($attempt, true);
     }
 

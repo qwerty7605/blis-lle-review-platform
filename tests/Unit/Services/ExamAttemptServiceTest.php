@@ -81,6 +81,8 @@ class ExamAttemptServiceTest extends TestCase
         $handedIn = $this->service()->autoSubmitExpiredAttempt($late);
         $this->assertSame(ExamAttempt::STATUS_SUBMITTED, $handedIn->status);
         $this->assertEquals(50.0, $handedIn->score_percent);
+        // Handed in when the time ran out, not when somebody next opened it.
+        $this->assertTrue($handedIn->submitted_at->equalTo($late->expires_at));
     }
 
     public function test_the_screen_shows_the_time_left_and_skips_a_question_that_was_deleted(): void
