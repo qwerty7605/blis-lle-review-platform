@@ -126,6 +126,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
   - App (nginx): `http://localhost:8080`
   - phpMyAdmin: `http://localhost:8081`
 - The `queue` service runs Laravel background jobs, including AI item mapping. Bank save/import now queues classification instead of waiting on OpenAI inline.
+- Server errors are emailed to the developers (`App\Support\ErrorAlerts`, hooked in `bootstrap/app.php`): only what Laravel reports (no 4xx), one email per distinct error every 15 minutes, never the request body, sent after the response. Address `ERROR_ALERT_EMAIL`, else `FEEDBACK_DEVELOPER_EMAIL`; none locally unless `ERROR_ALERT_IN_LOCAL=true`. Logs rotate daily and are kept 14 days (`LOG_STACK=daily`). Tests: `tests/Unit/Support/ErrorAlertsTest.php`.
 - MySQL container is intentionally named `lnu_lle_db`.
 - MySQL volume name is `blis_system_mysql_data`.
 - Production (lnu-blis.live) deploys itself: a merge to `main` is live within a few minutes. The server runs `scripts/auto-deploy.sh` (installed as `~/auto-deploy.sh`) from cron every minute; on a new commit it waits until no exam attempt is running, then runs `~/deploy.sh` (backup, pull, rebuild, migrate). So a migration merged to `main` runs on real data straight away: try it on MySQL 8.4.8 first. Its log is `~/auto-deploy.log` on the server; a failed commit is not retried until `~/.failed-commit` is removed or another commit lands. After changing the script, copy it to `~/auto-deploy.sh` again.

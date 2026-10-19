@@ -31,6 +31,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Email the developers about server errors (App\Support\ErrorAlerts).
+        // Still logged as usual: this adds to the report, it does not replace it.
+        $exceptions->report(function (Throwable $e): void {
+            \App\Support\ErrorAlerts::report($e);
+        });
+
         $exceptions->render(function (Throwable $e, Request $request) {
             if (!$request->expectsJson() && !$request->is('api/*')) {
                 return null;
