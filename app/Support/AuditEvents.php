@@ -50,6 +50,7 @@ final class AuditEvents
         'exam.archive' => 'Archived an exam',
         'exam.attempt.start' => 'Started an exam',
         'exam.attempt.submit' => 'Submitted an exam',
+        'exam.attempt.auto_submit' => 'Exam submitted when time ran out',
         'room.create' => 'Created a room',
         'room.update' => 'Updated a room',
         'room.delete' => 'Deleted a room',

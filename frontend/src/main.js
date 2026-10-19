@@ -1,5 +1,13 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+// Poppins is served from this site, not Google Fonts: the production security
+// policy (nginx/production.conf) only lets fonts and stylesheets load from our
+// own address, so a Google Fonts link was blocked and every page fell back to
+// another font. Latin covers English and Filipino names (ñ included).
+import '@fontsource/poppins/latin-400.css'
+import '@fontsource/poppins/latin-500.css'
+import '@fontsource/poppins/latin-600.css'
+import '@fontsource/poppins/latin-700.css'
 import './style.css'
 import App from './App.vue'
 import router from './router'
