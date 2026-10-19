@@ -4,16 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Services\DashboardAnalyticsService;
 use App\Services\StudentAnalyticsService;
+use App\Services\StudentDirectoryService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class StudentDirectoryController extends Controller
 {
     public function __construct(
-        private readonly DashboardAnalyticsService $dashboardAnalyticsService,
         private readonly StudentAnalyticsService $studentAnalytics,
+        private readonly StudentDirectoryService $directory,
     ) {
     }
 
@@ -32,7 +32,7 @@ class StudentDirectoryController extends Controller
             'admission_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
             'archive_state' => ['nullable', Rule::in(['current', 'archived', 'all'])],
             // Unknown sort keys fall back to name rather than erroring -- the
-            // whitelist lives in DashboardAnalyticsService::DIRECTORY_SORTS, which
+            // whitelist lives in StudentDirectoryService::DIRECTORY_SORTS, which
             // is also what stops the value reaching ORDER BY unchecked.
             'sort' => ['nullable', 'string', 'max:64'],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
@@ -40,7 +40,7 @@ class StudentDirectoryController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        return response()->json($this->dashboardAnalyticsService->paginateStudentDirectory($validated));
+        return response()->json($this->directory->paginateStudentDirectory($validated));
     }
 
     /**

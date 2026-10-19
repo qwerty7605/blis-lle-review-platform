@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Services\DashboardAnalyticsService;
+use App\Services\StudentDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use InvalidArgumentException;
 use Laravel\Sanctum\Sanctum;
@@ -210,7 +210,7 @@ class StudentLifecycleTest extends TestCase
 
         $this->makeStudent('current@example.com', '2603333', 1, 2026);
 
-        $service = app(DashboardAnalyticsService::class);
+        $service = app(StudentDirectoryService::class);
 
         $this->assertSame(1, $service->paginateStudentDirectory([
             'archive_state' => 'all',

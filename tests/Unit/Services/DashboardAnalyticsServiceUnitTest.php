@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\Models\ExamAttempt;
 use App\Services\DashboardAnalyticsService;
+use App\Services\StudentDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\BuildsBlisData;
 use Tests\TestCase;
@@ -59,7 +60,7 @@ class DashboardAnalyticsServiceUnitTest extends TestCase
         $this->makeSubmittedAttempt($exam, $room, $low, [true, false]);
 
         foreach (['desc' => ['High', 'Low', 'None'], 'asc' => ['Low', 'High', 'None']] as $direction => $expected) {
-            $page = $this->service()->paginateStudentDirectory([
+            $page = app(StudentDirectoryService::class)->paginateStudentDirectory([
                 'sort' => 'average_score_percent',
                 'direction' => $direction,
                 'per_page' => 10,

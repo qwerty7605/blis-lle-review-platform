@@ -2,7 +2,10 @@
 
 namespace Tests\Unit\Library;
 
-use App\Services\Library\DocxQuestionParser;
+use App\Services\Library\Docx\AnswerKeyReader;
+use App\Services\Library\Docx\AnswerMarkResolver;
+use App\Services\Library\Docx\DocxLineReader;
+use App\Services\Library\Docx\QuestionSegmenter;
 use PhpOffice\PhpWord\Element\TextBreak;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionMethod;
@@ -10,18 +13,22 @@ use Tests\Support\Fakes\Tab;
 use Tests\TestCase;
 
 /**
- * White-box tests of DocxQuestionParser's private helper functions, called
+ * White-box tests of the Word parser's private helper functions (its parts in
+ * App\Services\Library\Docx), called
  * through reflection: naming a mark's colour family, reading text out of
  * each kind of Word element, the "does this line look like..." checks,
  * folding a statement list back into the question, and choice-letter order.
  */
 class DocxQuestionParserHelpersTest extends TestCase
 {
+    /** Calls a helper on whichever of the parser's parts holds it. */
     private function invoke(string $method, mixed ...$arguments): mixed
     {
-        $reflection = new ReflectionMethod(DocxQuestionParser::class, $method);
+        $holder = collect([DocxLineReader::class, QuestionSegmenter::class, AnswerKeyReader::class, AnswerMarkResolver::class])
+            ->first(fn (string $class) => method_exists($class, $method));
+        $reflection = new ReflectionMethod($holder, $method);
 
-        return $reflection->invokeArgs(new DocxQuestionParser(), $arguments);
+        return $reflection->invokeArgs(new $holder(), $arguments);
     }
 
     /** @return array<string, array{mixed, bool, ?string}> */
@@ -158,8 +165,8 @@ class DocxQuestionParserHelpersTest extends TestCase
 
     public function test_statements_followed_by_code_choices_are_split_apart(): void
     {
-        $method = new ReflectionMethod(DocxQuestionParser::class, 'normalizeUnlabeledMixedOptions');
-        $parser = new DocxQuestionParser();
+        $method = new ReflectionMethod(QuestionSegmenter::class, 'normalizeUnlabeledMixedOptions');
+        $parser = new QuestionSegmenter();
         $option = fn (string $text) => ['label' => '', 'text' => $text, 'marks' => []];
 
         $current = [
