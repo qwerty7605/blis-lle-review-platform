@@ -30,7 +30,7 @@
 
 @section('content')
     <h1>{{ $session['exam']['title'] ?? 'Exam' }}</h1>
-    <p class="subtitle">How the class did on this exam: each student's latest sitting counts.</p>
+    <p class="subtitle">How the class did on this exam: each student's latest attempt counts.</p>
 
     <table class="facts">
         <tr>

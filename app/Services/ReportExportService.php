@@ -349,7 +349,7 @@ class ReportExportService
                         'correct_answers' => (int) $attempt->correct_answers,
                         'score_percent' => $score,
                         'passed' => $submitted && $score !== null ? $score >= self::PASSING_SCORE : null,
-                        'sitting' => (int) $attemptsByStudentId->get((int) $student->id)->count(),
+                        'attempt_number' => (int) $attemptsByStudentId->get((int) $student->id)->count(),
                         'started_at' => $attempt->started_at,
                         'submitted_at' => $attempt->submitted_at,
                     ]
@@ -503,7 +503,7 @@ class ReportExportService
     /** @return array<int, string> */
     public static function resultsHeaders(): array
     {
-        return ['Student Name', 'Student ID', 'Email', 'Status', 'Score %', 'Correct', 'Items', 'Result', 'Sitting', 'Submitted'];
+        return ['Student Name', 'Student ID', 'Email', 'Status', 'Score %', 'Correct', 'Items', 'Result', 'Attempt', 'Submitted'];
     }
 
     /**
@@ -535,7 +535,7 @@ class ReportExportService
                 false => 'Below ' . (int) self::PASSING_SCORE . '%',
                 default => '',
             },
-            $attempt ? (int) ($attempt['sitting'] ?? 1) : '',
+            $attempt ? (int) ($attempt['attempt_number'] ?? 1) : '',
             $attempt['submitted_at'] ?? null,
         ];
     }
@@ -765,7 +765,7 @@ class ReportExportService
 
         $answersByQuestionId = $attempt->answers->keyBy('question_bank_question_id');
 
-        // Which sitting of the exam in this room this is: "Sitting 2 of 2".
+        // Which attempt at the exam in this room this is: "Attempt 2 of 2".
         $sittingIds = ExamAttempt::query()
             ->where('exam_id', (int) $attempt->exam_id)
             ->where('room_id', (int) $attempt->room_id)
@@ -839,8 +839,8 @@ class ReportExportService
                 'score_percent' => $scorePercent,
                 'passed' => $attempt->status === ExamAttempt::STATUS_SUBMITTED ? $scorePercent >= self::PASSING_SCORE : null,
                 'passing_score' => self::PASSING_SCORE,
-                'sitting' => $sittingNumber === false ? 1 : $sittingNumber + 1,
-                'sittings' => max(1, count($sittingIds)),
+                'attempt_number' => $sittingNumber === false ? 1 : $sittingNumber + 1,
+                'attempts_total' => max(1, count($sittingIds)),
                 'started_at' => $attempt->started_at,
                 'submitted_at' => $attempt->submitted_at,
             ],

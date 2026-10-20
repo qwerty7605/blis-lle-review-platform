@@ -50,7 +50,7 @@ class ClassResultsWorkbook
         $submitted = (int) ($summary['attempts_submitted'] ?? 0);
 
         $notes = [
-            "Scores: one row per student in the room, from their latest sitting (the score that counts everywhere in BLIS). A student who has not taken the exam is listed as \"Not taken\".",
+            "Scores: one row per student in the room, from their latest attempt (the score that counts everywhere in BLIS). Attempt 2 means the score is from a retake. A student who has not taken the exam is listed as \"Not taken\".",
             "In the question columns: ✓ right, ✗ wrong, – left blank, ? a written answer not marked yet.",
             "Q numbers are the numbers in the Answer Key PDF, so Q5 here is item 5 there, whatever order the student saw the questions in.",
         ];

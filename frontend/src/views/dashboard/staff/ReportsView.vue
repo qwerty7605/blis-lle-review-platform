@@ -885,7 +885,7 @@ const EXPORT_GROUPS = [
   {
     key: 'downloads',
     title: 'Downloads',
-    info: 'Files for the chosen exam and room. Each student counts once, by their latest sitting.',
+    info: 'Files for the chosen exam and room. Each student counts once, by their latest attempt.',
     options: [
       { key: 'xlsx', label: 'Results (Excel)', info: 'Every student\'s score and right or wrong on each question, plus how the class did on each question. A sheet inside explains how to read it. Best for your records.' },
       { key: 'csv', label: 'Results (CSV)', info: 'The same scores as plain data with no formatting, for Google Sheets or another records system.' },
