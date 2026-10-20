@@ -7,7 +7,13 @@
     var choice = localStorage.getItem('blis-theme')
     var dark = choice === 'dark' ||
       (choice === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
-    if (dark) document.documentElement.setAttribute('data-theme', 'dark')
+    if (dark) {
+      document.documentElement.setAttribute('data-theme', 'dark')
+      // The page colour too, for the moment before the stylesheet arrives
+      // (a slow connection); style.css paints the same colour after it.
+      document.documentElement.style.colorScheme = 'dark'
+      document.documentElement.style.backgroundColor = '#11141c'
+    }
   } catch (e) {
     // No storage: light, as before.
   }

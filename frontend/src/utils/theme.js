@@ -31,6 +31,9 @@ function apply() {
   const dark = themeChoice.value === 'dark' || (themeChoice.value === 'system' && Boolean(deviceDark?.matches))
   activeTheme.value = dark ? 'dark' : 'light'
   document.documentElement.dataset.theme = activeTheme.value
+  // theme-boot.js's stand-in colours; the stylesheet has taken over by now.
+  document.documentElement.style.removeProperty('color-scheme')
+  document.documentElement.style.removeProperty('background-color')
 }
 
 export function initTheme() {

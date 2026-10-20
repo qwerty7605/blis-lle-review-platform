@@ -55,6 +55,18 @@ const OVERRIDES = {
   '--dk-fg-lnu-success': '#7fcf8a',
   '--dk-fg-lnu-danger': '#ff8a80',
   '--dk-fg-lnu-info': '#9fb6f2',
+  // Small gold labels on a gold tint ("Due", "Waiting for review"): bright
+  // enough for 4.5:1 at 11px.
+  '--dk-fg-6b5310': '#e3c27c',
+  '--dk-fg-7a5512': '#e3c27c',
+  // A white wash on navy (the count on a selected filter, a hovered navy
+  // button): the dark navy is lighter, so a white wash left the gold text on
+  // it faint. A dark wash keeps it readable.
+  '--dk-bg-ffffff-a20': 'rgba(0, 0, 0, 0.28)',
+  // The filled red button (Delete, Leave Room, Submit Final) a shade deeper,
+  // so its white text reads at 4.5:1, as GitHub's and others' dark red does.
+  '--dk-bg-lnu-danger-strong': '#d93a3d',
+  '--dk-bg-lnu-danger-strong-hover': '#c22f33',
 }
 
 // Brand tokens whose role depends on where they are used. Light values are
