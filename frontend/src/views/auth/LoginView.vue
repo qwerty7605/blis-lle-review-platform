@@ -298,7 +298,7 @@ async function handleSubmit() {
 /* Shared field, alert and layout styles live in auth.css (see AuthLayout.vue). */
 
 .resend-limit {
-  color: var(--lnu-danger);
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
   font-weight: 600;
 }
 
@@ -318,7 +318,7 @@ async function handleSubmit() {
 }
 
 .remember-wrap input {
-  accent-color: var(--lnu-navy);
+  accent-color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* Each on one line. Allowed to break, both did at 320px, four short lines

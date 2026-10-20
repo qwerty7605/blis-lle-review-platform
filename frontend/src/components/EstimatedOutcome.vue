@@ -87,8 +87,8 @@ defineProps({
 .outcome-mode {
   padding: 4px 12px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 12px;
   font-weight: 600;
 }
@@ -110,14 +110,14 @@ defineProps({
   font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 /* Amber, not red, for the at-risk verdict: it reads as "pay attention"
    without the alarm. */
-.outcome-label.verdict-success { color: var(--lnu-success); }
-.outcome-label.verdict-danger { color: #9a6a0c; }
-.outcome-label.verdict-neutral { color: var(--lnu-navy); }
+.outcome-label.verdict-success { color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.outcome-label.verdict-danger { color: var(--dk-fg-9a6a0c, #9a6a0c); }
+.outcome-label.verdict-neutral { color: var(--dk-fg-lnu-navy, var(--lnu-navy)); }
 
 .outcome-detail {
   margin: 0 auto;
@@ -145,8 +145,8 @@ defineProps({
 }
 
 .outcome-list.is-risk {
-  background: rgba(201, 138, 30, 0.1);
-  border-color: rgba(201, 138, 30, 0.35);
+  background: var(--dk-bg-c98a1e-a10, rgba(201, 138, 30, 0.1));
+  border-color: var(--dk-line-c98a1e-a35, rgba(201, 138, 30, 0.35));
 }
 
 .outcome-list-title {
@@ -156,10 +156,10 @@ defineProps({
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
-.outcome-list.is-risk .outcome-list-title { color: #7a5309; }
+.outcome-list.is-risk .outcome-list-title { color: var(--dk-fg-7a5309, #7a5309); }
 
 .outcome-list ul {
   margin: 0;
@@ -197,7 +197,7 @@ defineProps({
 .outcome-stat-value {
   font-size: 16px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 @media (max-width: 640px) {

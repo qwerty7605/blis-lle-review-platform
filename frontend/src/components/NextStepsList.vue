@@ -151,8 +151,8 @@ function effortText(action) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   font-size: 14px;
   font-weight: 600;
 }
@@ -178,16 +178,16 @@ function effortText(action) {
   font-weight: 600;
 }
 
-.step-tag.is-alert { background: rgba(201, 168, 76, 0.24); color: #6b5310; }
-.step-tag.is-good { background: rgba(46, 125, 50, 0.12); color: var(--lnu-success); }
-.step-tag.is-neutral { background: rgba(26, 35, 126, 0.08); color: var(--lnu-navy-light); }
+.step-tag.is-alert { background: var(--dk-bg-c9a84c-a24, rgba(201, 168, 76, 0.24)); color: var(--dk-fg-6b5310, #6b5310); }
+.step-tag.is-good { background: var(--dk-bg-2e7d32-a12, rgba(46, 125, 50, 0.12)); color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.step-tag.is-neutral { background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08)); color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light)); }
 
 .step-title {
   margin: 6px 0 0;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
   overflow-wrap: anywhere;
 }
 
@@ -212,7 +212,7 @@ function effortText(action) {
   font-size: 13.5px;
   font-weight: 500;
   line-height: 1.55;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .step-next svg {
@@ -238,7 +238,7 @@ function effortText(action) {
 .step-meter-track {
   height: 8px;
   border-radius: 999px;
-  background: rgba(13, 21, 71, 0.09);
+  background: var(--dk-bg-0d1547-a09, rgba(13, 21, 71, 0.09));
   overflow: hidden;
 }
 
@@ -246,17 +246,17 @@ function effortText(action) {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--lnu-navy-light);
+  background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
 }
 
 /* Amber for a low score, matching the "At Risk" gauge; green once it is solid. */
-.step-meter-fill.is-struggling { background: #b7791f; }
-.step-meter-fill.is-mastered { background: var(--lnu-success); }
+.step-meter-fill.is-struggling { background: var(--dk-bg-b7791f, #b7791f); }
+.step-meter-fill.is-mastered { background: var(--dk-bg-lnu-success, var(--lnu-success)); }
 
 .step-meter-value {
   font-size: 13.5px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .step-foot {
@@ -271,8 +271,8 @@ function effortText(action) {
   height: 40px;
   padding: 0 16px;
   border-radius: 10px;
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -283,13 +283,13 @@ function effortText(action) {
 }
 
 .step-cta:hover {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
+  background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
+  box-shadow: 0 10px 18px var(--dk-shadow-1a237e-a25, rgba(26, 35, 126, 0.25));
   transform: translateY(-1px);
 }
 
 .step-cta:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 

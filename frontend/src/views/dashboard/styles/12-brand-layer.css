@@ -35,7 +35,7 @@
 .surface-head-copy h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .surface-head-copy p {
@@ -50,7 +50,7 @@
 .room-page-title h3 {
   font-size: 17px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 /* ---- Controls ---- */
@@ -65,15 +65,15 @@
 /* Navy with gold text: the Sign In button, so the primary action looks the
    same before and after signing in. */
 .primary-btn {
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   padding: 0 16px;
   box-shadow: none;
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
+  background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
+  box-shadow: 0 10px 18px var(--dk-shadow-1a237e-a25, rgba(26, 35, 126, 0.25));
 }
 
 .ghost-btn {
@@ -101,11 +101,11 @@ a.ghost-btn {
 .text-input {
   border-radius: 10px;
   font-size: 13.5px;
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
 }
 
 .text-input::placeholder {
-  color: rgba(13, 21, 71, 0.5);
+  color: var(--dk-fg-0d1547-a50, rgba(13, 21, 71, 0.5));
 }
 
 .text-input:focus {
@@ -137,7 +137,7 @@ a.ghost-btn {
 .owner-line {
   font-size: 12px;
   font-weight: 600;
-  color: var(--lnu-info);
+  color: var(--dk-fg-lnu-info, var(--lnu-info));
   overflow-wrap: anywhere;
 }
 
@@ -164,7 +164,7 @@ a.ghost-btn {
 .modal-head h4 {
   font-size: 18px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .modal-close {
@@ -223,7 +223,7 @@ a.ghost-btn {
 .room-empty-state h4 {
   font-size: 16px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .room-empty-state p {
@@ -257,7 +257,7 @@ a.ghost-btn {
   margin-top: 3px;
   font-size: 24px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 /* ---- Section headers ---- */
@@ -266,7 +266,7 @@ a.ghost-btn {
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .section-count {

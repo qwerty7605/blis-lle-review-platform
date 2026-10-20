@@ -37,9 +37,9 @@
   max-width: 100%;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(26, 35, 126, 0.2);
-  background: rgba(26, 35, 126, 0.06);
-  color: var(--lnu-navy-deep);
+  border: 1px solid var(--dk-line-1a237e-a20, rgba(26, 35, 126, 0.2));
+  background: var(--dk-bg-1a237e-a06, rgba(26, 35, 126, 0.06));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-size: 11.5px;
   font-weight: 700;
   line-height: 1.3;
@@ -49,12 +49,12 @@
 }
 
 a.assignment-chip:hover {
-  background: rgba(26, 35, 126, 0.12);
-  border-color: rgba(26, 35, 126, 0.4);
+  background: var(--dk-bg-1a237e-a12, rgba(26, 35, 126, 0.12));
+  border-color: var(--dk-line-1a237e-a40, rgba(26, 35, 126, 0.4));
 }
 
 a.assignment-chip:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -80,9 +80,9 @@ a.assignment-chip:focus-visible {
 }
 
 a.assignment-chip.is-link:hover {
-  border-color: rgba(26, 35, 126, 0.4);
-  background: #f2f5fd;
-  color: var(--lnu-navy);
+  border-color: var(--dk-line-1a237e-a40, rgba(26, 35, 126, 0.4));
+  background: var(--dk-bg-f2f5fd, #f2f5fd);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* Says "assigned nowhere" outright rather than leaving a blank slot that
@@ -95,8 +95,8 @@ a.assignment-chip.is-link:hover {
 
 /* Target of the ?exam=<id> deep link from the Rooms page. */
 .management-item.is-highlighted {
-  border-color: rgba(26, 35, 126, 0.45);
-  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.16);
+  border-color: var(--dk-line-1a237e-a45, rgba(26, 35, 126, 0.45));
+  box-shadow: 0 0 0 2px var(--dk-line-1a237e-a16, rgba(26, 35, 126, 0.16));
 }
 
 /* The Rooms page's exam rows put the schedule and the "Exam setup" link on

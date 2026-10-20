@@ -64,6 +64,35 @@
   --font-display: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
+/* Dark mode (utils/theme.js sets data-theme on <html>). The tokens below are
+   used for one thing each, so they are redefined here. The brand colours
+   (navy, gold, white, ...) mean one thing as text and another as a fill, and
+   so does almost every colour written directly in a stylesheet: those are
+   wrapped by scripts/dark-theme.mjs as var(--dk-<role>-..., <light colour>),
+   whose dark values are in theme/dark-colors.css. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --lnu-text: #e4e7f4;
+  --lnu-text-muted: #a3adc2;
+
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.45);
+
+  --surface: #1b1f2b;
+  --surface-muted: #202533;
+  --border-soft: rgba(214, 220, 245, 0.12);
+  --border-strong: rgba(214, 220, 245, 0.22);
+  --ink: #e4e7f4;
+  --ink-muted: #a7b0c6;
+  --ink-soft: #9ea8bf;
+
+  --focus-ring: 0 0 0 3px rgba(160, 172, 255, 0.35);
+
+  /* Only ever used for faint tints and hairlines, which need a light blue here. */
+  --lnu-info-rgb: 159, 182, 242;
+}
+
 /* Fingers, not cursors: every button and field built on --control-height
    grows to the 44px touch target Apple and WCAG guidance use. */
 @media (pointer: coarse) {
@@ -101,9 +130,9 @@ body,
 body {
   font-family: var(--font-display);
   background:
-    radial-gradient(circle at 8% 4%, rgba(26, 35, 126, 0.1), transparent 28%),
-    radial-gradient(circle at 92% 0%, rgba(201, 168, 76, 0.16), transparent 30%),
-    var(--lnu-bg);
+    radial-gradient(circle at 8% 4%, var(--dk-bg-1a237e-a10, rgba(26, 35, 126, 0.1)), transparent 28%),
+    radial-gradient(circle at 92% 0%, var(--dk-bg-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 30%),
+    var(--dk-bg-lnu-bg, var(--lnu-bg));
   color: var(--lnu-text);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
@@ -134,7 +163,7 @@ button {
 }
 
 ::selection {
-  background: rgba(201, 168, 76, 0.36);
+  background: var(--dk-bg-c9a84c-a36, rgba(201, 168, 76, 0.36));
   color: var(--lnu-text);
 }
 
@@ -144,7 +173,7 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(26, 35, 126, 0.28);
+  background: var(--dk-bg-1a237e-a28, rgba(26, 35, 126, 0.28));
   border-radius: 999px;
 }
 
@@ -170,8 +199,8 @@ button {
   height: 44px;
   border: none;
   border-radius: var(--radius-sm);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   font-weight: 700;
   letter-spacing: 0.01em;
   display: inline-flex;
@@ -181,8 +210,8 @@ button {
 }
 
 .submit-btn:hover:not(:disabled) {
-  background: var(--lnu-navy-light);
-  box-shadow: 0 10px 18px rgba(26, 35, 126, 0.25);
+  background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
+  box-shadow: 0 10px 18px var(--dk-shadow-1a237e-a25, rgba(26, 35, 126, 0.25));
   transform: translateY(-1px);
 }
 

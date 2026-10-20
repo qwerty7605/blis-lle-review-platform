@@ -152,16 +152,33 @@
         </div>
       </form>
     </article>
+    <!-- Appearance -->
+    <article class="surface-card account-card">
+      <header class="account-card-head">
+        <h3>Appearance <InfoTip text="Saved with your account, so it follows you to any device you sign in on." /></h3>
+      </header>
+
+      <div class="account-theme" role="radiogroup" aria-label="Theme">
+        <label v-for="option in themeOptions" :key="option.value" class="account-theme-option" :class="{ active: themeChoice === option.value }">
+          <input type="radio" name="theme" :value="option.value" :checked="themeChoice === option.value" @change="chooseTheme(option.value)" />
+          <component :is="option.icon" :size="16" />
+          <span>{{ option.label }}</span>
+        </label>
+      </div>
+
+      <div v-if="themeError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ themeError }}</span></div>
+    </article>
   </div>
 </template>
 
 <script setup>
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
-import { AlertCircle, CheckCircle2, Circle, RefreshCw } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, Circle, Monitor, Moon, RefreshCw, Sun } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'
 import { useAuthStore } from '@/store/auth.store'
 import { firstPasswordProblem, passwordChecklist } from '@/utils/password'
+import { setThemeChoice, themeChoice } from '@/utils/theme'
 
 const auth = useAuthStore()
 
@@ -323,6 +340,28 @@ async function changePassword() {
     passwordError.value = generalError(error, 'Unable to change your password.')
   } finally {
     passwordSaving.value = false
+  }
+}
+
+// ---------------------------------------------------------------- appearance
+const themeOptions = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'Match device', icon: Monitor },
+]
+const themeError = ref('')
+
+// Applied at once; saved with the account in the background. If the save
+// fails the choice still holds on this device.
+async function chooseTheme(value) {
+  themeError.value = ''
+  setThemeChoice(value)
+
+  try {
+    const { data } = await accountApi.savePreferences({ theme: value })
+    auth.user = { ...auth.user, ...data.user }
+  } catch (error) {
+    themeError.value = generalError(error, 'Applied here, but it could not be saved to your account. Try again.')
   }
 }
 </script>

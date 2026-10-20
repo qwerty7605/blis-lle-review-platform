@@ -31,19 +31,19 @@
   height: 40px;
   padding: 0 14px 0 11px;
   border-radius: 999px;
-  background: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-gold-light, var(--lnu-gold-light));
   color: var(--lnu-navy-deep);
   box-shadow: none;
   font-size: 14px;
 }
 
 .primary-btn.appbar-action:hover:not(:disabled) {
-  background: #f5dc9c;
+  background: var(--dk-bg-f5dc9c, #f5dc9c);
 }
 
 .primary-btn.appbar-action:focus-visible,
 .appbar-icon-action:focus-visible {
-  outline: 2px solid var(--lnu-gold-light);
+  outline: 2px solid var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
   outline-offset: 2px;
 }
 
@@ -53,14 +53,14 @@
   border: 0;
   border-radius: 14px;
   background: transparent;
-  color: #ffffff;
+  color: var(--dk-fg-ffffff, #ffffff);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .appbar-icon-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--dk-bg-ffffff-a10, rgba(255, 255, 255, 0.1));
 }
 
 .appbar-icon-action:disabled {
@@ -79,8 +79,8 @@
   height: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--lnu-navy);
-  color: #ffffff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #ffffff);
   font-size: 11px;
   font-weight: 800;
   display: inline-flex;
@@ -105,10 +105,10 @@
   flex: 0 0 auto;
   height: 36px;
   padding: 0 10px 0 13px;
-  border: 1px solid rgba(26, 35, 126, 0.28);
+  border: 1px solid var(--dk-line-1a237e-a28, rgba(26, 35, 126, 0.28));
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.07);
-  color: var(--lnu-navy-deep);
+  background: var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-size: 13px;
   font-weight: 700;
   display: inline-flex;
@@ -117,7 +117,7 @@
 }
 
 .filter-chip:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -149,15 +149,15 @@
 }
 
 .directory-row:hover {
-  background: rgba(26, 35, 126, 0.04);
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.04));
 }
 
 .directory-row:active {
-  background: rgba(26, 35, 126, 0.08);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
 }
 
 .directory-row:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: -2px;
 }
 
@@ -178,7 +178,7 @@
 .directory-row-copy strong {
   font-size: 15px;
   font-weight: 700;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .directory-row-copy span {
@@ -323,16 +323,16 @@
 
 .user-action-item svg {
   flex-shrink: 0;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .user-action-item:hover:not(:disabled),
 .user-action-item:active:not(:disabled) {
-  background: rgba(26, 35, 126, 0.06);
+  background: var(--dk-bg-1a237e-a06, rgba(26, 35, 126, 0.06));
 }
 
 .user-action-item:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: -2px;
 }
 
@@ -641,7 +641,7 @@
     bottom: 100%;
     left: 0;
     height: 18px;
-    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--surface));
+    background: linear-gradient(to bottom, var(--dk-bg-ffffff-a00, rgba(255, 255, 255, 0)), var(--surface));
     pointer-events: none;
   }
 }
@@ -781,7 +781,7 @@
     font-size: clamp(18px, 0.85vw + 9px, 28px);
     line-height: 1.5;
     font-weight: 500;
-    color: var(--lnu-navy-deep);
+    color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   }
 
   .exam-attempt-card.immersive .exam-question-list {
@@ -850,15 +850,15 @@
 
   /* Next is the move made most, so it is the filled one. */
   .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled) {
-    border-color: var(--lnu-navy);
-    background: var(--lnu-navy);
-    color: var(--lnu-gold-light);
+    border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+    background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+    color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   }
 
   .exam-attempt-main > .exam-attempt-footer .exam-attempt-nav .ghost-btn:last-child:not(:disabled):hover {
-    border-color: var(--lnu-navy-light);
-    background: var(--lnu-navy-light);
-    color: var(--lnu-gold-light);
+    border-color: var(--dk-line-lnu-navy-light, var(--lnu-navy-light));
+    background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
+    color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   }
 
 

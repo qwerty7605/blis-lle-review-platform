@@ -121,11 +121,11 @@ onBeforeUnmount(() => cancelAnimationFrame(frame))
 }
 
 .gauge-track {
-  stroke: rgba(13, 21, 71, 0.09);
+  stroke: var(--dk-auto-0d1547-a09, rgba(13, 21, 71, 0.09));
 }
 
 .gauge-tip {
-  fill: var(--surface, #ffffff);
+  fill: var(--surface, var(--dk-auto-ffffff, #ffffff));
   stroke-width: 3;
 }
 
@@ -139,7 +139,7 @@ onBeforeUnmount(() => cancelAnimationFrame(frame))
 .gauge-value {
   font-size: 36px;
   font-weight: 600;
-  fill: #0b0d17;
+  fill: var(--dk-auto-0b0d17, #0b0d17);
 }
 
 .gauge-label {

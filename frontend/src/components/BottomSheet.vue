@@ -146,7 +146,7 @@ onBeforeUnmount(release)
   position: fixed;
   inset: 0;
   z-index: 1200;
-  background: rgba(6, 10, 30, 0.5);
+  background: var(--dk-bg-060a1e-a50, rgba(6, 10, 30, 0.5));
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -158,9 +158,9 @@ onBeforeUnmount(release)
   max-height: min(88dvh, 760px);
   display: flex;
   flex-direction: column;
-  background: var(--surface, #ffffff);
+  background: var(--surface, var(--dk-bg-ffffff, #ffffff));
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -12px 40px rgba(13, 21, 71, 0.22);
+  box-shadow: 0 -12px 40px var(--dk-shadow-0d1547-a22, rgba(13, 21, 71, 0.22));
   outline: none;
 }
 
@@ -170,7 +170,7 @@ onBeforeUnmount(release)
   justify-content: space-between;
   gap: 12px;
   padding: 16px 8px 12px 18px;
-  border-bottom: 1px solid var(--border-soft, rgba(13, 21, 71, 0.1));
+  border-bottom: 1px solid var(--border-soft, var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1)));
 }
 
 .sheet-head-copy {
@@ -183,13 +183,13 @@ onBeforeUnmount(release)
   font-size: 17px;
   font-weight: 800;
   line-height: 1.3;
-  color: var(--ink, #102149);
+  color: var(--ink, var(--dk-fg-102149, #102149));
 }
 
 .sheet-head p {
   margin: 3px 0 0;
   font-size: 13px;
-  color: var(--ink-muted, #5d6b86);
+  color: var(--ink-muted, var(--dk-fg-5d6b86, #5d6b86));
   overflow-wrap: anywhere;
 }
 
@@ -201,7 +201,7 @@ onBeforeUnmount(release)
   border: 0;
   border-radius: 14px;
   background: transparent;
-  color: var(--ink-muted, #5d6b86);
+  color: var(--ink-muted, var(--dk-fg-5d6b86, #5d6b86));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -209,12 +209,12 @@ onBeforeUnmount(release)
 
 .sheet-close:hover,
 .sheet-close:focus-visible {
-  background: rgba(13, 21, 71, 0.06);
-  color: var(--ink, #102149);
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
+  color: var(--ink, var(--dk-fg-102149, #102149));
 }
 
 .sheet-close:focus-visible {
-  outline: 2px solid var(--lnu-navy, #1a237e);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy, var(--dk-line-1a237e, #1a237e)));
   outline-offset: -2px;
 }
 
@@ -233,7 +233,7 @@ onBeforeUnmount(release)
   grid-auto-columns: minmax(0, 1fr);
   gap: 10px;
   padding: 12px 18px calc(12px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid var(--border-soft, rgba(13, 21, 71, 0.1));
+  border-top: 1px solid var(--border-soft, var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1)));
 }
 
 .sheet-enter-active,

@@ -507,7 +507,7 @@ function recommendationHeading(action) {
    give every subject its own colour, which read as decoration, not meaning. */
 .review-setup,
 .review-session {
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
 }
 
 /* ---- Panel head ---- */
@@ -518,7 +518,7 @@ function recommendationHeading(action) {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 15px;
-  border-bottom: 1px solid rgba(13, 21, 71, 0.08);
+  border-bottom: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 .review-panel-head-copy {
@@ -529,7 +529,7 @@ function recommendationHeading(action) {
   margin: 0;
   font-size: 15px;
   font-weight: 800;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .review-panel-head p {
@@ -545,8 +545,8 @@ function recommendationHeading(action) {
   flex-shrink: 0;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.09);
-  color: var(--lnu-navy-deep);
+  background: var(--dk-bg-1a237e-a09, rgba(26, 35, 126, 0.09));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -565,7 +565,7 @@ function recommendationHeading(action) {
 .review-progress-value {
   font-size: 15px;
   font-weight: 800;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   line-height: 1;
 }
 
@@ -580,14 +580,14 @@ function recommendationHeading(action) {
   width: 96px;
   height: 5px;
   border-radius: 999px;
-  background: rgba(13, 21, 71, 0.1);
+  background: var(--dk-bg-0d1547-a10, rgba(13, 21, 71, 0.1));
   overflow: hidden;
 }
 
 .review-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--lnu-navy), var(--lnu-navy-light));
+  background: linear-gradient(90deg, var(--dk-bg-lnu-navy, var(--lnu-navy)), var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)));
   transition: width 0.3s ease;
 }
 
@@ -624,7 +624,7 @@ function recommendationHeading(action) {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #5d6b86;
+  color: var(--dk-fg-5d6b86, #5d6b86);
 }
 
 .review-clear-link {
@@ -633,7 +633,7 @@ function recommendationHeading(action) {
   padding: 0;
   font-size: 11px;
   font-weight: 700;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -645,7 +645,7 @@ function recommendationHeading(action) {
   gap: 3px;
   padding: 3px;
   border-radius: 10px;
-  background: rgba(13, 21, 71, 0.06);
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
 }
 
 .review-segment {
@@ -659,14 +659,14 @@ function recommendationHeading(action) {
   gap: 5px;
   font-size: 12px;
   font-weight: 700;
-  color: #5d6b86;
+  color: var(--dk-fg-5d6b86, #5d6b86);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .review-segment.active {
-  background: #fff;
-  color: var(--lnu-navy);
-  box-shadow: 0 1px 3px rgba(13, 21, 71, 0.14);
+  background: var(--dk-bg-ffffff, #fff);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
+  box-shadow: 0 1px 3px var(--dk-shadow-0d1547-a14, rgba(13, 21, 71, 0.14));
 }
 
 .review-segment:disabled {
@@ -679,8 +679,8 @@ function recommendationHeading(action) {
   gap: 3px;
   padding: 11px 12px;
   border-radius: 10px;
-  background: #f6f7f9;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 .review-weak-kicker {
@@ -688,12 +688,12 @@ function recommendationHeading(action) {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #5d6b86;
+  color: var(--dk-fg-5d6b86, #5d6b86);
 }
 
 .review-weak-box strong {
   font-size: 13.5px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   line-height: 1.35;
 }
 
@@ -721,21 +721,21 @@ function recommendationHeading(action) {
   font-size: 12px;
   font-weight: 700;
   text-align: center;
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  background: #fff;
-  color: var(--lnu-navy-deep);
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
+  background: var(--dk-bg-ffffff, #fff);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .review-subject-chip:hover:not(.is-selected) {
-  border-color: rgba(13, 21, 71, 0.26);
-  background: #f6f7f9;
+  border-color: var(--dk-line-0d1547-a26, rgba(13, 21, 71, 0.26));
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
 }
 
 .review-subject-chip.is-selected {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #fff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 /* ---- Shared chips (topic, subtopic, difficulty, item count) ---- */
@@ -757,9 +757,9 @@ function recommendationHeading(action) {
 }
 
 .review-chip {
-  border: 1px solid rgba(13, 21, 71, 0.12);
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   border-radius: 999px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   color: var(--lnu-text);
   padding: 6px 11px;
   font-size: 12px;
@@ -770,14 +770,14 @@ function recommendationHeading(action) {
 }
 
 .review-chip:hover:not(.is-selected) {
-  border-color: rgba(13, 21, 71, 0.26);
-  background: #f6f7f9;
+  border-color: var(--dk-line-0d1547-a26, rgba(13, 21, 71, 0.26));
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
 }
 
 .review-chip.is-selected {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #fff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 .review-chip.is-capitalized {
@@ -796,8 +796,8 @@ function recommendationHeading(action) {
   gap: 6px;
   padding: 14px 12px;
   border-radius: 10px;
-  border: 1px dashed rgba(13, 21, 71, 0.16);
-  background: rgba(255, 255, 255, 0.6);
+  border: 1px dashed var(--dk-line-0d1547-a16, rgba(13, 21, 71, 0.16));
+  background: var(--dk-bg-ffffff-a60, rgba(255, 255, 255, 0.6));
   text-align: center;
   color: var(--lnu-text-muted);
 }
@@ -814,8 +814,8 @@ function recommendationHeading(action) {
   display: flex;
   gap: 8px;
   padding: 11px 15px;
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  border-top: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
+  background: var(--dk-bg-ffffff-a72, rgba(255, 255, 255, 0.72));
 }
 
 .review-start-btn {
@@ -846,9 +846,9 @@ function recommendationHeading(action) {
   margin: 12px 15px 0;
   padding: 9px 11px;
   border-radius: 10px;
-  background: #f6f7f9;
-  border: 1px solid rgba(13, 21, 71, 0.1);
-  color: #46526b;
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
+  color: var(--dk-fg-46526b, #46526b);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -872,15 +872,15 @@ function recommendationHeading(action) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 21, 71, 0.06);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .review-empty h3 {
   margin: 2px 0 0;
   font-size: 14px;
   font-weight: 800;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .review-empty p {
@@ -899,12 +899,12 @@ function recommendationHeading(action) {
   margin: 12px 15px 0;
   padding: 13px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 /* The score is the same neutral box whatever it is; the number says enough. */
 .review-result {
-  background: #f8f9fb;
+  background: var(--dk-bg-f8f9fb, #f8f9fb);
 }
 
 .review-result-score {
@@ -914,7 +914,7 @@ function recommendationHeading(action) {
   justify-items: center;
   min-width: 92px;
   padding-right: 14px;
-  border-right: 1px solid rgba(13, 21, 71, 0.1);
+  border-right: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 .review-result-kicker {
@@ -922,13 +922,13 @@ function recommendationHeading(action) {
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #5d6b86;
+  color: var(--dk-fg-5d6b86, #5d6b86);
 }
 
 .review-result-score strong {
   font-size: 28px;
   line-height: 1.1;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .review-result-count {
@@ -946,7 +946,7 @@ function recommendationHeading(action) {
 
 .review-result-copy strong {
   font-size: 13px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .review-result-copy p {
@@ -959,12 +959,12 @@ function recommendationHeading(action) {
 .review-improved {
   font-size: 11px;
   font-weight: 800;
-  color: #3949ab;
+  color: var(--dk-fg-3949ab, #3949ab);
 }
 
 /* Amber, not red: the app's below-passing colour (see JsChart.vue). */
 .review-improved.down {
-  color: #96600f;
+  color: var(--dk-fg-96600f, #96600f);
 }
 
 .review-result-actions {
@@ -1002,8 +1002,8 @@ function recommendationHeading(action) {
   gap: 9px;
   padding: 13px 14px;
   border-radius: 14px;
-  border: 1px solid rgba(13, 21, 71, 0.1);
-  background: #fff;
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
+  background: var(--dk-bg-ffffff, #fff);
 }
 
 .review-question-head {
@@ -1018,7 +1018,7 @@ function recommendationHeading(action) {
   font-weight: 800;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: #5d6b86;
+  color: var(--dk-fg-5d6b86, #5d6b86);
 }
 
 .review-question-text {
@@ -1038,9 +1038,9 @@ function recommendationHeading(action) {
   align-items: flex-start;
   gap: 9px;
   padding: 9px 11px;
-  border: 1px solid rgba(13, 21, 71, 0.11);
+  border: 1px solid var(--dk-line-0d1547-a11, rgba(13, 21, 71, 0.11));
   border-radius: 10px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   color: var(--lnu-text);
   font-size: 13px;
   line-height: 1.45;
@@ -1049,18 +1049,18 @@ function recommendationHeading(action) {
 }
 
 .review-option:hover:not(.is-selected) {
-  background: #f6f7f9;
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
 }
 
 .review-option.is-selected {
-  border-color: var(--lnu-navy);
-  box-shadow: inset 0 0 0 1px var(--lnu-navy);
-  background: rgba(26, 35, 126, 0.04);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  box-shadow: inset 0 0 0 1px var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.04));
 }
 
 .review-option input {
   margin-top: 2px;
-  accent-color: var(--lnu-navy);
+  accent-color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   flex-shrink: 0;
 }
 
@@ -1069,13 +1069,13 @@ function recommendationHeading(action) {
   gap: 3px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f6f7f9;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 .review-explanation strong {
   font-size: 12.5px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .review-explanation p {
@@ -1093,8 +1093,8 @@ function recommendationHeading(action) {
   justify-content: space-between;
   gap: 10px;
   padding: 11px 15px;
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
-  background: rgba(255, 255, 255, 0.72);
+  border-top: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
+  background: var(--dk-bg-ffffff-a72, rgba(255, 255, 255, 0.72));
 }
 
 .review-foot-hint {
@@ -1165,15 +1165,15 @@ function recommendationHeading(action) {
     position: sticky;
     bottom: 0;
     z-index: 2;
-    box-shadow: 0 -6px 16px rgba(13, 21, 71, 0.06);
+    box-shadow: 0 -6px 16px var(--dk-shadow-0d1547-a06, rgba(13, 21, 71, 0.06));
   }
 
   .review-setup-foot {
-    background: #fff;
+    background: var(--dk-bg-ffffff, #fff);
   }
 
   .review-session-foot {
-    background: #fff;
+    background: var(--dk-bg-ffffff, #fff);
   }
 }
 
@@ -1212,7 +1212,7 @@ function recommendationHeading(action) {
     padding-right: 0;
     padding-bottom: 11px;
     border-right: none;
-    border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+    border-bottom: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
   }
 
   .review-session-foot {

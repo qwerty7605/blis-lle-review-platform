@@ -28,7 +28,7 @@
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
   padding: 16px 17px;
 }
 
@@ -79,9 +79,9 @@
 /* White, not gold: gold-on-navy read as a decorative badge rather than the
    page's primary action, and the student side already uses white here. */
 .primary-btn {
-  color: #ffffff;
+  color: var(--dk-fg-ffffff, #ffffff);
   padding: 0 15px;
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.18);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a18, rgba(13, 21, 71, 0.18));
 }
 
 .ghost-btn {
@@ -92,9 +92,9 @@
 }
 
 .ghost-btn:hover:not(:disabled) {
-  background: #f2f5fd;
-  border-color: rgba(26, 35, 126, 0.34);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-f2f5fd, #f2f5fd);
+  border-color: var(--dk-line-1a237e-a34, rgba(26, 35, 126, 0.34));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .danger-btn {
@@ -104,7 +104,7 @@
 .primary-btn:focus-visible,
 .ghost-btn:focus-visible,
 .danger-btn:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -133,16 +133,16 @@
 }
 
 .text-input::placeholder {
-  color: #8b97ad;
+  color: var(--dk-fg-8b97ad, #8b97ad);
 }
 
 .text-input:hover:not(:focus):not(:disabled) {
-  border-color: rgba(26, 35, 126, 0.34);
+  border-color: var(--dk-line-1a237e-a34, rgba(26, 35, 126, 0.34));
 }
 
 .text-input:focus {
-  border-color: var(--lnu-navy);
-  box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.12);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  box-shadow: 0 0 0 3px var(--dk-line-1a237e-a12, rgba(26, 35, 126, 0.12));
 }
 
 /* Re-asserted after .text-input above, which would otherwise clamp every
@@ -159,7 +159,7 @@
 }
 
 .check-item input {
-  accent-color: var(--lnu-navy);
+  accent-color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* ---- Pills ---- */
@@ -176,28 +176,28 @@
 /* neutral was the same gold as .pill.gold, so a status row of "neutral" and
    "gold" pills rendered as one indistinguishable tan block. */
 .pill.neutral {
-  background: rgba(13, 21, 71, 0.07);
-  color: #4a5570;
+  background: var(--dk-bg-0d1547-a07, rgba(13, 21, 71, 0.07));
+  color: var(--dk-fg-4a5570, #4a5570);
 }
 
 .pill.navy {
-  background: rgba(26, 35, 126, 0.12);
-  color: var(--lnu-navy-deep);
+  background: var(--dk-bg-1a237e-a12, rgba(26, 35, 126, 0.12));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .pill.success {
-  background: rgba(46, 125, 50, 0.14);
-  color: #226b3f;
+  background: var(--dk-bg-2e7d32-a14, rgba(46, 125, 50, 0.14));
+  color: var(--dk-fg-226b3f, #226b3f);
 }
 
 .pill.danger {
-  background: rgba(198, 40, 40, 0.12);
-  color: #a8302f;
+  background: var(--dk-bg-c62828-a12, rgba(198, 40, 40, 0.12));
+  color: var(--dk-fg-a8302f, #a8302f);
 }
 
 .pill.gold {
-  background: rgba(201, 168, 76, 0.22);
-  color: #7a5512;
+  background: var(--dk-bg-c9a84c-a22, rgba(201, 168, 76, 0.22));
+  color: var(--dk-fg-7a5512, #7a5512);
 }
 
 /* ---- Feedback banners ---- */
@@ -210,7 +210,7 @@
 
 /* ---- Modals ---- */
 .modal-backdrop {
-  background: rgba(6, 10, 30, 0.5);
+  background: var(--dk-bg-060a1e-a50, rgba(6, 10, 30, 0.5));
   backdrop-filter: blur(2px);
 }
 
@@ -218,7 +218,7 @@
   border-radius: 20px;
   border-color: var(--border-soft);
   background: var(--surface);
-  box-shadow: 0 24px 60px rgba(13, 21, 71, 0.22);
+  box-shadow: 0 24px 60px var(--dk-shadow-0d1547-a22, rgba(13, 21, 71, 0.22));
   padding: 18px;
   gap: 13px;
 }
@@ -285,7 +285,7 @@
 }
 
 .directory-table tbody tr:hover td {
-  background: rgba(26, 35, 126, 0.035);
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.035));
 }
 
 .directory-table tbody tr:last-child td {
@@ -324,7 +324,7 @@
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
   padding: 13px 14px;
   gap: 11px;
 }

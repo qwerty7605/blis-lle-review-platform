@@ -504,12 +504,12 @@ useLiveRefresh(() => load({ silent: true }), {
 }
 
 .fb-tab:hover {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .fb-tab.active {
-  border-bottom-color: var(--lnu-navy);
-  color: var(--lnu-navy-deep);
+  border-bottom-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .fb-tab-count {
@@ -523,8 +523,8 @@ useLiveRefresh(() => load({ silent: true }), {
 }
 
 .fb-tab.active .fb-tab-count {
-  background: var(--lnu-navy);
-  color: #ffffff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .fb-toolbar {
@@ -572,11 +572,11 @@ useLiveRefresh(() => load({ silent: true }), {
 }
 
 .fb-row:hover {
-  background: rgba(26, 35, 126, 0.04);
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.04));
 }
 
 .fb-row:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: -2px;
 }
 
@@ -588,12 +588,12 @@ useLiveRefresh(() => load({ silent: true }), {
   height: 36px;
   border-radius: 10px;
   background: var(--surface-muted);
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .fb-row-icon.is-problem {
-  background: rgba(201, 138, 30, 0.14);
-  color: #8a5a0b;
+  background: var(--dk-bg-c98a1e-a14, rgba(201, 138, 30, 0.14));
+  color: var(--dk-fg-8a5a0b, #8a5a0b);
 }
 
 .fb-row-main {
@@ -607,7 +607,7 @@ useLiveRefresh(() => load({ silent: true }), {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -685,7 +685,7 @@ useLiveRefresh(() => load({ silent: true }), {
 .fb-facts dd {
   margin: 2px 0 0;
   font-size: 13.5px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   overflow-wrap: anywhere;
 }
 

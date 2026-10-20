@@ -42,7 +42,7 @@
 
   .room-list-panel {
     border-right: none;
-    border-bottom: 1px solid rgba(13, 21, 71, 0.12);
+    border-bottom: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   }
 
   .room-list {
@@ -170,7 +170,7 @@
     z-index: 3;
     padding: 12px;
     backdrop-filter: blur(6px);
-    background: linear-gradient(180deg, rgba(250, 251, 255, 0.96), rgba(250, 251, 255, 0.9));
+    background: linear-gradient(180deg, var(--dk-bg-fafbff-a96, rgba(250, 251, 255, 0.96)), var(--dk-bg-fafbff-a90, rgba(250, 251, 255, 0.9)));
   }
 
   .exam-attempt-head-meta {
@@ -214,8 +214,8 @@
     position: sticky;
     bottom: 0;
     z-index: 2;
-    border-color: rgba(13, 21, 71, 0.16);
-    box-shadow: 0 -8px 20px rgba(7, 14, 48, 0.08);
+    border-color: var(--dk-line-0d1547-a16, rgba(13, 21, 71, 0.16));
+    box-shadow: 0 -8px 20px var(--dk-shadow-070e30-a08, rgba(7, 14, 48, 0.08));
   }
 
   .exam-attempt-footer .ghost-btn,
@@ -308,7 +308,7 @@
     align-self: stretch;
     padding: 10px 12px 8px;
     border-right: none;
-    border-bottom: 1px solid rgba(240, 208, 128, 0.24);
+    border-bottom: 1px solid var(--dk-line-f0d080-a24, rgba(240, 208, 128, 0.24));
   }
 
   .sidebar.collapsed {

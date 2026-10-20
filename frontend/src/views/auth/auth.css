@@ -12,9 +12,9 @@
   padding: 32px 20px;
   font-family: var(--font-display);
   background:
-    radial-gradient(circle at 12% 10%, rgba(26, 35, 126, 0.07), transparent 34%),
-    radial-gradient(circle at 88% 92%, rgba(201, 168, 76, 0.16), transparent 36%),
-    var(--lnu-bg);
+    radial-gradient(circle at 12% 10%, var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07)), transparent 34%),
+    radial-gradient(circle at 88% 92%, var(--dk-bg-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 36%),
+    var(--dk-bg-lnu-bg, var(--lnu-bg));
 }
 
 /*
@@ -32,10 +32,10 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   padding: 8px;
   border-radius: 28px;
-  border: 1px solid rgba(13, 21, 71, 0.14);
-  background: linear-gradient(135deg, #ffffff 40%, var(--lnu-gold-pale));
+  border: 1px solid var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
+  background: linear-gradient(135deg, var(--dk-bg-ffffff, #ffffff) 40%, var(--dk-bg-lnu-gold-pale, var(--lnu-gold-pale)));
   box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.75),
+    0 0 0 4px var(--dk-line-ffffff-a75, rgba(255, 255, 255, 0.75)),
     var(--shadow-md);
 }
 
@@ -54,7 +54,7 @@
   gap: 28px;
   padding: 34px 32px;
   border-radius: 22px;
-  color: var(--lnu-white);
+  color: var(--dk-fg-lnu-white, var(--lnu-white));
   background: var(--panel-navy);
 }
 
@@ -84,14 +84,14 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .auth-shell .auth-panel-org {
   margin: 2px 0 0;
   font-size: 11.5px;
   font-weight: 500;
-  color: rgba(240, 208, 128, 0.86);
+  color: var(--dk-fg-f0d080-a86, rgba(240, 208, 128, 0.86));
 }
 
 .auth-shell .auth-panel-body {
@@ -103,14 +103,14 @@
   font-size: clamp(24px, 2.5vw, 30px);
   font-weight: 600;
   line-height: 1.25;
-  color: var(--lnu-white);
+  color: var(--dk-fg-lnu-white, var(--lnu-white));
 }
 
 .auth-shell .auth-panel-body p {
   margin: 14px 0 0;
   font-size: 14.5px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--dk-fg-ffffff-a80, rgba(255, 255, 255, 0.8));
 }
 
 .auth-shell .auth-panel-list {
@@ -127,15 +127,15 @@
   gap: 12px;
   padding: 11px 14px;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--dk-line-ffffff-a14, rgba(255, 255, 255, 0.14));
+  background: var(--dk-bg-ffffff-a05, rgba(255, 255, 255, 0.05));
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--dk-fg-ffffff-a90, rgba(255, 255, 255, 0.9));
 }
 
 .auth-shell .auth-panel-list svg {
   flex-shrink: 0;
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 /* ---------- Form side ---------- */
@@ -170,7 +170,7 @@
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.01em;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .auth-shell .auth-logo img {
@@ -188,7 +188,7 @@
   margin: 22px 0 0;
   font-size: 13px;
   font-weight: 600;
-  color: #2a6fc9;
+  color: var(--dk-fg-2a6fc9, #2a6fc9);
 }
 
 .auth-shell .auth-title {
@@ -196,7 +196,7 @@
   font-size: 24px;
   font-weight: 600;
   line-height: 1.25;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .auth-shell .auth-subtitle {
@@ -241,7 +241,7 @@
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   opacity: 0.8;
   pointer-events: none;
 }
@@ -249,24 +249,24 @@
 .auth-shell .field-input {
   width: 100%;
   height: 44px;
-  border: 1px solid rgba(13, 21, 71, 0.18);
+  border: 1px solid var(--dk-line-0d1547-a18, rgba(13, 21, 71, 0.18));
   border-radius: 10px;
   padding: 0 12px 0 40px;
   font-size: 14px;
   color: var(--lnu-text);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  background: var(--dk-bg-ffffff, #ffffff);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .auth-shell .field-input:focus {
-  border-color: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
   box-shadow: var(--focus-ring);
   outline: none;
 }
 
 .auth-shell .field-input::placeholder {
-  color: rgba(13, 21, 71, 0.5);
+  color: var(--dk-fg-0d1547-a50, rgba(13, 21, 71, 0.5));
 }
 
 .auth-shell .field-select {
@@ -296,24 +296,24 @@
 }
 
 .auth-shell .field-toggle:hover {
-  background: rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-0d1547-a08, rgba(13, 21, 71, 0.08));
   color: var(--lnu-text);
 }
 
 .auth-shell .field-input-error {
-  border-color: var(--lnu-danger);
+  border-color: var(--dk-line-lnu-danger, var(--lnu-danger));
 }
 
 .auth-shell .field-input-error:focus {
-  border-color: var(--lnu-danger);
-  box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.18);
+  border-color: var(--dk-line-lnu-danger, var(--lnu-danger));
+  box-shadow: 0 0 0 3px var(--dk-line-c62828-a18, rgba(198, 40, 40, 0.18));
 }
 
 .auth-shell .field-error {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.4;
-  color: var(--lnu-danger);
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
   /* A server message can be long ("The student id has already been taken.");
      it wraps rather than stretching the grid column it sits in. */
   overflow-wrap: anywhere;
@@ -337,7 +337,7 @@
 }
 
 .auth-shell .pw-rules li.met {
-  color: var(--lnu-success);
+  color: var(--dk-fg-lnu-success, var(--lnu-success));
 }
 
 .auth-shell .submit-btn {
@@ -352,8 +352,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  border: 2px solid rgba(240, 208, 128, 0.35);
-  border-top-color: var(--lnu-gold-light);
+  border: 2px solid var(--dk-line-f0d080-a35, rgba(240, 208, 128, 0.35));
+  border-top-color: var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
   animation: auth-spin 0.8s linear infinite;
 }
 
@@ -377,20 +377,20 @@
 }
 
 .auth-shell .alert-danger {
-  background: rgba(198, 40, 40, 0.1);
-  color: var(--lnu-danger);
-  border: 1px solid rgba(198, 40, 40, 0.2);
+  background: var(--dk-bg-c62828-a10, rgba(198, 40, 40, 0.1));
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
+  border: 1px solid var(--dk-line-c62828-a20, rgba(198, 40, 40, 0.2));
 }
 
 .auth-shell .alert-success {
-  background: rgba(46, 125, 50, 0.1);
-  color: var(--lnu-success);
-  border: 1px solid rgba(46, 125, 50, 0.22);
+  background: var(--dk-bg-2e7d32-a10, rgba(46, 125, 50, 0.1));
+  color: var(--dk-fg-lnu-success, var(--lnu-success));
+  border: 1px solid var(--dk-line-2e7d32-a22, rgba(46, 125, 50, 0.22));
 }
 
 .auth-shell .alert-info {
-  background: rgba(21, 101, 192, 0.09);
-  border: 1px solid rgba(21, 101, 192, 0.2);
+  background: var(--dk-bg-1565c0-a09, rgba(21, 101, 192, 0.09));
+  border: 1px solid var(--dk-line-1565c0-a20, rgba(21, 101, 192, 0.2));
 }
 
 .auth-shell .auth-form + .alert {
@@ -398,7 +398,7 @@
 }
 
 .auth-shell .inline-link {
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   text-decoration: none;
 }
 
@@ -421,7 +421,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   font-weight: 600;
   text-decoration: none;
 }

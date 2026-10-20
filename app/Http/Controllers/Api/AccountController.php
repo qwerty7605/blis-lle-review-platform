@@ -185,8 +185,8 @@ class AccountController extends Controller
 
     /**
      * The person's own choices, kept with their account. A partial save: what is
-     * not sent stays as it is. So far there is one: `exam_defaults`, which a
-     * teacher's New Exam form starts from.
+     * not sent stays as it is: `exam_defaults`, which a teacher's New Exam form
+     * starts from, and `theme` (light, dark, or follow the device), for anyone.
      */
     public function updatePreferences(Request $request)
     {
@@ -201,6 +201,7 @@ class AccountController extends Controller
             'exam_defaults.one_take_only' => ['required_with:exam_defaults', 'boolean'],
             'exam_defaults.shuffle_questions' => ['required_with:exam_defaults', 'boolean'],
             'exam_defaults.results_visibility_mode' => ['required_with:exam_defaults', Rule::in(['hidden', 'visible'])],
+            'theme' => ['sometimes', Rule::in(['light', 'dark', 'system'])],
         ]);
 
         $user->forceFill(['preferences' => array_merge($user->preferences ?? [], $validated)])->save();

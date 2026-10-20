@@ -366,7 +366,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   gap: 6px;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   text-decoration: none;
 }
 
@@ -390,7 +390,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   gap: 10px;
   padding: 48px 20px;
   border-radius: 20px;
-  border: 1px dashed rgba(26, 35, 126, 0.16);
+  border: 1px dashed var(--dk-line-1a237e-a16, rgba(26, 35, 126, 0.16));
   background: var(--surface);
   color: var(--lnu-text-muted);
   text-align: center;
@@ -399,7 +399,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
 .profile-state strong {
   font-size: 16px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .profile-state p {
@@ -417,7 +417,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   gap: 20px;
   padding: 26px 28px;
   border-radius: 22px;
-  color: #fff;
+  color: var(--dk-fg-ffffff, #fff);
   background: var(--panel-navy);
   box-shadow: var(--shadow-md);
 }
@@ -430,7 +430,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-gold-light, var(--lnu-gold-light));
   color: var(--lnu-navy-deep);
   font-size: 24px;
   font-weight: 600;
@@ -455,7 +455,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   flex-wrap: wrap;
   gap: 2px 14px;
   font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--dk-fg-ffffff-a80, rgba(255, 255, 255, 0.8));
   overflow-wrap: anywhere;
 }
 
@@ -474,20 +474,20 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--dk-line-ffffff-a16, rgba(255, 255, 255, 0.16));
+  background: var(--dk-bg-ffffff-a07, rgba(255, 255, 255, 0.07));
   font-size: 12px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--dk-fg-ffffff-a92, rgba(255, 255, 255, 0.92));
 }
 
 .profile-chips svg {
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .profile-chips li.is-warning {
-  border-color: rgba(240, 208, 128, 0.5);
-  color: var(--lnu-gold-light);
+  border-color: var(--dk-line-f0d080-a50, rgba(240, 208, 128, 0.5));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .profile-refresh {
@@ -496,16 +496,16 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  border: 1px solid var(--dk-line-ffffff-a22, rgba(255, 255, 255, 0.22));
+  background: var(--dk-bg-ffffff-a06, rgba(255, 255, 255, 0.06));
+  color: var(--dk-fg-ffffff, #fff);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .profile-refresh:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--dk-bg-ffffff-a16, rgba(255, 255, 255, 0.16));
 }
 
 .profile-refresh:disabled {
@@ -514,7 +514,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
 }
 
 .profile-refresh:focus-visible {
-  outline: 2px solid var(--lnu-gold-light);
+  outline: 2px solid var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
   outline-offset: 2px;
 }
 
@@ -555,12 +555,12 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   gap: 9px;
   font-size: 17px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .profile-card-head h3 svg {
   flex-shrink: 0;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .profile-card-head p {
@@ -612,7 +612,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
 .profile-stat strong {
   font-size: 18px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .profile-trend-chart {
@@ -653,7 +653,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   min-width: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .profile-subject-score,
@@ -664,15 +664,15 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
 }
 
 /* Amber rather than red for a low score, as on the student's own pages. */
-.is-good { color: var(--lnu-success); }
-.is-mid { color: #6b5310; }
-.is-low { color: #9a6a0c; }
+.is-good { color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.is-mid { color: var(--dk-fg-6b5310, #6b5310); }
+.is-low { color: var(--dk-fg-9a6a0c, #9a6a0c); }
 .is-none { color: var(--lnu-text-muted); }
 
 .profile-bar {
   height: 8px;
   border-radius: 999px;
-  background: rgba(13, 21, 71, 0.09);
+  background: var(--dk-bg-0d1547-a09, rgba(13, 21, 71, 0.09));
   overflow: hidden;
 }
 
@@ -682,9 +682,9 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   border-radius: 999px;
 }
 
-.profile-bar-fill.is-good { background: var(--lnu-success); }
-.profile-bar-fill.is-mid { background: #c9a84c; }
-.profile-bar-fill.is-low { background: #b7791f; }
+.profile-bar-fill.is-good { background: var(--dk-bg-lnu-success, var(--lnu-success)); }
+.profile-bar-fill.is-mid { background: var(--dk-bg-c9a84c, #c9a84c); }
+.profile-bar-fill.is-low { background: var(--dk-bg-b7791f, #b7791f); }
 
 .profile-subject-meta {
   margin: 0;
@@ -720,8 +720,8 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   font-size: 13px;
   font-weight: 600;
 }
@@ -736,7 +736,7 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
 .profile-row-copy strong {
   font-size: 14px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
