@@ -44,6 +44,9 @@
     </table>
 
     <h2>Per-Question Breakdown</h2>
+    @unless ($showAnswers ?? true)
+        <p class="muted">Your teacher has kept the correct answers for this exam hidden, so this list shows your answers only.</p>
+    @endunless
     @if (empty($report['items'] ?? []))
         <p class="muted">No item data available for this attempt.</p>
     @else
@@ -52,16 +55,20 @@
                 <th>Item</th>
                 <th>Question</th>
                 <th>Selected Answer</th>
-                <th>Correct Answer</th>
-                <th>Status</th>
+                @if ($showAnswers ?? true)
+                    <th>Correct Answer</th>
+                    <th>Status</th>
+                @endif
             </tr>
             @foreach ($report['items'] as $item)
                 <tr>
                     <td>{{ $item['item_number'] }}</td>
                     <td>{{ $item['question_text'] ?? 'N/A' }}</td>
                     <td>{{ $item['selected_answer'] ?? 'No Answer' }}</td>
-                    <td>{{ $item['correct_answer']['display'] ?? 'N/A' }}</td>
-                    <td>{{ $item['status_label'] ?? 'N/A' }}</td>
+                    @if ($showAnswers ?? true)
+                        <td>{{ $item['correct_answer']['display'] ?? 'N/A' }}</td>
+                        <td>{{ $item['status_label'] ?? 'N/A' }}</td>
+                    @endif
                 </tr>
             @endforeach
         </table>

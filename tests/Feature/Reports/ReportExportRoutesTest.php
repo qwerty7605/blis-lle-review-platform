@@ -2,14 +2,18 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Jobs\SendStudentReportEmailJob;
 use App\Mail\StudentReportMail;
 use App\Models\AuditLog;
 use App\Models\Exam;
+use App\Models\ExamAttempt;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\Demo\DemoData;
+use App\Services\ReportExportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -187,14 +191,16 @@ class ReportExportRoutesTest extends TestCase
     {
         Mail::shouldReceive('to')->andThrow(new \RuntimeException('SMTP is down'));
 
-        $this->postJson($this->base() . "/students/{$this->students[0]->id}/student-report.email")
-            ->assertStatus(500)
-            ->assertJsonPath('error', 'SMTP is down');
+        $response = $this->postJson($this->base() . "/students/{$this->students[0]->id}/student-report.email")
+            ->assertStatus(502);
+
+        // The mail server's own words stay out of the teacher's screen.
+        $this->assertStringNotContainsString('SMTP', $response->getContent());
     }
 
-    public function test_bulk_email_sends_to_who_it_can_and_names_the_reason_for_everyone_else(): void
+    public function test_bulk_email_queues_who_it_can_and_names_the_reason_for_everyone_else(): void
     {
-        Mail::fake();
+        Queue::fake();
 
         $badAddress = $this->makeStudent(['name' => 'Bad Address', 'email' => 'nope']);
         $demo = $this->makeStudent(['name' => 'Demo Person', 'email' => 'd@' . DemoData::EMAIL_DOMAIN]);
@@ -207,7 +213,7 @@ class ReportExportRoutesTest extends TestCase
         $response = $this->postJson($this->base() . '/student-reports.email', ['verified_only' => true])->assertOk();
 
         $this->assertSame(6, $response->json('summary.students_total'));
-        $this->assertSame(2, $response->json('summary.sent_count'));
+        $this->assertSame(2, $response->json('summary.queued_count'));
         $reasons = collect($response->json('issues'))->pluck('reason', 'student_name')->all();
         $this->assertSame([
             'Bad Address' => 'invalid_email',
@@ -216,18 +222,49 @@ class ReportExportRoutesTest extends TestCase
             'Not Verified' => 'email_not_verified',
         ], collect($reasons)->sortKeys()->all());
 
-        Mail::assertSent(StudentReportMail::class, 2);
+        Queue::assertPushed(SendStudentReportEmailJob::class, 2);
+        Queue::assertPushed(SendStudentReportEmailJob::class, fn (SendStudentReportEmailJob $job) => $job->recipientEmail === 'ana@lnu.edu.ph');
         $this->assertTrue(AuditLog::where('action', 'report.email.student_reports_bulk')->exists());
     }
 
-    public function test_bulk_email_records_a_send_that_failed_and_carries_on(): void
+    public function test_the_queued_email_sends_the_student_their_report(): void
     {
-        Mail::shouldReceive('to')->andThrow(new \RuntimeException('Mailbox full'));
+        Mail::fake();
+        $attempt = ExamAttempt::where('user_id', $this->students[0]->id)->firstOrFail();
 
-        $response = $this->postJson($this->base() . '/student-reports.email')->assertOk();
+        dispatch_sync(new SendStudentReportEmailJob($attempt->id, $this->teacher->id, 'ana@lnu.edu.ph'));
 
-        $this->assertSame(0, $response->json('summary.sent_count'));
-        $this->assertSame(['mail_send_failed', 'mail_send_failed'], collect($response->json('issues'))->pluck('reason')->all());
+        Mail::assertSent(StudentReportMail::class, fn (StudentReportMail $mail) => $mail->hasTo('ana@lnu.edu.ph'));
+    }
+
+    public function test_a_queued_email_that_keeps_failing_is_written_to_the_audit_log(): void
+    {
+        $attempt = ExamAttempt::where('user_id', $this->students[0]->id)->firstOrFail();
+
+        (new SendStudentReportEmailJob($attempt->id, $this->teacher->id, 'ana@lnu.edu.ph'))
+            ->failed(new \RuntimeException('Mailbox full'));
+
+        $log = AuditLog::where('action', 'report.email.failed')->firstOrFail();
+        $this->assertSame((int) $this->students[0]->id, (int) $log->metadata['student_id']);
+        $this->assertStringContainsString('Ana Cruz', $log->description);
+    }
+
+    public function test_a_student_s_copy_leaves_out_the_answers_when_results_are_hidden(): void
+    {
+        $attempt = ExamAttempt::where('user_id', $this->students[0]->id)->firstOrFail();
+        $reports = app(ReportExportService::class);
+
+        $this->exam->update(['results_visibility_mode' => 'hidden']);
+        $this->assertFalse($reports->answersShownToStudent($attempt->fresh()));
+        $this->exam->update(['results_visibility_mode' => 'visible']);
+        $this->assertTrue($reports->answersShownToStudent($attempt->fresh()));
+
+        $report = $reports->buildAttemptReportData($attempt->fresh());
+        $hidden = view('reports.student_report_pdf', ['report' => $report, 'showAnswers' => false])->render();
+        $shown = view('reports.student_report_pdf', ['report' => $report, 'showAnswers' => true])->render();
+        $this->assertStringNotContainsString('Correct Answer', $hidden);
+        $this->assertStringContainsString('kept the correct answers for this exam hidden', $hidden);
+        $this->assertStringContainsString('Correct Answer', $shown);
     }
 
     public function test_every_report_comes_back_in_one_zip(): void

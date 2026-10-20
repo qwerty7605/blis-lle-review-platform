@@ -9,7 +9,9 @@ use App\Models\ExamAttemptQuestion;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class ReportExportService
 {
@@ -667,6 +669,42 @@ class ReportExportService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * One student's report as a PDF, with its file name.
+     *
+     * $forStudent is the copy that goes to the student (by email): it follows
+     * the exam's results setting, so a "Hidden" exam's copy leaves out the
+     * correct answers and which items were right, as the student's own result
+     * page does. The teacher's download always has them.
+     *
+     * @return array{report: array<string, mixed>, binary: string, filename: string}
+     */
+    public function studentReportPdf(ExamAttempt $attempt, bool $forStudent = false): array
+    {
+        $report = $this->buildAttemptReportData($attempt);
+        $showAnswers = !$forStudent || $this->answersShownToStudent($attempt);
+
+        $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
+        $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
+        $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
+        $filename = ($baseName !== '' ? $baseName : 'student-report') . '-attempt-' . (int) $attempt->id . '.pdf';
+
+        $binary = Pdf::loadView('reports.student_report_pdf', [
+            'report' => $report,
+            'showAnswers' => $showAnswers,
+        ])->setPaper('a4', 'portrait')->output();
+
+        return ['report' => $report, 'binary' => $binary, 'filename' => $filename];
+    }
+
+    /** The exam's results setting: "visible" shows a student the correct answers. */
+    public function answersShownToStudent(ExamAttempt $attempt): bool
+    {
+        $attempt->loadMissing('exam:id,results_visibility_mode');
+
+        return ($attempt->exam?->results_visibility_mode ?? 'hidden') === 'visible';
+    }
+
     public function buildAttemptReportData(ExamAttempt $attempt): array
     {
         $attempt->loadMissing([
