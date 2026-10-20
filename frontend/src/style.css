@@ -79,8 +79,8 @@
   --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.45);
 
-  --surface: #1b1f2b;
-  --surface-muted: #202533;
+  --surface: #191d27;
+  --surface-muted: #1f2430;
   --border-soft: rgba(214, 220, 245, 0.12);
   --border-strong: rgba(214, 220, 245, 0.22);
   --ink: #e4e7f4;
@@ -91,6 +91,14 @@
 
   /* Only ever used for faint tints and hairlines, which need a light blue here. */
   --lnu-info-rgb: 159, 182, 242;
+}
+
+/* A flat page in dark mode: the light theme's navy and gold glows turn
+   into coloured smudges on a dark background. */
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .dashboard-shell,
+:root[data-theme='dark'] .auth-shell {
+  background: #11141c;
 }
 
 /* Fingers, not cursors: every button and field built on --control-height
@@ -130,8 +138,8 @@ body,
 body {
   font-family: var(--font-display);
   background:
-    radial-gradient(circle at 8% 4%, var(--dk-bg-1a237e-a10, rgba(26, 35, 126, 0.1)), transparent 28%),
-    radial-gradient(circle at 92% 0%, var(--dk-bg-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 30%),
+    radial-gradient(circle at 8% 4%, var(--dk-glow-1a237e-a10, rgba(26, 35, 126, 0.1)), transparent 28%),
+    radial-gradient(circle at 92% 0%, var(--dk-glow-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 30%),
     var(--dk-bg-lnu-bg, var(--lnu-bg));
   color: var(--lnu-text);
   line-height: 1.45;

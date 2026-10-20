@@ -394,7 +394,7 @@
   z-index: 80;
   padding: clamp(10px, 2vw, 22px);
   background:
-    radial-gradient(120% 120% at 0% 0%, var(--dk-bg-f0d080-a24, rgba(240, 208, 128, 0.24)), transparent 48%),
+    radial-gradient(120% 120% at 0% 0%, var(--dk-glow-f0d080-a24, rgba(240, 208, 128, 0.24)), transparent 48%),
     linear-gradient(135deg, var(--dk-bg-070e30-a90, rgba(7, 14, 48, 0.9)), var(--dk-bg-111a44-a92, rgba(17, 26, 68, 0.92)));
 }
 
