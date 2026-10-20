@@ -545,13 +545,6 @@
               </div>
             </div>
 
-            <div class="overview-pill-row report-selection-row" v-if="selectedReportExam || selectedReportRoom || selectedReportStudent">
-              <span v-if="selectedReportExam" class="pill navy">{{ selectedReportExam.title }}</span>
-              <span v-if="selectedReportRoom" class="pill neutral">
-                {{ selectedReportRoom.name }}{{ selectedReportRoom.code ? ` (${selectedReportRoom.code})` : '' }}
-              </span>
-              <span v-if="selectedReportStudent" class="pill success">{{ selectedReportStudent.name }}</span>
-            </div>
 
             <!-- An (i) set inside each button's edge says what the export is (a
                  sibling of the button, as a button cannot hold another). One
@@ -856,18 +849,6 @@ const strongestTopics = computed(() => {
 function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value ?? 0)))
 }
-
-const selectedReportExam = computed(() => (
-  reportExportExams.value.find((exam) => String(exam.id) === String(reportExportForm.exam_id)) ?? null
-))
-
-const selectedReportRoom = computed(() => (
-  reportExportRoomOptions.value.find((room) => String(room.id) === String(reportExportForm.room_id)) ?? null
-))
-
-const selectedReportStudent = computed(() => (
-  reportExportStudents.value.find((student) => String(student.id) === String(reportExportForm.student_id)) ?? null
-))
 
 // Under the Student field: why it is empty, or what picking one is for. The
 // other downloads cover the whole room whether or not a student is picked.
