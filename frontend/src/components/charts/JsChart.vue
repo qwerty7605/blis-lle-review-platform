@@ -6,6 +6,7 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { activeTheme } from '@/utils/theme'
 import {
   BarController,
   BarElement,
@@ -63,11 +64,43 @@ const props = defineProps({
   ariaLabel: { type: String, default: 'Chart' },
 })
 
-const INK = '#0b0d17'
-const MUTED = '#607080'
-const GRID = 'rgba(13, 21, 71, 0.08)'
-const NAVY = '#283593'
-const THRESHOLD = '#9a6a0c'
+// Chart.js draws on a canvas, which CSS cannot recolour: each theme has its
+// own set, and the chart is redrawn when the theme changes.
+const PALETTES = {
+  light: {
+    ink: '#0b0d17',
+    muted: '#607080',
+    grid: 'rgba(13, 21, 71, 0.08)',
+    navy: '#283593',
+    threshold: '#9a6a0c',
+    surface: '#ffffff',
+    area: 'rgba(40, 53, 147, 0.07)',
+    tooltip: '#0d1547',
+  },
+  dark: {
+    ink: '#e4e7f4',
+    muted: '#a3adc2',
+    grid: 'rgba(214, 220, 245, 0.1)',
+    navy: '#8f9ae6',
+    threshold: '#e0b04a',
+    surface: '#1b1f2b',
+    area: 'rgba(143, 154, 230, 0.12)',
+    tooltip: '#0b0e16',
+  },
+}
+// The pages' series colours, lifted for a dark background. The pass/fail pair
+// (indigo and amber) keeps its colour-blind-safe contrast.
+const DARK_SERIES = {
+  '#3949ab': '#7f8ce0',
+  '#c98a1e': '#e0a640',
+  '#283593': '#8f9ae6',
+}
+const palette = () => PALETTES[activeTheme.value] ?? PALETTES.light
+const seriesColor = (color) => {
+  if (activeTheme.value !== 'dark') return color
+  if (Array.isArray(color)) return color.map((one) => DARK_SERIES[String(one).toLowerCase()] ?? one)
+  return DARK_SERIES[String(color).toLowerCase()] ?? color
+}
 
 const canvas = ref(null)
 let chart = null
@@ -126,7 +159,7 @@ const thresholdPlugin = {
     const label = instance.options.plugins.thresholdLine.label
 
     ctx.save()
-    ctx.strokeStyle = THRESHOLD
+    ctx.strokeStyle = palette().threshold
     ctx.lineWidth = 1.5
     ctx.setLineDash([5, 4])
     ctx.beginPath()
@@ -143,7 +176,7 @@ const thresholdPlugin = {
 
     if (label) {
       ctx.setLineDash([])
-      ctx.fillStyle = THRESHOLD
+      ctx.fillStyle = palette().threshold
       ctx.font = `600 11px ${fontFamily()}`
 
       if (horizontal) {
@@ -172,7 +205,8 @@ const valueLabelPlugin = {
     const horizontal = instance.options.indexAxis === 'y'
 
     ctx.save()
-    ctx.fillStyle = INK
+    const colors = palette()
+    ctx.fillStyle = colors.ink
     ctx.font = `600 12px ${fontFamily()}`
 
     instance.data.datasets.forEach((dataset, datasetIndex) => {
@@ -186,9 +220,9 @@ const valueLabelPlugin = {
           // A surface-coloured backing, so a label that lands on the
           // pass-mark line stays readable instead of being struck through.
           const width = ctx.measureText(text).width
-          ctx.fillStyle = '#ffffff'
+          ctx.fillStyle = colors.surface
           ctx.fillRect(bar.x + 5, bar.y - 9, width + 6, 18)
-          ctx.fillStyle = INK
+          ctx.fillStyle = colors.ink
           ctx.textAlign = 'left'
           ctx.textBaseline = 'middle'
           ctx.fillText(text, bar.x + 8, bar.y)
@@ -209,34 +243,35 @@ function buildConfig() {
   const indexAxis = props.horizontal ? 'y' : 'x'
   const valueAxis = props.horizontal ? 'x' : 'y'
   const family = fontFamily()
+  const colors = palette()
 
   const datasets = props.datasets.map((dataset) => (
     isLine
       ? {
           label: dataset.label,
           data: dataset.data,
-          borderColor: dataset.colors ?? NAVY,
+          borderColor: seriesColor(dataset.colors ?? colors.navy),
           borderWidth: 2,
           tension: 0.3,
           pointRadius: 4,
           pointHoverRadius: 6,
-          pointBackgroundColor: '#ffffff',
-          pointBorderColor: dataset.colors ?? NAVY,
+          pointBackgroundColor: colors.surface,
+          pointBorderColor: seriesColor(dataset.colors ?? colors.navy),
           pointBorderWidth: 2,
           fill: true,
-          backgroundColor: 'rgba(40, 53, 147, 0.07)',
+          backgroundColor: colors.area,
         }
       : {
           label: dataset.label,
           data: dataset.data,
-          backgroundColor: dataset.colors ?? NAVY,
+          backgroundColor: seriesColor(dataset.colors ?? colors.navy),
           borderRadius: 6,
           borderSkipped: false,
           maxBarThickness: props.horizontal ? 18 : 56,
         }
   ))
 
-  const ticks = { color: MUTED, font: { family, size: TICK_FONT_SIZE } }
+  const ticks = { color: colors.muted, font: { family, size: TICK_FONT_SIZE } }
 
   // Sideways bars name their categories down the left edge; those names
   // wrap to the room they are allowed. Asked again whenever the chart is
@@ -276,13 +311,13 @@ function buildConfig() {
       scales: {
         [indexAxis]: {
           grid: { display: false },
-          border: { color: GRID },
+          border: { color: colors.grid },
           ticks: categoryTicks,
         },
         [valueAxis]: {
           beginAtZero: true,
           max: props.max ?? undefined,
-          grid: { color: GRID },
+          grid: { color: colors.grid },
           border: { display: false },
           ticks: {
             ...ticks,
@@ -296,7 +331,7 @@ function buildConfig() {
         thresholdLine: { value: props.threshold, label: props.thresholdLabel },
         valueLabels: { enabled: props.valueLabels, unit: props.unit },
         tooltip: {
-          backgroundColor: '#0d1547',
+          backgroundColor: colors.tooltip,
           titleColor: '#ffffff',
           bodyColor: 'rgba(255, 255, 255, 0.88)',
           titleFont: { family, size: 12.5, weight: 600 },
@@ -338,7 +373,7 @@ onMounted(() => {
 // Rebuilt rather than patched: these charts are small, and it guarantees the
 // colours, labels and plugins never drift out of step with the props.
 watch(
-  () => [props.type, props.labels, props.datasets, props.horizontal, props.threshold, props.max],
+  () => [props.type, props.labels, props.datasets, props.horizontal, props.threshold, props.max, activeTheme.value],
   render,
   { deep: true },
 )

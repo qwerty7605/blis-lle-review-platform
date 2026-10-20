@@ -112,20 +112,20 @@ const thresholdTick = computed(() => {
 }
 
 .radial-track {
-  stroke: rgba(13, 21, 71, 0.16);
+  stroke: var(--dk-auto-0d1547-a16, rgba(13, 21, 71, 0.16));
 }
 
 .radial-fill {
   transition: stroke-dashoffset 0.5s ease;
 }
 
-.radial-fill.tone-success { stroke: #3f925e; }
-.radial-fill.tone-navy { stroke: #315cbf; }
-.radial-fill.tone-gold { stroke: #cd972b; }
-.radial-fill.tone-danger { stroke: #c24b4b; }
+.radial-fill.tone-success { stroke: var(--dk-auto-3f925e, #3f925e); }
+.radial-fill.tone-navy { stroke: var(--dk-auto-315cbf, #315cbf); }
+.radial-fill.tone-gold { stroke: var(--dk-auto-cd972b, #cd972b); }
+.radial-fill.tone-danger { stroke: var(--dk-auto-c24b4b, #c24b4b); }
 
 .radial-threshold-tick {
-  stroke: #9d6110;
+  stroke: var(--dk-auto-9d6110, #9d6110);
   stroke-width: 3;
 }
 

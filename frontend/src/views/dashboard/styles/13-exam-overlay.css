@@ -20,15 +20,15 @@
 
 /* Plain scrim: a decorative gold wash behind a timed exam is noise. */
 .exam-attempt-backdrop {
-  background: rgba(9, 14, 40, 0.82);
+  background: var(--dk-bg-090e28-a82, rgba(9, 14, 40, 0.82));
   backdrop-filter: blur(3px);
 }
 
 .exam-attempt-shell {
   border-radius: 20px;
-  border: 1px solid rgba(13, 21, 71, 0.14);
+  border: 1px solid var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
   background: var(--surface);
-  box-shadow: 0 24px 60px rgba(4, 8, 26, 0.4);
+  box-shadow: 0 24px 60px var(--dk-shadow-04081a-a40, rgba(4, 8, 26, 0.4));
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -112,14 +112,14 @@
 .exam-progress-track {
   height: 5px;
   border-radius: 999px;
-  background: rgba(13, 21, 71, 0.1);
+  background: var(--dk-bg-0d1547-a10, rgba(13, 21, 71, 0.1));
   overflow: hidden;
 }
 
 .exam-progress-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--lnu-navy), var(--lnu-navy-light));
+  background: linear-gradient(90deg, var(--dk-bg-lnu-navy, var(--lnu-navy)), var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)));
   transition: width 0.3s ease;
 }
 
@@ -131,9 +131,9 @@
   height: 36px;
   padding: 0 13px;
   border-radius: 10px;
-  border: 1px solid rgba(26, 35, 126, 0.2);
-  background: rgba(26, 35, 126, 0.06);
-  color: var(--lnu-navy-deep);
+  border: 1px solid var(--dk-line-1a237e-a20, rgba(26, 35, 126, 0.2));
+  background: var(--dk-bg-1a237e-a06, rgba(26, 35, 126, 0.06));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 /* tabular-nums stops the whole chip re-flowing every second as digit
@@ -146,20 +146,20 @@
 }
 
 .exam-timer.is-warning {
-  border-color: rgba(205, 151, 43, 0.45);
-  background: #fff6e2;
-  color: #8a6117;
+  border-color: var(--dk-line-cd972b-a45, rgba(205, 151, 43, 0.45));
+  background: var(--dk-bg-fff6e2, #fff6e2);
+  color: var(--dk-fg-8a6117, #8a6117);
 }
 
 .exam-timer.is-critical {
-  border-color: rgba(198, 40, 40, 0.45);
-  background: #fdecec;
-  color: #a8302f;
+  border-color: var(--dk-line-c62828-a45, rgba(198, 40, 40, 0.45));
+  background: var(--dk-bg-fdecec, #fdecec);
+  color: var(--dk-fg-a8302f, #a8302f);
   animation: exam-timer-pulse 1.6s ease-in-out infinite;
 }
 
 @keyframes exam-timer-pulse {
-  50% { border-color: rgba(198, 40, 40, 0.85); }
+  50% { border-color: var(--dk-line-c62828-a85, rgba(198, 40, 40, 0.85)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -219,28 +219,28 @@
 /* Lifting each cell on hover made the whole grid twitch while scanning it. */
 .exam-jump-btn:hover:not(:disabled) {
   transform: none;
-  border-color: rgba(26, 35, 126, 0.45);
-  background: #f2f5fd;
+  border-color: var(--dk-line-1a237e-a45, rgba(26, 35, 126, 0.45));
+  background: var(--dk-bg-f2f5fd, #f2f5fd);
 }
 
 .exam-jump-btn.pre-current,
 .exam-jump-btn.is-current {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #fff;
-  box-shadow: 0 0 0 2px rgba(26, 35, 126, 0.22);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #fff);
+  box-shadow: 0 0 0 2px var(--dk-line-1a237e-a22, rgba(26, 35, 126, 0.22));
 }
 
 .exam-jump-btn.pre-answered {
-  background: #e8f6ee;
-  border-color: #93cfae;
-  color: #1e6943;
+  background: var(--dk-bg-e8f6ee, #e8f6ee);
+  border-color: var(--dk-line-93cfae, #93cfae);
+  color: var(--dk-fg-1e6943, #1e6943);
 }
 
 .exam-jump-btn.pre-blank {
-  background: #fdeeed;
-  border-color: #f0a9a7;
-  color: #a8302f;
+  background: var(--dk-bg-fdeeed, #fdeeed);
+  border-color: var(--dk-line-f0a9a7, #f0a9a7);
+  color: var(--dk-fg-a8302f, #a8302f);
 }
 
 .exam-jump-btn.pre-pending {
@@ -250,27 +250,27 @@
 }
 
 .exam-jump-btn.post-correct {
-  background: #e8f6ee;
-  border-color: #93cfae;
-  color: #1e6943;
+  background: var(--dk-bg-e8f6ee, #e8f6ee);
+  border-color: var(--dk-line-93cfae, #93cfae);
+  color: var(--dk-fg-1e6943, #1e6943);
 }
 
 .exam-jump-btn.post-incorrect {
-  background: #fdeeed;
-  border-color: #f0a9a7;
-  color: #a8302f;
+  background: var(--dk-bg-fdeeed, #fdeeed);
+  border-color: var(--dk-line-f0a9a7, #f0a9a7);
+  color: var(--dk-fg-a8302f, #a8302f);
 }
 
 .exam-jump-btn.post-missed {
-  background: #f1edef;
-  border-color: #cbb8bf;
-  color: #7e5964;
+  background: var(--dk-bg-f1edef, #f1edef);
+  border-color: var(--dk-line-cbb8bf, #cbb8bf);
+  color: var(--dk-fg-7e5964, #7e5964);
 }
 
 .exam-jump-btn.post-answered {
-  background: #eaf2fb;
-  border-color: #a6c6e4;
-  color: #225b8c;
+  background: var(--dk-bg-eaf2fb, #eaf2fb);
+  border-color: var(--dk-line-a6c6e4, #a6c6e4);
+  color: var(--dk-fg-225b8c, #225b8c);
 }
 
 /* A flat corner wedge instead of the previous clip-path ribbon plus a
@@ -282,7 +282,7 @@
   right: 0;
   width: 0;
   height: 0;
-  border-top: 12px solid #e8a71c;
+  border-top: 12px solid var(--dk-line-e8a71c, #e8a71c);
   border-left: 12px solid transparent;
   border-radius: 0;
   clip-path: none;
@@ -299,7 +299,7 @@
   border: 1px solid var(--border-soft);
   border-radius: 14px;
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
   padding: 18px clamp(16px, 2vw, 26px);
   gap: 16px;
   scrollbar-width: thin;
@@ -341,19 +341,19 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid rgba(13, 21, 71, 0.14);
+  border: 1px solid var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
   border-radius: 11px;
   font-size: 14.5px;
 }
 
 .exam-option-card:hover {
   transform: none;
-  border-color: rgba(26, 35, 126, 0.4);
-  background: #f7f9ff;
+  border-color: var(--dk-line-1a237e-a40, rgba(26, 35, 126, 0.4));
+  background: var(--dk-bg-f7f9ff, #f7f9ff);
 }
 
 .exam-option-card:focus-within {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -378,7 +378,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(13, 21, 71, 0.06);
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
   border: 1px solid var(--border-soft);
   color: var(--ink-muted);
   font-size: 12.5px;
@@ -393,39 +393,39 @@
 }
 
 .exam-option-card.selected {
-  border-color: var(--lnu-navy);
-  background: rgba(26, 35, 126, 0.06);
-  box-shadow: inset 0 0 0 1px var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-1a237e-a06, rgba(26, 35, 126, 0.06));
+  box-shadow: inset 0 0 0 1px var(--dk-line-lnu-navy, var(--lnu-navy));
 }
 
 .exam-option-card.selected .exam-option-letter {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #fff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 .exam-option-card.submitted-correct {
-  border-color: #7bc99a;
-  background: #eaf8f0;
-  box-shadow: inset 0 0 0 1px #7bc99a;
+  border-color: var(--dk-line-7bc99a, #7bc99a);
+  background: var(--dk-bg-eaf8f0, #eaf8f0);
+  box-shadow: inset 0 0 0 1px var(--dk-line-7bc99a, #7bc99a);
 }
 
 .exam-option-card.submitted-correct .exam-option-letter {
-  background: #2f8a4f;
-  border-color: #2f8a4f;
-  color: #fff;
+  background: var(--dk-bg-2f8a4f, #2f8a4f);
+  border-color: var(--dk-line-2f8a4f, #2f8a4f);
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 .exam-option-card.submitted-incorrect {
-  border-color: #e98d8a;
-  background: #fff1f0;
-  box-shadow: inset 0 0 0 1px #e98d8a;
+  border-color: var(--dk-line-e98d8a, #e98d8a);
+  background: var(--dk-bg-fff1f0, #fff1f0);
+  box-shadow: inset 0 0 0 1px var(--dk-line-e98d8a, #e98d8a);
 }
 
 .exam-option-card.submitted-incorrect .exam-option-letter {
-  background: #c9433d;
-  border-color: #c9433d;
-  color: #fff;
+  background: var(--dk-bg-c9433d, #c9433d);
+  border-color: var(--dk-line-c9433d, #c9433d);
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 .exam-option-card.submitted-neutral {
@@ -453,7 +453,7 @@
 
 .exam-attempt-footer .bookmark-toggle-btn:hover:not(:disabled) {
   transform: none;
-  border-color: rgba(26, 35, 126, 0.46);
+  border-color: var(--dk-line-1a237e-a46, rgba(26, 35, 126, 0.46));
 }
 
 .exam-attempt-footer .ghost-btn,

@@ -93,16 +93,16 @@ const detailEntries = computed(() => Object.entries(props.log.metadata ?? {}))
   display: grid;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
   border-radius: 12px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   font-size: 13px;
   white-space: normal;
 }
 
 .audit-details-desc {
   margin: 0;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-weight: 600;
   line-height: 1.5;
 }
@@ -140,7 +140,7 @@ const detailEntries = computed(() => Object.entries(props.log.metadata ?? {}))
 .audit-details code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  color: #46526b;
+  color: var(--dk-fg-46526b, #46526b);
 }
 
 .audit-agent {
@@ -153,7 +153,7 @@ const detailEntries = computed(() => Object.entries(props.log.metadata ?? {}))
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 12px;
   font-weight: 700;
   text-decoration: underline;
@@ -162,13 +162,13 @@ const detailEntries = computed(() => Object.entries(props.log.metadata ?? {}))
 
 .audit-details-meta {
   padding-top: 10px;
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
+  border-top: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 .audit-details-meta h5 {
   margin: 0 0 8px;
   font-size: 12px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .audit-details-meta dl {

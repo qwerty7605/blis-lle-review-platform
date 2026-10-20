@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 // Poppins is served from this site, not Google Fonts: the production security
 // policy (nginx/production.conf) only lets fonts and stylesheets load from our
@@ -9,12 +9,17 @@ import '@fontsource/poppins/latin-500.css'
 import '@fontsource/poppins/latin-600.css'
 import '@fontsource/poppins/latin-700.css'
 import './style.css'
+import './theme/dark-colors.css'
 import App from './App.vue'
 import router from './router'
 import { setSessionEndedHandler } from './api/http'
 import { useAuthStore } from './store/auth.store'
 import { keepInStepWithUpdates } from './utils/appVersion'
 import { watchForIdle } from './utils/idleSignOut'
+import { initTheme, setThemeChoice } from './utils/theme'
+
+// Before anything renders, so the first frame is already in the right theme.
+initTheme()
 
 const app = createApp(App)
 app.use(createPinia())
@@ -49,5 +54,15 @@ watchForIdle(
 )
 
 keepInStepWithUpdates(router)
+
+// The theme saved with the account wins once its owner is signed in, so the
+// choice follows them from device to device.
+watch(
+  () => useAuthStore().user?.preferences?.theme ?? null,
+  (theme) => {
+    if (theme) setThemeChoice(theme)
+  },
+  { immediate: true },
+)
 
 app.mount('#app')

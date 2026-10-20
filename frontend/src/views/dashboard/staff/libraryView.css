@@ -36,9 +36,9 @@
 }
 
 .library-bank-question-card {
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
   border-radius: 20px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   padding: 16px;
   display: grid;
   gap: 12px;
@@ -50,7 +50,7 @@
 }
 
 .library-bank-question-head strong {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   line-height: 1.45;
 }
 
@@ -77,19 +77,19 @@
   align-items: flex-start;
   padding: 10px 12px;
   border-radius: 14px;
-  background: rgba(13, 21, 71, 0.04);
+  background: var(--dk-bg-0d1547-a04, rgba(13, 21, 71, 0.04));
   color: var(--lnu-text);
 }
 
 .library-bank-option-row.correct {
-  background: rgba(46, 125, 50, 0.08);
-  border: 1px solid rgba(46, 125, 50, 0.14);
+  background: var(--dk-bg-2e7d32-a08, rgba(46, 125, 50, 0.08));
+  border: 1px solid var(--dk-line-2e7d32-a14, rgba(46, 125, 50, 0.14));
 }
 
 .library-bank-option-label {
   min-width: 20px;
   font-weight: 700;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .library-bank-question-actions {
@@ -101,7 +101,7 @@
   display: grid;
   gap: 12px;
   padding-top: 4px;
-  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+  border-top: 1px dashed var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
 }
 
 /* In the Edit dialog: the way to the set's questions. */
@@ -113,7 +113,7 @@
   gap: 12px;
   margin-top: 14px;
   padding-top: 14px;
-  border-top: 1px dashed rgba(13, 21, 71, 0.14);
+  border-top: 1px dashed var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
 }
 
 .library-edit-questions-text {
@@ -161,7 +161,7 @@
   flex-wrap: wrap;
   padding: 26px 28px;
   border-radius: 22px;
-  color: #fff;
+  color: var(--dk-fg-ffffff, #fff);
   background: var(--panel-navy);
   box-shadow: var(--shadow-md);
 }
@@ -194,14 +194,14 @@
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--dk-line-ffffff-a16, rgba(255, 255, 255, 0.16));
+  background: var(--dk-bg-ffffff-a07, rgba(255, 255, 255, 0.07));
   font-size: 12px;
   font-weight: 500;
 }
 
 .library-hero-stats svg {
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .library-hero-btn {
@@ -210,7 +210,7 @@
   padding: 0 18px;
   border: none;
   border-radius: 10px;
-  background: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-gold-light, var(--lnu-gold-light));
   color: var(--lnu-navy-deep);
   display: inline-flex;
   align-items: center;
@@ -222,13 +222,13 @@
 }
 
 .library-hero-btn:hover {
-  background: #f6dc9a;
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+  background: var(--dk-bg-f6dc9a, #f6dc9a);
+  box-shadow: 0 10px 18px var(--dk-shadow-000000-a18, rgba(0, 0, 0, 0.18));
   transform: translateY(-1px);
 }
 
 .library-hero-btn:focus-visible {
-  outline: 2px solid var(--lnu-gold-light);
+  outline: 2px solid var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
   outline-offset: 2px;
 }
 
@@ -239,7 +239,7 @@
   gap: 10px;
   padding: 48px 20px;
   border-radius: 20px;
-  border: 1px dashed rgba(26, 35, 126, 0.16);
+  border: 1px dashed var(--dk-line-1a237e-a16, rgba(26, 35, 126, 0.16));
   background: var(--surface);
   color: var(--lnu-text-muted);
   text-align: center;
@@ -248,7 +248,7 @@
 .library-state strong {
   font-size: 16px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .library-state p {
@@ -264,8 +264,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* ---------- Search and subject filter ---------- */
@@ -288,7 +288,7 @@
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   opacity: 0.8;
   pointer-events: none;
 }
@@ -302,12 +302,12 @@
   background: var(--surface);
   font-size: 13.5px;
   color: var(--lnu-text);
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
 }
 
 .library-search-input:focus {
   outline: none;
-  border-color: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
   box-shadow: var(--focus-ring);
 }
 
@@ -336,14 +336,14 @@
 }
 
 .library-filter:hover:not(.active) {
-  border-color: rgba(26, 35, 126, 0.3);
-  color: var(--lnu-navy);
+  border-color: var(--dk-line-1a237e-a30, rgba(26, 35, 126, 0.3));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .library-filter.active {
-  border-color: var(--lnu-navy);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   font-weight: 600;
 }
 
@@ -352,7 +352,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.1);
+  background: var(--dk-bg-1a237e-a10, rgba(26, 35, 126, 0.1));
   font-size: 11px;
   font-weight: 600;
   display: inline-flex;
@@ -361,7 +361,7 @@
 }
 
 .library-filter.active .library-filter-count {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--dk-bg-ffffff-a20, rgba(255, 255, 255, 0.2));
 }
 
 /* ---------- Bank table (desktop and tablet) ---------- */
@@ -410,7 +410,7 @@
 }
 
 .library-table tbody tr:hover td {
-  background: rgba(26, 35, 126, 0.03);
+  background: var(--dk-bg-1a237e-a03, rgba(26, 35, 126, 0.03));
 }
 
 .library-table .is-number {
@@ -455,7 +455,7 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
   overflow-wrap: anywhere;
 }
 
@@ -467,7 +467,7 @@
 .bank-number {
   font-size: 16px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .bank-file {
@@ -499,10 +499,10 @@
   color: var(--lnu-text-muted);
 }
 
-.bank-topics-status.is-done svg { color: var(--lnu-success); }
-.bank-topics-status.is-review svg { color: #9a6a0c; }
-.bank-topics-status.is-busy svg { color: var(--lnu-navy); }
-.bank-topics-status.is-failed svg { color: var(--lnu-danger); }
+.bank-topics-status.is-done svg { color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.bank-topics-status.is-review svg { color: var(--dk-fg-9a6a0c, #9a6a0c); }
+.bank-topics-status.is-busy svg { color: var(--dk-fg-lnu-navy, var(--lnu-navy)); }
+.bank-topics-status.is-failed svg { color: var(--dk-fg-lnu-danger, var(--lnu-danger)); }
 
 /* A text link, not another boxed button: the row already has three. */
 .bank-topics-btn {
@@ -511,7 +511,7 @@
   background: transparent;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
 }
 
 .bank-topics-btn:hover:not(:disabled) {
@@ -524,7 +524,7 @@
 }
 
 .bank-topics-btn:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -589,8 +589,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .bank-card-heading {
@@ -603,7 +603,7 @@
   font-size: 15.5px;
   font-weight: 600;
   line-height: 1.35;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
   overflow-wrap: anywhere;
 }
 
@@ -625,7 +625,7 @@
   font-size: 22px;
   font-weight: 600;
   line-height: 1.1;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .bank-facts {
@@ -670,10 +670,10 @@
   flex-shrink: 0;
 }
 
-.bank-mapping.is-done > svg { color: var(--lnu-success); }
-.bank-mapping.is-review > svg { color: #9a6a0c; }
-.bank-mapping.is-busy > svg { color: var(--lnu-navy); }
-.bank-mapping.is-failed > svg { color: var(--lnu-danger); }
+.bank-mapping.is-done > svg { color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.bank-mapping.is-review > svg { color: var(--dk-fg-9a6a0c, #9a6a0c); }
+.bank-mapping.is-busy > svg { color: var(--dk-fg-lnu-navy, var(--lnu-navy)); }
+.bank-mapping.is-failed > svg { color: var(--dk-fg-lnu-danger, var(--lnu-danger)); }
 
 .bank-mapping-copy {
   flex: 1;
@@ -685,7 +685,7 @@
 .bank-mapping-copy strong {
   font-size: 13px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .bank-mapping-copy span {
@@ -700,7 +700,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface);
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -710,7 +710,7 @@
 }
 
 .bank-mapping-btn:hover:not(:disabled) {
-  border-color: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
 }
 
 .bank-mapping-btn:disabled {
@@ -756,9 +756,9 @@
 }
 
 .bank-delete-btn:hover:not(:disabled) {
-  border-color: rgba(198, 40, 40, 0.4);
-  background: rgba(198, 40, 40, 0.08);
-  color: var(--lnu-danger);
+  border-color: var(--dk-line-c62828-a40, rgba(198, 40, 40, 0.4));
+  background: var(--dk-bg-c62828-a08, rgba(198, 40, 40, 0.08));
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
 }
 
 .bank-delete-btn:disabled {
@@ -769,7 +769,7 @@
 .bank-mapping-btn:focus-visible,
 .bank-delete-btn:focus-visible,
 .library-filter:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 

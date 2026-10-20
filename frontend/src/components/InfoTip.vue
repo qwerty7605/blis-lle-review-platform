@@ -189,34 +189,34 @@ defineExpose({ close })
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--lnu-text-muted, #5d6b86);
+  color: var(--lnu-text-muted, var(--dk-fg-5d6b86, #5d6b86));
   cursor: help;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .info-tip-btn:hover,
 .info-tip-btn.is-open {
-  color: var(--lnu-navy, #1a237e);
-  background: rgba(13, 21, 71, 0.06);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy, var(--dk-fg-1a237e, #1a237e)));
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
 }
 
 .info-tip-btn:focus-visible {
-  outline: 2px solid var(--lnu-navy, #1a237e);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy, var(--dk-line-1a237e, #1a237e)));
   outline-offset: 1px;
 }
 
 .on-dark .info-tip-btn {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--dk-fg-ffffff-a72, rgba(255, 255, 255, 0.72));
 }
 
 .on-dark .info-tip-btn:hover,
 .on-dark .info-tip-btn.is-open {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--dk-fg-ffffff, #fff);
+  background: var(--dk-bg-ffffff-a14, rgba(255, 255, 255, 0.14));
 }
 
 .on-dark .info-tip-btn:focus-visible {
-  outline-color: var(--lnu-gold-light, #f5d77a);
+  outline-color: var(--dk-line-lnu-gold-light, var(--lnu-gold-light, var(--dk-line-f5d77a, #f5d77a)));
 }
 
 .info-tip-sr {
@@ -240,10 +240,10 @@ defineExpose({ close })
   border-radius: 10px;
   /* White card, dark text: reads clearly on the cream page and the navy
      panels alike, where the old navy bubble blended into the navy. */
-  border: 1px solid rgba(13, 21, 71, 0.14);
-  border-top: 3px solid var(--lnu-gold, #d4a72c);
-  background: #fff;
-  color: #1f2433;
+  border: 1px solid var(--dk-line-0d1547-a14, rgba(13, 21, 71, 0.14));
+  border-top: 3px solid var(--dk-line-lnu-gold, var(--lnu-gold, var(--dk-line-d4a72c, #d4a72c)));
+  background: var(--dk-bg-ffffff, #fff);
+  color: var(--dk-fg-1f2433, #1f2433);
   font-family: var(--font-body, inherit);
   font-size: 12.5px;
   font-weight: 500;
@@ -257,7 +257,7 @@ defineExpose({ close })
   hyphens: auto;
   -webkit-hyphens: auto;
   white-space: normal;
-  box-shadow: 0 10px 28px rgba(13, 21, 71, 0.18), 0 2px 6px rgba(13, 21, 71, 0.08);
+  box-shadow: 0 10px 28px var(--dk-shadow-0d1547-a18, rgba(13, 21, 71, 0.18)), 0 2px 6px var(--dk-shadow-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 /* Touch screens: a 44px tap target around the same 15px icon. */

@@ -470,8 +470,8 @@ watch(() => route.params.attemptId, (next, previous) => {
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
-  background: #eef1f8;
-  border: 1px solid rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-eef1f8, #eef1f8);
+  border: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
   justify-self: start;
   max-width: 100%;
 }
@@ -493,7 +493,7 @@ watch(() => route.params.attemptId, (next, previous) => {
 
 .result-sitting.active {
   background: var(--panel-navy);
-  color: #ffffff;
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .result-sitting-score {

@@ -344,7 +344,7 @@ async function save() {
   padding: 0 12px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--dk-bg-ffffff, #ffffff);
   color: var(--ink-soft);
 }
 
@@ -372,7 +372,7 @@ async function save() {
 }
 
 .lleb-count strong {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .lleb-list {
@@ -401,8 +401,8 @@ async function save() {
 
 /* Marked on this visit and not saved yet. */
 .lleb-row.is-changed {
-  border-left-color: var(--lnu-gold, #c9a227);
-  background: rgba(201, 162, 39, 0.06);
+  border-left-color: var(--dk-line-lnu-gold, var(--lnu-gold, var(--dk-line-c9a227, #c9a227)));
+  background: var(--dk-bg-c9a227-a06, rgba(201, 162, 39, 0.06));
 }
 
 .lleb-row-copy {
@@ -414,7 +414,7 @@ async function save() {
 
 .lleb-row-copy strong {
   font-size: 13.5px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   overflow-wrap: anywhere;
 }
 
@@ -430,8 +430,8 @@ async function save() {
   padding: 3px;
   gap: 3px;
   border-radius: 999px;
-  background: #eef1f8;
-  border: 1px solid rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-eef1f8, #eef1f8);
+  border: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 .lleb-choice-btn {
@@ -450,13 +450,13 @@ async function save() {
 /* The same pair the charts use for passing and below passing: indigo and
    amber, which stay apart for colour-blind readers where green and red do not. */
 .lleb-choice-btn.is-pass.active {
-  background: #3949ab;
-  color: #ffffff;
+  background: var(--dk-bg-3949ab, #3949ab);
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .lleb-choice-btn.is-fail.active {
-  background: #c98a1e;
-  color: #ffffff;
+  background: var(--dk-bg-c98a1e, #c98a1e);
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .lleb-rating {

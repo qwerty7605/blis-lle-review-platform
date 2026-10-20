@@ -659,7 +659,7 @@ watch(useRows, () => {
 <style scoped>
 /* A student's name opens their profile. */
 .directory-profile-link {
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   text-decoration: none;
 }
 
@@ -669,7 +669,7 @@ watch(useRows, () => {
 }
 
 .directory-profile-link:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
   border-radius: 4px;
 }

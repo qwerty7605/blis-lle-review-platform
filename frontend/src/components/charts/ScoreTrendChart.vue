@@ -209,7 +209,7 @@ const tooltipStyle = computed(() => {
 }
 
 .trend-grid-line {
-  stroke: rgba(13, 21, 71, 0.18);
+  stroke: var(--dk-auto-0d1547-a18, rgba(13, 21, 71, 0.18));
   stroke-width: 1;
 }
 
@@ -219,7 +219,7 @@ const tooltipStyle = computed(() => {
 }
 
 .trend-threshold-line {
-  stroke: #cd972b;
+  stroke: var(--dk-auto-cd972b, #cd972b);
   stroke-width: 2.5;
   stroke-dasharray: 6 4;
 }
@@ -227,32 +227,32 @@ const tooltipStyle = computed(() => {
 .trend-threshold-label {
   font-size: 11px;
   font-weight: 700;
-  fill: #9d6110;
+  fill: var(--dk-auto-9d6110, #9d6110);
 }
 
 .trend-line-path {
-  stroke: #1a3a8c;
+  stroke: var(--dk-auto-1a3a8c, #1a3a8c);
   stroke-width: 3.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .trend-area-path {
-  fill: rgba(49, 92, 191, 0.16);
+  fill: var(--dk-auto-315cbf-a16, rgba(49, 92, 191, 0.16));
   stroke: none;
 }
 
 .trend-point {
-  stroke: #ffffff;
+  stroke: var(--dk-auto-ffffff, #ffffff);
   stroke-width: 2;
   cursor: pointer;
   transition: r 0.15s ease;
 }
 
-.trend-point.tone-success { fill: #3f925e; }
-.trend-point.tone-navy { fill: #315cbf; }
-.trend-point.tone-gold { fill: #cd972b; }
-.trend-point.tone-danger { fill: #c24b4b; }
+.trend-point.tone-success { fill: var(--dk-auto-3f925e, #3f925e); }
+.trend-point.tone-navy { fill: var(--dk-auto-315cbf, #315cbf); }
+.trend-point.tone-gold { fill: var(--dk-auto-cd972b, #cd972b); }
+.trend-point.tone-danger { fill: var(--dk-auto-c24b4b, #c24b4b); }
 
 .trend-x-label {
   font-size: 11px;
@@ -281,7 +281,7 @@ const tooltipStyle = computed(() => {
 /* One accent for every point: at this size a four-colour scale reads as
    noise, and each point's own score is a hover away in the tooltip. */
 .trend-chart.is-compact .trend-point {
-  fill: #1a3a8c;
+  fill: var(--dk-auto-1a3a8c, #1a3a8c);
   stroke-width: 1.6;
 }
 
@@ -293,15 +293,15 @@ const tooltipStyle = computed(() => {
 .trend-tooltip {
   position: absolute;
   transform: translate(-50%, -115%);
-  background: #0d1547;
-  color: #ffffff;
+  background: var(--dk-bg-0d1547, #0d1547);
+  color: var(--dk-fg-ffffff, #ffffff);
   padding: 8px 10px;
   border-radius: 10px;
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
   pointer-events: none;
-  box-shadow: 0 8px 20px rgba(13, 21, 71, 0.28);
+  box-shadow: 0 8px 20px var(--dk-shadow-0d1547-a28, rgba(13, 21, 71, 0.28));
   z-index: 5;
   display: grid;
   gap: 1px;
@@ -313,11 +313,11 @@ const tooltipStyle = computed(() => {
 
 .trend-tooltip span {
   font-weight: 700;
-  color: #f0d080;
+  color: var(--dk-fg-f0d080, #f0d080);
 }
 
 .trend-tooltip small {
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--dk-fg-ffffff-a72, rgba(255, 255, 255, 0.72));
   font-size: 11px;
 }
 </style>

@@ -71,7 +71,7 @@
   flex-direction: column;
   gap: 12px;
   min-height: 0;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
 }
 
 .rooms-list-head {
@@ -94,8 +94,8 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.1);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a10, rgba(26, 35, 126, 0.1));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 11px;
   font-weight: 800;
   display: inline-flex;
@@ -123,8 +123,8 @@
   height: 34px;
   padding: 0 10px;
   border-radius: 8px;
-  border: 1px solid rgba(26, 35, 126, 0.16);
-  background: #f7f8fb;
+  border: 1px solid var(--dk-line-1a237e-a16, rgba(26, 35, 126, 0.16));
+  background: var(--dk-bg-f7f8fb, #f7f8fb);
   color: var(--lnu-text-muted);
 }
 
@@ -152,10 +152,10 @@
 .rooms-list-item {
   flex-shrink: 0;
   text-align: left;
-  border: 1px solid rgba(26, 35, 126, 0.12);
+  border: 1px solid var(--dk-line-1a237e-a12, rgba(26, 35, 126, 0.12));
   border-radius: 10px;
   padding: 10px 12px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -163,13 +163,13 @@
 }
 
 .rooms-list-item:hover:not(.active) {
-  background: rgba(26, 35, 126, 0.04);
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.04));
 }
 
 .rooms-list-item.active {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #fff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #fff);
 }
 
 .rooms-list-item-head {
@@ -236,8 +236,8 @@
   border-radius: var(--radius-lg);
   padding: 18px 22px;
   background: var(--panel-navy);
-  color: #fff;
-  box-shadow: 0 10px 24px rgba(13, 21, 71, 0.2);
+  color: var(--dk-fg-ffffff, #fff);
+  box-shadow: 0 10px 24px var(--dk-shadow-0d1547-a20, rgba(13, 21, 71, 0.2));
 }
 
 .room-banner-copy h4 {
@@ -259,8 +259,8 @@
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--dk-bg-ffffff-a14, rgba(255, 255, 255, 0.14));
+  border: 1px solid var(--dk-line-ffffff-a20, rgba(255, 255, 255, 0.2));
   font-size: 12px;
   font-weight: 600;
 }
@@ -272,7 +272,7 @@
 /* ---- Current exams ---- */
 .rooms-exams-card {
   padding: 18px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -292,7 +292,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 800;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .rooms-exams-head p {
@@ -305,7 +305,7 @@
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 12px;
   font-weight: 700;
   text-decoration: underline;
@@ -313,7 +313,7 @@
 }
 
 .rooms-link-btn:hover {
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
 }
 
 /* One exam per row (not a card grid) -- title + action on top, items/
@@ -340,22 +340,22 @@
   max-height: 260px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px dashed rgba(26, 35, 126, 0.14);
+  border-top: 1px dashed var(--dk-line-1a237e-a14, rgba(26, 35, 126, 0.14));
 }
 
 .rooms-exam-row {
   flex-shrink: 0;
-  border: 1px solid rgba(26, 35, 126, 0.12);
+  border: 1px solid var(--dk-line-1a237e-a12, rgba(26, 35, 126, 0.12));
   border-radius: 14px;
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: #fafbfd;
+  background: var(--dk-bg-fafbfd, #fafbfd);
 }
 
 .rooms-exam-row.archived {
-  background: #f4f5f8;
+  background: var(--dk-bg-f4f5f8, #f4f5f8);
 }
 
 /* Text stays fully legible even when the exam can't be opened -- only the
@@ -363,7 +363,7 @@
    Dimming the whole row too just made the title/meta hard to read on top
    of an already-disabled button. */
 .rooms-exam-row.locked {
-  background: #f6f7fa;
+  background: var(--dk-bg-f6f7fa, #f6f7fa);
 }
 
 .rooms-exam-row-head {
@@ -376,7 +376,7 @@
 .rooms-exam-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   line-height: 1.3;
 }
 
@@ -441,41 +441,41 @@
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  background: linear-gradient(135deg, var(--lnu-navy), var(--lnu-navy-light));
-  color: #fff;
+  background: linear-gradient(135deg, var(--dk-bg-lnu-navy, var(--lnu-navy)), var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)));
+  color: var(--dk-fg-ffffff, #fff);
   font-size: 13px;
   font-weight: 700;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .rooms-exam-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--lnu-navy-light), var(--lnu-navy));
+  background: linear-gradient(135deg, var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)), var(--dk-bg-lnu-navy, var(--lnu-navy)));
 }
 
 .rooms-exam-btn.is-resume {
-  background: linear-gradient(135deg, var(--lnu-navy), var(--lnu-navy-light));
+  background: linear-gradient(135deg, var(--dk-bg-lnu-navy, var(--lnu-navy)), var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)));
 }
 
 /* Teal outline, not filled -- "you've already passed through this one,
    here's a lower-emphasis way back in" reads calmer than a solid button. */
 .rooms-exam-btn.is-retake {
-  background: #fff;
-  border: 1.5px solid #0f9d78;
-  color: #0f9d78;
+  background: var(--dk-bg-ffffff, #fff);
+  border: 1.5px solid var(--dk-line-0f9d78, #0f9d78);
+  color: var(--dk-fg-0f9d78, #0f9d78);
 }
 
 .rooms-exam-btn.is-retake:hover:not(:disabled) {
-  background: rgba(15, 157, 120, 0.08);
+  background: var(--dk-bg-0f9d78-a08, rgba(15, 157, 120, 0.08));
 }
 
 .rooms-exam-btn.is-review {
-  background: #fff;
-  border: 1.5px solid rgba(26, 35, 126, 0.28);
+  background: var(--dk-bg-ffffff, #fff);
+  border: 1.5px solid var(--dk-line-1a237e-a28, rgba(26, 35, 126, 0.28));
   color: var(--lnu-text-muted);
 }
 
 .rooms-exam-btn.is-review:hover:not(:disabled) {
-  background: rgba(26, 35, 126, 0.05);
+  background: var(--dk-bg-1a237e-a05, rgba(26, 35, 126, 0.05));
 }
 
 /* Declared last (equal specificity to the .is-* rules above, so source
@@ -484,8 +484,8 @@
    A disabled exam (window closed) reads as a clean neutral "unavailable"
    chip instead, regardless of which tone it would otherwise have been. */
 .rooms-exam-btn:disabled {
-  background: #f4f5f8;
-  border-color: rgba(26, 35, 126, 0.14);
+  background: var(--dk-bg-f4f5f8, #f4f5f8);
+  border-color: var(--dk-line-1a237e-a14, rgba(26, 35, 126, 0.14));
   color: var(--lnu-text-muted);
   cursor: not-allowed;
 }
@@ -503,7 +503,7 @@
   text-align: center;
   padding: 48px 20px;
   color: var(--lnu-text-muted);
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   flex: 1;
   min-height: 0;
 }
@@ -521,7 +521,7 @@
 /* ---- Class list + quick summary ---- */
 .rooms-roster-card {
   padding: 16px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -533,7 +533,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .rooms-roster-head h5 {
@@ -561,8 +561,8 @@
   letter-spacing: 0.02em;
 }
 
-.rooms-tag.success { background: rgba(46, 125, 50, 0.14); color: var(--lnu-success); }
-.rooms-tag.neutral { background: rgba(26, 35, 126, 0.08); color: var(--lnu-text-muted); }
+.rooms-tag.success { background: var(--dk-bg-2e7d32-a14, rgba(46, 125, 50, 0.14)); color: var(--dk-fg-lnu-success, var(--lnu-success)); }
+.rooms-tag.neutral { background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08)); color: var(--lnu-text-muted); }
 
 .rooms-tag.small {
   margin-left: auto;
@@ -594,7 +594,7 @@
   gap: 10px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: #f7f8fb;
+  background: var(--dk-bg-f7f8fb, #f7f8fb);
 }
 
 .rooms-roster-avatar {
@@ -604,7 +604,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(26, 35, 126, 0.08);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
   color: var(--lnu-text-muted);
 }
 
@@ -650,7 +650,7 @@
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .rooms-summary-row {
@@ -662,7 +662,7 @@
 }
 
 .rooms-summary-row strong {
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 15px;
 }
 
@@ -670,14 +670,14 @@
   margin-top: 8px;
   height: 6px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.12);
+  background: var(--dk-bg-1a237e-a12, rgba(26, 35, 126, 0.12));
   overflow: hidden;
 }
 
 .rooms-summary-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--lnu-navy);
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
   transition: width 0.3s ease;
 }
 
@@ -694,14 +694,14 @@
   text-align: center;
   padding: 10px 6px;
   border-radius: 10px;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
 }
 
 .rooms-summary-stat strong {
   font-size: 18px;
   font-weight: 800;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .rooms-summary-stat span {
@@ -805,15 +805,15 @@
      it was the largest thing on the page, on the page a student opens to
      take an exam. */
   .room-banner-leave-btn {
-    border: 1px solid rgba(255, 255, 255, 0.42);
+    border: 1px solid var(--dk-line-ffffff-a42, rgba(255, 255, 255, 0.42));
     background: transparent;
     box-shadow: none;
-    color: #fff;
+    color: var(--dk-fg-ffffff, #fff);
   }
 
   .room-banner-leave-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: var(--dk-bg-ffffff-a12, rgba(255, 255, 255, 0.12));
+    color: var(--dk-fg-ffffff, #fff);
   }
 
   /* The summary is three numbers; the class list under it can be fifty
@@ -897,5 +897,5 @@
 
 .rooms-exam-attempts {
   font-weight: 600;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }

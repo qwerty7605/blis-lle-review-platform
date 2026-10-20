@@ -419,7 +419,7 @@ function formatCount(value) {
   gap: 6px;
   font-size: 13.5px;
   font-weight: 600;
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   text-decoration: none;
 }
 
@@ -538,7 +538,7 @@ function formatCount(value) {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  accent-color: var(--lnu-navy);
+  accent-color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .year-end-row-copy {

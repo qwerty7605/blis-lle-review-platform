@@ -8,59 +8,59 @@
    and wrong as before.
    ======================================================================= */
 .exam-jump-btn.pre-answered {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #ffffff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .exam-jump-btn.pre-blank,
 .exam-jump-btn.pre-pending,
 .exam-jump-btn.is-current.pre-blank,
 .exam-jump-btn.is-current.pre-pending {
-  background: #ffffff;
-  border-color: rgba(13, 21, 71, 0.26);
-  color: var(--lnu-navy-deep);
+  background: var(--dk-bg-ffffff, #ffffff);
+  border-color: var(--dk-line-0d1547-a26, rgba(13, 21, 71, 0.26));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .exam-jump-btn.is-current.pre-answered {
-  background: var(--lnu-navy);
-  border-color: var(--lnu-navy);
-  color: #ffffff;
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .exam-jump-btn.is-current.post-correct {
-  background: #e8f6ee;
-  border-color: #93cfae;
-  color: #1e6943;
+  background: var(--dk-bg-e8f6ee, #e8f6ee);
+  border-color: var(--dk-line-93cfae, #93cfae);
+  color: var(--dk-fg-1e6943, #1e6943);
 }
 
 .exam-jump-btn.is-current.post-incorrect {
-  background: #fdeeed;
-  border-color: #f0a9a7;
-  color: #a8302f;
+  background: var(--dk-bg-fdeeed, #fdeeed);
+  border-color: var(--dk-line-f0a9a7, #f0a9a7);
+  color: var(--dk-fg-a8302f, #a8302f);
 }
 
 .exam-jump-btn.is-current.post-missed {
-  background: #f1edef;
-  border-color: #cbb8bf;
-  color: #7e5964;
+  background: var(--dk-bg-f1edef, #f1edef);
+  border-color: var(--dk-line-cbb8bf, #cbb8bf);
+  color: var(--dk-fg-7e5964, #7e5964);
 }
 
 .exam-jump-btn.is-current.post-answered {
-  background: #eaf2fb;
-  border-color: #a6c6e4;
-  color: #225b8c;
+  background: var(--dk-bg-eaf2fb, #eaf2fb);
+  border-color: var(--dk-line-a6c6e4, #a6c6e4);
+  color: var(--dk-fg-225b8c, #225b8c);
 }
 
 .exam-jump-btn.is-current {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--lnu-gold);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--dk-line-lnu-gold, var(--lnu-gold));
   z-index: 1;
 }
 
 .exam-jump-btn.pre-blank:hover:not(:disabled),
 .exam-jump-btn.pre-pending:hover:not(:disabled) {
-  border-color: var(--lnu-navy);
-  background: #f5f6fc;
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-f5f6fc, #f5f6fc);
 }
 
 /* Room for the current question's ring at the edges of the list. */
@@ -81,17 +81,17 @@
   width: 12px;
   height: 12px;
   border-radius: 3px;
-  border: 1px solid rgba(13, 21, 71, 0.3);
-  background: #ffffff;
+  border: 1px solid var(--dk-line-0d1547-a30, rgba(13, 21, 71, 0.3));
+  background: var(--dk-bg-ffffff, #ffffff);
 }
 
 .legend-swatch.answered {
-  border-color: var(--lnu-navy);
-  background: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
 }
 
 .legend-swatch.current {
-  box-shadow: 0 0 0 1.5px #ffffff, 0 0 0 3px var(--lnu-gold);
+  box-shadow: 0 0 0 1.5px var(--dk-line-ffffff, #ffffff), 0 0 0 3px var(--dk-line-lnu-gold, var(--lnu-gold));
 }
 
 /* All / Unanswered / Marked */
@@ -101,7 +101,7 @@
   gap: 2px;
   padding: 3px;
   border-radius: 10px;
-  background: rgba(13, 21, 71, 0.06);
+  background: var(--dk-bg-0d1547-a06, rgba(13, 21, 71, 0.06));
 }
 
 .exam-list-filter {
@@ -135,13 +135,13 @@
 }
 
 .exam-list-filter.active {
-  background: #ffffff;
-  color: var(--lnu-navy-deep);
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.12);
+  background: var(--dk-bg-ffffff, #ffffff);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a12, rgba(13, 21, 71, 0.12));
 }
 
 .exam-list-filter:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 1px;
 }
 
@@ -154,8 +154,8 @@
 
 /* The chosen answer: a firmer outline and a tick, seen at a glance. */
 .exam-option-card.selected {
-  background: rgba(26, 35, 126, 0.07);
-  box-shadow: inset 0 0 0 2px var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07));
+  box-shadow: inset 0 0 0 2px var(--dk-line-lnu-navy, var(--lnu-navy));
 }
 
 .exam-option-check {
@@ -163,7 +163,7 @@
   margin-left: auto;
   width: 20px;
   height: 20px;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* The review screen before submitting. */
@@ -189,7 +189,7 @@
 .exam-review-screen h3 {
   margin: -8px 0 0;
   font-size: clamp(22px, 1vw + 12px, 32px);
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .exam-review-stats {
@@ -206,8 +206,8 @@
 }
 
 .exam-review-stats > div.is-attention {
-  border-color: rgba(201, 138, 30, 0.55);
-  background: rgba(201, 138, 30, 0.07);
+  border-color: var(--dk-line-c98a1e-a55, rgba(201, 138, 30, 0.55));
+  background: var(--dk-bg-c98a1e-a07, rgba(201, 138, 30, 0.07));
 }
 
 .exam-review-stats dt {
@@ -221,7 +221,7 @@
   font-size: clamp(22px, 0.8vw + 14px, 30px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .exam-review-stats dd small {
@@ -233,7 +233,7 @@
 .exam-review-group h4 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .exam-review-numbers {
@@ -249,7 +249,7 @@
   gap: 8px;
   margin: 0;
   font-weight: 600;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .exam-review-note {
@@ -332,7 +332,7 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 20px;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 @media (min-width: 901px) {

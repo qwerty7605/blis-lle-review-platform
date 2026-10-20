@@ -538,8 +538,8 @@ function percent(value) {
   margin: 0 18px 14px;
   padding: 4px;
   border-radius: 999px;
-  background: #eef1f8;
-  border: 1px solid rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-eef1f8, #eef1f8);
+  border: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
   justify-self: start;
   width: fit-content;
   max-width: calc(100% - 36px);
@@ -565,7 +565,7 @@ function percent(value) {
 
 .lle-mode-tab.active {
   background: var(--panel-navy);
-  color: #ffffff;
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 @media (max-width: 640px) {
@@ -628,9 +628,9 @@ function percent(value) {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(13, 21, 71, 0.12);
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   border-radius: 14px;
-  background: #ffffff;
+  background: var(--dk-bg-ffffff, #ffffff);
 }
 
 .lle-selected small {
@@ -642,10 +642,10 @@ function percent(value) {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid rgba(13, 21, 71, 0.12);
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   border-radius: 14px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--dk-bg-ffffff, #ffffff);
 }
 
 .lle-matches button {
@@ -659,7 +659,7 @@ function percent(value) {
 }
 
 .lle-matches button:hover {
-  background: rgba(26, 35, 126, 0.07);
+  background: var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07));
 }
 
 .lle-matches small {
@@ -676,9 +676,9 @@ function percent(value) {
 
 .lle-model-facts > div {
   padding: 12px 14px;
-  border: 1px solid rgba(13, 21, 71, 0.1);
+  border: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--dk-bg-ffffff, #ffffff);
 }
 
 .lle-model-facts dt {

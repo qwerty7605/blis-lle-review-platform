@@ -549,7 +549,7 @@ const emptyListMessage = computed(() => ({
     margin: 0 14px 8px 0;
     text-align: left;
     font-weight: 600;
-    color: var(--lnu-navy-deep);
+    color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   }
 
   .rbg-coverage-table td.numeric::before {
@@ -570,7 +570,7 @@ const emptyListMessage = computed(() => ({
 .rbg-head {
   display: grid;
   gap: 8px;
-  background: #f4f7ff;
+  background: var(--dk-bg-f4f7ff, #f4f7ff);
   border-color: rgba(var(--lnu-info-rgb), 0.18);
 }
 
@@ -580,12 +580,12 @@ const emptyListMessage = computed(() => ({
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--lnu-info);
+  color: var(--dk-fg-lnu-info, var(--lnu-info));
 }
 
 .rbg-head h3 {
   margin: 0;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .rbg-head p {
@@ -598,13 +598,13 @@ const emptyListMessage = computed(() => ({
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid rgba(13, 21, 71, 0.12);
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   border-radius: 18px;
   overflow: hidden;
 }
 
 .rbg-file-list > li + li {
-  border-top: 1px solid rgba(13, 21, 71, 0.08);
+  border-top: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 .rbg-file-row {
@@ -629,7 +629,7 @@ const emptyListMessage = computed(() => ({
 }
 
 .rbg-file-row:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: -2px;
 }
 
@@ -641,8 +641,8 @@ const emptyListMessage = computed(() => ({
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .rbg-file-copy {
@@ -656,7 +656,7 @@ const emptyListMessage = computed(() => ({
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   overflow-wrap: anywhere;
 }
 
@@ -702,7 +702,7 @@ const emptyListMessage = computed(() => ({
 .rbg-selected-file-title {
   margin: 0;
   font-weight: 700;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .rbg-selected-file-actions {
@@ -740,8 +740,8 @@ const emptyListMessage = computed(() => ({
   gap: 6px;
   padding: 12px 14px;
   border-radius: 14px;
-  background: #f6f8fd;
-  border: 1px solid rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-f6f8fd, #f6f8fd);
+  border: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
 }
 
 .rbg-source-item-head {
@@ -772,8 +772,8 @@ const emptyListMessage = computed(() => ({
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
-  background: #eef1f8;
-  border: 1px solid rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-eef1f8, #eef1f8);
+  border: 1px solid var(--dk-line-0d1547-a08, rgba(13, 21, 71, 0.08));
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
@@ -833,26 +833,26 @@ const emptyListMessage = computed(() => ({
 }
 
 .rbg-status-tab:hover {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .rbg-status-tab.active {
   background: var(--panel-navy);
-  color: #ffffff;
+  color: var(--dk-fg-ffffff, #ffffff);
 }
 
 .rbg-status-count {
   min-width: 22px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: rgba(13, 21, 71, 0.08);
+  background: var(--dk-bg-0d1547-a08, rgba(13, 21, 71, 0.08));
   font-size: 11px;
   font-weight: 700;
   text-align: center;
 }
 
 .rbg-status-tab.active .rbg-status-count {
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--dk-bg-ffffff-a18, rgba(255, 255, 255, 0.18));
 }
 
 .rbg-bulk-bar {
@@ -862,7 +862,7 @@ const emptyListMessage = computed(() => ({
   gap: 12px;
   padding: 10px 14px;
   border-radius: 14px;
-  background: #eef3ff;
+  background: var(--dk-bg-eef3ff, #eef3ff);
   border: 1px solid rgba(var(--lnu-info-rgb), 0.14);
   flex-wrap: wrap;
 }
@@ -874,7 +874,7 @@ const emptyListMessage = computed(() => ({
   gap: 8px;
   font-size: 13px;
   font-weight: 700;
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
 
 .rbg-bulk-actions {
@@ -893,8 +893,8 @@ const emptyListMessage = computed(() => ({
   gap: 10px;
   padding: 16px;
   border-radius: 20px;
-  border: 1px solid rgba(13, 21, 71, 0.12);
-  background: #ffffff;
+  border: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
+  background: var(--dk-bg-ffffff, #ffffff);
 }
 
 .rbg-question-head {
@@ -917,8 +917,8 @@ const emptyListMessage = computed(() => ({
 }
 
 .rbg-question-actions .danger {
-  color: #ad5340;
-  border-color: rgba(173, 83, 64, 0.3);
+  color: var(--dk-fg-ad5340, #ad5340);
+  border-color: var(--dk-line-ad5340-a30, rgba(173, 83, 64, 0.3));
 }
 
 .rbg-question-text {
@@ -938,7 +938,7 @@ const emptyListMessage = computed(() => ({
 }
 
 .rbg-option-list .is-correct {
-  color: #267242;
+  color: var(--dk-fg-267242, #267242);
   font-weight: 700;
 }
 
@@ -946,7 +946,7 @@ const emptyListMessage = computed(() => ({
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #f6f8fd;
+  background: var(--dk-bg-f6f8fd, #f6f8fd);
   font-size: 13px;
   color: var(--lnu-text-muted);
 }

@@ -731,7 +731,7 @@ async function handleSubmit() {
   flex: 1;
   height: 5px;
   border-radius: 999px;
-  background: var(--lnu-gray);
+  background: var(--dk-bg-lnu-gray, var(--lnu-gray));
   overflow: hidden;
 }
 
@@ -767,11 +767,11 @@ async function handleSubmit() {
 
 .terms-wrap input {
   margin-top: 3px;
-  accent-color: var(--lnu-navy);
+  accent-color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .terms-wrap input[aria-invalid='true'] {
-  outline: 2px solid var(--lnu-danger);
+  outline: 2px solid var(--dk-line-lnu-danger, var(--lnu-danger));
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -806,7 +806,7 @@ async function handleSubmit() {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(10, 18, 56, 0.58);
+  background: var(--dk-bg-0a1238-a58, rgba(10, 18, 56, 0.58));
   padding: 20px;
 }
 
@@ -818,9 +818,9 @@ async function handleSubmit() {
   max-height: min(640px, 90dvh);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: #fff;
+  background: var(--dk-bg-ffffff, #fff);
   border-radius: 14px;
-  border: 1px solid rgba(13, 21, 71, 0.22);
+  border: 1px solid var(--dk-line-0d1547-a22, rgba(13, 21, 71, 0.22));
   overflow: hidden;
 }
 
@@ -830,7 +830,7 @@ async function handleSubmit() {
   justify-content: space-between;
   gap: 12px;
   padding: 16px 18px;
-  border-bottom: 1px solid rgba(13, 21, 71, 0.12);
+  border-bottom: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
 }
 
 .policy-modal-header h3 {
@@ -839,18 +839,18 @@ async function handleSubmit() {
 }
 
 .policy-close-btn {
-  border: 1px solid rgba(13, 21, 71, 0.2);
-  background: #fff;
+  border: 1px solid var(--dk-line-0d1547-a20, rgba(13, 21, 71, 0.2));
+  background: var(--dk-bg-ffffff, #fff);
   border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   padding: 6px 10px;
   cursor: pointer;
 }
 
 .policy-close-btn:hover {
-  border-color: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
 }
 
 /* contain: the reader is asked to scroll to the end, and once there the
@@ -873,7 +873,7 @@ async function handleSubmit() {
 .policy-warning {
   margin: 0;
   font-size: 13px;
-  color: var(--lnu-danger);
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
 }
 
 .policy-article h4 {
@@ -884,7 +884,7 @@ async function handleSubmit() {
 
 /* Two documents share the dialog now, so the second needs a visible start. */
 .policy-article + .policy-article {
-  border-top: 1px solid rgba(13, 21, 71, 0.12);
+  border-top: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   padding-top: 14px;
 }
 
@@ -897,7 +897,7 @@ async function handleSubmit() {
 }
 
 .policy-modal-footer {
-  border-top: 1px solid rgba(13, 21, 71, 0.12);
+  border-top: 1px solid var(--dk-line-0d1547-a12, rgba(13, 21, 71, 0.12));
   padding: 14px 18px;
   display: flex;
   flex-wrap: wrap;

@@ -267,7 +267,7 @@ function applyFromDetails(changes) {
   align-items: end;
   gap: 10px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  border-bottom: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 .audit-filters .text-input {
@@ -313,7 +313,7 @@ function applyFromDetails(changes) {
   padding: 0 6px;
   border: 0;
   background: transparent;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 12.5px;
   font-weight: 700;
   white-space: nowrap;
@@ -331,10 +331,10 @@ function applyFromDetails(changes) {
   align-items: center;
   gap: 6px;
   padding: 4px 6px 4px 10px;
-  border: 1px solid rgba(26, 35, 126, 0.25);
+  border: 1px solid var(--dk-line-1a237e-a25, rgba(26, 35, 126, 0.25));
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.06);
-  color: var(--lnu-navy-deep);
+  background: var(--dk-bg-1a237e-a06, rgba(26, 35, 126, 0.06));
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-size: 12.5px;
   font-weight: 600;
   max-width: 100%;
@@ -350,7 +350,7 @@ function applyFromDetails(changes) {
 }
 
 .audit-chip button:hover {
-  background: rgba(26, 35, 126, 0.12);
+  background: var(--dk-bg-1a237e-a12, rgba(26, 35, 126, 0.12));
 }
 
 /* ---- Table ---- */
@@ -399,7 +399,7 @@ function applyFromDetails(changes) {
 }
 
 .audit-table td > strong {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-weight: 700;
 }
 
@@ -419,16 +419,16 @@ function applyFromDetails(changes) {
 }
 
 .audit-row:hover td {
-  background: #f6f7f9;
+  background: var(--dk-bg-f6f7f9, #f6f7f9);
 }
 
 .audit-row.is-open td {
-  background: rgba(26, 35, 126, 0.05);
+  background: var(--dk-bg-1a237e-a05, rgba(26, 35, 126, 0.05));
   border-bottom-color: transparent;
 }
 
 .audit-row.is-failure td:first-child {
-  box-shadow: inset 3px 0 0 #c98a1e;
+  box-shadow: inset 3px 0 0 var(--dk-shadow-c98a1e, #c98a1e);
 }
 
 .audit-failed {
@@ -436,8 +436,8 @@ function applyFromDetails(changes) {
   margin-left: 6px;
   padding: 1px 7px;
   border-radius: 999px;
-  background: #fff3dc;
-  color: #8a5a0b;
+  background: var(--dk-bg-fff3dc, #fff3dc);
+  color: var(--dk-fg-8a5a0b, #8a5a0b);
   font-size: 11px;
   font-weight: 700;
   vertical-align: 1px;
@@ -466,7 +466,7 @@ function applyFromDetails(changes) {
 
 .audit-detail-row td {
   padding: 0 12px 14px;
-  background: rgba(26, 35, 126, 0.05);
+  background: var(--dk-bg-1a237e-a05, rgba(26, 35, 126, 0.05));
   white-space: normal;
 }
 
@@ -480,11 +480,11 @@ function applyFromDetails(changes) {
 }
 
 .audit-mrow {
-  border-bottom: 1px solid rgba(13, 21, 71, 0.1);
+  border-bottom: 1px solid var(--dk-line-0d1547-a10, rgba(13, 21, 71, 0.1));
 }
 
 .audit-mrow.is-open {
-  background: rgba(26, 35, 126, 0.04);
+  background: var(--dk-bg-1a237e-a04, rgba(26, 35, 126, 0.04));
 }
 
 .audit-mrow-head {
@@ -508,7 +508,7 @@ function applyFromDetails(changes) {
 }
 
 .audit-mrow-copy strong {
-  color: var(--lnu-navy-deep);
+  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
   font-size: 14px;
 }
 

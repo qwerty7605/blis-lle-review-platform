@@ -18,7 +18,7 @@
   flex-wrap: wrap;
   padding: 26px 28px;
   border-radius: 22px;
-  color: #fff;
+  color: var(--dk-fg-ffffff, #fff);
   background: var(--panel-navy);
   box-shadow: var(--shadow-md);
 }
@@ -51,14 +51,14 @@
   gap: 6px;
   padding: 5px 11px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--dk-line-ffffff-a16, rgba(255, 255, 255, 0.16));
+  background: var(--dk-bg-ffffff-a07, rgba(255, 255, 255, 0.07));
   font-size: 12px;
   font-weight: 500;
 }
 
 .examlist-hero-stats svg {
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .examlist-hero-btn {
@@ -67,7 +67,7 @@
   padding: 0 18px;
   border: none;
   border-radius: 10px;
-  background: var(--lnu-gold-light);
+  background: var(--dk-bg-lnu-gold-light, var(--lnu-gold-light));
   color: var(--lnu-navy-deep);
   display: inline-flex;
   align-items: center;
@@ -79,13 +79,13 @@
 }
 
 .examlist-hero-btn:hover {
-  background: #f6dc9a;
-  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.18);
+  background: var(--dk-bg-f6dc9a, #f6dc9a);
+  box-shadow: 0 10px 18px var(--dk-shadow-000000-a18, rgba(0, 0, 0, 0.18));
   transform: translateY(-1px);
 }
 
 .examlist-hero-btn:focus-visible {
-  outline: 2px solid var(--lnu-gold-light);
+  outline: 2px solid var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
   outline-offset: 2px;
 }
 
@@ -96,7 +96,7 @@
   gap: 10px;
   padding: 48px 20px;
   border-radius: 20px;
-  border: 1px dashed rgba(26, 35, 126, 0.16);
+  border: 1px dashed var(--dk-line-1a237e-a16, rgba(26, 35, 126, 0.16));
   background: var(--surface);
   color: var(--lnu-text-muted);
   text-align: center;
@@ -105,7 +105,7 @@
 .examlist-state strong {
   font-size: 16px;
   font-weight: 600;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .examlist-state p {
@@ -121,8 +121,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* ---------- Search and subject filter ---------- */
@@ -143,7 +143,7 @@
   left: 13px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--lnu-navy-light);
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
   opacity: 0.8;
   pointer-events: none;
 }
@@ -157,12 +157,12 @@
   background: var(--surface);
   font-size: 13.5px;
   color: var(--lnu-text);
-  box-shadow: 0 1px 2px rgba(13, 21, 71, 0.05);
+  box-shadow: 0 1px 2px var(--dk-shadow-0d1547-a05, rgba(13, 21, 71, 0.05));
 }
 
 .examlist-search-input:focus {
   outline: none;
-  border-color: var(--lnu-navy);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
   box-shadow: var(--focus-ring);
 }
 
@@ -191,14 +191,14 @@
 }
 
 .examlist-filter:hover:not(.active) {
-  border-color: rgba(26, 35, 126, 0.3);
-  color: var(--lnu-navy);
+  border-color: var(--dk-line-1a237e-a30, rgba(26, 35, 126, 0.3));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .examlist-filter.active {
-  border-color: var(--lnu-navy);
-  background: var(--lnu-navy);
-  color: var(--lnu-gold-light);
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
   font-weight: 600;
 }
 
@@ -207,7 +207,7 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(26, 35, 126, 0.1);
+  background: var(--dk-bg-1a237e-a10, rgba(26, 35, 126, 0.1));
   font-size: 11px;
   font-weight: 600;
   display: inline-flex;
@@ -216,7 +216,7 @@
 }
 
 .examlist-filter.active .examlist-filter-count {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--dk-bg-ffffff-a20, rgba(255, 255, 255, 0.2));
 }
 
 /* ---------- Rows (wherever the table does not fit) ---------- */
@@ -238,11 +238,11 @@
   font-size: 14.5px;
   font-weight: 600;
   line-height: 1.3;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
 }
 
 .examlist-rows .directory-row-details.is-highlighted > summary {
-  background: rgba(240, 208, 128, 0.22);
+  background: var(--dk-bg-f0d080-a22, rgba(240, 208, 128, 0.22));
 }
 
 .examlist-rows .examrow-rooms {
@@ -276,8 +276,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(26, 35, 126, 0.08);
-  color: var(--lnu-navy);
+  background: var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08));
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 .examrow-actions {
@@ -310,9 +310,9 @@
 }
 
 .examrow-delete-btn:hover:not(:disabled) {
-  border-color: rgba(198, 40, 40, 0.4);
-  background: rgba(198, 40, 40, 0.08);
-  color: var(--lnu-danger);
+  border-color: var(--dk-line-c62828-a40, rgba(198, 40, 40, 0.4));
+  background: var(--dk-bg-c62828-a08, rgba(198, 40, 40, 0.08));
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
 }
 
 .examrow-delete-btn:disabled {
@@ -322,7 +322,7 @@
 
 .examrow-delete-btn:focus-visible,
 .examlist-filter:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -431,7 +431,7 @@
 }
 
 .examlist-table tbody tr:hover td {
-  background: rgba(26, 35, 126, 0.03);
+  background: var(--dk-bg-1a237e-a03, rgba(26, 35, 126, 0.03));
 }
 
 .examlist-table .is-number {
@@ -466,7 +466,7 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1.35;
-  color: #0b0d17;
+  color: var(--dk-fg-0b0d17, #0b0d17);
   overflow-wrap: anywhere;
 }
 
@@ -478,7 +478,7 @@
 .examrow-number {
   font-size: 16px;
   font-weight: 600;
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
 }
 
 /* A text link, not another boxed button: the row already has three. */
@@ -545,16 +545,16 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--lnu-gray-dark);
+  background: var(--dk-bg-lnu-gray-dark, var(--lnu-gray-dark));
 }
 
-.examrow-status.is-open i { background: var(--lnu-success); }
-.examrow-status.is-upcoming i { background: var(--lnu-navy-light); }
+.examrow-status.is-open i { background: var(--dk-bg-lnu-success, var(--lnu-success)); }
+.examrow-status.is-upcoming i { background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light)); }
 .examrow-status.is-ended { color: var(--lnu-text-muted); }
 
 /* The exam a link from the Rooms page pointed at. */
 .examlist-table tbody tr.is-highlighted td {
-  background: rgba(240, 208, 128, 0.22);
+  background: var(--dk-bg-f0d080-a22, rgba(240, 208, 128, 0.22));
 }
 
 /* =====================================================================
@@ -586,7 +586,7 @@
 
 /* Gold on the navy card. It was navy on navy. */
 .exam-summary-kicker {
-  color: var(--lnu-gold-light);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
 }
 
 .exam-summary-stat strong {
@@ -613,14 +613,14 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface);
-  color: var(--lnu-navy);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
   font-size: 13px;
   font-weight: 600;
 }
 
 .exam-room-tool:hover:not(:disabled) {
-  border-color: rgba(26, 35, 126, 0.34);
-  background: #f2f5fd;
+  border-color: var(--dk-line-1a237e-a34, rgba(26, 35, 126, 0.34));
+  background: var(--dk-bg-f2f5fd, #f2f5fd);
 }
 
 .exam-room-tool:disabled {
@@ -629,7 +629,7 @@
 }
 
 .exam-room-tool:focus-visible {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -667,12 +667,12 @@
 }
 
 .exam-room-choice:has(input:checked) {
-  border-color: rgba(26, 35, 126, 0.5);
-  background: rgba(26, 35, 126, 0.05);
+  border-color: var(--dk-line-1a237e-a50, rgba(26, 35, 126, 0.5));
+  background: var(--dk-bg-1a237e-a05, rgba(26, 35, 126, 0.05));
 }
 
 .exam-room-choice:has(input:focus-visible) {
-  outline: 2px solid var(--lnu-navy);
+  outline: 2px solid var(--dk-line-lnu-navy, var(--lnu-navy));
   outline-offset: 2px;
 }
 
@@ -685,7 +685,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  color: var(--lnu-danger);
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
   font-weight: 500;
 }
 

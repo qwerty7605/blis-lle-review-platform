@@ -220,6 +220,21 @@ class AccountSettingsTest extends TestCase
         $this->assertSame(['exam_defaults' => $defaults], $teacher->fresh()->preferences);
     }
 
+    public function test_anyone_can_keep_a_theme_with_their_account(): void
+    {
+        $student = $this->user(User::ROLE_STUDENT);
+
+        $this->as($student)->putJson('/api/account/preferences', ['theme' => 'dark'])
+            ->assertOk()
+            ->assertJsonPath('user.preferences.theme', 'dark');
+
+        $this->as($student)->putJson('/api/account/preferences', ['theme' => 'neon'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['theme']);
+
+        $this->assertSame(['theme' => 'dark'], $student->fresh()->preferences);
+    }
+
     public function test_exam_defaults_keep_to_the_limits_an_exam_is_saved_under(): void
     {
         $this->as($this->user(User::ROLE_STAFF_MASTER_EXAMINER))->putJson('/api/account/preferences', ['exam_defaults' => [
