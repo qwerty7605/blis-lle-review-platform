@@ -9,12 +9,12 @@ use App\Models\Room;
 use App\Models\User;
 use App\Services\ExamDeliveryModeService;
 use App\Services\ReportExportService;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\Reports\RoomGradebookWorkbook;
+use App\Support\Reports\ReportOutput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class RoomController extends Controller
@@ -653,9 +653,7 @@ class RoomController extends Controller
         $format = strtolower((string) ($validated['format'] ?? 'xlsx'));
         $gradebook = $this->reportExportService->buildRoomGradebook($room);
         $table = $this->reportExportService->buildRoomGradebookTable($gradebook);
-        $fileLabel = Str::slug(trim((string) ($room->code ?: $room->name ?: 'room')));
-        $timestamp = now()->format('Ymd_His');
-        $baseFilename = ($fileLabel !== '' ? $fileLabel : ('room-' . $room->id)) . '-grades-' . $timestamp;
+        $filename = fn (string $extension): string => ReportOutput::filename([$room->name, 'Gradebook'], $extension);
 
         $this->recordAudit(
             $user,
@@ -672,47 +670,13 @@ class RoomController extends Controller
         );
 
         if ($format === 'csv') {
-            return response()->streamDownload(function () use ($table): void {
-                $stream = fopen('php://output', 'w');
-                if ($stream === false) {
-                    return;
-                }
-
-                fputcsv($stream, $table['headers']);
-
-                foreach ($table['rows'] as $row) {
-                    fputcsv($stream, $row);
-                }
-
-                fclose($stream);
-            }, $baseFilename . '.csv', [
-                'Content-Type' => 'text/csv; charset=UTF-8',
-            ]);
+            return ReportOutput::csv($table['headers'], $table['rows'], $filename('csv'));
         }
 
         if ($format === 'pdf') {
-            return Pdf::loadView('reports.room_grades_pdf', [
+            return ReportOutput::pdfDownload('reports.room_grades_pdf', [
                 'gradebook' => $gradebook,
-            ])
-                ->setPaper('a4', 'landscape')
-                ->download($baseFilename . '.pdf');
-        }
-
-        $spreadsheet = new Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('Room Grades');
-        $sheet->fromArray($table['headers'], null, 'A1');
-
-        if (!empty($table['rows'])) {
-            $sheet->fromArray($table['rows'], null, 'A2');
-        }
-
-        $highestColumn = $sheet->getHighestColumn();
-        $sheet->getStyle('A1:' . $highestColumn . '1')->getFont()->setBold(true);
-
-        for ($columnIndex = 1; $columnIndex <= count($table['headers']); $columnIndex++) {
-            $columnName = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex);
-            $sheet->getColumnDimension($columnName)->setAutoSize(true);
+            ], $filename('pdf'), 'landscape');
         }
 
         $tempFile = tempnam(sys_get_temp_dir(), 'blis_room_xlsx_');
@@ -721,10 +685,11 @@ class RoomController extends Controller
             return response()->json(['message' => 'Unable to generate export file.'], 500);
         }
 
-        $writer = new Xlsx($spreadsheet);
-        $writer->save($tempFile);
+        $spreadsheet = app(RoomGradebookWorkbook::class)->build($gradebook);
+        (new Xlsx($spreadsheet))->save($tempFile);
+        $spreadsheet->disconnectWorksheets();
 
-        return response()->download($tempFile, $baseFilename . '.xlsx')->deleteFileAfterSend(true);
+        return response()->download($tempFile, $filename('xlsx'))->deleteFileAfterSend(true);
     }
 
     public function archiveExam(

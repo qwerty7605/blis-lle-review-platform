@@ -515,16 +515,17 @@
       <div v-if="showRoomExportModal" class="modal-backdrop" @click.self="closeRoomExportModal">
         <div class="modal-card">
           <header class="modal-head">
-            <h4>Export Room Grades</h4>
+            <h4>Export Gradebook</h4>
             <button type="button" class="modal-close" @click="closeRoomExportModal">
               <X :size="16" />
             </button>
           </header>
 
           <p class="muted">
-            This export generates a room-level gradebook for <strong>{{ selectedRoom?.name }}</strong>
-            <span v-if="selectedRoom?.code">(<code>{{ selectedRoom.code }}</code>)</span>.
-            Use the Reports module for exam-specific detailed exports.
+            The Gradebook for <strong>{{ selectedRoom?.name }}</strong>
+            <span v-if="selectedRoom?.code">(<code>{{ selectedRoom.code }}</code>)</span>:
+            one row per student, with their latest score on every exam this room has had.
+            For one exam in detail, use the Dashboard's Exports tab.
           </p>
 
           <label class="field-stack">
@@ -534,7 +535,7 @@
                 {{ format.label }}
               </option>
             </select>
-            <small class="muted">Default format is XLSX for class record use.</small>
+            <small class="muted">{{ roomExportFormats.find((format) => format.value === roomExportForm.format)?.hint }}</small>
           </label>
 
           <div class="modal-actions">

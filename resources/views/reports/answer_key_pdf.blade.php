@@ -1,49 +1,48 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1f2937; }
-        h1 { margin: 0 0 8px; font-size: 18px; }
-        h2 { margin: 16px 0 6px; font-size: 13px; }
-        p.meta { margin: 2px 0; }
-        .question-card { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
-        .muted { color: #6b7280; }
-        ul { margin: 4px 0 0 18px; }
-        li { margin: 2px 0; }
-    </style>
-</head>
-<body>
-    <h1>Answer Key</h1>
+@extends('reports.layout')
 
-    <p class="meta"><strong>Exam:</strong> {{ $exam['title'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Room:</strong> {{ $room['name'] ?? 'N/A' }} ({{ $room['code'] ?? 'N/A' }})</p>
-    <p class="meta"><strong>Generated:</strong> {{ optional($generatedAt ?? null)->format('Y-m-d H:i:s') ?? now()->format('Y-m-d H:i:s') }}</p>
+@section('title', 'Answer Key')
+@section('kind', 'Answer Key')
+@section('styles')
+    .item { padding: 6px 0 7px; border-bottom: 1px solid #e6e8f0; page-break-inside: avoid; }
+    .item .question { margin: 0 0 3px; }
+    .item .number { display: inline-block; width: 22px; font-weight: bold; color: #1a237e; }
+    .choices { margin-left: 22px; }
+    .choice { padding: 1px 4px; }
+    .choice.is-correct { background: #e7f4ea; color: #1e6b34; font-weight: bold; }
+    .written { margin-left: 22px; color: #1e6b34; font-weight: bold; }
+@endsection
+
+@section('content')
+    <h1>{{ $exam['title'] ?? 'Exam' }}</h1>
+    <p class="subtitle">
+        {{ $exam['subject'] ?: 'No subject' }} · {{ count($answerKey) }} {{ count($answerKey) === 1 ? 'question' : 'questions' }}
+        · the correct answer is marked ✓
+    </p>
+
+    @if (!empty($exam['shuffle_questions']) && count($answerKey) > (int) ($exam['total_items'] ?? 0) && (int) ($exam['total_items'] ?? 0) > 0)
+        <p class="muted">This exam shuffles its questions: each student gets {{ $exam['total_items'] }} of these {{ count($answerKey) }}, in their own order. The numbers here are the Q numbers in the Class Results and Class Summary.</p>
+    @elseif (!empty($exam['shuffle_questions']))
+        <p class="muted">This exam shuffles its questions, so students saw them in a different order. The numbers here are the Q numbers in the Class Results and Class Summary.</p>
+    @endif
 
     @if (empty($answerKey))
-        <p class="muted">No answer key is available for this exam.</p>
+        <p class="muted">This exam has no question set yet, so there is no answer key.</p>
     @else
         @foreach ($answerKey as $item)
-            <div class="question-card">
-                <h2>Item {{ $item['item_number'] }} ({{ $item['question_type'] }})</h2>
-                <p><strong>Question:</strong> {{ $item['question_text'] }}</p>
-                <p><strong>Correct Answer:</strong> {{ $item['correct_answer']['display'] ?? 'N/A' }}</p>
-
+            <div class="item">
+                <p class="question"><span class="number">{{ $item['item_number'] }}.</span>{{ $item['question_text'] }}</p>
                 @if (!empty($item['options']))
-                    <p><strong>Options:</strong></p>
-                    <ul>
+                    <div class="choices">
                         @foreach ($item['options'] as $option)
-                            <li>
-                                {{ $option['label'] }}. {{ $option['text'] }}
-                                @if ($option['is_correct'])
-                                    <strong>(Correct)</strong>
-                                @endif
-                            </li>
+                            <div class="choice {{ $option['is_correct'] ? 'is-correct' : '' }}">
+                                {{ $option['label'] ? $option['label'] . '.' : '' }} {{ $option['text'] }}@if ($option['is_correct']) ✓@endif
+                            </div>
                         @endforeach
-                    </ul>
+                    </div>
+                @else
+                    <p class="written">Answer: {{ $item['correct_answer']['display'] ?? '–' }}</p>
                 @endif
             </div>
         @endforeach
     @endif
-</body>
-</html>
+@endsection

@@ -1,77 +1,93 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1f2937; }
-        h1 { margin: 0 0 8px; font-size: 18px; }
-        h2 { margin: 16px 0 8px; font-size: 14px; }
-        p.meta { margin: 2px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-        th, td { border: 1px solid #d1d5db; padding: 6px; vertical-align: top; }
-        th { background: #f3f4f6; text-align: left; }
-        .muted { color: #6b7280; }
-    </style>
-</head>
-<body>
-    <h1>Individual Student Report</h1>
+@extends('reports.layout')
+@php
+    use App\Support\Reports\ReportOutput;
+    $attempt = $report['attempt'] ?? [];
+    $showAnswers = $showAnswers ?? true;
+    $submitted = ($attempt['status'] ?? null) === 'submitted';
+    $passing = (int) ($attempt['passing_score'] ?? 75);
+    $marks = [
+        'Correct' => ['✓', 'mark-correct'],
+        'Wrong' => ['✗', 'mark-wrong'],
+        'No Answer' => ['–', 'mark-blank'],
+        'Pending Review' => ['?', 'mark-pending'],
+    ];
+@endphp
 
-    <p class="meta"><strong>Student:</strong> {{ $report['student']['name'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Student ID:</strong> {{ $report['student']['student_id'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Email:</strong> {{ $report['student']['email'] ?? 'N/A' }}</p>
+@section('title', 'Student Report')
+@section('kind', 'Student Report')
+@section('styles')
+    table.score td { border: 1px solid #d7dbe7; padding: 10px 12px; vertical-align: middle; }
+    table.score .big { font-size: 24px; font-weight: bold; color: #1a237e; }
+    table.score .verdict { font-size: 13px; }
+@endsection
 
-    <p class="meta"><strong>Exam:</strong> {{ $report['exam']['title'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Room:</strong> {{ $report['room']['name'] ?? 'N/A' }} ({{ $report['room']['code'] ?? 'N/A' }})</p>
-    <p class="meta"><strong>Attempt ID:</strong> {{ $report['attempt']['id'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Attempt Status:</strong> {{ $report['attempt']['status'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Started At:</strong> {{ optional($report['attempt']['started_at'] ?? null)->format('Y-m-d H:i:s') ?? 'N/A' }}</p>
-    <p class="meta"><strong>Submitted At:</strong> {{ optional($report['attempt']['submitted_at'] ?? null)->format('Y-m-d H:i:s') ?? 'N/A' }}</p>
+@section('content')
+    <h1>{{ $report['student']['name'] ?? 'Student' }}</h1>
+    <p class="subtitle">Student ID {{ $report['student']['student_id'] ?: '–' }}</p>
 
-    <h2>Score Summary</h2>
-    <table>
+    <table class="facts">
         <tr>
-            <th>Total Items</th>
-            <th>Answered</th>
-            <th>Correct</th>
-            <th>Score %</th>
+            <td class="label">Exam</td><td class="value">{{ $report['exam']['title'] ?? '' }}</td>
+            <td class="label">Room</td><td class="value">{{ $report['room']['name'] ?? '' }} ({{ $report['room']['code'] ?? '' }})</td>
         </tr>
         <tr>
-            <td>{{ $report['attempt']['total_items'] ?? 0 }}</td>
-            <td>{{ $report['attempt']['answered_count'] ?? 0 }}</td>
-            <td>{{ $report['attempt']['correct_answers'] ?? 0 }}</td>
-            <td>{{ is_null($report['attempt']['score_percent'] ?? null) ? 'N/A' : number_format((float) $report['attempt']['score_percent'], 2) }}</td>
+            <td class="label">Submitted</td><td class="value">{{ ReportOutput::time($attempt['submitted_at'] ?? null) ?? 'Not yet submitted' }}</td>
+            <td class="label">Sitting</td><td class="value">{{ $attempt['sitting'] ?? 1 }} of {{ $attempt['sittings'] ?? 1 }}</td>
         </tr>
     </table>
 
-    <h2>Per-Question Breakdown</h2>
-    @unless ($showAnswers ?? true)
+    <table class="score" style="margin-top: 10px">
+        <tr>
+            <td style="width: 32%"><span class="big">{{ $submitted && !is_null($attempt['score_percent'] ?? null) ? rtrim(rtrim(number_format((float) $attempt['score_percent'], 2), '0'), '.') . '%' : '–' }}</span></td>
+            <td>
+                <span class="verdict">{{ $attempt['correct_answers'] ?? 0 }} of {{ $attempt['total_items'] ?? 0 }} correct · {{ $attempt['answered_count'] ?? 0 }} answered</span><br>
+                @if ($submitted)
+                    @if ($attempt['passed'] ?? false)
+                        <span class="pass">Passed</span> <span class="muted">(pass mark {{ $passing }}%)</span>
+                    @else
+                        <span class="below">Below the {{ $passing }}% pass mark</span>
+                    @endif
+                @else
+                    <span class="muted">This sitting is still in progress.</span>
+                @endif
+            </td>
+        </tr>
+    </table>
+
+    <h2>Answers</h2>
+    @unless ($showAnswers)
         <p class="muted">Your teacher has kept the correct answers for this exam hidden, so this list shows your answers only.</p>
     @endunless
     @if (empty($report['items'] ?? []))
-        <p class="muted">No item data available for this attempt.</p>
+        <p class="muted">No questions were recorded for this sitting.</p>
     @else
-        <table>
-            <tr>
-                <th>Item</th>
-                <th>Question</th>
-                <th>Selected Answer</th>
-                @if ($showAnswers ?? true)
-                    <th>Correct Answer</th>
-                    <th>Status</th>
-                @endif
-            </tr>
+        <table class="grid">
+            <thead>
+                <tr>
+                    <th style="width: 22px">#</th>
+                    <th class="text">Question</th>
+                    <th class="text" style="width: 140px">Answer Given</th>
+                    @if ($showAnswers)
+                        <th class="text" style="width: 140px">Correct Answer</th>
+                        <th style="width: 30px">Mark</th>
+                    @endif
+                </tr>
+            </thead>
             @foreach ($report['items'] as $item)
                 <tr>
                     <td>{{ $item['item_number'] }}</td>
-                    <td>{{ $item['question_text'] ?? 'N/A' }}</td>
-                    <td>{{ $item['selected_answer'] ?? 'No Answer' }}</td>
-                    @if ($showAnswers ?? true)
-                        <td>{{ $item['correct_answer']['display'] ?? 'N/A' }}</td>
-                        <td>{{ $item['status_label'] ?? 'N/A' }}</td>
+                    <td class="text">{{ $item['question_text'] ?? '' }}</td>
+                    <td class="text">{{ $item['selected_answer'] ?? '–' }}</td>
+                    @if ($showAnswers)
+                        <td class="text">{{ $item['correct_answer']['display'] ?? '–' }}</td>
+                        @php $mark = $marks[$item['status_label'] ?? ''] ?? ['', '']; @endphp
+                        <td><span class="mark {{ $mark[1] }}">{{ $mark[0] }}</span></td>
                     @endif
                 </tr>
             @endforeach
         </table>
+        @if ($showAnswers)
+            <p class="note">✓ right · ✗ wrong · – left blank · ? a written answer not marked yet. Questions are in the order this student saw them.</p>
+        @endif
     @endif
-</body>
-</html>
+@endsection

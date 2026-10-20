@@ -522,7 +522,7 @@
               </label>
 
               <label class="field-stack">
-                <span class="field-label">Student (optional)</span>
+                <span class="field-label">Student (for one-student reports)</span>
                 <select
                   v-model="reportExportForm.student_id"
                   class="text-input"
@@ -553,96 +553,46 @@
               <span v-if="selectedReportStudent" class="pill success">{{ selectedReportStudent.name }}</span>
             </div>
 
+            <!-- Each export says what it is under its name, so the buttons can
+                 be told apart without opening anything. -->
             <div class="report-action-sections">
-              <section class="action-section">
+              <section v-for="group in EXPORT_GROUPS" :key="group.key" class="action-section">
                 <header class="action-section-head">
-                  <h4>Downloads <InfoTip text="Printable or downloadable files for the panel or class records." /></h4>
+                  <h4>{{ group.title }} <InfoTip :text="group.info" /></h4>
+                  <p v-if="group.key === 'student' && !canExportSingleStudentReport" class="export-group-hint">
+                    Pick a student in the Student field above to use these.
+                  </p>
                 </header>
 
-                <div class="report-action-grid">
+                <div class="export-option-grid">
                   <button
+                    v-for="option in group.options"
+                    :key="option.key"
                     type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="exportReport('xlsx')"
+                    class="export-option"
+                    :class="{ 'is-primary': option.primary }"
+                    :disabled="!(group.key === 'student' ? canExportSingleStudentReport : canExportSessionReports) || reportExportingKey !== ''"
+                    @click="option.email ? sendReportEmail(option.key) : exportReport(option.key)"
                   >
-                    <RefreshCw v-if="reportExportingKey === 'xlsx'" :size="14" class="spin-soft" />
-                    <span>Results XLSX</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="exportReport('csv')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'csv'" :size="14" class="spin-soft" />
-                    <span>Results CSV</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="exportReport('summary_pdf')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'summary_pdf'" :size="14" class="spin-soft" />
-                    <span>Summary PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="exportReport('answer_key_pdf')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'answer_key_pdf'" :size="14" class="spin-soft" />
-                    <span>Answer Key PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSingleStudentReport || reportExportingKey !== ''"
-                    @click="exportReport('student_pdf')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'student_pdf'" :size="14" class="spin-soft" />
-                    <span>Student PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="primary-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="exportReport('student_zip')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'student_zip'" :size="14" class="spin-soft" />
-                    <span>All PDFs ZIP</span>
+                    <span class="export-option-icon" aria-hidden="true">
+                      <RefreshCw v-if="reportExportingKey === option.key" :size="18" class="spin-soft" />
+                      <component :is="option.icon" v-else :size="18" />
+                    </span>
+                    <span class="export-option-copy">
+                      <span class="export-option-title">
+                        {{ option.title }}
+                        <span class="export-option-format">{{ option.format }}</span>
+                      </span>
+                      <span class="export-option-desc">{{ option.description }}</span>
+                    </span>
                   </button>
                 </div>
               </section>
 
-              <section class="action-section">
-                <header class="action-section-head">
-                  <h4>Email Delivery <InfoTip text="Sends each student their own report PDF. If the exam's results are Hidden, their copy leaves out the correct answers." /></h4>
-                </header>
-
-                <div class="report-action-grid">
-                  <button
-                    type="button"
-                    class="ghost-btn"
-                    :disabled="!canExportSingleStudentReport || reportExportingKey !== ''"
-                    @click="sendReportEmail('student_email')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'student_email'" :size="14" class="spin-soft" />
-                    <span>Email Student PDF</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="primary-btn"
-                    :disabled="!canExportSessionReports || reportExportingKey !== ''"
-                    @click="sendReportEmail('student_email_bulk')"
-                  >
-                    <RefreshCw v-if="reportExportingKey === 'student_email_bulk'" :size="14" class="spin-soft" />
-                    <span>Email All Reports</span>
-                  </button>
-                </div>
-              </section>
+              <p class="export-gradebook-note">
+                <DoorOpen :size="14" aria-hidden="true" />
+                <span>For every exam in a room at once, use <strong>Export</strong> on that room's page in Rooms (the Gradebook).</span>
+              </p>
             </div>
           </template>
         </div>
@@ -696,9 +646,15 @@ import {
   ChevronDown,
   ClipboardList,
   DoorOpen,
+  FileArchive,
+  FileKey,
+  FileSpreadsheet,
   FileText,
   LayoutDashboard,
+  Mail,
+  MailPlus,
   RefreshCw,
+  Sheet,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -927,8 +883,42 @@ const reportStudentHint = computed(() => {
   if (reportStudentsLoading.value) return 'Loading the room\'s students...'
   if (reportExportStudents.value.length === 0) return 'This room has no current students.'
 
-  return 'Only for Student PDF and Email Student PDF. The other exports cover the whole room.'
+  return 'Only needed for the one-student reports below.'
 })
+
+// The Exports tab's buttons, grouped by who they are about. The key is what
+// exportReport() / sendReportEmail() take.
+const EXPORT_GROUPS = [
+  {
+    key: 'class',
+    title: 'For the Whole Class',
+    info: 'Everyone in the chosen room on the chosen exam. Each student counts once, by their latest sitting.',
+    options: [
+      { key: 'xlsx', title: 'Class Results', format: 'Excel', icon: FileSpreadsheet, primary: true, description: 'Every student\'s score and right or wrong on each question, plus how the class did per question. Best for your records.' },
+      { key: 'summary_pdf', title: 'Class Summary', format: 'PDF', icon: FileText, description: 'One or two printable pages: average, pass rate, score breakdown and the questions to review.' },
+      { key: 'csv', title: 'Class Results', format: 'CSV', icon: Sheet, description: 'The same scores as plain data, for Google Sheets or another records system. Not formatted.' },
+      { key: 'student_zip', title: 'Every Student\'s Report', format: 'ZIP', icon: FileArchive, description: 'A Student Report PDF for each student who has taken the exam, in one download.' },
+      { key: 'student_email_bulk', title: 'Email Every Student Their Report', format: 'Email', icon: MailPlus, email: true, description: 'Sends each student their own Student Report PDF. Hidden results leave out the correct answers.' },
+    ],
+  },
+  {
+    key: 'student',
+    title: 'For One Student',
+    info: 'The student picked in the Student field above, from their latest sitting.',
+    options: [
+      { key: 'student_pdf', title: 'Student Report', format: 'PDF', icon: FileText, description: 'Their score, then each question with the answer they gave and the correct one.' },
+      { key: 'student_email', title: 'Email This Student Their Report', format: 'Email', icon: Mail, email: true, description: 'Sends the same PDF to their email. Hidden results leave out the correct answers.' },
+    ],
+  },
+  {
+    key: 'key',
+    title: 'Answer Key',
+    info: 'The same for every room the exam is in.',
+    options: [
+      { key: 'answer_key_pdf', title: 'Answer Key', format: 'PDF', icon: FileKey, description: 'Every question with its choices and the correct answer marked. For you, not for students.' },
+    ],
+  },
+]
 </script>
 
 <style scoped src="./reportsView.css"></style>
