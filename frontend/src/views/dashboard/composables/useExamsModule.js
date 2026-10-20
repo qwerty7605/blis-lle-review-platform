@@ -308,6 +308,7 @@ export function useExamsModule() {
         code: room.code,
         // Shown to an administrator, who is choosing among every teacher's.
         ownerName: room.creator?.name ?? '',
+        ownerId: room.creator?.id ?? room.created_by ?? null,
       }))
     } catch (error) {
       if (!keepOnFailure) manageableRooms.value = []
