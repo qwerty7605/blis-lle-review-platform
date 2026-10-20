@@ -81,6 +81,10 @@ return [
 
     'timezone' => 'UTC',
 
+    // The school's own clock: the times written into exports and report
+    // PDFs. The app itself stays on UTC.
+    'school_timezone' => env('SCHOOL_TIMEZONE', 'Asia/Manila'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

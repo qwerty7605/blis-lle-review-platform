@@ -694,3 +694,112 @@
     font-size: 21px;
   }
 }
+
+/* Exports tab: each export is a button that says what it is. Two across
+   where there is room, one on phones. */
+.export-option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 10px;
+}
+
+.export-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.export-option:hover:not(:disabled) {
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  box-shadow: var(--shadow-sm);
+}
+
+.export-option:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.export-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.export-option.is-primary {
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+}
+
+.export-option-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-muted);
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
+}
+
+.export-option.is-primary .export-option-icon {
+  background: var(--panel-navy);
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
+}
+
+.export-option-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.export-option-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.export-option-format {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-soft);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-muted);
+}
+
+.export-option-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.export-group-hint {
+  font-weight: 600;
+}
+
+.export-gradebook-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.export-gradebook-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}

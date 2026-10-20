@@ -12,13 +12,14 @@ use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\Demo\DemoData;
 use App\Services\ReportExportService;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\Reports\ClassResultsWorkbook;
+use App\Support\Reports\ReportOutput;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 use ZipArchive;
 
 class ReportController extends Controller
@@ -87,9 +88,6 @@ class ReportController extends Controller
         $session = $this->reportExportService->buildSessionLatestResults($exam, $room);
         $table = $this->reportExportService->buildCompleteResultsTable($session);
 
-        $fileLabel = trim((string) Str::slug(($exam->title ?? 'exam') . '-' . ($room->code ?? 'room')));
-        $filename = ($fileLabel !== '' ? $fileLabel : 'session') . '-complete-results-' . now()->format('Ymd_His') . '.csv';
-
         $this->recordAudit(
             $user,
             'report.export.complete_results_csv',
@@ -104,22 +102,7 @@ class ReportController extends Controller
             $request,
         );
 
-        return response()->streamDownload(function () use ($table): void {
-            $stream = fopen('php://output', 'w');
-            if ($stream === false) {
-                return;
-            }
-
-            fputcsv($stream, $table['headers']);
-
-            foreach ($table['rows'] as $row) {
-                fputcsv($stream, $row);
-            }
-
-            fclose($stream);
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-        ]);
+        return ReportOutput::csv($table['headers'], $table['rows'], $this->sessionFilename($exam, $room, 'Class Results', 'csv'));
     }
 
     public function completeResultsXlsx(
@@ -137,65 +120,14 @@ class ReportController extends Controller
         $user = $access;
 
         $session = $this->reportExportService->buildSessionLatestResults($exam, $room);
-        $table = $this->reportExportService->buildCompleteResultsTable($session);
-
-        $spreadsheet = new Spreadsheet();
-        $resultsSheet = $spreadsheet->getActiveSheet();
-        $resultsSheet->setTitle('Results');
-        $resultsSheet->fromArray($table['headers'], null, 'A1');
-
-        if (!empty($table['rows'])) {
-            $resultsSheet->fromArray($table['rows'], null, 'A2');
-        }
-
-        $highestResultsColumn = $resultsSheet->getHighestColumn();
-        $resultsSheet->getStyle('A1:' . $highestResultsColumn . '1')->getFont()->setBold(true);
-
-        for ($columnIndex = 1; $columnIndex <= count($table['headers']); $columnIndex++) {
-            $columnName = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex);
-            $resultsSheet->getColumnDimension($columnName)->setAutoSize(true);
-        }
-
-        $analysisSheet = $spreadsheet->createSheet();
-        $analysisSheet->setTitle('Item Analysis');
-
-        $analysisHeaders = ['Item', 'Question', 'Started', 'Answered', 'Correct', '% Answered', '% Correct'];
-        $analysisSheet->fromArray($analysisHeaders, null, 'A1');
-
-        $analysisRows = collect($session['item_summary'] ?? [])->map(function (array $item): array {
-            return [
-                (int) ($item['item_number'] ?? 0),
-                (string) ($item['question_text'] ?? ''),
-                (int) ($item['started_count'] ?? 0),
-                (int) ($item['answered_count'] ?? 0),
-                (int) ($item['correct_count'] ?? 0),
-                is_null($item['answered_percent'] ?? null) ? '' : (float) $item['answered_percent'],
-                is_null($item['correct_percent'] ?? null) ? '' : (float) $item['correct_percent'],
-            ];
-        })->values()->all();
-
-        if (!empty($analysisRows)) {
-            $analysisSheet->fromArray($analysisRows, null, 'A2');
-        }
-
-        $highestAnalysisColumn = $analysisSheet->getHighestColumn();
-        $analysisSheet->getStyle('A1:' . $highestAnalysisColumn . '1')->getFont()->setBold(true);
-
-        for ($columnIndex = 1; $columnIndex <= count($analysisHeaders); $columnIndex++) {
-            $columnName = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($columnIndex);
-            $analysisSheet->getColumnDimension($columnName)->setAutoSize(true);
-        }
-
-        $fileLabel = trim((string) Str::slug(($exam->title ?? 'exam') . '-' . ($room->code ?? 'room')));
-        $filename = ($fileLabel !== '' ? $fileLabel : 'session') . '-complete-results-' . now()->format('Ymd_His') . '.xlsx';
         $tempFile = tempnam(sys_get_temp_dir(), 'blis_xlsx_');
 
         if ($tempFile === false) {
             return response()->json(['message' => 'Unable to generate export file.'], 500);
         }
 
-        $writer = new Xlsx($spreadsheet);
-        $writer->save($tempFile);
+        $spreadsheet = app(ClassResultsWorkbook::class)->build($session);
+        (new Xlsx($spreadsheet))->save($tempFile);
         $spreadsheet->disconnectWorksheets();
         unset($spreadsheet);
 
@@ -215,7 +147,7 @@ class ReportController extends Controller
 
         return response()->download(
             $tempFile,
-            $filename,
+            $this->sessionFilename($exam, $room, 'Class Results', 'xlsx'),
             ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
         )->deleteFileAfterSend(true);
     }
@@ -236,9 +168,6 @@ class ReportController extends Controller
 
         $session = $this->reportExportService->buildSessionLatestResults($exam, $room);
 
-        $fileLabel = trim((string) Str::slug(($exam->title ?? 'exam') . '-' . ($room->code ?? 'room')));
-        $filename = ($fileLabel !== '' ? $fileLabel : 'session') . '-results-summary-' . now()->format('Ymd_His') . '.pdf';
-
         $this->recordAudit(
             $user,
             'report.export.summary_pdf',
@@ -252,9 +181,9 @@ class ReportController extends Controller
             $request,
         );
 
-        return Pdf::loadView('reports.summary_pdf', [
+        return ReportOutput::pdfDownload('reports.summary_pdf', [
             'session' => $session,
-        ])->setPaper('a4', 'portrait')->download($filename);
+        ], $this->sessionFilename($exam, $room, 'Class Summary', 'pdf'));
     }
 
     public function answerKeyPdf(
@@ -273,9 +202,6 @@ class ReportController extends Controller
 
         $answerKey = $this->reportExportService->buildAnswerKey($exam);
 
-        $fileLabel = trim((string) Str::slug(($exam->title ?? 'exam') . '-' . ($room->code ?? 'room')));
-        $filename = ($fileLabel !== '' ? $fileLabel : 'session') . '-answer-key-' . now()->format('Ymd_His') . '.pdf';
-
         $this->recordAudit(
             $user,
             'report.export.answer_key_pdf',
@@ -289,11 +215,13 @@ class ReportController extends Controller
             $request,
         );
 
-        return Pdf::loadView('reports.answer_key_pdf', [
+        return ReportOutput::pdfDownload('reports.answer_key_pdf', [
             'exam' => [
                 'id' => (int) $exam->id,
                 'title' => $exam->title,
                 'subject' => $exam->subject,
+                'total_items' => (int) $exam->total_items,
+                'shuffle_questions' => (bool) $exam->shuffle_questions,
             ],
             'room' => [
                 'id' => (int) $room->id,
@@ -301,8 +229,7 @@ class ReportController extends Controller
                 'code' => $room->code,
             ],
             'answerKey' => $answerKey,
-            'generatedAt' => now(),
-        ])->setPaper('a4', 'portrait')->download($filename);
+        ], ReportOutput::filename([$exam->title, 'Answer Key'], 'pdf'));
     }
 
     public function studentReportPdf(
@@ -334,14 +261,7 @@ class ReportController extends Controller
             return response()->json(['message' => 'No attempt found for this student in the selected session.'], 404);
         }
 
-        $report = $this->reportExportService->buildAttemptReportData($attempt);
-
-        $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
-        $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
-        $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
-        $filename = ($baseName !== '' ? $baseName : 'student-report')
-            . '-attempt-' . (int) $attempt->id
-            . '.pdf';
+        $pdf = $this->reportExportService->studentReportPdf($attempt);
 
         $this->recordAudit(
             $user,
@@ -357,9 +277,10 @@ class ReportController extends Controller
             $request,
         );
 
-        return Pdf::loadView('reports.student_report_pdf', [
-            'report' => $report,
-        ])->setPaper('a4', 'portrait')->download($filename);
+        return response($pdf['binary'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $pdf['filename'], Str::ascii($pdf['filename'])),
+        ]);
     }
 
     public function emailStudentReport(
@@ -589,7 +510,8 @@ class ReportController extends Controller
         /** @var User $user */
         $user = $access;
 
-        $attempts = $this->reportExportService->getSessionAttempts($exam, $room);
+        // Each student's latest sitting, the score that counts everywhere else.
+        $attempts = $this->reportExportService->getLatestSessionAttemptsByStudent($exam, $room);
 
         if ($attempts->isEmpty()) {
             return response()->json([
@@ -610,26 +532,15 @@ class ReportController extends Controller
         }
 
         foreach ($attempts as $attempt) {
-            $report = $this->reportExportService->buildAttemptReportData($attempt);
+            $pdf = $this->reportExportService->studentReportPdf($attempt);
+            $studentId = trim((string) ($pdf['report']['student']['student_id'] ?? ''));
+            $entryName = trim(str_replace(['/', '\\'], ' ', (string) ($pdf['report']['student']['name'] ?? 'Student')))
+                . ($studentId !== '' ? " ({$studentId})" : '') . '.pdf';
 
-            $pdfBinary = Pdf::loadView('reports.student_report_pdf', [
-                'report' => $report,
-            ])->setPaper('a4', 'portrait')->output();
-
-            $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
-            $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
-            $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
-            $entryName = ($baseName !== '' ? $baseName : 'student')
-                . '-attempt-' . (int) $attempt->id
-                . '.pdf';
-
-            $zip->addFromString($entryName, $pdfBinary);
+            $zip->addFromString($entryName, $pdf['binary']);
         }
 
         $zip->close();
-
-        $fileLabel = trim((string) Str::slug(($exam->title ?? 'exam') . '-' . ($room->code ?? 'room')));
-        $filename = ($fileLabel !== '' ? $fileLabel : 'session') . '-student-reports-' . now()->format('Ymd_His') . '.zip';
 
         $this->recordAudit(
             $user,
@@ -645,9 +556,15 @@ class ReportController extends Controller
             $request,
         );
 
-        return response()->download($zipPath, $filename, [
+        return response()->download($zipPath, $this->sessionFilename($exam, $room, 'Student Reports', 'zip'), [
             'Content-Type' => 'application/zip',
         ])->deleteFileAfterSend(true);
+    }
+
+    /** "BLIS 4-A - Cataloging Mock Board Exam - Class Results - 2026-10-20.xlsx" */
+    private function sessionFilename(Exam $exam, Room $room, string $kind, string $extension): string
+    {
+        return ReportOutput::filename([$room->name, $exam->title, $kind], $extension);
     }
 
     /**

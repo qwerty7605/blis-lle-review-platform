@@ -1,126 +1,130 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1f2937; }
-        h1 { margin: 0 0 8px; font-size: 18px; }
-        h2 { margin: 18px 0 8px; font-size: 14px; }
-        h3 { margin: 14px 0 6px; font-size: 12px; }
-        p.meta { margin: 2px 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
-        th, td { border: 1px solid #d1d5db; padding: 6px; vertical-align: top; }
-        th { background: #f3f4f6; text-align: left; }
-        .muted { color: #6b7280; }
-        .pill { display: inline-block; border: 1px solid #d1d5db; border-radius: 999px; padding: 2px 8px; margin-right: 6px; }
-    </style>
-</head>
-<body>
-    <h1>Results Summary</h1>
+@extends('reports.layout')
+@php
+    use App\Support\Reports\ReportOutput;
+    $summary = $session['summary'] ?? [];
+    $passing = (int) ($summary['passing_score'] ?? 75);
+    $pct = fn ($value) => $value === null ? '–' : rtrim(rtrim(number_format((float) $value, 2), '0'), '.') . '%';
+    $submittedRows = collect($session['rows'] ?? [])->filter(fn ($row) => ($row['attempt']['status'] ?? null) === 'submitted');
+    $scores = $submittedRows->map(fn ($row) => (float) ($row['attempt']['score_percent'] ?? 0));
+    $bands = [
+        '90–100%' => $scores->filter(fn ($s) => $s >= 90)->count(),
+        "{$passing}–89%" => $scores->filter(fn ($s) => $s >= $passing && $s < 90)->count(),
+        "50–" . ($passing - 1) . '%' => $scores->filter(fn ($s) => $s >= 50 && $s < $passing)->count(),
+        'Below 50%' => $scores->filter(fn ($s) => $s < 50)->count(),
+    ];
+    $widest = max(1, max($bands));
+    $notSubmitted = collect($session['rows'] ?? [])->filter(fn ($row) => ($row['attempt']['status'] ?? null) !== 'submitted');
+    $hardest = collect($session['hardest_items'] ?? [])->filter(fn ($item) => ($item['correct_percent'] ?? 100) < 76)->values();
+@endphp
 
-    <p class="meta"><strong>Exam:</strong> {{ $session['exam']['title'] ?? 'N/A' }}</p>
-    <p class="meta"><strong>Room:</strong> {{ $session['room']['name'] ?? 'N/A' }} ({{ $session['room']['code'] ?? 'N/A' }})</p>
-    <p class="meta"><strong>Generated:</strong> {{ optional($session['generated_at'] ?? null)->format('Y-m-d H:i:s') ?? now()->format('Y-m-d H:i:s') }}</p>
+@section('title', 'Class Summary')
+@section('kind', 'Class Summary')
+@section('styles')
+    table.bands td { border: 0; padding: 3px 0; }
+    table.bands td.band { width: 70px; color: #5f6577; white-space: nowrap; }
+    table.bands td.track { padding-right: 10px; }
+    table.bands td.count { width: 80px; text-align: right; font-weight: bold; white-space: nowrap; }
+    .bar { height: 11px; background: #3949ab; }
+    .bar.below { background: #c98a1e; }
+@endsection
 
-    <h2>Class Statistics</h2>
-    <table>
+@section('content')
+    <h1>{{ $session['exam']['title'] ?? 'Exam' }}</h1>
+    <p class="subtitle">How the class did on this exam: each student's latest sitting counts.</p>
+
+    <table class="facts">
         <tr>
-            <th>Students</th>
-            <th>Started</th>
-            <th>Submitted</th>
-            <th>Average Score %</th>
-            <th>Highest %</th>
-            <th>Lowest %</th>
+            <td class="label">Room</td><td class="value">{{ $session['room']['name'] ?? '' }} ({{ $session['room']['code'] ?? '' }})</td>
+            <td class="label">Subject</td><td class="value">{{ $session['exam']['subject'] ?: '–' }}</td>
         </tr>
         <tr>
-            <td>{{ $session['summary']['students_total'] ?? 0 }}</td>
-            <td>{{ $session['summary']['attempts_started'] ?? 0 }}</td>
-            <td>{{ $session['summary']['attempts_submitted'] ?? 0 }}</td>
-            <td>{{ is_null($session['summary']['average_score_percent'] ?? null) ? 'N/A' : number_format((float) $session['summary']['average_score_percent'], 2) }}</td>
-            <td>{{ is_null($session['summary']['highest_score_percent'] ?? null) ? 'N/A' : number_format((float) $session['summary']['highest_score_percent'], 2) }}</td>
-            <td>{{ is_null($session['summary']['lowest_score_percent'] ?? null) ? 'N/A' : number_format((float) $session['summary']['lowest_score_percent'], 2) }}</td>
+            <td class="label">Questions</td><td class="value">{{ $session['exam']['total_items'] ?? 0 }} per student{{ !empty($session['exam']['shuffle_questions']) ? ', shuffled' : '' }}</td>
+            <td class="label">Pass mark</td><td class="value">{{ $passing }}%</td>
         </tr>
     </table>
 
-    <h2>Item Analysis</h2>
-    <table>
+    <table class="stats">
         <tr>
-            <th>Item</th>
-            <th>Question</th>
-            <th>Started</th>
-            <th>Answered</th>
-            <th>Correct</th>
-            <th>% Answered</th>
-            <th>% Correct</th>
+            <td><span class="figure">{{ $summary['students_total'] ?? 0 }}</span><span class="caption">Students in room</span></td>
+            <td><span class="figure">{{ $summary['attempts_submitted'] ?? 0 }}</span><span class="caption">Submitted</span></td>
+            <td><span class="figure">{{ $pct($summary['average_score_percent'] ?? null) }}</span><span class="caption">Average score</span></td>
+            <td><span class="figure">{{ $pct($summary['pass_rate_percent'] ?? null) }}</span><span class="caption">Passed ({{ $summary['passed_count'] ?? 0 }} of {{ $summary['attempts_submitted'] ?? 0 }})</span></td>
+            <td><span class="figure">{{ $pct($summary['highest_score_percent'] ?? null) }}</span><span class="caption">Highest</span></td>
+            <td><span class="figure">{{ $pct($summary['lowest_score_percent'] ?? null) }}</span><span class="caption">Lowest</span></td>
         </tr>
-        @foreach (($session['item_summary'] ?? []) as $item)
-            <tr>
-                <td>{{ $item['item_number'] }}</td>
-                <td>{{ $item['question_text'] ?? 'N/A' }}</td>
-                <td>{{ $item['started_count'] }}</td>
-                <td>{{ $item['answered_count'] }}</td>
-                <td>{{ $item['correct_count'] }}</td>
-                <td>{{ number_format((float) ($item['answered_percent'] ?? 0), 2) }}</td>
-                <td>{{ is_null($item['correct_percent'] ?? null) ? 'N/A' : number_format((float) $item['correct_percent'], 2) }}</td>
-            </tr>
-        @endforeach
     </table>
 
-    <h2>Hardest and Easiest Items</h2>
-    <p>
-        <span class="pill"><strong>Hardest:</strong>
-            @if (empty($session['hardest_items'] ?? []))
-                N/A
-            @else
-                @foreach ($session['hardest_items'] as $item)
-                    Item {{ $item['item_number'] }} ({{ is_null($item['correct_percent']) ? 'N/A' : number_format((float) $item['correct_percent'], 2) }}%)@if (!$loop->last), @endif
-                @endforeach
-            @endif
-        </span>
-    </p>
-    <p>
-        <span class="pill"><strong>Easiest:</strong>
-            @if (empty($session['easiest_items'] ?? []))
-                N/A
-            @else
-                @foreach ($session['easiest_items'] as $item)
-                    Item {{ $item['item_number'] }} ({{ is_null($item['correct_percent']) ? 'N/A' : number_format((float) $item['correct_percent'], 2) }}%)@if (!$loop->last), @endif
-                @endforeach
-            @endif
-        </span>
-    </p>
-
-    <h2>Short-Answer Text Dump</h2>
-    @if (empty($session['short_answer_dump'] ?? []))
-        <p class="muted">No short-answer responses found for this session.</p>
-    @else
-        @foreach ($session['short_answer_dump'] as $item)
-            <h3>Item {{ $item['item_number'] }}: {{ $item['question_text'] }}</h3>
-            <table>
+    @if ($scores->isNotEmpty())
+        <h2>Score Breakdown</h2>
+        <table class="bands">
+            @foreach ($bands as $label => $count)
                 <tr>
-                    <th>Student</th>
-                    <th>Student ID</th>
-                    <th>Response</th>
-                    <th>Status</th>
+                    <td class="band">{{ $label }}</td>
+                    <td class="track"><div class="bar {{ $loop->index >= 2 ? 'below' : '' }}" style="width: {{ max(1, round($count / $widest * 100)) }}%"></div></td>
+                    <td class="count">{{ $count }} {{ $count === 1 ? 'student' : 'students' }}</td>
                 </tr>
+            @endforeach
+        </table>
+    @endif
+
+    @if ($hardest->isNotEmpty())
+        <h2>Questions to Review</h2>
+        <p class="muted">The questions the fewest students got right. Q numbers match the Answer Key.</p>
+        <table class="grid">
+            <thead><tr><th style="width: 26px">Q</th><th class="text">Question</th><th style="width: 52px">% Correct</th><th class="text" style="width: 150px">Most Chosen Wrong Answer</th></tr></thead>
+            @foreach ($hardest as $item)
+                <tr>
+                    <td>{{ $item['item_number'] }}</td>
+                    <td class="text">{{ $item['question_text'] ?? '' }}</td>
+                    <td>{{ $pct($item['correct_percent']) }}</td>
+                    <td class="text">{{ $item['common_wrong_answer'] ? $item['common_wrong_answer'] . ' (' . $item['common_wrong_count'] . ')' : '–' }}</td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
+    <h2>Every Question</h2>
+    @if (empty($session['item_summary']))
+        <p class="muted">This exam has no questions yet.</p>
+    @else
+        <table class="grid">
+            <thead><tr><th style="width: 26px">Q</th><th class="text">Question</th><th class="text" style="width: 130px">Correct Answer</th><th style="width: 52px">% Correct</th><th style="width: 54px">Difficulty</th></tr></thead>
+            @foreach ($session['item_summary'] as $item)
+                <tr>
+                    <td>{{ $item['item_number'] }}</td>
+                    <td class="text">{{ $item['question_text'] ?? '' }}</td>
+                    <td class="text">{{ $item['correct_answer'] ?? '–' }}</td>
+                    <td>{{ $item['started_count'] > 0 ? $pct($item['correct_percent']) : '–' }}</td>
+                    <td>@if ($item['difficulty'])<span class="tag tag-{{ strtolower($item['difficulty']) }}">{{ $item['difficulty'] }}</span>@else – @endif</td>
+                </tr>
+            @endforeach
+        </table>
+        <p class="note">% Correct is out of everyone who was given the question; a blank counts as wrong. Easy: 76% or more got it right. Hard: 25% or fewer.</p>
+    @endif
+
+    @if ($notSubmitted->isNotEmpty())
+        <h2>Not Submitted ({{ $notSubmitted->count() }})</h2>
+        <p>
+            @foreach ($notSubmitted as $row)
+                {{ $row['student']['name'] }}{{ ($row['attempt'] ?? null) ? ' (in progress)' : '' }}@if (!$loop->last), @endif
+            @endforeach
+        </p>
+    @endif
+
+    @if (!empty($session['short_answer_dump']))
+        <h2>Written Answers</h2>
+        @foreach ($session['short_answer_dump'] as $item)
+            <p><strong>Q{{ $item['item_number'] }}.</strong> {{ $item['question_text'] }}</p>
+            <table class="grid">
+                <thead><tr><th class="text" style="width: 150px">Student</th><th class="text">Answer</th><th style="width: 70px">Marked</th></tr></thead>
                 @foreach (($item['responses'] ?? []) as $response)
                     <tr>
-                        <td>{{ $response['student_name'] ?? 'N/A' }}</td>
-                        <td>{{ $response['student_id'] ?? 'N/A' }}</td>
-                        <td>{{ $response['answer_text'] ?? '' }}</td>
-                        <td>
-                            @if (($response['is_correct'] ?? null) === true)
-                                Correct
-                            @elseif (($response['is_correct'] ?? null) === false)
-                                Wrong
-                            @else
-                                Pending Review
-                            @endif
-                        </td>
+                        <td class="text">{{ $response['student_name'] ?? '' }}</td>
+                        <td class="text">{{ $response['answer_text'] ?? '' }}</td>
+                        <td>{{ match ($response['is_correct'] ?? null) { true => 'Correct', false => 'Wrong', default => 'Not yet' } }}</td>
                     </tr>
                 @endforeach
             </table>
         @endforeach
     @endif
-</body>
-</html>
+@endsection

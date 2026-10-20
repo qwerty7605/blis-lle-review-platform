@@ -80,7 +80,7 @@ class RoomGradeExportTest extends TestCase
 
         $csv = $response->streamedContent();
 
-        $this->assertStringContainsString('Average Score %', $csv);
+        $this->assertStringContainsString('Average %', $csv);
         $this->assertStringContainsString('Reference Services Mock (%)', $csv);
         $this->assertStringContainsString('80', $csv);
     }
