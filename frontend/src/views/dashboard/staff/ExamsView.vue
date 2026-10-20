@@ -49,43 +49,54 @@
     </div>
 
     <template v-else>
-      <!-- Find an exam: by name, or by the room it is assigned to -->
+      <!-- Find an exam: by name, by where it is in its window, or by the room
+           it is assigned to; and the order to list them in -->
       <div class="examlist-toolbar">
-        <label class="examlist-search">
-          <Search :size="16" class="examlist-search-icon" />
-          <input
-            v-model.trim="examSearch"
-            type="search"
-            class="examlist-search-input"
-            placeholder="Search by exam or subject"
-            aria-label="Search exams"
+        <div class="examlist-toolbar-line">
+          <label class="examlist-search">
+            <Search :size="16" class="examlist-search-icon" />
+            <input
+              v-model.trim="examSearch"
+              type="search"
+              class="examlist-search-input"
+              placeholder="Search by exam or subject"
+              aria-label="Search exams"
+            />
+          </label>
+
+          <label class="examlist-sort">
+            <ArrowUpDown :size="15" class="examlist-sort-icon" aria-hidden="true" />
+            <select v-model="examSortChoice" class="examlist-sort-select" aria-label="Sort exams">
+              <option v-for="option in EXAM_SORT_CHOICES" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <div class="examlist-toolbar-line">
+          <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="examOwners" label="Exams by" />
+          <RoomFilter
+            v-model="selectedRoomFilter"
+            :rooms="roomFilterRooms"
+            :total-count="roomFilterTotal"
+            :group-by-owner="seesEveryTeacher && selectedOwnerFilter === ''"
           />
-        </label>
+        </div>
 
-        <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="examOwners" label="Exams by" />
-
-        <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by room">
+        <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by status">
+          <span class="examlist-filters-label" aria-hidden="true">Status</span>
           <button
+            v-for="option in EXAM_STATUS_FILTERS"
+            :key="option.value || 'all'"
             type="button"
             class="examlist-filter"
-            :class="{ active: selectedRoomFilter === '' }"
-            :aria-pressed="selectedRoomFilter === ''"
-            @click="selectedRoomFilter = ''"
+            :class="{ active: selectedStatusFilter === option.value }"
+            :aria-pressed="selectedStatusFilter === option.value"
+            @click="selectedStatusFilter = option.value"
           >
-            All rooms
-            <span class="examlist-filter-count">{{ exams.length }}</span>
-          </button>
-          <button
-            v-for="room in manageableRooms"
-            :key="room.id"
-            type="button"
-            class="examlist-filter"
-            :class="{ active: selectedRoomFilter === String(room.id) }"
-            :aria-pressed="selectedRoomFilter === String(room.id)"
-            @click="selectedRoomFilter = String(room.id)"
-          >
-            {{ room.name }}
-            <span class="examlist-filter-count">{{ examCountForRoom(room.id) }}</span>
+            {{ option.label }}
+            <span class="examlist-filter-count">{{ examStatusCounts[option.value] }}</span>
           </button>
         </div>
       </div>
@@ -94,11 +105,11 @@
            having no exams at all, so it gets its own way out. -->
       <div v-if="filteredExams.length === 0" class="examlist-state">
         <span class="examlist-state-icon"><Search :size="22" /></span>
-        <strong>{{ examSearch ? 'No exams match' : `No exams in ${selectedRoomName}` }}</strong>
+        <strong>{{ examSearch || selectedStatusFilter ? 'No exams match' : `No exams in ${selectedRoomName}` }}</strong>
         <p>
           {{
-            examSearch
-              ? 'Try a different search or room.'
+            examSearch || selectedStatusFilter
+              ? 'Try a different search, status or room.'
               : 'This room has no exams assigned yet. Assign one by editing an exam, or switch back to all rooms.'
           }}
         </p>
@@ -112,11 +123,31 @@
           <table class="examlist-table">
             <thead>
               <tr>
-                <th scope="col">Exam</th>
-                <th scope="col" class="is-number">Questions</th>
-                <th scope="col" class="is-number">Minutes</th>
+                <th scope="col" :aria-sort="examSortAria('title')">
+                  <button type="button" class="examlist-sort-btn" @click="toggleExamSort('title')">
+                    Exam
+                    <span class="examlist-sort-arrow" aria-hidden="true">{{ examSortArrow('title') }}</span>
+                  </button>
+                </th>
+                <th scope="col" class="is-number" :aria-sort="examSortAria('items')">
+                  <button type="button" class="examlist-sort-btn" @click="toggleExamSort('items')">
+                    Questions
+                    <span class="examlist-sort-arrow" aria-hidden="true">{{ examSortArrow('items') }}</span>
+                  </button>
+                </th>
+                <th scope="col" class="is-number" :aria-sort="examSortAria('minutes')">
+                  <button type="button" class="examlist-sort-btn" @click="toggleExamSort('minutes')">
+                    Minutes
+                    <span class="examlist-sort-arrow" aria-hidden="true">{{ examSortArrow('minutes') }}</span>
+                  </button>
+                </th>
                 <th scope="col">Rooms</th>
-                <th scope="col">Schedule</th>
+                <th scope="col" :aria-sort="examSortAria('schedule')">
+                  <button type="button" class="examlist-sort-btn" @click="toggleExamSort('schedule')">
+                    Schedule
+                    <span class="examlist-sort-arrow" aria-hidden="true">{{ examSortArrow('schedule') }}</span>
+                  </button>
+                </th>
                 <th scope="col" class="is-actions">Actions</th>
               </tr>
             </thead>
@@ -141,10 +172,12 @@
                 <td class="is-number"><strong class="examrow-number">{{ exam.total_items }}</strong></td>
                 <td class="is-number">{{ exam.duration_minutes }}</td>
                 <td>
-                  <!-- Each chip opens that room's page directly. -->
+                  <!-- Each chip opens that room's page directly. Two show; the
+                       rest wait behind "+N more", or a whole year level's six
+                       sections made every row three lines taller. -->
                   <div v-if="exam.assigned_rooms?.length > 0 || exam.archived_rooms?.length > 0" class="examrow-rooms">
                     <router-link
-                      v-for="room in exam.assigned_rooms"
+                      v-for="room in roomChips(exam).assigned"
                       :key="`room-${room.id}`"
                       class="assignment-chip"
                       :to="{ name: 'dashboard-room-management', query: { room: room.id } }"
@@ -154,7 +187,7 @@
                       {{ room.name }}
                     </router-link>
                     <span
-                      v-for="room in exam.archived_rooms"
+                      v-for="room in roomChips(exam).archived"
                       :key="`archived-room-${room.id}`"
                       class="assignment-chip is-archived"
                       title="Archived from this room"
@@ -162,6 +195,15 @@
                       <Archive :size="12" />
                       {{ room.name }}
                     </span>
+                    <button
+                      v-if="roomChips(exam).hidden > 0 || expandedRoomExams.has(exam.id)"
+                      type="button"
+                      class="assignment-chip examrow-rooms-more"
+                      :aria-expanded="expandedRoomExams.has(exam.id)"
+                      @click="toggleRoomChips(exam.id)"
+                    >
+                      {{ expandedRoomExams.has(exam.id) ? 'Show less' : `+${roomChips(exam).hidden} more` }}
+                    </button>
                   </div>
                   <span v-else class="examrow-muted">Not assigned</span>
                 </td>
@@ -747,6 +789,7 @@ import { useRoute } from 'vue-router'
 import {
   AlertCircle,
   Archive,
+  ArrowUpDown,
   CheckCircle2,
   ChevronDown,
   CircleDot,
@@ -772,12 +815,97 @@ import { vScrollHint } from '@/utils/scrollHint'
 import { useAuthStore } from '@/store/auth.store'
 import { isOwnedBy, ownersOf, overseesAll } from '@/utils/owners'
 import OwnerFilter from '../shared/OwnerFilter.vue'
+import RoomFilter from '../shared/RoomFilter.vue'
 
 const route = useRoute()
 const highlightedExamId = ref(null)
 
+/*
+ * How the list is narrowed and ordered, kept on this device so the page
+ * opens the way it was left. Only conveniences: an unreadable or missing
+ * entry just means the defaults.
+ */
+const EXAM_LIST_STORAGE_KEY = 'blis-exam-list'
+
+function readSavedExamList() {
+  try {
+    return JSON.parse(localStorage.getItem(EXAM_LIST_STORAGE_KEY) ?? '{}') ?? {}
+  } catch {
+    return {}
+  }
+}
+
+const savedExamList = readSavedExamList()
+
 /** '' = All rooms; otherwise a room id, held as a string. */
-const selectedRoomFilter = ref('')
+const selectedRoomFilter = ref(typeof savedExamList.room === 'string' ? savedExamList.room : '')
+
+// Where an exam is in its window (examWindow() below), or that it is in no room.
+const EXAM_STATUS_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'open', label: 'Open now' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'ended', label: 'Ended' },
+  { value: 'unassigned', label: 'Not in a room' },
+]
+const selectedStatusFilter = ref(
+  EXAM_STATUS_FILTERS.some((option) => option.value === savedExamList.status) ? savedExamList.status : '',
+)
+
+// Newest created first until another order is picked: the order exams come
+// from the server. A heading sorts by its column; the menu offers every
+// order, direction included, and is the only way to sort on a phone.
+const EXAM_SORT_CHOICES = [
+  { value: 'created:desc', label: 'Newest first' },
+  { value: 'created:asc', label: 'Oldest first' },
+  { value: 'schedule:desc', label: 'Schedule: latest first' },
+  { value: 'schedule:asc', label: 'Schedule: earliest first' },
+  { value: 'title:asc', label: 'Name: A to Z' },
+  { value: 'title:desc', label: 'Name: Z to A' },
+  { value: 'items:desc', label: 'Most questions' },
+  { value: 'items:asc', label: 'Fewest questions' },
+  { value: 'minutes:desc', label: 'Longest' },
+  { value: 'minutes:asc', label: 'Shortest' },
+]
+// A heading's first click: names A to Z, the rest largest or latest first.
+const EXAM_SORT_FIRST_DIRECTION = { title: 'asc', items: 'desc', minutes: 'desc', schedule: 'desc', created: 'desc' }
+const examSortChoice = ref(
+  EXAM_SORT_CHOICES.some((option) => option.value === savedExamList.sort) ? savedExamList.sort : 'created:desc',
+)
+const examSort = computed(() => {
+  const [key, direction] = examSortChoice.value.split(':')
+  return { key, direction }
+})
+
+function toggleExamSort(key) {
+  const { key: current, direction } = examSort.value
+  const next = current === key
+    ? (direction === 'asc' ? 'desc' : 'asc')
+    : EXAM_SORT_FIRST_DIRECTION[key]
+  examSortChoice.value = `${key}:${next}`
+}
+
+function examSortArrow(key) {
+  if (examSort.value.key !== key) return ''
+  return examSort.value.direction === 'asc' ? '▲' : '▼'
+}
+
+function examSortAria(key) {
+  if (examSort.value.key !== key) return 'none'
+  return examSort.value.direction === 'asc' ? 'ascending' : 'descending'
+}
+
+watch([selectedRoomFilter, selectedStatusFilter, examSortChoice], () => {
+  try {
+    localStorage.setItem(EXAM_LIST_STORAGE_KEY, JSON.stringify({
+      room: selectedRoomFilter.value,
+      status: selectedStatusFilter.value,
+      sort: examSortChoice.value,
+    }))
+  } catch {
+    // Storage refused (a private window): the choices still apply until the page is left.
+  }
+})
 
 // An administrator's list holds every teacher's exams.
 const seesEveryTeacher = computed(() => overseesAll(useAuthStore().user))
@@ -872,33 +1000,131 @@ const selectedRoomName = computed(() => {
  * reading the Rooms page uses when it files those under Archived.
  * An exam in several rooms shows up under each of them.
  */
-const filteredExams = computed(() => {
+function matchesExamFilters(exam, { ignoreRoom = false } = {}) {
+  if (!isOwnedBy(exam, selectedOwnerFilter.value)) return false
+
+  if (!ignoreRoom && selectedRoomFilter.value !== ''
+    && !(exam.assigned_rooms ?? []).some((room) => String(room.id) === selectedRoomFilter.value)) {
+    return false
+  }
+
   const needle = examSearch.value.toLowerCase()
+  if (!needle) return true
 
-  return exams.value.filter((exam) => {
-    if (!isOwnedBy(exam, selectedOwnerFilter.value)) return false
+  return [exam.title, exam.subject, examQuestionBankSubject(exam)]
+    .some((value) => String(value ?? '').toLowerCase().includes(needle))
+}
 
-    if (selectedRoomFilter.value !== ''
-      && !(exam.assigned_rooms ?? []).some((room) => String(room.id) === selectedRoomFilter.value)) {
-      return false
-    }
+function examStatusMatches(exam, status) {
+  if (status === '') return true
+  if (status === 'unassigned') return (exam.assigned_rooms ?? []).length === 0
+  return examWindow(exam).tone === status
+}
 
-    if (!needle) return true
+// Each status chip counts what choosing it would show, under the other filters.
+const examStatusCounts = computed(() => {
+  const narrowed = exams.value.filter(matchesExamFilters)
 
-    return [exam.title, exam.subject, examQuestionBankSubject(exam)]
-      .some((value) => String(value ?? '').toLowerCase().includes(needle))
-  })
+  return Object.fromEntries(EXAM_STATUS_FILTERS.map(({ value }) => [
+    value,
+    narrowed.filter((exam) => examStatusMatches(exam, value)).length,
+  ]))
 })
 
-function examCountForRoom(roomId) {
-  return exams.value.filter((exam) => (
-    (exam.assigned_rooms ?? []).some((room) => String(room.id) === String(roomId))
-  )).length
+const timeOf = (value) => parseDateTime(value)?.getTime() ?? null
+
+// What each order compares; null (an exam with no schedule) always goes last.
+const EXAM_SORT_VALUES = {
+  created: (exam) => timeOf(exam.created_at),
+  schedule: (exam) => timeOf(exam.schedule_start_at ?? exam.scheduled_at),
+  title: (exam) => String(exam.title ?? ''),
+  items: (exam) => Number(exam.total_items ?? 0),
+  minutes: (exam) => Number(exam.duration_minutes ?? 0),
+}
+
+function compareExams(left, right) {
+  const { key, direction } = examSort.value
+  const valueOf = EXAM_SORT_VALUES[key]
+  const a = valueOf(left)
+  const b = valueOf(right)
+
+  if (a === null || b === null) {
+    if (a !== b) return a === null ? 1 : -1
+  } else {
+    const order = typeof a === 'string'
+      ? a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+      : a - b
+    if (order !== 0) return direction === 'asc' ? order : -order
+  }
+
+  // Equal: newest created first, as the list is by default.
+  return (timeOf(right.created_at) ?? 0) - (timeOf(left.created_at) ?? 0) || right.id - left.id
+}
+
+const filteredExams = computed(() => (
+  exams.value
+    .filter((exam) => matchesExamFilters(exam) && examStatusMatches(exam, selectedStatusFilter.value))
+    .sort(compareExams)
+))
+
+// The room menu: the chosen teacher's rooms (all of them for "All teachers"),
+// each counting what picking it would show under the other filters.
+const examsForRoomCounts = computed(() => (
+  exams.value.filter((exam) => (
+    matchesExamFilters(exam, { ignoreRoom: true }) && examStatusMatches(exam, selectedStatusFilter.value)
+  ))
+))
+
+const roomFilterRooms = computed(() => {
+  const counts = new Map()
+  for (const exam of examsForRoomCounts.value) {
+    for (const room of exam.assigned_rooms ?? []) counts.set(String(room.id), (counts.get(String(room.id)) ?? 0) + 1)
+  }
+
+  return manageableRooms.value
+    .filter((room) => selectedOwnerFilter.value === '' || String(room.ownerId) === selectedOwnerFilter.value
+      || String(room.id) === selectedRoomFilter.value)
+    .map((room) => ({ ...room, count: counts.get(String(room.id)) ?? 0 }))
+})
+
+const roomFilterTotal = computed(() => examsForRoomCounts.value.length)
+
+// The table's Rooms column: two chips, the filtered room among them, and
+// "+N more" for the rest, which opens them in place.
+const ROOM_CHIPS_SHOWN = 2
+const expandedRoomExams = ref(new Set())
+
+function toggleRoomChips(examId) {
+  const next = new Set(expandedRoomExams.value)
+  if (next.has(examId)) next.delete(examId)
+  else next.add(examId)
+  expandedRoomExams.value = next
+}
+
+function roomChips(exam) {
+  const picked = selectedRoomFilter.value
+  const assigned = [...(exam.assigned_rooms ?? [])]
+    .sort((left, right) => (String(right.id) === picked) - (String(left.id) === picked))
+  const archived = exam.archived_rooms ?? []
+
+  if (expandedRoomExams.value.has(exam.id)) return { assigned, archived, hidden: 0 }
+
+  const shownAssigned = assigned.slice(0, ROOM_CHIPS_SHOWN)
+  const shownArchived = archived.slice(0, ROOM_CHIPS_SHOWN - shownAssigned.length)
+  // One left over is shown rather than hidden behind "+1 more".
+  if (assigned.length + archived.length === ROOM_CHIPS_SHOWN + 1) return { assigned, archived, hidden: 0 }
+
+  return {
+    assigned: shownAssigned,
+    archived: shownArchived,
+    hidden: assigned.length + archived.length - shownAssigned.length - shownArchived.length,
+  }
 }
 
 function clearExamFilters() {
   examSearch.value = ''
   selectedRoomFilter.value = ''
+  selectedStatusFilter.value = ''
 }
 
 /*
@@ -994,6 +1220,7 @@ watch(
     // would hide it gets cleared -- otherwise the link lands on an empty
     // list with no indication of why.
     selectedRoomFilter.value = ''
+    selectedStatusFilter.value = ''
     examSearch.value = ''
 
     nextTick(() => {
