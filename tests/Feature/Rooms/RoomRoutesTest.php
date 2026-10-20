@@ -88,7 +88,7 @@ class RoomRoutesTest extends TestCase
         $response = $this->get("/api/rooms/{$this->room->id}/export-grades?format=pdf")->assertOk();
 
         $this->assertStringStartsWith('%PDF', $response->getContent());
-        $this->assertStringContainsString('room4a-grades-', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString($this->room->name . ' - Gradebook - ', $response->headers->get('Content-Disposition'));
     }
 
     public function test_a_code_that_matches_no_room_is_not_found(): void

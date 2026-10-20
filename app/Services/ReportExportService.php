@@ -9,9 +9,8 @@ use App\Models\ExamAttemptQuestion;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Support\Reports\ReportOutput;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 
 class ReportExportService
 {
@@ -148,8 +147,8 @@ class ReportExportService
             'Student Name',
             'Student ID',
             'Email',
-            'Completed Exams',
-            'Average Score %',
+            'Exams Taken',
+            'Average %',
         ];
 
         foreach (($gradebook['exams'] ?? []) as $exam) {
@@ -166,12 +165,14 @@ class ReportExportService
                 (string) ($student['student_id'] ?? ''),
                 (string) ($student['email'] ?? ''),
                 (int) ($summary['completed_exams'] ?? 0),
-                is_null($summary['average_score_percent'] ?? null) ? 'N/A' : (float) $summary['average_score_percent'],
+                is_null($summary['average_score_percent'] ?? null) ? '' : (float) $summary['average_score_percent'],
             ];
 
             foreach (($row['exam_entries'] ?? []) as $entry) {
+                // Blank, not "N/A": a column of numbers stays numbers when
+                // it is opened or imported somewhere else.
                 $line[] = is_null($entry['score_percent'] ?? null)
-                    ? 'N/A'
+                    ? ''
                     : (float) $entry['score_percent'];
             }
 
@@ -184,8 +185,18 @@ class ReportExportService
         ];
     }
 
+    /** The pass mark every report reads a score against. */
+    public const PASSING_SCORE = DashboardAnalyticsService::PASSING_SCORE;
+
     /**
-     * Build session-level results using the latest attempt per student.
+     * Class results for one exam in one room: each current student's latest
+     * sitting, and how the class did on each question.
+     *
+     * Questions are columns by which question they are, not by the position
+     * a student met them in: with shuffling on, a student's item 1 is a
+     * different question for everyone, and counting by position mixed them.
+     * The columns follow the answer key's numbering (examQuestionIds()), so
+     * Q5 here is item 5 there; a question a student never got is "Not Given".
      *
      * @return array<string, mixed>
      */
@@ -209,10 +220,7 @@ class ReportExportService
                 fn ($query) => $query->whereRaw('1 = 0')
             )
             ->with([
-                'student:id,name,email,student_id',
                 'attemptQuestions:id,exam_attempt_id,question_bank_question_id,item_number',
-                'attemptQuestions.question:id,question_text,question_type,answer_label,answer_text',
-                'attemptQuestions.question.options:id,question_bank_question_id,option_label,option_text,is_correct',
                 'answers:id,exam_attempt_id,question_bank_question_id,question_bank_option_id,answer_text,is_correct,answered_at',
                 'answers.selectedOption:id,option_label,option_text,is_correct',
             ])
@@ -220,152 +228,110 @@ class ReportExportService
             ->orderByDesc('id')
             ->get();
 
-        $latestAttemptsByStudentId = $attempts
-            ->groupBy('user_id')
-            ->map(fn (Collection $group) => $group->first());
+        $attemptsByStudentId = $attempts->groupBy('user_id');
+        $latestAttemptsByStudentId = $attemptsByStudentId->map(fn (Collection $group) => $group->first());
 
-        $maxItemsFromAttempts = $latestAttemptsByStudentId
-            ->map(function (ExamAttempt $attempt): int {
-                $maxItemNumber = (int) ($attempt->attemptQuestions->max('item_number') ?? 0);
-
-                return max((int) $attempt->total_items, $maxItemNumber);
-            })
-            ->max() ?? 0;
-
-        $maxItems = max(1, (int) $exam->total_items, (int) $maxItemsFromAttempts);
-
-        $itemStats = [];
-        for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-            $itemStats[$itemNumber] = [
-                'started_count' => 0,
-                'answered_count' => 0,
-                'correct_count' => 0,
-            ];
+        // The answer key's order, then anything a student was given that is no
+        // longer in the exam's sets (a set changed after they sat it).
+        $columnIds = $this->examQuestionIds($exam);
+        foreach ($latestAttemptsByStudentId as $attempt) {
+            foreach ($attempt->attemptQuestions->sortBy('item_number') as $attemptQuestion) {
+                $questionId = (int) $attemptQuestion->question_bank_question_id;
+                if (!in_array($questionId, $columnIds, true)) {
+                    $columnIds[] = $questionId;
+                }
+            }
         }
 
-        $itemQuestionTexts = [];
+        $columnByQuestionId = [];
+        foreach ($columnIds as $index => $questionId) {
+            $columnByQuestionId[$questionId] = $index + 1;
+        }
+
+        $questions = QuestionBankQuestion::query()
+            ->whereIn('id', $columnIds === [] ? [0] : $columnIds)
+            ->with('options:id,question_bank_question_id,option_label,option_text,is_correct')
+            ->get(['id', 'question_text', 'question_type', 'answer_label', 'answer_text'])
+            ->keyBy('id');
+
+        $stats = [];
+        foreach ($columnIds as $index => $questionId) {
+            $stats[$index + 1] = ['given' => 0, 'answered' => 0, 'correct' => 0, 'wrong_choices' => []];
+        }
+
         $shortAnswerDump = [];
 
         $rows = $students->map(function (User $student) use (
+            $attemptsByStudentId,
             $latestAttemptsByStudentId,
-            $maxItems,
-            &$itemStats,
-            &$itemQuestionTexts,
+            $columnIds,
+            $columnByQuestionId,
+            $questions,
+            &$stats,
             &$shortAnswerDump
         ): array {
             /** @var ExamAttempt|null $attempt */
             $attempt = $latestAttemptsByStudentId->get((int) $student->id);
-            $itemPayloadByNumber = [];
+            $labels = [];
+            foreach ($columnIds as $index => $questionId) {
+                $labels[$index + 1] = $attempt ? 'Not Given' : '';
+            }
 
             if ($attempt) {
                 $answersByQuestionId = $attempt->answers->keyBy('question_bank_question_id');
 
-                foreach ($attempt->attemptQuestions->sortBy('item_number')->values() as $attemptQuestion) {
-                    /** @var ExamAttemptQuestion $attemptQuestion */
-                    $itemNumber = (int) $attemptQuestion->item_number;
-                    $question = $attemptQuestion->question;
+                foreach ($attempt->attemptQuestions as $attemptQuestion) {
                     $questionId = (int) $attemptQuestion->question_bank_question_id;
+                    $column = $columnByQuestionId[$questionId] ?? null;
+                    if ($column === null) {
+                        continue;
+                    }
 
                     /** @var ExamAttemptAnswer|null $answer */
                     $answer = $answersByQuestionId->get($questionId);
-                    $isAnswered = !is_null($answer);
+                    $isCorrect = $answer && !is_null($answer->is_correct) ? (bool) $answer->is_correct : null;
 
-                    $isCorrect = null;
-                    if ($isAnswered && !is_null($answer?->is_correct)) {
-                        $isCorrect = (bool) $answer->is_correct;
+                    $stats[$column]['given']++;
+
+                    if (!$answer) {
+                        $labels[$column] = 'No Answer';
+                        continue;
                     }
 
+                    $stats[$column]['answered']++;
+                    $labels[$column] = match ($isCorrect) {
+                        true => 'Correct',
+                        false => 'Wrong',
+                        null => 'Answered',
+                    };
+
+                    if ($isCorrect === true) {
+                        $stats[$column]['correct']++;
+                    } elseif ($isCorrect === false && $answer->selectedOption) {
+                        $choice = $this->formatResponseText($answer);
+                        $stats[$column]['wrong_choices'][$choice] = ($stats[$column]['wrong_choices'][$choice] ?? 0) + 1;
+                    }
+
+                    $question = $questions->get($questionId);
                     $responseText = $this->formatResponseText($answer);
-
-                    $questionText = trim((string) ($question?->question_text ?? ''));
-                    if ($questionText !== '' && !array_key_exists($itemNumber, $itemQuestionTexts)) {
-                        $itemQuestionTexts[$itemNumber] = $questionText;
-                    }
-
-                    if (
-                        $question?->question_type === QuestionBankQuestion::TYPE_OPEN_ENDED
-                        && $responseText !== null
-                    ) {
-                        if (!array_key_exists($itemNumber, $shortAnswerDump)) {
-                            $shortAnswerDump[$itemNumber] = [
-                                'item_number' => $itemNumber,
-                                'question_text' => $questionText !== '' ? $questionText : ('Item ' . $itemNumber),
-                                'responses' => [],
-                            ];
-                        }
-
-                        $shortAnswerDump[$itemNumber]['responses'][] = [
+                    if ($question?->question_type === QuestionBankQuestion::TYPE_OPEN_ENDED && $responseText !== null) {
+                        $shortAnswerDump[$column] ??= [
+                            'item_number' => $column,
+                            'question_text' => trim((string) $question->question_text) ?: ('Item ' . $column),
+                            'responses' => [],
+                        ];
+                        $shortAnswerDump[$column]['responses'][] = [
                             'student_name' => $student->name,
                             'student_id' => $student->student_id,
                             'answer_text' => $responseText,
                             'is_correct' => $isCorrect,
                         ];
                     }
-
-                    $statusLabel = 'No Answer';
-                    if ($isAnswered && $isCorrect === true) {
-                        $statusLabel = 'Correct';
-                    } elseif ($isAnswered && $isCorrect === false) {
-                        $statusLabel = 'Wrong';
-                    } elseif ($isAnswered) {
-                        $statusLabel = 'Answered';
-                    }
-
-                    $itemPayloadByNumber[$itemNumber] = [
-                        'item_number' => $itemNumber,
-                        'question_id' => $questionId,
-                        'question_type' => $question?->question_type,
-                        'question_text' => $questionText !== '' ? $questionText : null,
-                        'answered' => $isAnswered,
-                        'is_correct' => $isCorrect,
-                        'response' => $responseText,
-                        'status_label' => $statusLabel,
-                    ];
-                }
-
-                $attemptItemCap = max(
-                    (int) $attempt->total_items,
-                    empty($itemPayloadByNumber) ? 0 : (int) max(array_keys($itemPayloadByNumber)),
-                );
-
-                for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-                    if ($itemNumber > $attemptItemCap) {
-                        continue;
-                    }
-
-                    $itemStats[$itemNumber]['started_count']++;
-
-                    $itemData = $itemPayloadByNumber[$itemNumber] ?? null;
-                    if (!($itemData['answered'] ?? false)) {
-                        continue;
-                    }
-
-                    $itemStats[$itemNumber]['answered_count']++;
-
-                    if (($itemData['is_correct'] ?? null) === true) {
-                        $itemStats[$itemNumber]['correct_count']++;
-                    }
                 }
             }
 
-            $items = [];
-            $itemStatusLabels = [];
-
-            for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-                $item = $itemPayloadByNumber[$itemNumber] ?? [
-                    'item_number' => $itemNumber,
-                    'question_id' => null,
-                    'question_type' => null,
-                    'question_text' => null,
-                    'answered' => false,
-                    'is_correct' => null,
-                    'response' => null,
-                    'status_label' => 'No Answer',
-                ];
-
-                $items[] = $item;
-                $itemStatusLabels[$itemNumber] = (string) $item['status_label'];
-            }
+            $submitted = $attempt?->status === ExamAttempt::STATUS_SUBMITTED;
+            $score = $attempt && !is_null($attempt->score_percent) ? (float) $attempt->score_percent : null;
 
             return [
                 'student' => [
@@ -381,36 +347,46 @@ class ReportExportService
                         'total_items' => (int) $attempt->total_items,
                         'answered_count' => (int) $attempt->answered_count,
                         'correct_answers' => (int) $attempt->correct_answers,
-                        'score_percent' => is_null($attempt->score_percent) ? null : (float) $attempt->score_percent,
+                        'score_percent' => $score,
+                        'passed' => $submitted && $score !== null ? $score >= self::PASSING_SCORE : null,
+                        'sitting' => (int) $attemptsByStudentId->get((int) $student->id)->count(),
                         'started_at' => $attempt->started_at,
                         'submitted_at' => $attempt->submitted_at,
                     ]
                     : null,
-                'items' => $items,
-                'item_status_labels' => $itemStatusLabels,
+                'item_status_labels' => $labels,
             ];
         })->values()->all();
 
         $itemSummary = [];
-        for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-            $startedCount = (int) $itemStats[$itemNumber]['started_count'];
-            $answeredCount = (int) $itemStats[$itemNumber]['answered_count'];
-            $correctCount = (int) $itemStats[$itemNumber]['correct_count'];
+        foreach ($columnIds as $index => $questionId) {
+            $column = $index + 1;
+            $question = $questions->get($questionId);
+            $given = (int) $stats[$column]['given'];
+            $answered = (int) $stats[$column]['answered'];
+            $correct = (int) $stats[$column]['correct'];
 
-            $correctPercent = $answeredCount > 0
-                ? round(($correctCount / $answeredCount) * 100, 2)
-                : null;
+            // Of everyone who was given the question, as in their score and the
+            // Dashboard: a blank is a miss.
+            $correctPercent = $given > 0 ? round(($correct / $given) * 100, 2) : null;
+
+            $wrongChoices = $stats[$column]['wrong_choices'];
+            arsort($wrongChoices);
+            $commonWrong = array_key_first($wrongChoices);
 
             $itemSummary[] = [
-                'item_number' => $itemNumber,
-                'question_text' => $itemQuestionTexts[$itemNumber] ?? null,
-                'started_count' => $startedCount,
-                'answered_count' => $answeredCount,
-                'correct_count' => $correctCount,
-                'answered_percent' => $startedCount > 0
-                    ? round(($answeredCount / $startedCount) * 100, 2)
-                    : 0.0,
+                'item_number' => $column,
+                'question_id' => (int) $questionId,
+                'question_text' => $question ? trim((string) $question->question_text) : null,
+                'correct_answer' => $question ? $this->resolveCorrectAnswer($question)['display'] : null,
+                'started_count' => $given,
+                'answered_count' => $answered,
+                'correct_count' => $correct,
+                'answered_percent' => $given > 0 ? round(($answered / $given) * 100, 2) : 0.0,
                 'correct_percent' => $correctPercent,
+                'difficulty' => self::difficultyLabel($correctPercent),
+                'common_wrong_answer' => $commonWrong,
+                'common_wrong_count' => $commonWrong === null ? 0 : (int) $wrongChoices[$commonWrong],
             ];
         }
 
@@ -424,17 +400,8 @@ class ReportExportService
             ->filter(fn (array $item) => !is_null($item['correct_percent']))
             ->values();
 
-        $hardestItems = $rankableItems
-            ->sortBy(fn (array $item) => (float) $item['correct_percent'])
-            ->take(5)
-            ->values()
-            ->all();
-
-        $easiestItems = $rankableItems
-            ->sortByDesc(fn (array $item) => (float) $item['correct_percent'])
-            ->take(5)
-            ->values()
-            ->all();
+        $submittedRows = collect($rows)->filter(fn (array $row) => ($row['attempt']['status'] ?? null) === ExamAttempt::STATUS_SUBMITTED);
+        $passedCount = $submittedRows->filter(fn (array $row) => ($row['attempt']['passed'] ?? false) === true)->count();
 
         ksort($shortAnswerDump);
 
@@ -446,6 +413,7 @@ class ReportExportService
                 'total_items' => (int) $exam->total_items,
                 'duration_minutes' => (int) $exam->duration_minutes,
                 'delivery_mode' => Exam::DELIVERY_MODE_OPEN_NAVIGATION,
+                'shuffle_questions' => (bool) $exam->shuffle_questions,
             ],
             'room' => [
                 'id' => (int) $room->id,
@@ -455,39 +423,59 @@ class ReportExportService
             'summary' => [
                 'students_total' => (int) $students->count(),
                 'attempts_started' => (int) collect($rows)->filter(fn (array $row) => !is_null($row['attempt']))->count(),
-                'attempts_submitted' => (int) collect($rows)->filter(fn (array $row) => ($row['attempt']['status'] ?? null) === ExamAttempt::STATUS_SUBMITTED)->count(),
+                'attempts_submitted' => (int) $submittedRows->count(),
+                'passed_count' => (int) $passedCount,
+                'pass_rate_percent' => $submittedRows->isNotEmpty() ? round(($passedCount / $submittedRows->count()) * 100, 2) : null,
+                'passing_score' => self::PASSING_SCORE,
                 'average_score_percent' => $scoreValues->isNotEmpty() ? round((float) $scoreValues->avg(), 2) : null,
                 'highest_score_percent' => $scoreValues->isNotEmpty() ? (float) $scoreValues->max() : null,
                 'lowest_score_percent' => $scoreValues->isNotEmpty() ? (float) $scoreValues->min() : null,
             ],
             'rows' => $rows,
-            'max_items' => $maxItems,
+            'max_items' => count($columnIds),
             'item_summary' => $itemSummary,
-            'hardest_items' => $hardestItems,
-            'easiest_items' => $easiestItems,
+            'hardest_items' => $rankableItems->sortBy(fn (array $item) => (float) $item['correct_percent'])->take(5)->values()->all(),
+            'easiest_items' => $rankableItems->sortByDesc(fn (array $item) => (float) $item['correct_percent'])->take(5)->values()->all(),
             'short_answer_dump' => array_values($shortAnswerDump),
             'generated_at' => now(),
         ];
     }
 
     /**
+     * Item difficulty from the share of the class that got it right, in the
+     * bands Philippine item analysis commonly uses (Kubiszyn and Borich):
+     * 76% and up is easy, 25% and below is hard.
+     */
+    public static function difficultyLabel(?float $correctPercent): ?string
+    {
+        return match (true) {
+            $correctPercent === null => null,
+            $correctPercent >= 76 => 'Easy',
+            $correctPercent <= 25 => 'Hard',
+            default => 'Average',
+        };
+    }
+
+    /** What a student's mark on one question reads as in an export. */
+    public const STATUS_TEXT = [
+        'Correct' => 'Correct',
+        'Wrong' => 'Wrong',
+        'No Answer' => 'No answer',
+        'Answered' => 'Not marked yet',
+        'Not Given' => '',
+        '' => '',
+    ];
+
+    /**
+     * The Class Results columns, one row per student, written out as text for
+     * the CSV (the Excel file formats the same rows itself).
+     *
      * @return array{headers: array<int, string>, rows: array<int, array<int, mixed>>}
      */
     public function buildCompleteResultsTable(array $session): array
     {
-        $maxItems = (int) ($session['max_items'] ?? 1);
-        $headers = [
-            'Student Name',
-            'Student ID',
-            'Email',
-            'Attempt ID',
-            'Attempt Status',
-            'Answered Count',
-            'Correct Answers',
-            'Score %',
-            'Started At',
-            'Submitted At',
-        ];
+        $maxItems = (int) ($session['max_items'] ?? 0);
+        $headers = self::resultsHeaders();
 
         for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
             $headers[] = 'Q' . $itemNumber;
@@ -496,27 +484,11 @@ class ReportExportService
         $rows = [];
 
         foreach (($session['rows'] ?? []) as $row) {
-            $attempt = $row['attempt'] ?? null;
-            $student = $row['student'] ?? [];
-            $line = [
-                (string) ($student['name'] ?? ''),
-                (string) ($student['student_id'] ?? ''),
-                (string) ($student['email'] ?? ''),
-                $attempt['id'] ?? '',
-                (string) ($attempt['status'] ?? 'not_started'),
-                $attempt['answered_count'] ?? 0,
-                $attempt['correct_answers'] ?? 0,
-                is_null($attempt['score_percent'] ?? null) ? '' : (float) $attempt['score_percent'],
-                isset($attempt['started_at']) && $attempt['started_at']
-                    ? optional($attempt['started_at'])->format('Y-m-d H:i:s')
-                    : '',
-                isset($attempt['submitted_at']) && $attempt['submitted_at']
-                    ? optional($attempt['submitted_at'])->format('Y-m-d H:i:s')
-                    : '',
-            ];
+            $line = $this->resultsLine($row);
+            $line[9] = ReportOutput::local($row['attempt']['submitted_at'] ?? null)?->format('Y-m-d H:i') ?? '';
 
             for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-                $line[] = (string) (($row['item_status_labels'][$itemNumber] ?? 'No Answer'));
+                $line[] = self::STATUS_TEXT[$row['item_status_labels'][$itemNumber] ?? ''] ?? '';
             }
 
             $rows[] = $line;
@@ -528,10 +500,55 @@ class ReportExportService
         ];
     }
 
+    /** @return array<int, string> */
+    public static function resultsHeaders(): array
+    {
+        return ['Student Name', 'Student ID', 'Email', 'Status', 'Score %', 'Correct', 'Items', 'Result', 'Sitting', 'Submitted'];
+    }
+
     /**
-     * @return array<int, array<string, mixed>>
+     * One student's leading cells, in resultsHeaders() order; Submitted is
+     * left as the moment itself for the caller to write.
+     *
+     * @return array<int, mixed>
      */
-    public function buildAnswerKey(Exam $exam): array
+    public function resultsLine(array $row): array
+    {
+        $attempt = $row['attempt'] ?? null;
+        $student = $row['student'] ?? [];
+        $submitted = ($attempt['status'] ?? null) === ExamAttempt::STATUS_SUBMITTED;
+
+        return [
+            (string) ($student['name'] ?? ''),
+            (string) ($student['student_id'] ?? ''),
+            (string) ($student['email'] ?? ''),
+            match (true) {
+                $attempt === null => 'Not taken',
+                $submitted => 'Submitted',
+                default => 'In progress',
+            },
+            $submitted && isset($attempt['score_percent']) ? round((float) $attempt['score_percent'], 2) : '',
+            $submitted ? (int) ($attempt['correct_answers'] ?? 0) : '',
+            $attempt ? (int) ($attempt['total_items'] ?? 0) : '',
+            match ($attempt['passed'] ?? null) {
+                true => 'Passed',
+                false => 'Below ' . (int) self::PASSING_SCORE . '%',
+                default => '',
+            },
+            $attempt ? (int) ($attempt['sitting'] ?? 1) : '',
+            $attempt['submitted_at'] ?? null,
+        ];
+    }
+
+    /**
+     * The questions an exam can put in front of a student, in the order its
+     * answer key numbers them: its sets in order, each set in its own order.
+     * Without shuffling every student gets the first total_items of these;
+     * with it, each student gets total_items drawn from all of them.
+     *
+     * @return array<int, int>
+     */
+    public function examQuestionIds(Exam $exam): array
     {
         $questionBankIds = $exam->resolvedQuestionBankIds();
 
@@ -542,8 +559,7 @@ class ReportExportService
         $orderLookup = array_flip($questionBankIds);
         $questions = QuestionBankQuestion::query()
             ->whereIn('question_bank_id', $questionBankIds)
-            ->with('options:id,question_bank_question_id,option_label,option_text,is_correct')
-            ->get()
+            ->get(['id', 'question_bank_id', 'item_number'])
             // Each entry of a multi-key sortBy() compares two questions; a
             // one-argument function here sorted the key out of order.
             ->sortBy([
@@ -553,11 +569,33 @@ class ReportExportService
                 fn (QuestionBankQuestion $a, QuestionBankQuestion $b) => (int) $a->id <=> (int) $b->id,
             ]);
 
-        if ((int) $exam->total_items > 0) {
+        if (!$exam->shuffle_questions && (int) $exam->total_items > 0) {
             $questions = $questions->take((int) $exam->total_items);
         }
 
-        return $questions
+        return $questions->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildAnswerKey(Exam $exam): array
+    {
+        $questionIds = $this->examQuestionIds($exam);
+
+        if ($questionIds === []) {
+            return [];
+        }
+
+        $questions = QuestionBankQuestion::query()
+            ->whereIn('id', $questionIds)
+            ->with('options:id,question_bank_question_id,option_label,option_text,is_correct')
+            ->get()
+            ->keyBy('id');
+
+        return collect($questionIds)
+            ->map(fn (int $id) => $questions->get($id))
+            ->filter()
             ->values()
             ->map(function (QuestionBankQuestion $question, int $index): array {
                 $correctAnswer = $this->resolveCorrectAnswer($question);
@@ -684,17 +722,24 @@ class ReportExportService
         $report = $this->buildAttemptReportData($attempt);
         $showAnswers = !$forStudent || $this->answersShownToStudent($attempt);
 
-        $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
-        $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
-        $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
-        $filename = ($baseName !== '' ? $baseName : 'student-report') . '-attempt-' . (int) $attempt->id . '.pdf';
-
-        $binary = Pdf::loadView('reports.student_report_pdf', [
+        $binary = ReportOutput::pdf('reports.student_report_pdf', [
             'report' => $report,
             'showAnswers' => $showAnswers,
-        ])->setPaper('a4', 'portrait')->output();
+        ])->output();
 
-        return ['report' => $report, 'binary' => $binary, 'filename' => $filename];
+        return ['report' => $report, 'binary' => $binary, 'filename' => $this->studentReportFilename($report)];
+    }
+
+    /** "Dela Cruz, Angelica (202300448) - Cataloging Mock Board Exam - Student Report - 2026-10-20.pdf" */
+    public function studentReportFilename(array $report): string
+    {
+        $studentId = trim((string) ($report['student']['student_id'] ?? ''));
+
+        return ReportOutput::filename([
+            trim((string) ($report['student']['name'] ?? 'Student')) . ($studentId !== '' ? " ({$studentId})" : ''),
+            $report['exam']['title'] ?? null,
+            'Student Report',
+        ], 'pdf');
     }
 
     /** The exam's results setting: "visible" shows a student the correct answers. */
@@ -719,6 +764,18 @@ class ReportExportService
         ]);
 
         $answersByQuestionId = $attempt->answers->keyBy('question_bank_question_id');
+
+        // Which sitting of the exam in this room this is: "Sitting 2 of 2".
+        $sittingIds = ExamAttempt::query()
+            ->where('exam_id', (int) $attempt->exam_id)
+            ->where('room_id', (int) $attempt->room_id)
+            ->where('user_id', (int) $attempt->user_id)
+            ->orderBy('started_at')
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $sittingNumber = array_search((int) $attempt->id, $sittingIds, true);
 
         $totalItems = max(
             (int) $attempt->total_items,
@@ -780,6 +837,10 @@ class ReportExportService
                 'answered_count' => $answeredCount,
                 'correct_answers' => $correctAnswers,
                 'score_percent' => $scorePercent,
+                'passed' => $attempt->status === ExamAttempt::STATUS_SUBMITTED ? $scorePercent >= self::PASSING_SCORE : null,
+                'passing_score' => self::PASSING_SCORE,
+                'sitting' => $sittingNumber === false ? 1 : $sittingNumber + 1,
+                'sittings' => max(1, count($sittingIds)),
                 'started_at' => $attempt->started_at,
                 'submitted_at' => $attempt->submitted_at,
             ],

@@ -71,9 +71,12 @@ class ReportExportRoutesTest extends TestCase
         $response = $this->get($this->base() . '/complete-results.csv')->assertOk();
 
         $this->assertStringContainsString('text/csv', $response->headers->get('Content-Type'));
-        $this->assertStringContainsString('reference-quiz-rpt001-complete-results-', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString($this->room->name . ' - Reference Quiz - Class Results - ', $response->headers->get('Content-Disposition'));
 
-        $lines = array_values(array_filter(explode("\n", $response->streamedContent())));
+        $csv = $response->streamedContent();
+        // The byte-order mark is what makes Excel read the file as UTF-8.
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $csv);
+        $lines = array_values(array_filter(explode("\n", $csv)));
         $this->assertCount(3, $lines, 'A heading row and one row per student.');
         $this->assertStringContainsString('Ana Cruz', $response->streamedContent());
         $this->assertStringContainsString('Ben Diaz', $response->streamedContent());
@@ -81,18 +84,29 @@ class ReportExportRoutesTest extends TestCase
         $this->assertTrue(AuditLog::where('action', 'report.export.complete_results_csv')->exists());
     }
 
-    public function test_complete_results_xlsx_has_a_results_sheet_and_an_item_analysis_sheet(): void
+    public function test_complete_results_xlsx_has_about_scores_and_questions_sheets(): void
     {
         $response = $this->get($this->base() . '/complete-results.xlsx')->assertOk();
 
         $this->assertInstanceOf(BinaryFileResponse::class, $response->baseResponse);
         $book = IOFactory::load($response->baseResponse->getFile()->getPathname());
 
-        $this->assertSame(['Results', 'Item Analysis'], $book->getSheetNames());
-        $this->assertSame('Item', $book->getSheetByName('Item Analysis')->getCell('A1')->getValue());
+        $this->assertSame(['About', 'Scores', 'Questions'], $book->getSheetNames());
+        $this->assertSame('Class Results', $book->getSheetByName('About')->getCell('A1')->getValue());
+
+        $scores = $book->getSheetByName('Scores');
+        $this->assertSame(3, $scores->getHighestDataRow());
+        $this->assertSame('Ana Cruz', $scores->getCell('A2')->getValue());
+        $this->assertSame('Submitted', $scores->getCell('D2')->getValue());
+        // Ana: right, right, wrong.
+        $this->assertSame(['✓', '✓', '✗'], [$scores->getCell('K2')->getValue(), $scores->getCell('L2')->getValue(), $scores->getCell('M2')->getValue()]);
+        // Ben left the second one blank.
+        $this->assertSame('–', $scores->getCell('L3')->getValue());
+
         // Three questions, one row each under the heading.
-        $this->assertSame(4, $book->getSheetByName('Item Analysis')->getHighestDataRow());
-        $this->assertSame(3, $book->getSheetByName('Results')->getHighestDataRow());
+        $questions = $book->getSheetByName('Questions');
+        $this->assertSame(4, $questions->getHighestDataRow());
+        $this->assertSame('Q', $questions->getCell('A1')->getValue());
         $this->assertTrue(AuditLog::where('action', 'report.export.complete_results_xlsx')->exists());
     }
 
@@ -104,7 +118,7 @@ class ReportExportRoutesTest extends TestCase
         $response = $this->get("/api/reports/exams/{$this->exam->id}/rooms/{$emptyRoom->id}/complete-results.xlsx")->assertOk();
 
         $book = IOFactory::load($response->baseResponse->getFile()->getPathname());
-        $this->assertSame(1, $book->getSheetByName('Results')->getHighestDataRow());
+        $this->assertSame(1, $book->getSheetByName('Scores')->getHighestDataRow());
     }
 
     public function test_summary_and_answer_key_come_back_as_pdfs(): void
@@ -125,7 +139,10 @@ class ReportExportRoutesTest extends TestCase
         $response = $this->get($this->base() . "/students/{$student->id}/student-report.pdf")->assertOk();
 
         $this->assertStringStartsWith('%PDF', $response->getContent());
-        $this->assertStringContainsString($student->student_id . '-ana-cruz-attempt-', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString("Ana Cruz ({$student->student_id}) - Reference Quiz - Student Report - ", $response->headers->get('Content-Disposition'));
+        // Only the letters it uses: a whole embedded font made each report
+        // nearly a megabyte.
+        $this->assertLessThan(150_000, strlen($response->getContent()));
         $this->assertTrue(AuditLog::where('action', 'report.export.individual_student_pdf')->exists());
     }
 
@@ -278,6 +295,24 @@ class ReportExportRoutesTest extends TestCase
         $zip->close();
 
         $this->assertTrue(AuditLog::where('action', 'report.export.student_reports_zip')->exists());
+    }
+
+    public function test_the_zip_has_one_report_per_student_from_their_latest_sitting(): void
+    {
+        // Ana sits it again: still one report for her.
+        $this->makeSubmittedAttempt($this->exam, $this->room, $this->students[0], [true, true, true], now()->addHour());
+
+        $response = $this->get($this->base() . '/student-reports.zip')->assertOk();
+
+        $zip = new ZipArchive();
+        $zip->open($response->baseResponse->getFile()->getPathname());
+        $names = collect(range(0, $zip->numFiles - 1))->map(fn ($i) => $zip->getNameIndex($i))->sort()->values()->all();
+        $zip->close();
+
+        $this->assertSame([
+            "Ana Cruz ({$this->students[0]->student_id}).pdf",
+            "Ben Diaz ({$this->students[1]->student_id}).pdf",
+        ], $names);
     }
 
     public function test_the_zip_is_refused_when_nobody_has_sat_the_exam(): void

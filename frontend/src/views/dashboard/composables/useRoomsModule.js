@@ -67,10 +67,12 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const roomExporting = ref(false)
   const roomError = ref('')
   const roomMessage = ref('')
+  // The room's Gradebook: every current student's latest score on every
+  // exam the room has had. What each format is for is said under the field.
   const roomExportFormats = [
-    { value: 'xlsx', label: 'XLSX' },
-    { value: 'pdf', label: 'PDF' },
-    { value: 'csv', label: 'CSV' },
+    { value: 'xlsx', label: 'Excel', hint: 'Formatted, with a sheet explaining the file. Best for your class records.' },
+    { value: 'pdf', label: 'PDF', hint: 'Printable landscape pages, with exams shortened to E1, E2... and a legend.' },
+    { value: 'csv', label: 'CSV', hint: 'Plain data for Google Sheets or another records system. Not formatted.' },
   ]
   const roomExportForm = reactive({
     format: 'xlsx',
