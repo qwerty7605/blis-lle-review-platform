@@ -553,39 +553,37 @@
               <span v-if="selectedReportStudent" class="pill success">{{ selectedReportStudent.name }}</span>
             </div>
 
-            <!-- An (i) beside each export says what it is. A button that cannot
-                 be used yet stays focusable (aria-disabled, not disabled), so
-                 hovering or focusing it can say why, and the line under the
-                 section heading says it too, for touch screens. -->
+            <!-- An (i) set inside each button's edge says what the export is (a
+                 sibling of the button, as a button cannot hold another). One
+                 that cannot be used yet stays focusable (aria-disabled, not
+                 disabled), so hovering or focusing it says why; a tap on it,
+                 where there is no hover, shows the reason under it. -->
             <div class="report-action-sections">
               <section v-for="group in EXPORT_GROUPS" :key="group.key" class="action-section">
                 <header class="action-section-head">
                   <h4>{{ group.title }} <InfoTip :text="group.info" /></h4>
-                  <p
-                    v-if="groupBlockedReason(group)"
-                    :id="`export-block-${group.key}`"
-                    class="export-block-reason"
-                    :class="{ 'is-flashing': flashedGroup === group.key }"
-                  >
-                    <AlertCircle :size="14" aria-hidden="true" />
-                    <span>{{ groupBlockedReason(group) }}</span>
-                  </p>
                 </header>
 
                 <div class="report-action-grid">
                   <div v-for="option in group.options" :key="option.key" class="export-cell">
-                    <button
-                      type="button"
-                      :class="[option.primary ? 'primary-btn' : 'ghost-btn', { 'is-blocked': exportBlockedReason(option) }]"
-                      :aria-disabled="Boolean(exportBlockedReason(option))"
-                      :title="exportBlockedReason(option) || undefined"
-                      :aria-describedby="exportBlockedReason(option) ? `export-block-${group.key}` : undefined"
-                      @click="runExportOption(group, option)"
-                    >
-                      <RefreshCw v-if="reportExportingKey === option.key" :size="14" class="spin-soft" />
-                      <span>{{ option.label }}</span>
-                    </button>
-                    <InfoTip :text="option.info" :label="`About ${option.label}`" />
+                    <div class="export-cell-main">
+                      <button
+                        type="button"
+                        :class="[option.primary ? 'primary-btn' : 'ghost-btn', { 'is-blocked': exportBlockedReason(option) }]"
+                        :aria-disabled="Boolean(exportBlockedReason(option))"
+                        :title="exportBlockedReason(option) || undefined"
+                        :aria-describedby="exportBlockedReason(option) ? `export-reason-${option.key}` : undefined"
+                        @click="runExportOption(option)"
+                      >
+                        <RefreshCw v-if="reportExportingKey === option.key" :size="14" class="spin-soft" />
+                        <span>{{ option.label }}</span>
+                      </button>
+                      <InfoTip class="export-cell-info" :text="option.info" :label="`About ${option.label}`" :on-dark="option.primary" />
+                      <span :id="`export-reason-${option.key}`" class="visually-hidden">{{ exportBlockedReason(option) }}</span>
+                    </div>
+                    <p v-if="tappedOption === option.key && exportBlockedReason(option)" class="export-cell-reason" role="status">
+                      {{ exportBlockedReason(option) }}
+                    </p>
                   </div>
                 </div>
               </section>
@@ -922,27 +920,16 @@ function exportBlockedReason(option) {
   return ''
 }
 
-function groupBlockedReason(group) {
-  const reasons = [...new Set(group.options.map(exportBlockedReason).filter(Boolean))]
-    .filter((reason) => !reason.startsWith('Wait'))
-  if (reasons.length === 0) return ''
-  if (reasons.length === 1) return reasons[0]
-  // Some can be used and some cannot: name the ones that cannot.
-  return reasons.join(' ')
-}
+// The export whose reason is showing under it after a tap (touch screens
+// have no hover to show the tooltip).
+const tappedOption = ref('')
+let tappedTimer = null
 
-const flashedGroup = ref('')
-let flashTimer = null
-
-function runExportOption(group, option) {
+function runExportOption(option) {
   if (exportBlockedReason(option)) {
-    // A tap on a touch screen has no hover: point at the reason instead.
-    flashedGroup.value = ''
-    clearTimeout(flashTimer)
-    requestAnimationFrame(() => {
-      flashedGroup.value = group.key
-      flashTimer = setTimeout(() => { flashedGroup.value = '' }, 1200)
-    })
+    tappedOption.value = option.key
+    clearTimeout(tappedTimer)
+    tappedTimer = setTimeout(() => { tappedOption.value = '' }, 4000)
     return
   }
   if (option.email) sendReportEmail(option.key)
