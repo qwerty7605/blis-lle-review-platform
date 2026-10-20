@@ -132,10 +132,58 @@
   gap: 10px;
 }
 
+/* Search, and the order beside it */
+.examlist-toolbar-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .examlist-search {
   position: relative;
   width: 100%;
   max-width: 380px;
+}
+
+.examlist-sort {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.examlist-sort-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--dk-fg-lnu-navy-light, var(--lnu-navy-light));
+  pointer-events: none;
+}
+
+.examlist-sort-select {
+  height: 42px;
+  padding: 0 32px 0 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background-color: var(--surface);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--lnu-text);
+  cursor: pointer;
+}
+
+.examlist-sort-select:focus {
+  outline: none;
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  box-shadow: var(--focus-ring);
+}
+
+/* "Status" and "Room" before their row of chips */
+.examlist-filters-label {
+  align-self: center;
+  min-width: 46px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lnu-text-muted);
 }
 
 .examlist-search-icon {
@@ -341,6 +389,11 @@
     max-width: none;
   }
 
+  .examlist-sort,
+  .examlist-sort-select {
+    width: 100%;
+  }
+
   /* One swipeable row of rooms instead of several wrapped lines of chips. */
   .examlist-filters {
     flex-wrap: nowrap;
@@ -424,6 +477,42 @@
   font-weight: 600;
   color: var(--lnu-text-muted);
   white-space: nowrap;
+}
+
+/* A sortable heading: the whole heading is the button. */
+.examlist-table thead th:has(.examlist-sort-btn) {
+  padding: 0;
+}
+
+.examlist-sort-btn {
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.examlist-table th.is-number .examlist-sort-btn {
+  justify-content: flex-end;
+}
+
+.examlist-sort-btn:hover {
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
+}
+
+.examlist-table th[aria-sort='ascending'],
+.examlist-table th[aria-sort='descending'] {
+  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
+}
+
+.examlist-sort-arrow {
+  font-size: 10px;
 }
 
 .examlist-table tbody tr:last-child td {
