@@ -568,8 +568,8 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: auto 1fr;
   background:
-    radial-gradient(circle at 12% 10%, var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07)), transparent 34%),
-    radial-gradient(circle at 88% 92%, var(--dk-bg-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 36%),
+    radial-gradient(circle at 12% 10%, var(--dk-glow-1a237e-a07, rgba(26, 35, 126, 0.07)), transparent 34%),
+    radial-gradient(circle at 88% 92%, var(--dk-glow-c9a84c-a16, rgba(201, 168, 76, 0.16)), transparent 36%),
     var(--dk-bg-lnu-bg, var(--lnu-bg, var(--dk-bg-f4f6f8, #f4f6f8)));
 }
 

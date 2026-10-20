@@ -48,10 +48,10 @@ const OVERRIDES = {
   '--dk-line-lnu-navy': '#8f99e0',
   '--dk-line-lnu-navy-deep': '#8f99e0',
   '--dk-line-lnu-navy-light': '#8f99e0',
-  '--dk-bg-lnu-white': '#1b1f2b',
+  '--dk-bg-lnu-white': '#191d27',
   '--dk-bg-lnu-bg': '#11141c',
-  '--dk-bg-lnu-gray': '#262b3a',
-  '--dk-bg-lnu-gold-pale': '#2e2817',
+  '--dk-bg-lnu-gray': '#272d3a',
+  '--dk-bg-lnu-gold-pale': 'rgba(240, 208, 128, 0.1)',
   '--dk-fg-lnu-success': '#7fcf8a',
   '--dk-fg-lnu-danger': '#ff8a80',
   '--dk-fg-lnu-info': '#9fb6f2',
@@ -136,18 +136,33 @@ const isBlue = (h) => { const deg = ((h * 180) / Math.PI + 360) % 360; return de
 
 // ------------------------------------------------------------ the dark roles
 
+/** The dark surface levels, as dark themes in common use keep them: a few
+ *  fixed steps (page, card, inset, raised) and one border, rather than one
+ *  near-black for every near-white the light theme used. Keep in step with
+ *  the tokens in style.css's :root[data-theme='dark']. */
+const SURFACE = {
+  page: '#11141c',
+  card: '#191d27',
+  inset: '#1f2430',
+  raised: '#272d3a',
+  line: '#2c3241',
+}
+
 const ROLES = {
   /** Surfaces and fills. Light surfaces go dark keeping their order (white,
    *  the most raised, stays the lightest dark); brand fills stay. */
   bg(c) {
-    if (c.a >= 0.6) {
-      if (c.L >= 0.75 && c.C >= 0.08) return c // a vivid fill (the gold buttons) stays
-      if (c.L >= 0.75) return { ...c, L: 0.17 + (c.L - 0.75) * 0.26, C: Math.min(c.C * 0.8, 0.05) }
-      return c
+    if (c.L >= 0.75 && c.C >= 0.08 && c.a >= 0.6) return c // a vivid fill (the gold buttons) stays
+    if (c.L >= 0.99 && c.C < 0.01 && c.a < 0.6) return c // a white glaze over a navy panel
+    if (c.L >= 0.75) {
+      // Pastel card and badge fills: a faint wash of their hue, never a
+      // coloured "black". Neutral light surfaces: one of the fixed levels.
+      if (c.C >= 0.015) return { ...c, L: 0.72, C: Math.min(c.C * 3, 0.12), a: c.a >= 0.6 ? 0.07 : c.a * 0.2 }
+      const level = c.L >= 0.985 ? SURFACE.card : c.L >= 0.94 ? SURFACE.inset : SURFACE.raised
+      return { ...toOklch(parseColor(level)), a: c.a >= 0.85 ? 1 : c.a }
     }
-    if (c.L >= 0.99 && c.C < 0.01) return c // a white glaze over a navy panel
-    if (c.L >= 0.75) return { ...c, L: 0.17 + (c.L - 0.75) * 0.26, C: Math.min(c.C * 0.8, 0.05) } // a pale wash -> a dark one
-    if (c.L < 0.5) return { ...c, L: 0.82, C: Math.min(c.C, 0.08) } // a navy tint -> a light tint
+    if (c.a >= 0.6) return c // brand fills (navy, green, red buttons) stay
+    if (c.L < 0.5) return { ...c, L: 0.82, C: Math.min(c.C, 0.05) } // a navy tint -> a light tint
     return { ...c, L: Math.max(c.L, 0.72), a: Math.min(1, c.a * 1.25) } // a coloured tint
   },
   /** Text and icons: dark ink turns light, light ink stays. */
@@ -157,13 +172,21 @@ const ROLES = {
   },
   /** Borders and rings: a light hairline becomes a dark one; ink-coloured lines turn light. */
   line(c) {
-    if (c.a >= 0.6 && c.L >= 0.72) return { ...c, L: 0.27 + (c.L - 0.72) * 0.35, C: Math.min(c.C, 0.04) }
+    if (c.a >= 0.6 && c.L >= 0.72) {
+      if (c.C >= 0.02) return { ...c, L: 0.72, C: Math.min(c.C * 2, 0.12), a: 0.35 } // a pastel border
+      return toOklch(parseColor(SURFACE.line))
+    }
     return ROLES.fg(c)
   },
   /** Drop shadows go black and a little stronger; glows stay. */
   shadow(c) {
     if (c.L < 0.5) return { L: 0, C: 0, h: 0, a: Math.min(0.6, c.a * 2.2) }
     return c
+  },
+  /** A translucent colour inside a radial-gradient is a decorative glow:
+   *  on a dark page it reads as a smudge, so dark mode drops it. */
+  glow(c) {
+    return { ...c, a: 0 }
   },
   /** fill/stroke and unnamed custom properties: decided by the colour itself. */
   auto(c) {
@@ -225,7 +248,7 @@ function convertedSpans(value) {
     }
     spans.push([i, j + 1])
     // Note what an earlier run made, so the dark file keeps it.
-    const inner = value.slice(i, j + 1).match(/^var\((--dk-(bg|fg|line|shadow|auto)-[a-z0-9-]+),\s*(.*)\)$/s)
+    const inner = value.slice(i, j + 1).match(/^var\((--dk-(bg|fg|line|shadow|auto|glow)-[a-z0-9-]+),\s*(.*)\)$/s)
     if (inner) remember(inner[1], inner[2], inner[3])
     i = value.indexOf('var(--dk-', i + 1) // nested ones too
   }
@@ -267,6 +290,19 @@ function wrapTokensWithFallback(value, role, file, line) {
   return out + value.slice(last)
 }
 
+
+/** Is this offset inside a radial-gradient( … ) of the value? */
+function insideRadialGradient(value, offset) {
+  const start = value.lastIndexOf('radial-gradient(', offset)
+  if (start === -1) return false
+  let depth = 0
+  for (let i = start; i < offset; i++) {
+    if (value[i] === '(') depth++
+    else if (value[i] === ')') depth--
+  }
+  return depth > 0
+}
+
 /** One declaration value -> converted value. */
 function convertValue(prop, value, file, line) {
   let role = roleOf(prop, value)
@@ -278,6 +314,10 @@ function convertValue(prop, value, file, line) {
   return value.replace(COLOR_RE, (match, token, offset) => {
     if (inSpan(offset)) return match
     let r = role
+    if (r === 'bg' && insideRadialGradient(value, offset)) {
+      const glow = parseColor(match)
+      if (glow && glow.a < 0.6) r = 'glow'
+    }
     if (r === 'shadow') {
       const seg = value.slice(0, offset).split(',').pop()
       if (/^\s*(inset\s+)?-?[\d.]+(px)?\s+-?[\d.]+(px)?\s+0(px)?\s+[\d.]+/.test(seg)) r = 'line'

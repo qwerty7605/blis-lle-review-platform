@@ -4,7 +4,7 @@
   display: grid;
   grid-template-columns: auto 1fr;
   background:
-    radial-gradient(circle at 88% 0%, var(--dk-bg-c9a84c-a24, rgba(201, 168, 76, 0.24)), transparent 30%),
+    radial-gradient(circle at 88% 0%, var(--dk-glow-c9a84c-a24, rgba(201, 168, 76, 0.24)), transparent 30%),
     linear-gradient(180deg, var(--dk-bg-1a237e-a08, rgba(26, 35, 126, 0.08)), transparent 40%),
     var(--dk-bg-lnu-bg, var(--lnu-bg));
 }
@@ -333,7 +333,7 @@
   overflow-y: auto;
   padding: 22px 24px;
   background:
-    radial-gradient(circle at 100% 0%, var(--dk-bg-c9a84c-a10, rgba(201, 168, 76, 0.1)), transparent 25%),
+    radial-gradient(circle at 100% 0%, var(--dk-glow-c9a84c-a10, rgba(201, 168, 76, 0.1)), transparent 25%),
     transparent;
 }
 
