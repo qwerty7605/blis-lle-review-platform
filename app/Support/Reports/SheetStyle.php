@@ -3,6 +3,7 @@
 namespace App\Support\Reports;
 
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -31,9 +32,17 @@ class SheetStyle
      */
     public static function table(Worksheet $sheet, array $headers, array $rows, array $textColumns, array $widths, int $freezeColumns = 1): void
     {
-        $sheet->fromArray($headers, null, 'A1', true);
-        if ($rows !== []) {
-            $sheet->fromArray($rows, null, 'A2', true);
+        // Cell by cell, so text that starts with "=" (a name or question as
+        // someone typed it) is stored as text and never run as a formula.
+        foreach (array_merge([$headers], $rows) as $rowIndex => $line) {
+            foreach (array_values($line) as $columnIndex => $value) {
+                $cell = Coordinate::stringFromColumnIndex($columnIndex + 1) . ($rowIndex + 1);
+                if (is_string($value) && str_starts_with($value, '=')) {
+                    $sheet->setCellValueExplicit($cell, $value, DataType::TYPE_STRING);
+                } elseif ($value !== null && $value !== '') {
+                    $sheet->setCellValue($cell, $value);
+                }
+            }
         }
 
         $lastColumn = Coordinate::stringFromColumnIndex(max(1, count($headers)));
@@ -93,8 +102,8 @@ class SheetStyle
 
         $row = 4;
         foreach ($facts as [$label, $value]) {
-            $sheet->setCellValueExplicit("A{$row}", $label, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-            $sheet->setCellValueExplicit("B{$row}", (string) $value, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("A{$row}", $label, DataType::TYPE_STRING);
+            $sheet->setCellValueExplicit("B{$row}", (string) $value, DataType::TYPE_STRING);
             $sheet->getStyle("A{$row}")->getFont()->setBold(true);
             $sheet->getStyle("B{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
             $row++;

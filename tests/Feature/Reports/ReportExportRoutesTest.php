@@ -121,6 +121,42 @@ class ReportExportRoutesTest extends TestCase
         $this->assertSame(1, $book->getSheetByName('Scores')->getHighestDataRow());
     }
 
+    public function test_every_download_survives_a_name_with_a_percent_sign_or_accents(): void
+    {
+        // Titles like these are typed by teachers; "%" is not allowed in the
+        // plain-ASCII file name browsers fall back to.
+        $this->exam->update(['title' => '100% Review: Cañete / Final']);
+        $this->room->update(['name' => 'BLIS 4-Ñ 50%']);
+        $this->students[0]->update(['name' => 'Ana Peña 100%']);
+
+        foreach (['complete-results.csv', 'complete-results.xlsx', 'summary.pdf', 'answer-key.pdf', 'student-reports.zip', "students/{$this->students[0]->id}/student-report.pdf"] as $file) {
+            $response = $this->get($this->base() . '/' . $file);
+            $response->assertOk();
+            $this->assertStringContainsString('attachment', (string) $response->headers->get('Content-Disposition'), $file);
+        }
+
+        foreach (['csv', 'xlsx', 'pdf'] as $format) {
+            $this->get("/api/rooms/{$this->room->id}/export-grades?format={$format}")->assertOk();
+        }
+    }
+
+    public function test_text_that_looks_like_a_formula_stays_text(): void
+    {
+        $this->students[0]->update(['name' => '=HYPERLINK("http://example.com","Ana")']);
+
+        $response = $this->get($this->base() . '/complete-results.xlsx')->assertOk();
+        $book = IOFactory::load($response->baseResponse->getFile()->getPathname());
+        $cell = collect(range(2, 3))->map(fn ($row) => $book->getSheetByName('Scores')->getCell("A{$row}"))
+            ->first(fn ($cell) => str_contains((string) $cell->getValue(), 'HYPERLINK'));
+
+        $this->assertNotNull($cell);
+        $this->assertSame(\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING, $cell->getDataType());
+
+        // In the CSV it is written so a spreadsheet does not run it either.
+        $csv = $this->get($this->base() . '/complete-results.csv')->streamedContent();
+        $this->assertStringContainsString("'=HYPERLINK", $csv);
+    }
+
     public function test_summary_and_answer_key_come_back_as_pdfs(): void
     {
         foreach (['summary.pdf' => 'report.export.summary_pdf', 'answer-key.pdf' => 'report.export.answer_key_pdf'] as $file => $action) {
