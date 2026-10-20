@@ -177,7 +177,7 @@
 
 .nav-item.active {
   background: linear-gradient(135deg, var(--dk-bg-lnu-gold-light, var(--lnu-gold-light)), var(--dk-bg-lnu-gold, var(--lnu-gold)));
-  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  color: var(--lnu-navy-deep);
 }
 
 .nav-icon {
@@ -212,7 +212,7 @@
   height: 34px;
   border-radius: 50%;
   background: var(--dk-bg-lnu-gold, var(--lnu-gold));
-  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  color: var(--lnu-navy-deep);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -301,7 +301,7 @@
   border-radius: 999px;
   background: linear-gradient(180deg, var(--dk-bg-lnu-gold-light, var(--lnu-gold-light)), var(--dk-bg-lnu-gold, var(--lnu-gold)));
   padding: 7px 12px;
-  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  color: var(--lnu-navy-deep);
   font-size: 13px;
   font-weight: 600;
 }

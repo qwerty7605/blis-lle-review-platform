@@ -162,6 +162,7 @@ const ROLES = {
       return { ...toOklch(parseColor(level)), a: c.a >= 0.85 ? 1 : c.a }
     }
     if (c.a >= 0.6) return c // brand fills (navy, green, red buttons) stay
+    if (c.L < 0.5 && c.a >= 0.3) return { ...c, L: 0.08, C: Math.min(c.C, 0.02), a: Math.max(c.a, 0.6) } // a dialog's backdrop stays dark
     if (c.L < 0.5) return { ...c, L: 0.82, C: Math.min(c.C, 0.05) } // a navy tint -> a light tint
     return { ...c, L: Math.max(c.L, 0.72), a: Math.min(1, c.a * 1.25) } // a coloured tint
   },
@@ -346,7 +347,7 @@ function staysLightFill(text) {
   const color = parseColor(tok ? lightTokens[tok[1]] ?? '' : text)
   if (!color) return false
   const c = toOklch(color)
-  return c.a >= 0.6 && c.L >= 0.75 && ROLES.bg(c) === c
+  return c.a >= 0.6 && c.L >= 0.65 && c.C >= 0.08 && ROLES.bg(c) === c // gold, light enough for navy text
 }
 
 /** Rule blocks that paint a fill which stays light: their text keeps its light colour too. */

@@ -456,7 +456,7 @@ async function save() {
 
 .lleb-choice-btn.is-fail.active {
   background: var(--dk-bg-c98a1e, #c98a1e);
-  color: var(--dk-fg-ffffff, #ffffff);
+  color: #ffffff;
 }
 
 .lleb-rating {

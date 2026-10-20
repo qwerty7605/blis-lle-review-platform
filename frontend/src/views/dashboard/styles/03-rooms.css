@@ -375,7 +375,7 @@
    brand tones instead of the unrelated blue/teal/grey this used to be. */
 .exam-start-btn.retake {
   background: linear-gradient(135deg, var(--dk-bg-lnu-gold, var(--lnu-gold)), var(--dk-bg-b8923d, #b8923d));
-  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  color: var(--lnu-navy-deep);
 }
 
 .exam-start-btn.review {

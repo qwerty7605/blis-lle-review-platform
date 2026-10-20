@@ -499,7 +499,7 @@
 }
 
 .plan-card:first-child .plan-rank {
-  background: var(--a-ink);
+  background: var(--dk-bg-lnu-navy, var(--a-ink));
   color: var(--dk-fg-ffffff, #fff);
 }
 
