@@ -16,6 +16,8 @@ use Illuminate\Validation\Rule;
 
 class ExamController extends Controller
 {
+    public const NO_QUESTION_SET_MESSAGE = 'Choose at least one question set from the Library for this exam.';
+
     public function __construct(
         private readonly DashboardAnalyticsService $dashboardAnalyticsService,
         private readonly ExamDeliveryModeService $deliveryModeService,
@@ -95,6 +97,12 @@ class ExamController extends Controller
         }
 
         $selectedQuestionBankIds = $this->examQuestionBanks->resolveIds($validated);
+
+        // An exam with no questions can be scheduled but never taken, which a
+        // teacher only finds out when the class cannot start it.
+        if ($selectedQuestionBankIds === []) {
+            return response()->json(['message' => self::NO_QUESTION_SET_MESSAGE], 422);
+        }
         $selectedQuestionBanks = $this->examQuestionBanks->findAccessible($user, $selectedQuestionBankIds, $this->oversees($user));
 
         if (count($selectedQuestionBankIds) !== $selectedQuestionBanks->count()) {
@@ -243,6 +251,11 @@ class ExamController extends Controller
         }
 
         $resolvedQuestionBankIds = $this->examQuestionBanks->resolveIds($validated, $exam);
+
+        // Also an exam saved before this was required: it gets one on its next edit.
+        if ($resolvedQuestionBankIds === []) {
+            return response()->json(['message' => self::NO_QUESTION_SET_MESSAGE], 422);
+        }
         $resolvedTotalItems = array_key_exists('total_items', $validated)
             ? (int) $validated['total_items']
             : (int) $exam->total_items;

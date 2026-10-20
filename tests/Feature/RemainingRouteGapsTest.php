@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Api\ExamController;
 use App\Models\AuditLog;
 use App\Models\Exam;
 use App\Models\LleResult;
@@ -92,8 +93,11 @@ class RemainingRouteGapsTest extends TestCase
 
         $this->assertSame([$bank->id], Exam::findOrFail($id)->resolvedQuestionBankIds());
 
-        $this->patchJson("/api/exams/{$id}", ['question_bank_id' => null, 'total_items' => 3])->assertOk();
-        $this->assertSame([], Exam::findOrFail($id)->resolvedQuestionBankIds());
+        // Clearing the only set is refused: an exam always keeps one.
+        $this->patchJson("/api/exams/{$id}", ['question_bank_id' => null, 'total_items' => 3])
+            ->assertStatus(422)
+            ->assertJsonPath('message', ExamController::NO_QUESTION_SET_MESSAGE);
+        $this->assertSame([$bank->id], Exam::findOrFail($id)->resolvedQuestionBankIds());
     }
 
     public function test_an_email_change_to_an_address_someone_else_took_meanwhile_is_turned_away(): void

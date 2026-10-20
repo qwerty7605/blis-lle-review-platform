@@ -8,6 +8,7 @@ use App\Models\Room;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Tests\Support\BuildsBlisData;
 use Tests\TestCase;
 
 /**
@@ -20,6 +21,7 @@ use Tests\TestCase;
  */
 class RoomRemovalRulesTest extends TestCase
 {
+    use BuildsBlisData;
     use RefreshDatabase;
 
     // ---------------------------------------------------------------- delete
@@ -183,6 +185,9 @@ class RoomRemovalRulesTest extends TestCase
 
         Sanctum::actingAs($staff);
         $this->postJson("/api/rooms/{$room->id}/archive")->assertOk();
+
+        // An exam is saved with a question set; the scenario's exam has none.
+        $exam->syncQuestionBanks([$this->makeBank($staff, 10)->id]);
 
         // The exam form lists only rooms in use, so this is all it sends.
         $this->patchJson("/api/exams/{$exam->id}", ['room_ids' => [$other->id]])->assertOk();
