@@ -15,6 +15,8 @@ Route::post('/rooms/{room}/archive', [RoomController::class, 'archive']);
 
 Route::post('/rooms/{room}/restore', [RoomController::class, 'restore']);
 
+Route::put('/rooms/{room}/joining', [RoomController::class, 'setJoining']);
+
 Route::post('/rooms', [RoomController::class, 'store']);
 
 Route::post('/rooms/join', [RoomController::class, 'join']);

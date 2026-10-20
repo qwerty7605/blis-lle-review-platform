@@ -18,6 +18,11 @@ class RoomsApi {
     return http.post(`/rooms/${roomId}/restore`)
   }
 
+  // "Accepting new students": closed, the code stops letting anyone new in.
+  setJoining(roomId, acceptingStudents) {
+    return http.put(`/rooms/${roomId}/joining`, { accepting_students: acceptingStudents })
+  }
+
   detail(roomId) {
     return http.get(`/rooms/${roomId}`)
   }

@@ -188,6 +188,7 @@
               <p class="rooms-list-code">CODE: {{ room.code }}</p>
               <div class="rooms-list-meta">
                 <span><Users :size="12" />{{ room.members_count ?? 0 }} members</span>
+                <span v-if="room.joins_closed_at"><Lock :size="12" />Not accepting students</span>
               </div>
               <p v-if="room.creator?.name" class="rooms-list-by">By {{ room.creator.name }}</p>
             </button>
@@ -220,6 +221,21 @@
                   <span class="room-banner-pill"><DoorOpen :size="12" />Room Code: {{ selectedRoom.code }}</span>
                   <span class="room-banner-pill"><Users :size="12" />{{ selectedRoom.members_count ?? selectedRoom.members.length }} members</span>
                 </div>
+                <!-- Off keeps the class already here and turns the code away
+                     for anyone new (a code shared outside the class). -->
+                <button
+                  type="button"
+                  role="switch"
+                  class="room-join-switch"
+                  :class="{ 'is-on': !selectedRoom.joins_closed_at }"
+                  :aria-checked="(!selectedRoom.joins_closed_at).toString()"
+                  :disabled="roomJoiningSaving || roomDetailsLoading"
+                  @click="toggleRoomJoining"
+                >
+                  <span class="room-join-switch-track" aria-hidden="true"><span class="room-join-switch-thumb" /></span>
+                  <span class="room-join-switch-label">Accepting new students</span>
+                  <span class="room-join-switch-state">{{ selectedRoom.joins_closed_at ? 'Off' : 'On' }}</span>
+                </button>
               </div>
               <div class="room-banner-actions">
                 <button type="button" class="ghost-btn room-banner-action-btn" :disabled="roomLoading || roomDetailsLoading || roomExporting" @click="openRoomExportModal">
@@ -720,6 +736,7 @@ import {
   Download,
   FileText,
   House,
+  Lock,
   Pencil,
   Plus,
   RefreshCw,
@@ -770,6 +787,8 @@ const {
   openArchiveRoomModal,
   closeArchiveRoomModal,
   handleArchiveRoom,
+  roomJoiningSaving,
+  toggleRoomJoining,
   openArchivedRoomsModal,
   closeArchivedRoomsModal,
   handleRestoreRoom,

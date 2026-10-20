@@ -290,6 +290,7 @@ class RoomController extends Controller
             'assigned_exams' => $assignedExams,
             'archived_exams' => $archivedExams,
             'archived_at' => $room->archived_at,
+            'joins_closed_at' => $room->joins_closed_at,
         ];
 
         // What stands in the way of deleting or archiving the room, so its page
@@ -466,6 +467,50 @@ class RoomController extends Controller
         return response()->json(['message' => 'Room restored.']);
     }
 
+    /**
+     * "Accepting new students": closing it stops joins by code and keeps the
+     * class already in the room. The code stays the same, so reopening it lets
+     * the same code work again.
+     */
+    public function setJoining(Request $request, Room $room)
+    {
+        $user = $request->user();
+
+        if (!$this->canManageRooms($user) || (!$this->isAdmin($user) && (int) $room->created_by !== (int) $user->id)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'accepting_students' => ['required', 'boolean'],
+        ]);
+
+        $accepting = (bool) $validated['accepting_students'];
+
+        if ($accepting === $room->isAcceptingStudents()) {
+            return response()->json([
+                'message' => $accepting ? 'This room is already accepting new students.' : 'This room is already closed to new students.',
+                'joins_closed_at' => $room->joins_closed_at,
+            ]);
+        }
+
+        $room->forceFill(['joins_closed_at' => $accepting ? null : now()])->save();
+
+        $this->recordAudit(
+            $user,
+            $accepting ? 'room.joins.open' : 'room.joins.close',
+            'room',
+            $room->id,
+            $accepting ? 'Room opened to new students' : 'Room closed to new students',
+            ['name' => $room->name, 'code' => $room->code],
+            $request,
+        );
+
+        return response()->json([
+            'message' => $accepting ? 'Students with the code can join this room again.' : 'This room is no longer accepting new students.',
+            'joins_closed_at' => $room->joins_closed_at,
+        ]);
+    }
+
     public function store(Request $request)
     {
         $user = $request->user();
@@ -519,6 +564,10 @@ class RoomController extends Controller
         }
 
         $user = $request->user();
+
+        if (!$room->isAcceptingStudents() && !$room->members()->whereKey($user->id)->exists()) {
+            return response()->json(['message' => 'This room is not accepting new students. Ask your teacher to open it.'], 422);
+        }
 
         // Anyone with the code may join, whatever their year level. A rule that
         // let the first student to join set the room's level turned away the
