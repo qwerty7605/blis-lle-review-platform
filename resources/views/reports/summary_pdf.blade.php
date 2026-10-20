@@ -23,7 +23,11 @@
     table.bands td { border: 0; padding: 3px 0; }
     table.bands td.band { width: 70px; color: #5f6577; white-space: nowrap; }
     table.bands td.track { padding-right: 10px; }
-    table.bands td.count { width: 80px; text-align: right; font-weight: bold; white-space: nowrap; }
+    table.bands td.count { width: 110px; text-align: right; font-weight: bold; white-space: nowrap; }
+    table.bands .share { font-weight: normal; color: #5f6577; }
+    .key { display: inline-block; width: 9px; height: 9px; margin: 0 3px 0 10px; vertical-align: -1px; }
+    .key-pass { background: #3949ab; }
+    .key-below { background: #c98a1e; }
     .bar { height: 11px; background: #3949ab; }
     .bar.below { background: #c98a1e; }
 @endsection
@@ -56,12 +60,17 @@
 
     @if ($scores->isNotEmpty())
         <h2>Score Breakdown</h2>
+        <p class="muted">
+            How many students scored in each range; the longer the bar, the more students.
+            <span class="key key-pass"></span> {{ $passing }}% and above (passed)
+            <span class="key key-below"></span> below {{ $passing }}%
+        </p>
         <table class="bands">
             @foreach ($bands as $label => $count)
                 <tr>
                     <td class="band">{{ $label }}</td>
                     <td class="track"><div class="bar {{ $loop->index >= 2 ? 'below' : '' }}" style="width: {{ max(1, round($count / $widest * 100)) }}%"></div></td>
-                    <td class="count">{{ $count }} {{ $count === 1 ? 'student' : 'students' }}</td>
+                    <td class="count">{{ $count }} {{ $count === 1 ? 'student' : 'students' }} <span class="share">({{ round($count / max(1, $scores->count()) * 100) }}%)</span></td>
                 </tr>
             @endforeach
         </table>
