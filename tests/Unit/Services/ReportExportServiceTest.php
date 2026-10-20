@@ -28,7 +28,7 @@ class ReportExportServiceTest extends TestCase
         $this->service = new ReportExportService();
     }
 
-    public function test_the_gradebook_has_a_column_per_exam_and_na_where_a_student_has_no_score(): void
+    public function test_the_gradebook_has_a_column_per_exam_and_a_blank_where_a_student_has_no_score(): void
     {
         $teacher = $this->makeTeacher();
         $ana = $this->makeStudent(['name' => 'Ana']);
@@ -58,9 +58,10 @@ class ReportExportServiceTest extends TestCase
         $this->assertNull($benRow['exam_entries'][0]['score_percent']);
 
         $table = $this->service->buildRoomGradebookTable($gradebook);
-        $this->assertSame(['Student Name', 'Student ID', 'Email', 'Completed Exams', 'Average Score %', 'First (%)', 'Second (%)'], $table['headers']);
+        $this->assertSame(['Student Name', 'Student ID', 'Email', 'Exams Taken', 'Average %', 'First (%)', 'Second (%)'], $table['headers']);
         $benLine = collect($table['rows'])->first(fn ($line) => $line[0] === 'Ben');
-        $this->assertSame(['N/A', 'N/A', 'N/A'], [$benLine[4], $benLine[5], $benLine[6]]);
+        // Blank, so a column of scores stays numbers in a spreadsheet.
+        $this->assertSame(['', '', ''], [$benLine[4], $benLine[5], $benLine[6]]);
     }
 
     public function test_a_room_with_no_exams_or_students_gives_an_empty_gradebook(): void
@@ -107,8 +108,80 @@ class ReportExportServiceTest extends TestCase
         $table = $this->service->buildCompleteResultsTable($session);
         $this->assertSame('Q3', end($table['headers']));
         $caraLine = collect($table['rows'])->first(fn ($line) => $line[0] === 'Cara');
-        $this->assertSame('not_started', $caraLine[4]);
-        $this->assertSame('', $caraLine[7]);
+        $this->assertSame('Not taken', $caraLine[3]);
+        $this->assertSame('', $caraLine[4]);
+        $anaLine = collect($table['rows'])->first(fn ($line) => $line[0] === 'Ana');
+        $this->assertSame(['Submitted', 66.67, 2, 3, 'Below 75%', 1], array_slice($anaLine, 3, 6));
+        $this->assertSame(['Correct', 'Correct', 'Wrong'], array_slice($anaLine, 10));
+    }
+
+    public function test_a_shuffled_exam_is_counted_by_question_not_by_the_position_a_student_met_it(): void
+    {
+        $teacher = $this->makeTeacher();
+        $ana = $this->makeStudent(['name' => 'Ana']);
+        $ben = $this->makeStudent(['name' => 'Ben']);
+        $room = $this->makeRoom($teacher, [$ana, $ben]);
+        $exam = $this->makeExam($teacher, $this->makeBank($teacher, 3), [$room], ['shuffle_questions' => true]);
+
+        // Both get only the set's first question right.
+        $this->makeSubmittedAttempt($exam, $room, $ana, [true, false, false]);
+        $benAttempt = $this->makeSubmittedAttempt($exam, $room, $ben, [true, false, false]);
+        // Ben saw the questions in reverse: the first question was his item 3.
+        // (Through 10+ first: two of an attempt's items cannot share a number.)
+        foreach ($benAttempt->attemptQuestions as $attemptQuestion) {
+            $attemptQuestion->update(['item_number' => 14 - $attemptQuestion->item_number]);
+        }
+        foreach ($benAttempt->attemptQuestions()->get() as $attemptQuestion) {
+            $attemptQuestion->update(['item_number' => $attemptQuestion->item_number - 10]);
+        }
+
+        $session = $this->service->buildSessionLatestResults($exam, $room);
+
+        // Counted by position, item 1 was half right and item 3 half right.
+        $this->assertEquals([100.0, 0.0, 0.0], array_column($session['item_summary'], 'correct_percent'));
+        $ben = collect($session['rows'])->firstWhere('student.name', 'Ben');
+        $this->assertSame([1 => 'Correct', 2 => 'Wrong', 3 => 'Wrong'], $ben['item_status_labels']);
+        $this->assertSame('Easy', $session['item_summary'][0]['difficulty']);
+        $this->assertSame('Hard', $session['item_summary'][1]['difficulty']);
+    }
+
+    public function test_a_question_a_shuffled_exam_did_not_give_a_student_is_not_given(): void
+    {
+        $teacher = $this->makeTeacher();
+        $ana = $this->makeStudent();
+        $room = $this->makeRoom($teacher, [$ana]);
+        // Each student gets 2 of the set's 3.
+        $exam = $this->makeExam($teacher, $this->makeBank($teacher, 3), [$room], ['shuffle_questions' => true, 'total_items' => 2]);
+        $attempt = $this->makeSubmittedAttempt($exam, $room, $ana, [true, true, true]);
+        $attempt->attemptQuestions()->where('item_number', 2)->delete();
+
+        $session = $this->service->buildSessionLatestResults($exam, $room);
+
+        $this->assertSame(3, $session['max_items']);
+        $this->assertSame([1 => 'Correct', 2 => 'Not Given', 3 => 'Correct'], $session['rows'][0]['item_status_labels']);
+        $this->assertSame([1, 0, 1], array_column($session['item_summary'], 'started_count'));
+        // The answer key lists every question a student could get.
+        $this->assertCount(3, $this->service->buildAnswerKey($exam));
+
+        $line = $this->service->buildCompleteResultsTable($session)['rows'][0];
+        $this->assertSame(['Correct', '', 'Correct'], array_slice($line, 10));
+    }
+
+    public function test_the_most_chosen_wrong_answer_is_named_for_each_question(): void
+    {
+        $teacher = $this->makeTeacher();
+        $students = [$this->makeStudent(), $this->makeStudent(), $this->makeStudent()];
+        $room = $this->makeRoom($teacher, $students);
+        $exam = $this->makeExam($teacher, $this->makeBank($teacher, 1), [$room]);
+        foreach ($students as $student) {
+            $this->makeSubmittedAttempt($exam, $room, $student, [false]);
+        }
+
+        $item = $this->service->buildSessionLatestResults($exam, $room)['item_summary'][0];
+
+        $this->assertSame('B. Wrong answer 1b', $item['common_wrong_answer']);
+        $this->assertSame(3, $item['common_wrong_count']);
+        $this->assertSame('A. Correct answer 1', $item['correct_answer']);
     }
 
     public function test_session_results_use_each_student_s_latest_sitting(): void
