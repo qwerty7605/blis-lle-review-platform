@@ -74,7 +74,15 @@
           </label>
         </div>
 
-        <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="examOwners" label="Exams by" />
+        <div class="examlist-toolbar-line">
+          <OwnerFilter v-if="seesEveryTeacher" v-model="selectedOwnerFilter" :owners="examOwners" label="Exams by" />
+          <RoomFilter
+            v-model="selectedRoomFilter"
+            :rooms="roomFilterRooms"
+            :total-count="roomFilterTotal"
+            :group-by-owner="seesEveryTeacher && selectedOwnerFilter === ''"
+          />
+        </div>
 
         <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by status">
           <span class="examlist-filters-label" aria-hidden="true">Status</span>
@@ -89,32 +97,6 @@
           >
             {{ option.label }}
             <span class="examlist-filter-count">{{ examStatusCounts[option.value] }}</span>
-          </button>
-        </div>
-
-        <div v-scroll-hint class="examlist-filters" role="group" aria-label="Filter by room">
-          <span class="examlist-filters-label" aria-hidden="true">Room</span>
-          <button
-            type="button"
-            class="examlist-filter"
-            :class="{ active: selectedRoomFilter === '' }"
-            :aria-pressed="selectedRoomFilter === ''"
-            @click="selectedRoomFilter = ''"
-          >
-            All rooms
-            <span class="examlist-filter-count">{{ exams.length }}</span>
-          </button>
-          <button
-            v-for="room in manageableRooms"
-            :key="room.id"
-            type="button"
-            class="examlist-filter"
-            :class="{ active: selectedRoomFilter === String(room.id) }"
-            :aria-pressed="selectedRoomFilter === String(room.id)"
-            @click="selectedRoomFilter = String(room.id)"
-          >
-            {{ room.name }}
-            <span class="examlist-filter-count">{{ examCountForRoom(room.id) }}</span>
           </button>
         </div>
       </div>
@@ -190,10 +172,12 @@
                 <td class="is-number"><strong class="examrow-number">{{ exam.total_items }}</strong></td>
                 <td class="is-number">{{ exam.duration_minutes }}</td>
                 <td>
-                  <!-- Each chip opens that room's page directly. -->
+                  <!-- Each chip opens that room's page directly. Two show; the
+                       rest wait behind "+N more", or a whole year level's six
+                       sections made every row three lines taller. -->
                   <div v-if="exam.assigned_rooms?.length > 0 || exam.archived_rooms?.length > 0" class="examrow-rooms">
                     <router-link
-                      v-for="room in exam.assigned_rooms"
+                      v-for="room in roomChips(exam).assigned"
                       :key="`room-${room.id}`"
                       class="assignment-chip"
                       :to="{ name: 'dashboard-room-management', query: { room: room.id } }"
@@ -203,7 +187,7 @@
                       {{ room.name }}
                     </router-link>
                     <span
-                      v-for="room in exam.archived_rooms"
+                      v-for="room in roomChips(exam).archived"
                       :key="`archived-room-${room.id}`"
                       class="assignment-chip is-archived"
                       title="Archived from this room"
@@ -211,6 +195,15 @@
                       <Archive :size="12" />
                       {{ room.name }}
                     </span>
+                    <button
+                      v-if="roomChips(exam).hidden > 0 || expandedRoomExams.has(exam.id)"
+                      type="button"
+                      class="assignment-chip examrow-rooms-more"
+                      :aria-expanded="expandedRoomExams.has(exam.id)"
+                      @click="toggleRoomChips(exam.id)"
+                    >
+                      {{ expandedRoomExams.has(exam.id) ? 'Show less' : `+${roomChips(exam).hidden} more` }}
+                    </button>
                   </div>
                   <span v-else class="examrow-muted">Not assigned</span>
                 </td>
@@ -819,6 +812,7 @@ import { vScrollHint } from '@/utils/scrollHint'
 import { useAuthStore } from '@/store/auth.store'
 import { isOwnedBy, ownersOf, overseesAll } from '@/utils/owners'
 import OwnerFilter from '../shared/OwnerFilter.vue'
+import RoomFilter from '../shared/RoomFilter.vue'
 
 const route = useRoute()
 const highlightedExamId = ref(null)
@@ -1003,10 +997,10 @@ const selectedRoomName = computed(() => {
  * reading the Rooms page uses when it files those under Archived.
  * An exam in several rooms shows up under each of them.
  */
-function matchesExamFilters(exam) {
+function matchesExamFilters(exam, { ignoreRoom = false } = {}) {
   if (!isOwnedBy(exam, selectedOwnerFilter.value)) return false
 
-  if (selectedRoomFilter.value !== ''
+  if (!ignoreRoom && selectedRoomFilter.value !== ''
     && !(exam.assigned_rooms ?? []).some((room) => String(room.id) === selectedRoomFilter.value)) {
     return false
   }
@@ -1070,10 +1064,58 @@ const filteredExams = computed(() => (
     .sort(compareExams)
 ))
 
-function examCountForRoom(roomId) {
-  return exams.value.filter((exam) => (
-    (exam.assigned_rooms ?? []).some((room) => String(room.id) === String(roomId))
-  )).length
+// The room menu: the chosen teacher's rooms (all of them for "All teachers"),
+// each counting what picking it would show under the other filters.
+const examsForRoomCounts = computed(() => (
+  exams.value.filter((exam) => (
+    matchesExamFilters(exam, { ignoreRoom: true }) && examStatusMatches(exam, selectedStatusFilter.value)
+  ))
+))
+
+const roomFilterRooms = computed(() => {
+  const counts = new Map()
+  for (const exam of examsForRoomCounts.value) {
+    for (const room of exam.assigned_rooms ?? []) counts.set(String(room.id), (counts.get(String(room.id)) ?? 0) + 1)
+  }
+
+  return manageableRooms.value
+    .filter((room) => selectedOwnerFilter.value === '' || String(room.ownerId) === selectedOwnerFilter.value
+      || String(room.id) === selectedRoomFilter.value)
+    .map((room) => ({ ...room, count: counts.get(String(room.id)) ?? 0 }))
+})
+
+const roomFilterTotal = computed(() => examsForRoomCounts.value.length)
+
+// The table's Rooms column: two chips, the filtered room among them, and
+// "+N more" for the rest, which opens them in place.
+const ROOM_CHIPS_SHOWN = 2
+const expandedRoomExams = ref(new Set())
+
+function toggleRoomChips(examId) {
+  const next = new Set(expandedRoomExams.value)
+  if (next.has(examId)) next.delete(examId)
+  else next.add(examId)
+  expandedRoomExams.value = next
+}
+
+function roomChips(exam) {
+  const picked = selectedRoomFilter.value
+  const assigned = [...(exam.assigned_rooms ?? [])]
+    .sort((left, right) => (String(right.id) === picked) - (String(left.id) === picked))
+  const archived = exam.archived_rooms ?? []
+
+  if (expandedRoomExams.value.has(exam.id)) return { assigned, archived, hidden: 0 }
+
+  const shownAssigned = assigned.slice(0, ROOM_CHIPS_SHOWN)
+  const shownArchived = archived.slice(0, ROOM_CHIPS_SHOWN - shownAssigned.length)
+  // One left over is shown rather than hidden behind "+1 more".
+  if (assigned.length + archived.length === ROOM_CHIPS_SHOWN + 1) return { assigned, archived, hidden: 0 }
+
+  return {
+    assigned: shownAssigned,
+    archived: shownArchived,
+    hidden: assigned.length + archived.length - shownAssigned.length - shownArchived.length,
+  }
 }
 
 function clearExamFilters() {
