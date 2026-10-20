@@ -4,6 +4,22 @@ import { DoorOpen, FileText } from 'lucide-vue-next'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 
+// "Skipped 3: 2 did not take the exam, 1 demo account." for the bulk email.
+const SKIP_REASONS = {
+  no_attempt: 'did not take the exam',
+  invalid_email: 'no valid email address',
+  demo_account: 'demo account',
+  email_not_verified: 'email not verified',
+}
+
+function skippedSummary(issues) {
+  if (!issues.length) return ''
+  const counts = {}
+  for (const issue of issues) counts[issue.reason] = (counts[issue.reason] ?? 0) + 1
+  const parts = Object.entries(counts).map(([reason, count]) => `${count} ${SKIP_REASONS[reason] ?? reason}`)
+  return `Skipped ${issues.length}: ${parts.join(', ')}.`
+}
+
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
@@ -354,9 +370,13 @@ export function useReportsModule() {
 
       if (type === 'student_email_bulk') {
         const { data } = await services.emailStudentReportsBulk(examId, roomId, payload)
-        const sentCount = Number(data?.summary?.sent_count ?? 0)
-        const issueCount = Number(data?.summary?.issue_count ?? 0)
-        reportExportMessage.value = `Bulk email completed: ${sentCount} sent, ${issueCount} issues.`
+        const queued = Number(data?.summary?.queued_count ?? 0)
+        reportExportMessage.value = [
+          queued > 0
+            ? `Sending ${queued} report ${queued === 1 ? 'email' : 'emails'} in the background; they arrive over the next few minutes.`
+            : 'No report emails were sent.',
+          skippedSummary(data?.issues ?? []),
+        ].filter(Boolean).join(' ')
         return
       }
 

@@ -619,7 +619,7 @@
 
               <section class="action-section">
                 <header class="action-section-head">
-                  <h4>Email Delivery <InfoTip text="Use these only when you are ready to send finalized student reports." /></h4>
+                  <h4>Email Delivery <InfoTip text="Sends each student their own report PDF. If the exam's results are Hidden, their copy leaves out the correct answers." /></h4>
                 </header>
 
                 <div class="report-action-grid">
