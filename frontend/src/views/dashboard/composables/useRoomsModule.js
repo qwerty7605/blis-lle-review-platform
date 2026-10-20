@@ -58,6 +58,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   // Rooms put away with their results; a teacher's or administrator's only.
   const archivedRooms = ref([])
   const restoringRoomId = ref(null)
+  const roomJoiningSaving = ref(false)
   const showRoomExportModal = ref(false)
   const showLeaveRoomModal = ref(false)
   const editRoomName = ref('')
@@ -379,6 +380,32 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       roomError.value = firstApiError(error, 'Unable to archive this room.')
     } finally {
       roomLoading.value = false
+    }
+  }
+
+  async function toggleRoomJoining() {
+    const room = selectedRoom.value
+    if (!room?.id || roomJoiningSaving.value) return
+
+    const accepting = Boolean(room.joins_closed_at)
+
+    roomJoiningSaving.value = true
+    roomError.value = ''
+    roomMessage.value = ''
+
+    try {
+      const { data } = await services.setRoomJoining(room.id, accepting)
+      const closedAt = data.joins_closed_at ?? null
+      room.joins_closed_at = closedAt
+      const listed = rooms.value.find((item) => item.id === room.id)
+      if (listed) listed.joins_closed_at = closedAt
+      roomMessage.value = accepting
+        ? `${room.name} is accepting new students again. Students with the code can join.`
+        : `${room.name} is closed to new students. The students already in it stay.`
+    } catch (error) {
+      roomError.value = firstApiError(error, 'Unable to change whether this room accepts new students.')
+    } finally {
+      roomJoiningSaving.value = false
     }
   }
 
@@ -909,6 +936,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     openArchiveRoomModal,
     closeArchiveRoomModal,
     handleArchiveRoom,
+    roomJoiningSaving,
+    toggleRoomJoining,
     openArchivedRoomsModal,
     closeArchivedRoomsModal,
     handleRestoreRoom,

@@ -256,13 +256,15 @@
 
 .rooms-list-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 2px 10px;
   margin-top: 2px;
 }
 
 .rooms-list-meta span {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   gap: 4px;
   font-size: 11px;
@@ -1007,6 +1009,82 @@
   }
 
   .rooms-pane-tab {
+    min-height: 44px;
+  }
+}
+
+/* "Accepting new students" on the navy banner: a switch, not another
+   pill, since it is the one thing in the banner that can be pressed. */
+.room-join-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 4px 4px 4px 0;
+  border: 0;
+  background: none;
+  color: var(--dk-fg-ffffff, #fff);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.room-join-switch:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.room-join-switch:focus-visible {
+  outline: 2px solid var(--dk-line-lnu-gold, var(--lnu-gold, #c9a84c));
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.room-join-switch-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--dk-bg-ffffff-a20, rgba(255, 255, 255, 0.2));
+  border: 1px solid var(--dk-line-ffffff-a28, rgba(255, 255, 255, 0.28));
+  transition: background 0.15s ease;
+}
+
+.room-join-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  /* The switch's own white text colour: stays white in dark mode too. */
+  background: currentColor;
+  transition: transform 0.15s ease;
+}
+
+.room-join-switch.is-on .room-join-switch-track {
+  background: var(--dk-bg-lnu-gold, var(--lnu-gold, #c9a84c));
+  border-color: var(--dk-line-lnu-gold, var(--lnu-gold, #c9a84c));
+}
+
+.room-join-switch.is-on .room-join-switch-thumb {
+  transform: translateX(16px);
+  background: var(--panel-navy, var(--dk-bg-0d1547, #0d1547));
+}
+
+.room-join-switch-state {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--dk-bg-ffffff-a14, rgba(255, 255, 255, 0.14));
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (pointer: coarse) {
+  .room-join-switch {
     min-height: 44px;
   }
 }

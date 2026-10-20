@@ -30,6 +30,7 @@ class Room extends Model
     {
         return [
             'archived_at' => 'datetime',
+            'joins_closed_at' => 'datetime',
         ];
     }
 
@@ -136,5 +137,14 @@ class Room extends Model
     public function isArchived(): bool
     {
         return $this->archived_at !== null;
+    }
+
+    /**
+     * Whether a student with the code may join. Off once the teacher closes
+     * the room to new students (the class already in it stays).
+     */
+    public function isAcceptingStudents(): bool
+    {
+        return $this->joins_closed_at === null;
     }
 }

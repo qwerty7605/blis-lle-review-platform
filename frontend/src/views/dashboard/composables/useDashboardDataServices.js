@@ -28,6 +28,7 @@ export function useDashboardDataServices() {
     getArchivedRooms: () => roomsApi.listArchived(),
     archiveRoom: (roomId) => roomsApi.archive(roomId),
     restoreRoom: (roomId) => roomsApi.restore(roomId),
+    setRoomJoining: (roomId, acceptingStudents) => roomsApi.setJoining(roomId, acceptingStudents),
     joinRoom: (payload) => roomsApi.join(payload),
     removeRoomMember: (roomId, memberId) => roomsApi.removeMember(roomId, memberId),
     archiveRoomExam: (roomId, examId) => roomsApi.archiveExam(roomId, examId),
