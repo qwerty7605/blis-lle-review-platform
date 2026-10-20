@@ -906,6 +906,11 @@ onBeforeUnmount(() => {
 }
 
 .layout-content {
+  /* Anything absolutely positioned inside (screen-reader-only text, an
+     InfoTip's label) is placed within this scrolling box. Without it such an
+     element is placed against the whole page, below the screen, and the
+     window gets a second scroll past the end of the content. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

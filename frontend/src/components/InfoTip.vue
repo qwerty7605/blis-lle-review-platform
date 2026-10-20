@@ -173,6 +173,10 @@ defineExpose({ close })
 
 <style scoped>
 .info-tip {
+  /* Holds .info-tip-sr: without it that absolute text is placed against the
+     whole page, outside the scrolling content, and makes the window itself
+     scroll past the end of the page. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
