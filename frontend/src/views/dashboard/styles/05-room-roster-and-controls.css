@@ -256,7 +256,7 @@
   border: 1px solid var(--dk-line-c62828-a30, rgba(198, 40, 40, 0.3));
   border-radius: 9px;
   background: var(--dk-bg-lnu-danger-strong, var(--lnu-danger-strong));
-  color: var(--dk-fg-ffffff, #fff);
+  color: #fff;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;

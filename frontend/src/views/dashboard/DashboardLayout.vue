@@ -798,7 +798,7 @@ onBeforeUnmount(() => {
   height: 34px;
   border-radius: 50%;
   background: var(--dk-bg-lnu-gold, var(--lnu-gold));
-  color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
+  color: var(--lnu-navy-deep);
   display: inline-flex;
   align-items: center;
   justify-content: center;
