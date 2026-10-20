@@ -287,9 +287,14 @@
               class="text-input code"
               maxlength="12"
               placeholder="Enter room code"
-              @input="joinCode = joinCode.toUpperCase()"
+              @input="joinCode = joinCode.toUpperCase(); joinRoomError = ''"
             />
           </label>
+
+          <div v-if="joinRoomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ joinRoomError }}</span>
+          </div>
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeJoinRoomModal">Cancel</button>
@@ -917,6 +922,7 @@ const showArchivedExams = ref(false)
 
 const {
   joinCode,
+  joinRoomError,
   roomSearchQuery,
   filteredRooms,
   rooms,
