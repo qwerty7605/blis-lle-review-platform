@@ -12,7 +12,7 @@
         "50–" . ($passing - 1) . '%' => $scores->filter(fn ($s) => $s >= 50 && $s < $passing)->count(),
         'Below 50%' => $scores->filter(fn ($s) => $s < 50)->count(),
     ];
-    $widest = max(1, max($bands));
+    $classSize = max(1, $scores->count());
     $notSubmitted = collect($session['rows'] ?? [])->filter(fn ($row) => ($row['attempt']['status'] ?? null) !== 'submitted');
     $hardest = collect($session['hardest_items'] ?? [])->filter(fn ($item) => ($item['correct_percent'] ?? 100) < 76)->values();
 @endphp
@@ -28,6 +28,7 @@
     .key { display: inline-block; width: 9px; height: 9px; margin: 0 3px 0 10px; vertical-align: -1px; }
     .key-pass { background: #3949ab; }
     .key-below { background: #c98a1e; }
+    .rail { height: 11px; background: #eceef6; }
     .bar { height: 11px; background: #3949ab; }
     .bar.below { background: #c98a1e; }
 @endsection
@@ -61,16 +62,16 @@
     @if ($scores->isNotEmpty())
         <h2>Score Breakdown</h2>
         <p class="muted">
-            How many students scored in each range; the longer the bar, the more students.
-            <span class="key key-pass"></span> {{ $passing }}% and above (passed)
+            The share of the class that scored in each range. A full line is the whole class ({{ $scores->count() }} {{ $scores->count() === 1 ? 'student' : 'students' }} who submitted).<br>
+            <span class="key key-pass" style="margin-left: 0"></span> {{ $passing }}% and above (passed)
             <span class="key key-below"></span> below {{ $passing }}%
         </p>
         <table class="bands">
             @foreach ($bands as $label => $count)
                 <tr>
                     <td class="band">{{ $label }}</td>
-                    <td class="track"><div class="bar {{ $loop->index >= 2 ? 'below' : '' }}" style="width: {{ max(1, round($count / $widest * 100)) }}%"></div></td>
-                    <td class="count">{{ $count }} {{ $count === 1 ? 'student' : 'students' }} <span class="share">({{ round($count / max(1, $scores->count()) * 100) }}%)</span></td>
+                    <td class="track"><div class="rail"><div class="bar {{ $loop->index >= 2 ? 'below' : '' }}" style="width: {{ $count > 0 ? max(1, round($count / $classSize * 100)) : 0 }}%"></div></div></td>
+                    <td class="count">{{ round($count / $classSize * 100) }}% <span class="share">({{ $count }} {{ $count === 1 ? 'student' : 'students' }})</span></td>
                 </tr>
             @endforeach
         </table>
