@@ -2,6 +2,7 @@
 
 namespace App\Support\Reports;
 
+use App\Services\AuditLogBrowser;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
@@ -48,7 +49,7 @@ class ReportOutput
     /**
      * "BLIS 4-A - Cataloging Mock Board Exam - Class Results - 2026-10-20.xlsx".
      * Parts that are empty are left out; characters a file name cannot hold
-     * are dropped.
+     * are dropped, and "%" is written as a word.
      *
      * @param  array<int, string|null>  $parts
      */
@@ -57,7 +58,9 @@ class ReportOutput
         $parts[] = Carbon::now(self::timezone())->format('Y-m-d');
 
         $name = collect($parts)
-            ->map(fn ($part) => trim(preg_replace('/\s+/', ' ', str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], ' ', (string) $part))))
+            // "%" cannot be in the plain-ASCII name browsers fall back to:
+            // a title like "100% Review" made the download fail.
+            ->map(fn ($part) => trim(preg_replace('/\s+/', ' ', str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '%'], [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' percent'], (string) $part))))
             ->filter(fn (string $part) => $part !== '')
             ->implode(' - ');
 
@@ -66,7 +69,8 @@ class ReportOutput
 
     /**
      * A CSV download. The byte-order mark is what tells Excel the file is
-     * UTF-8; without it "Pacaña" opens as "PacaÃ±a".
+     * UTF-8; without it "Pacaña" opens as "PacaÃ±a". Text a spreadsheet would
+     * run as a formula is written as text, as in the audit log export.
      *
      * @param  array<int, string>  $headers
      * @param  iterable<int, array<int, mixed>>  $rows
@@ -83,7 +87,9 @@ class ReportOutput
             fputcsv($stream, $headers);
 
             foreach ($rows as $row) {
-                fputcsv($stream, $row);
+                // Names and questions are what people typed: one starting
+                // with "=" is written as text, not run as a formula.
+                fputcsv($stream, array_map(fn ($cell) => is_string($cell) ? AuditLogBrowser::safeCell($cell) : $cell, $row));
             }
 
             fclose($stream);

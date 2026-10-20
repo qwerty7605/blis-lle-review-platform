@@ -79,9 +79,7 @@ class ClassResultsWorkbook
         $headers = ReportExportService::resultsHeaders();
         $headers[4] = 'Score %';
         $leading = count($headers);
-        for ($item = 1; $item <= $maxItems; $item++) {
-            $headers[] = 'Q' . $item;
-        }
+        array_push($headers, ...ReportExportService::questionHeaders($session));
 
         $rows = [];
         foreach (($session['rows'] ?? []) as $row) {

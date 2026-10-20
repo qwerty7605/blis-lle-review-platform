@@ -390,6 +390,22 @@ class ReportExportService
             ];
         }
 
+        // A shuffled exam drawing from a larger set (60 items from 120) lists
+        // only the questions someone was given, still under their Answer Key
+        // numbers: a column for every question in the set is mostly empty.
+        if ($exam->shuffle_questions && count($columnIds) > (int) $exam->total_items) {
+            $itemSummary = array_values(array_filter($itemSummary, fn (array $item) => $item['started_count'] > 0));
+            $kept = array_column($itemSummary, 'item_number');
+            foreach ($rows as &$row) {
+                $labels = [];
+                foreach ($kept as $position => $itemNumber) {
+                    $labels[$position + 1] = $row['item_status_labels'][$itemNumber] ?? '';
+                }
+                $row['item_status_labels'] = $labels;
+            }
+            unset($row);
+        }
+
         $scoreValues = collect($rows)
             ->map(fn (array $row) => $row['attempt']['score_percent'] ?? null)
             ->filter(fn ($value) => !is_null($value))
@@ -432,7 +448,9 @@ class ReportExportService
                 'lowest_score_percent' => $scoreValues->isNotEmpty() ? (float) $scoreValues->min() : null,
             ],
             'rows' => $rows,
-            'max_items' => count($columnIds),
+            // How many question columns; item_summary's item_number is each
+            // one's Answer Key number.
+            'max_items' => count($itemSummary),
             'item_summary' => $itemSummary,
             'hardest_items' => $rankableItems->sortBy(fn (array $item) => (float) $item['correct_percent'])->take(5)->values()->all(),
             'easiest_items' => $rankableItems->sortByDesc(fn (array $item) => (float) $item['correct_percent'])->take(5)->values()->all(),
@@ -477,8 +495,8 @@ class ReportExportService
         $maxItems = (int) ($session['max_items'] ?? 0);
         $headers = self::resultsHeaders();
 
-        for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
-            $headers[] = 'Q' . $itemNumber;
+        foreach (self::questionHeaders($session) as $header) {
+            $headers[] = $header;
         }
 
         $rows = [];
@@ -498,6 +516,16 @@ class ReportExportService
             'headers' => $headers,
             'rows' => $rows,
         ];
+    }
+
+    /**
+     * "Q1", "Q2"... for the question columns, by Answer Key number.
+     *
+     * @return array<int, string>
+     */
+    public static function questionHeaders(array $session): array
+    {
+        return array_map(fn ($item) => 'Q' . (int) $item['item_number'], $session['item_summary'] ?? []);
     }
 
     /** @return array<int, string> */

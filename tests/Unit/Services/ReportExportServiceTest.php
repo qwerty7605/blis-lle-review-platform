@@ -148,23 +148,44 @@ class ReportExportServiceTest extends TestCase
     public function test_a_question_a_shuffled_exam_did_not_give_a_student_is_not_given(): void
     {
         $teacher = $this->makeTeacher();
-        $ana = $this->makeStudent();
-        $room = $this->makeRoom($teacher, [$ana]);
+        $ana = $this->makeStudent(['name' => 'Ana']);
+        $ben = $this->makeStudent(['name' => 'Ben']);
+        $room = $this->makeRoom($teacher, [$ana, $ben]);
         // Each student gets 2 of the set's 3.
         $exam = $this->makeExam($teacher, $this->makeBank($teacher, 3), [$room], ['shuffle_questions' => true, 'total_items' => 2]);
-        $attempt = $this->makeSubmittedAttempt($exam, $room, $ana, [true, true, true]);
-        $attempt->attemptQuestions()->where('item_number', 2)->delete();
+        $this->makeSubmittedAttempt($exam, $room, $ana, [true, true, true])->attemptQuestions()->where('item_number', 2)->delete();
+        $this->makeSubmittedAttempt($exam, $room, $ben, [true, true, true])->attemptQuestions()->where('item_number', 1)->delete();
 
         $session = $this->service->buildSessionLatestResults($exam, $room);
 
         $this->assertSame(3, $session['max_items']);
-        $this->assertSame([1 => 'Correct', 2 => 'Not Given', 3 => 'Correct'], $session['rows'][0]['item_status_labels']);
-        $this->assertSame([1, 0, 1], array_column($session['item_summary'], 'started_count'));
+        $anaRow = collect($session['rows'])->firstWhere('student.name', 'Ana');
+        $this->assertSame([1 => 'Correct', 2 => 'Not Given', 3 => 'Correct'], $anaRow['item_status_labels']);
+        $this->assertSame([1, 1, 2], array_column($session['item_summary'], 'started_count'));
         // The answer key lists every question a student could get.
         $this->assertCount(3, $this->service->buildAnswerKey($exam));
 
-        $line = $this->service->buildCompleteResultsTable($session)['rows'][0];
+        $line = collect($this->service->buildCompleteResultsTable($session)['rows'])->first(fn ($line) => $line[0] === 'Ana');
         $this->assertSame(['Correct', '', 'Correct'], array_slice($line, 10));
+    }
+
+    public function test_a_large_shuffled_set_lists_only_the_questions_someone_was_given(): void
+    {
+        $teacher = $this->makeTeacher();
+        $ana = $this->makeStudent();
+        $room = $this->makeRoom($teacher, [$ana]);
+        // Each student gets 2 of a set of 6.
+        $exam = $this->makeExam($teacher, $this->makeBank($teacher, 6), [$room], ['shuffle_questions' => true, 'total_items' => 2]);
+        $attempt = $this->makeSubmittedAttempt($exam, $room, $ana, [true, true, false, false, false, true]);
+        // She was given the set's 2nd and 6th.
+        $attempt->attemptQuestions()->whereNotIn('item_number', [2, 6])->delete();
+
+        $session = $this->service->buildSessionLatestResults($exam, $room);
+
+        // Columns keep the Answer Key's numbers: Q2 and Q6, not Q1 to Q6.
+        $this->assertSame([2, 6], array_column($session['item_summary'], 'item_number'));
+        $this->assertSame([1 => 'Correct', 2 => 'Correct'], $session['rows'][0]['item_status_labels']);
+        $this->assertSame(['Q2', 'Q6'], array_slice($this->service->buildCompleteResultsTable($session)['headers'], 10));
     }
 
     public function test_the_most_chosen_wrong_answer_is_named_for_each_question(): void
