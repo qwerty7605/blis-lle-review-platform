@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Exams;
 
+use App\Http\Controllers\Api\ExamController;
 use App\Models\Exam;
 use App\Models\ExamAttemptAnswer;
 use App\Models\QuestionBankQuestion;
@@ -54,6 +55,23 @@ class ExamRoutesGapsTest extends TestCase
         $this->postJson('/api/exams', $this->examBody(['total_items' => 10]))
             ->assertStatus(422)
             ->assertJsonPath('message', 'Selected question sets do not have enough questions for the item count.');
+    }
+
+    public function test_an_exam_needs_a_question_set_to_be_saved(): void
+    {
+        foreach ([['question_bank_ids' => []], ['question_bank_ids' => null], ['question_bank_ids' => null, 'question_bank_id' => null]] as $missing) {
+            $this->postJson('/api/exams', $this->examBody($missing))
+                ->assertStatus(422)
+                ->assertJsonPath('message', ExamController::NO_QUESTION_SET_MESSAGE);
+        }
+        $this->assertSame(0, Exam::count());
+
+        // One saved before this was required gets a set on its next edit.
+        $old = $this->makeExam($this->teacher, null, [], ['title' => 'Old Exam']);
+        $this->patchJson("/api/exams/{$old->id}", ['title' => 'Old Exam, renamed'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', ExamController::NO_QUESTION_SET_MESSAGE);
+        $this->patchJson("/api/exams/{$old->id}", ['question_bank_ids' => [$this->makeBank($this->teacher, 3)->id]])->assertOk();
     }
 
     public function test_an_exam_given_to_someone_else_s_room_is_not_kept(): void

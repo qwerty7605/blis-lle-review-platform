@@ -653,6 +653,9 @@
               <AlertCircle :size="15" />
               <span>{{ examError }}</span>
             </p>
+            <p v-else-if="selectedQuestionBanks.length === 0" class="exam-modal-action-note">
+              Choose at least one question set from the Library before saving.
+            </p>
             <p v-else-if="needsMoreQuestions" class="exam-modal-action-note">
               Choose enough question sets to cover the requested item count before saving.
             </p>
@@ -661,7 +664,7 @@
               <button
                 type="button"
                 class="primary-btn"
-                :disabled="examSaving || !examForm.title.trim() || examForm.total_items < 1 || examForm.duration_minutes < 1"
+                :disabled="examSaving || !examForm.title.trim() || examForm.total_items < 1 || examForm.duration_minutes < 1 || needsMoreQuestions"
                 @click="handleSaveExam"
               >
                 <RefreshCw v-if="examSaving" :size="15" class="spin-soft" />

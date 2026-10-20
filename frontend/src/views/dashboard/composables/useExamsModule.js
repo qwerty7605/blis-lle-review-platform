@@ -430,7 +430,13 @@ export function useExamsModule() {
       0,
     )
 
-    if (selectedQuestionBanks.value.length > 0 && Number(examForm.total_items) > availableQuestionCount) {
+    if (selectedBankIds.length === 0) {
+      examError.value = 'Choose at least one question set from the Library before saving.'
+      examSaving.value = false
+      return
+    }
+
+    if (Number(examForm.total_items) > availableQuestionCount) {
       examError.value = 'Selected question sets do not have enough questions for the item count.'
       examSaving.value = false
       return
