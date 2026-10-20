@@ -45,7 +45,10 @@ class RoomGradebookWorkbook
             $widths[$column] = 16;
         }
         SheetStyle::table($sheet, $table['headers'], $table['rows'], [1, 3], $widths, 2);
-        $sheet->getRowDimension(1)->setRowHeight(48);
+        // Exam names wrap in their 16-wide columns: tall enough for the
+        // longest, at about 13 characters and 15 points a line.
+        $longest = max(array_map('mb_strlen', $table['headers']));
+        $sheet->getRowDimension(1)->setRowHeight(max(32, 15 * (int) ceil($longest / 13) + 6));
 
         $last = count($table['rows']) + 1;
         if ($table['rows'] !== []) {

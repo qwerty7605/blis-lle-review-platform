@@ -887,8 +887,8 @@ const EXPORT_GROUPS = [
   },
 ]
 
-// Why an export cannot be used yet, or '' when it can. Said on hover and
-// focus, and under the section heading.
+// Why an export cannot be used yet, or '' when it can: the button's tooltip
+// on hover and focus, and shown under it when tapped.
 function exportBlockedReason(option) {
   if (!reportExportForm.exam_id) return 'Choose an exam above first.'
   if (!reportExportForm.room_id) return 'Choose a room above first.'

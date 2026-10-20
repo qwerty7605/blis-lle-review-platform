@@ -45,6 +45,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   const roomName = ref('')
   const joinCode = ref('')
+  // Shown inside the Join dialog: the page's own message sits behind it.
+  const joinRoomError = ref('')
   const roomSearchQuery = ref('')
   const rooms = ref([])
   const selectedRoomId = ref(null)
@@ -288,12 +290,14 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   function openJoinRoomModal() {
     joinCode.value = ''
+    joinRoomError.value = ''
     showJoinRoomModal.value = true
   }
 
   function closeJoinRoomModal() {
     showJoinRoomModal.value = false
     joinCode.value = ''
+    joinRoomError.value = ''
   }
 
   function openEditRoomModal() {
@@ -673,6 +677,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     roomLoading.value = true
     roomError.value = ''
     roomMessage.value = ''
+    joinRoomError.value = ''
 
     try {
       const { data } = await services.joinRoom({ code: joinCode.value.trim().toUpperCase() })
@@ -681,7 +686,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       roomMessage.value = 'Joined room successfully.'
       await fetchRooms(data?.room?.id ?? null)
     } catch (error) {
-      roomError.value = firstApiError(error, 'Unable to join room with that code.')
+      joinRoomError.value = firstApiError(error, 'Unable to join room with that code.')
     } finally {
       roomLoading.value = false
     }
@@ -824,6 +829,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     canViewExamResults,
     roomName,
     joinCode,
+    joinRoomError,
     roomSearchQuery,
     filteredRooms,
     rooms,
