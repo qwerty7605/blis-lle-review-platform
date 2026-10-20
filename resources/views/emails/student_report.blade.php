@@ -23,7 +23,7 @@
             <p class="meta"><strong>Exam:</strong> {{ $report['exam']['title'] ?? 'N/A' }}</p>
             <p class="meta"><strong>Room:</strong> {{ $report['room']['name'] ?? 'N/A' }} ({{ $report['room']['code'] ?? 'N/A' }})</p>
             <p class="meta"><strong>Score:</strong> {{ is_null($report['attempt']['score_percent'] ?? null) ? '–' : rtrim(rtrim(number_format((float) $report['attempt']['score_percent'], 2), '0'), '.') . '%' }} ({{ $report['attempt']['correct_answers'] ?? 0 }} of {{ $report['attempt']['total_items'] ?? 0 }} correct)</p>
-            <p class="meta"><strong>Sitting:</strong> {{ $report['attempt']['sitting'] ?? 1 }} of {{ $report['attempt']['sittings'] ?? 1 }}</p>
+            <p class="meta"><strong>Attempt:</strong> {{ $report['attempt']['attempt_number'] ?? 1 }} of {{ $report['attempt']['attempts_total'] ?? 1 }}</p>
         </div>
 
         <p class="muted">

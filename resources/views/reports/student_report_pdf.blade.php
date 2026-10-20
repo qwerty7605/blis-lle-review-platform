@@ -32,7 +32,7 @@
         </tr>
         <tr>
             <td class="label">Submitted</td><td class="value">{{ ReportOutput::time($attempt['submitted_at'] ?? null) ?? 'Not yet submitted' }}</td>
-            <td class="label">Sitting</td><td class="value">{{ $attempt['sitting'] ?? 1 }} of {{ $attempt['sittings'] ?? 1 }}</td>
+            <td class="label">Attempt</td><td class="value">{{ $attempt['attempt_number'] ?? 1 }} of {{ $attempt['attempts_total'] ?? 1 }}</td>
         </tr>
     </table>
 
@@ -48,7 +48,7 @@
                         <span class="below">Below the {{ $passing }}% pass mark</span>
                     @endif
                 @else
-                    <span class="muted">This sitting is still in progress.</span>
+                    <span class="muted">This attempt is still in progress.</span>
                 @endif
             </td>
         </tr>
@@ -59,7 +59,7 @@
         <p class="muted">Your teacher has kept the correct answers for this exam hidden, so this list shows your answers only.</p>
     @endunless
     @if (empty($report['items'] ?? []))
-        <p class="muted">No questions were recorded for this sitting.</p>
+        <p class="muted">No questions were recorded for this attempt.</p>
     @else
         <table class="grid">
             <thead>

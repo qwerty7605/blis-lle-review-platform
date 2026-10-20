@@ -62,5 +62,5 @@
             <tr><td colspan="{{ 4 + count($exams) }}" class="muted">This room has no current students.</td></tr>
         @endforelse
     </table>
-    <p class="note">Scores are percentages from each student's latest sitting. – not submitted. Scores below {{ $passing }}% are shown in amber.</p>
+    <p class="note">Scores are percentages from each student's latest attempt. – not submitted. Scores below {{ $passing }}% are shown in amber.</p>
 @endsection
