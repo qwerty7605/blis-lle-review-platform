@@ -695,64 +695,48 @@
   }
 }
 
-/* Exports tab: each export button with its (i) beside it. */
+/* Exports tab: the (i) sits inside each button's right edge. It is the
+   button's sibling (a button cannot hold another), laid over it. The cell
+   is positioned, which also holds the visually hidden reason text. */
 .export-cell {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   min-width: 0;
 }
 
-.export-cell > button {
-  flex: 1;
-  min-width: 0;
+.report-action-grid:has(.export-cell) {
+  align-items: start;
+}
+
+.export-cell-main {
+  position: relative;
+}
+
+.export-cell-main > button {
+  width: 100%;
+  padding-left: 36px;
+  padding-right: 36px;
+}
+
+.export-cell-info {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
 }
 
 /* Looks unavailable, but stays hoverable and focusable so it can say why. */
-.export-cell > button.is-blocked {
+.export-cell-main > button.is-blocked {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
 }
 
-.export-block-reason {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 6px 0 0;
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: var(--surface-muted);
-  color: var(--ink-muted);
-  font-size: 13px;
+/* The reason a tapped button cannot be used yet, for touch screens. */
+.export-cell-reason {
+  margin: 6px 2px 0;
+  font-size: 12.5px;
   line-height: 1.4;
-  transition: background 0.2s ease, color 0.2s ease;
-}
-
-.export-block-reason svg {
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-/* A tap on a button that cannot be used yet points here. */
-.export-block-reason.is-flashing {
-  animation: export-reason-flash 1.2s ease;
-}
-
-@keyframes export-reason-flash {
-  0%, 60% {
-    background: var(--dk-bg-lnu-gold-pale, var(--lnu-gold-pale));
-    color: var(--ink);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .export-block-reason.is-flashing {
-    animation: none;
-    background: var(--dk-bg-lnu-gold-pale, var(--lnu-gold-pale));
-    color: var(--ink);
-  }
+  color: var(--ink-muted);
 }
 
 .export-gradebook-note {
