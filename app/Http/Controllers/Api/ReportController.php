@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendStudentReportEmailJob;
 use App\Mail\StudentReportMail;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
@@ -410,31 +411,18 @@ class ReportController extends Controller
             return response()->json(['message' => 'No attempt found for this student in the selected session.'], 404);
         }
 
-        $report = $this->reportExportService->buildAttemptReportData($attempt);
-
-        $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
-        $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
-        $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
-        $filename = ($baseName !== '' ? $baseName : 'student-report')
-            . '-attempt-' . (int) $attempt->id
-            . '.pdf';
-
-        $pdfBinary = Pdf::loadView('reports.student_report_pdf', [
-            'report' => $report,
-        ])->setPaper('a4', 'portrait')->output();
+        $pdf = $this->reportExportService->studentReportPdf($attempt, forStudent: true);
 
         try {
-            Mail::to($recipientEmail)->send(new StudentReportMail(
-                $report,
-                $user,
-                $pdfBinary,
-                $filename
-            ));
+            Mail::to($recipientEmail)->send(new StudentReportMail($pdf['report'], $user, $pdf['binary'], $pdf['filename']));
         } catch (\Throwable $exception) {
+            // The mail server's own words go to the error log and alert, not
+            // to the teacher's screen.
+            report($exception);
+
             return response()->json([
-                'message' => 'Failed to send report email.',
-                'error' => $exception->getMessage(),
-            ], 500);
+                'message' => 'The email could not be sent. Try again in a few minutes; if it keeps failing, download the PDF instead.',
+            ], 502);
         }
 
         $this->recordAudit(
@@ -494,7 +482,7 @@ class ReportController extends Controller
             ->getLatestSessionAttemptsByStudent($exam, $room)
             ->keyBy('user_id');
 
-        $sent = [];
+        $queued = [];
         $issues = [];
 
         foreach ($students as $student) {
@@ -543,38 +531,10 @@ class ReportController extends Controller
                 continue;
             }
 
-            $report = $this->reportExportService->buildAttemptReportData($attempt);
+            // Built and sent by the queue worker, one student at a time.
+            SendStudentReportEmailJob::dispatch((int) $attempt->id, (int) $user->id, $recipientEmail);
 
-            $studentLabel = trim((string) ($report['student']['student_id'] ?? 'student'));
-            $studentSlug = trim((string) Str::slug((string) ($report['student']['name'] ?? 'student')));
-            $baseName = trim($studentLabel . '-' . ($studentSlug !== '' ? $studentSlug : 'student'));
-            $filename = ($baseName !== '' ? $baseName : 'student-report')
-                . '-attempt-' . (int) $attempt->id
-                . '.pdf';
-
-            $pdfBinary = Pdf::loadView('reports.student_report_pdf', [
-                'report' => $report,
-            ])->setPaper('a4', 'portrait')->output();
-
-            try {
-                Mail::to($recipientEmail)->send(new StudentReportMail(
-                    $report,
-                    $user,
-                    $pdfBinary,
-                    $filename
-                ));
-            } catch (\Throwable $exception) {
-                $issues[] = [
-                    'student_id' => (int) $student->id,
-                    'student_name' => $student->name,
-                    'student_number' => $student->student_id,
-                    'reason' => 'mail_send_failed',
-                    'error' => $exception->getMessage(),
-                ];
-                continue;
-            }
-
-            $sent[] = [
+            $queued[] = [
                 'student_id' => (int) $student->id,
                 'student_name' => $student->name,
                 'student_number' => $student->student_id,
@@ -585,7 +545,7 @@ class ReportController extends Controller
 
         $summary = [
             'students_total' => (int) $students->count(),
-            'sent_count' => (int) count($sent),
+            'queued_count' => (int) count($queued),
             'issue_count' => (int) count($issues),
             'verified_only' => $verifiedOnly,
         ];
@@ -595,12 +555,12 @@ class ReportController extends Controller
             'report.email.student_reports_bulk',
             'exam',
             $exam->id,
-            'Emailed bulk student report PDFs',
+            'Queued student report emails',
             [
                 'exam_id' => (int) $exam->id,
                 'room_id' => (int) $room->id,
                 'students_total' => (int) $students->count(),
-                'sent_count' => (int) count($sent),
+                'queued_count' => (int) count($queued),
                 'issue_count' => (int) count($issues),
                 'verified_only' => $verifiedOnly,
             ],
@@ -608,9 +568,9 @@ class ReportController extends Controller
         );
 
         return response()->json([
-            'message' => 'Bulk student report email process completed.',
+            'message' => 'Student report emails are being sent.',
             'summary' => $summary,
-            'sent' => $sent,
+            'queued' => $queued,
             'issues' => $issues,
         ]);
     }
