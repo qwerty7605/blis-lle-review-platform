@@ -553,39 +553,40 @@
               <span v-if="selectedReportStudent" class="pill success">{{ selectedReportStudent.name }}</span>
             </div>
 
-            <!-- Each export says what it is under its name, so the buttons can
-                 be told apart without opening anything. -->
+            <!-- An (i) beside each export says what it is. A button that cannot
+                 be used yet stays focusable (aria-disabled, not disabled), so
+                 hovering or focusing it can say why, and the line under the
+                 section heading says it too, for touch screens. -->
             <div class="report-action-sections">
               <section v-for="group in EXPORT_GROUPS" :key="group.key" class="action-section">
                 <header class="action-section-head">
                   <h4>{{ group.title }} <InfoTip :text="group.info" /></h4>
-                  <p v-if="group.key === 'student' && !canExportSingleStudentReport" class="export-group-hint">
-                    Pick a student in the Student field above to use these.
+                  <p
+                    v-if="groupBlockedReason(group)"
+                    :id="`export-block-${group.key}`"
+                    class="export-block-reason"
+                    :class="{ 'is-flashing': flashedGroup === group.key }"
+                  >
+                    <AlertCircle :size="14" aria-hidden="true" />
+                    <span>{{ groupBlockedReason(group) }}</span>
                   </p>
                 </header>
 
-                <div class="export-option-grid">
-                  <button
-                    v-for="option in group.options"
-                    :key="option.key"
-                    type="button"
-                    class="export-option"
-                    :class="{ 'is-primary': option.primary }"
-                    :disabled="!(group.key === 'student' ? canExportSingleStudentReport : canExportSessionReports) || reportExportingKey !== ''"
-                    @click="option.email ? sendReportEmail(option.key) : exportReport(option.key)"
-                  >
-                    <span class="export-option-icon" aria-hidden="true">
-                      <RefreshCw v-if="reportExportingKey === option.key" :size="18" class="spin-soft" />
-                      <component :is="option.icon" v-else :size="18" />
-                    </span>
-                    <span class="export-option-copy">
-                      <span class="export-option-title">
-                        {{ option.title }}
-                        <span class="export-option-format">{{ option.format }}</span>
-                      </span>
-                      <span class="export-option-desc">{{ option.description }}</span>
-                    </span>
-                  </button>
+                <div class="report-action-grid">
+                  <div v-for="option in group.options" :key="option.key" class="export-cell">
+                    <button
+                      type="button"
+                      :class="[option.primary ? 'primary-btn' : 'ghost-btn', { 'is-blocked': exportBlockedReason(option) }]"
+                      :aria-disabled="Boolean(exportBlockedReason(option))"
+                      :title="exportBlockedReason(option) || undefined"
+                      :aria-describedby="exportBlockedReason(option) ? `export-block-${group.key}` : undefined"
+                      @click="runExportOption(group, option)"
+                    >
+                      <RefreshCw v-if="reportExportingKey === option.key" :size="14" class="spin-soft" />
+                      <span>{{ option.label }}</span>
+                    </button>
+                    <InfoTip :text="option.info" :label="`About ${option.label}`" />
+                  </div>
                 </div>
               </section>
 
@@ -646,15 +647,9 @@ import {
   ChevronDown,
   ClipboardList,
   DoorOpen,
-  FileArchive,
-  FileKey,
-  FileSpreadsheet,
   FileText,
   LayoutDashboard,
-  Mail,
-  MailPlus,
   RefreshCw,
-  Sheet,
   ShieldCheck,
   TrendingUp,
   Users,
@@ -886,39 +881,73 @@ const reportStudentHint = computed(() => {
   return 'Only needed for the one-student reports below.'
 })
 
-// The Exports tab's buttons, grouped by who they are about. The key is what
-// exportReport() / sendReportEmail() take.
+// The Exports tab's buttons, as they were laid out before, each with an (i)
+// saying what it is. The key is what exportReport() / sendReportEmail() take.
 const EXPORT_GROUPS = [
   {
-    key: 'class',
-    title: 'For the Whole Class',
-    info: 'Everyone in the chosen room on the chosen exam. Each student counts once, by their latest sitting.',
+    key: 'downloads',
+    title: 'Downloads',
+    info: 'Files for the chosen exam and room. Each student counts once, by their latest sitting.',
     options: [
-      { key: 'xlsx', title: 'Class Results', format: 'Excel', icon: FileSpreadsheet, primary: true, description: 'Every student\'s score and right or wrong on each question, plus how the class did per question. Best for your records.' },
-      { key: 'summary_pdf', title: 'Class Summary', format: 'PDF', icon: FileText, description: 'One or two printable pages: average, pass rate, score breakdown and the questions to review.' },
-      { key: 'csv', title: 'Class Results', format: 'CSV', icon: Sheet, description: 'The same scores as plain data, for Google Sheets or another records system. Not formatted.' },
-      { key: 'student_zip', title: 'Every Student\'s Report', format: 'ZIP', icon: FileArchive, description: 'A Student Report PDF for each student who has taken the exam, in one download.' },
-      { key: 'student_email_bulk', title: 'Email Every Student Their Report', format: 'Email', icon: MailPlus, email: true, description: 'Sends each student their own Student Report PDF. Hidden results leave out the correct answers.' },
+      { key: 'xlsx', label: 'Results (Excel)', info: 'Every student\'s score and right or wrong on each question, plus how the class did on each question. A sheet inside explains how to read it. Best for your records.' },
+      { key: 'csv', label: 'Results (CSV)', info: 'The same scores as plain data with no formatting, for Google Sheets or another records system.' },
+      { key: 'summary_pdf', label: 'Summary PDF', info: 'One or two printable pages for the class: average, pass rate, score breakdown and the questions most students missed.' },
+      { key: 'answer_key_pdf', label: 'Answer Key PDF', info: 'Every question with its choices and the correct answer marked. The same for every room. For you, not for students.' },
+      { key: 'student_pdf', label: 'Student PDF', needsStudent: true, info: 'One student\'s report: their score, then each question with the answer they gave and the correct one. Needs a student chosen above.' },
+      { key: 'student_zip', label: 'All PDFs ZIP', primary: true, info: 'The Student PDF of every student who has taken the exam, in one download.' },
     ],
   },
   {
-    key: 'student',
-    title: 'For One Student',
-    info: 'The student picked in the Student field above, from their latest sitting.',
+    key: 'email',
+    title: 'Email Delivery',
+    info: 'Sends each student their own Student PDF. If the exam\'s results are Hidden, their copy leaves out the correct answers.',
     options: [
-      { key: 'student_pdf', title: 'Student Report', format: 'PDF', icon: FileText, description: 'Their score, then each question with the answer they gave and the correct one.' },
-      { key: 'student_email', title: 'Email This Student Their Report', format: 'Email', icon: Mail, email: true, description: 'Sends the same PDF to their email. Hidden results leave out the correct answers.' },
-    ],
-  },
-  {
-    key: 'key',
-    title: 'Answer Key',
-    info: 'The same for every room the exam is in.',
-    options: [
-      { key: 'answer_key_pdf', title: 'Answer Key', format: 'PDF', icon: FileKey, description: 'Every question with its choices and the correct answer marked. For you, not for students.' },
+      { key: 'student_email', label: 'Email Student PDF', email: true, needsStudent: true, info: 'Emails the chosen student their own report. Needs a student chosen above.' },
+      { key: 'student_email_bulk', label: 'Email All Reports', email: true, primary: true, info: 'Emails every student in the room who has taken the exam their own report. Sent in the background over a few minutes.' },
     ],
   },
 ]
+
+// Why an export cannot be used yet, or '' when it can. Said on hover and
+// focus, and under the section heading.
+function exportBlockedReason(option) {
+  if (!reportExportForm.exam_id) return 'Choose an exam above first.'
+  if (!reportExportForm.room_id) return 'Choose a room above first.'
+  if (option.needsStudent) {
+    if (reportStudentsLoading.value) return 'Loading the room\'s students...'
+    if (reportExportStudents.value.length === 0) return 'This room has no current students to choose from.'
+    if (!reportExportForm.student_id) return `${option.label} is for one student: choose one in the Student field above.`
+  }
+  if (reportExportingKey.value) return 'Wait for the export in progress to finish.'
+  return ''
+}
+
+function groupBlockedReason(group) {
+  const reasons = [...new Set(group.options.map(exportBlockedReason).filter(Boolean))]
+    .filter((reason) => !reason.startsWith('Wait'))
+  if (reasons.length === 0) return ''
+  if (reasons.length === 1) return reasons[0]
+  // Some can be used and some cannot: name the ones that cannot.
+  return reasons.join(' ')
+}
+
+const flashedGroup = ref('')
+let flashTimer = null
+
+function runExportOption(group, option) {
+  if (exportBlockedReason(option)) {
+    // A tap on a touch screen has no hover: point at the reason instead.
+    flashedGroup.value = ''
+    clearTimeout(flashTimer)
+    requestAnimationFrame(() => {
+      flashedGroup.value = group.key
+      flashTimer = setTimeout(() => { flashedGroup.value = '' }, 1200)
+    })
+    return
+  }
+  if (option.email) sendReportEmail(option.key)
+  else exportReport(option.key)
+}
 </script>
 
 <style scoped src="./reportsView.css"></style>

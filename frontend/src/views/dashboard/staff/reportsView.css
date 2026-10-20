@@ -695,99 +695,64 @@
   }
 }
 
-/* Exports tab: each export is a button that says what it is. Two across
-   where there is room, one on phones. */
-.export-option-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 10px;
-}
-
-.export-option {
+/* Exports tab: each export button with its (i) beside it. */
+.export-cell {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.export-option:hover:not(:disabled) {
-  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
-  box-shadow: var(--shadow-sm);
-}
-
-.export-option:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.export-option:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.export-option.is-primary {
-  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
-}
-
-.export-option-icon {
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: var(--surface-muted);
-  color: var(--dk-fg-lnu-navy, var(--lnu-navy));
-}
-
-.export-option.is-primary .export-option-icon {
-  background: var(--panel-navy);
-  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
-}
-
-.export-option-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.export-option-title {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--ink);
+  min-width: 0;
 }
 
-.export-option-format {
-  padding: 1px 7px;
-  border-radius: 999px;
+.export-cell > button {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Looks unavailable, but stays hoverable and focusable so it can say why. */
+.export-cell > button.is-blocked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.export-block-reason {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 8px;
   background: var(--surface-muted);
-  border: 1px solid var(--border-soft);
-  font-size: 11px;
-  font-weight: 600;
   color: var(--ink-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
-.export-option-desc {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--ink-muted);
+.export-block-reason svg {
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.export-group-hint {
-  font-weight: 600;
+/* A tap on a button that cannot be used yet points here. */
+.export-block-reason.is-flashing {
+  animation: export-reason-flash 1.2s ease;
+}
+
+@keyframes export-reason-flash {
+  0%, 60% {
+    background: var(--dk-bg-lnu-gold-pale, var(--lnu-gold-pale));
+    color: var(--ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-block-reason.is-flashing {
+    animation: none;
+    background: var(--dk-bg-lnu-gold-pale, var(--lnu-gold-pale));
+    color: var(--ink);
+  }
 }
 
 .export-gradebook-note {
