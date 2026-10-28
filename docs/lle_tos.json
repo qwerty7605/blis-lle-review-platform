@@ -1,0 +1,1511 @@
+{
+  "title": "Librarian Licensure Examination - Table of Specifications (PRC Board for Librarians)",
+  "source": "TOS-LLE-CODHLIS.docx (scanned pages), transcribed 2026-10-28",
+  "rules": [
+    "Subjects, topics and sub-topics are the tagging taxonomy. A question gets one subject, one topic and one sub-topic from this file, or the subject's 'Other / Unclassified' topic.",
+    "A sub-topic is the TOS level that carries a question count. Where a TOS item has listed children with their own counts (Indexing 2.10, IT 3.1), the children are the sub-topics; where only the parent has a count (IT 6.2, 6.3), the children are keyword_hints.",
+    "tos_items is the number of board-exam questions the TOS assigns. It is reference data; nothing in the system is required to use it yet.",
+    "source_note marks places where the scanned TOS contradicts itself. Confirm these with faculty before relying on the counts."
+  ],
+  "subjects": [
+    {
+      "key": "cataloging",
+      "official_name": "Cataloging and Classification",
+      "short_name": "Cataloging",
+      "weight_percent": 20,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Basic Concepts",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Identify the importance of cataloging and classification in information handling",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Describe the different catalogs and their advantages / disadvantages",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Trace the historical development of cataloging rules",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "List down the personalities involved in the development of cataloging rules",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.5",
+              "name": "Define operational terms in cataloging and classification",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.6",
+              "name": "Identify the types of catalog, its parts and functions",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.7",
+              "name": "Point out the components and functions of the catalog department",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "2",
+          "name": "Descriptive Cataloging",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Explain the process of descriptive cataloging",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Illustrate the principles of descriptive cataloging",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Identify the basic parts of the International Standard Bibliographic Description",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.4",
+              "name": "Apply the rules of descriptive cataloging as exemplified by the Anglo American Cataloging Rules 2nd ed. 2004 ed. for all types of materials",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.5",
+              "name": "Name the appropriate access points for personal, corporate, geographic, titles and uniform titles",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.6",
+              "name": "Design a name authority file",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.7",
+              "name": "Provide references for descriptive cataloging",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "3",
+          "name": "Subject Cataloging",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "3.1",
+              "name": "Relate the principles of subject cataloging",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.2",
+              "name": "Exemplify the rules of subject cataloging",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.3",
+              "name": "Identify the forms of subject catalogs",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.4",
+              "name": "Use standard lists of subject headings such as the Sears, LCSH, MCSH and others",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.5",
+              "name": "Assign appropriate subject headings",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.6",
+              "name": "Consult subject authority file",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "4",
+          "name": "Classification",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "4.1",
+              "name": "Recite the overview of the different classification systems",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.2",
+              "name": "Apply the principles of classification",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.3",
+              "name": "Summarize the historical background and general characteristics of DDC",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.4",
+              "name": "Use schedules, tables, and cutter table",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.5",
+              "name": "Build the DDC call number",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.6",
+              "name": "Paraphrase the historical background and general characteristics of LCC Scheme",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.7",
+              "name": "Use schedules, tables and internal cutter table",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.8",
+              "name": "Build the LCC call number",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "5",
+          "name": "Shelflisting and Filing Catalog Entries",
+          "tos_items": 15,
+          "subtopics": [
+            {
+              "code": "5.1",
+              "name": "Modify shelf list",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "5.2",
+              "name": "File catalog entries using the ALA rules of filing",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "5.3",
+              "name": "Shelve books using the DDC or LC Scheme",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "6",
+          "name": "Trends in Cataloging",
+          "tos_items": 15,
+          "subtopics": [
+            {
+              "code": "6.1",
+              "name": "Operate a computer assisted catalog",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.2",
+              "name": "Identify the different fields of the MARC records",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.3",
+              "name": "Match the catalog records with the MARC",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.4",
+              "name": "Describe online cataloging",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.5",
+              "name": "Define Dublin Core",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.6",
+              "name": "Define metadata",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.7",
+              "name": "Illustrate data mining process",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.8",
+              "name": "Undertake conversion and migration of records",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "Sub-topic counts add up to 20 but the TOS gives the topic 15."
+        }
+      ]
+    },
+    {
+      "key": "indexing",
+      "official_name": "Indexing and Abstracting",
+      "short_name": "Indexing",
+      "weight_percent": 15,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Abstracting",
+          "tos_items": 30,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Define abstracting",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Trace the development of abstracts and abstracting process",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Identify the various types of document surrogates",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "Familiar with the uses of abstracts",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.5",
+              "name": "Differentiate the types of abstracts",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.6",
+              "name": "Apply the principles and concepts of abstracting",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.7",
+              "name": "Distinguish the parts of an abstract, e.g. reference, body, signature",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.8",
+              "name": "Demonstrate the proper citation formats in abstract, e.g. books, periodicals, electronic",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.9",
+              "name": "Compose an abstract",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.10",
+              "name": "Apply the abstracting principles",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.11",
+              "name": "Prepare abstracting policies, procedures and guidelines",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.12",
+              "name": "Produce a good abstract",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "2",
+          "name": "Indexing",
+          "tos_items": 35,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Define indexing",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Trace the development of indexes and indexing process",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Recite the role of indexing in information retrieval",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.4",
+              "name": "Describe information retrieval system",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.5",
+              "name": "State the purposes and uses of indexing",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.6",
+              "name": "Identify the type of indexes",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.7",
+              "name": "Produce a book, newspaper and periodical index",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.8",
+              "name": "Use the principles and concepts of indexing such as exhaustivity, specificity and consistency",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.9",
+              "name": "Explain indexing languages as to purposes, features and types",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.1",
+              "name": "Indexing systems: Coordinate indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.2",
+              "name": "Indexing systems: Classified indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.3",
+              "name": "Indexing systems: Chain indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.4",
+              "name": "Indexing systems: Permuted indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.5",
+              "name": "Indexing systems: Citation indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.10.6",
+              "name": "Indexing systems: String indexes",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.11",
+              "name": "Apply the measure of effectiveness of the indexing system, e.g. recall and precision",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.12",
+              "name": "Design a thesaurus",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.13",
+              "name": "Describe a thesaurus as to differences and similarities, relationships of terms and basic features",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.14",
+              "name": "Apply indexing standards",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.15",
+              "name": "Prepare indexing policies, procedures and guidelines",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "TOS item 2.10 'Present examples of indexing systems' has no count of its own; its six items (2.10.1-2.10.6) carry the counts, so they are the sub-topics here."
+        },
+        {
+          "code": "3",
+          "name": "Application of Abstracting and Indexing Data",
+          "tos_items": 15,
+          "subtopics": [
+            {
+              "code": "3.1",
+              "name": "Prepare samples of primary publications for abstracting and indexing services",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.2",
+              "name": "Prepare samples of database products",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.3",
+              "name": "Prepare online searching application",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.4",
+              "name": "Prepare current awareness services",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.5",
+              "name": "Prepare Selective Dissemination of Information and other tools",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "4",
+          "name": "Automated Abstracting and Indexing and Trends",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "4.1",
+              "name": "Describe automated indexing",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.2",
+              "name": "Describe an automated abstracting service",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.3",
+              "name": "Identify new developments in indexing",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.4",
+              "name": "Identify new developments in abstracting services",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "The TOS scope page lists 'Automated Indexing and Abstracting' (2%, 10) and 'Trends in Abstracting and Indexing' (2%, 10) separately; the detailed table merges them into this topic."
+        }
+      ]
+    },
+    {
+      "key": "it",
+      "official_name": "Information Technology",
+      "short_name": "IT",
+      "weight_percent": 10,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Concepts of Information Storage and Retrieval Systems",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Identify technologies for information handling: hardware, software, manpower component",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Understand the nature and need for information and the function and responsibilities of libraries/information centers",
+              "tos_items": 7,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Identify/describe principles of information storage and retrieval systems",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "Trace the history of computing, computer development and their effects on library and information work",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "2",
+          "name": "Information Systems and Databases",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Name national, regional information systems",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Familiarize with international library systems",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Identify international information databases",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "3",
+          "name": "Computer Applications in Library Operations",
+          "tos_items": 30,
+          "subtopics": [
+            {
+              "code": "3.1.1",
+              "name": "Computer applications: Acquisition",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.1.2",
+              "name": "Computer applications: Circulation",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.1.3",
+              "name": "Computer applications: Cataloging",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.1.4",
+              "name": "Computer applications: Serials",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.1.5",
+              "name": "Computer applications: Inventory",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.1.6",
+              "name": "Computer applications: Reporting",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "TOS item 3.1 'Identify computer applications in library operations' has no count of its own; its six items carry the counts, so they are the sub-topics here. The original numbers 3.1.6 as '3.2.6'. The scope page gives this topic 2% / 20; the detailed table (used here) gives 3% / 30."
+        },
+        {
+          "code": "4",
+          "name": "Computer Technologies",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "4.1",
+              "name": "Identify basics and developments in telecommunications",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.2",
+              "name": "Differentiate networks - LAN, WAN, MAN, etc.",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.3",
+              "name": "Familiarize with the Internet and its application in library functions",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "The scope page calls this topic 'Communication Technologies' (2% / 20); the detailed table (used here) calls it 'Computer Technologies' (1% / 10). Its sub-topics are about telecommunications and networks."
+        },
+        {
+          "code": "5",
+          "name": "Multimedia Technologies",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "5.1",
+              "name": "Identify current developments",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "5.2",
+              "name": "Familiarize with the applications in libraries and information work",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "6",
+          "name": "Issues in Information Technology",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "6.1",
+              "name": "Understand the information age and its role for information professionals",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.2",
+              "name": "Familiarize with emerging trends in information technology",
+              "tos_items": 10,
+              "keyword_hints": [
+                [
+                  "Digital resources",
+                  "Safety and security controls",
+                  "Licensing",
+                  "Open journal access"
+                ]
+              ]
+            },
+            {
+              "code": "6.3",
+              "name": "Ethical issues in information technology",
+              "tos_items": 5,
+              "keyword_hints": [
+                [
+                  "Apply netiquette",
+                  "Differentiate Intellectual Property Rights (IPR) and copyright"
+                ]
+              ]
+            }
+          ],
+          "source_note": "6.2 and 6.3 carry the counts; their listed items (6.2.1-6.2.4, 6.3.1-6.3.2) are given as keyword_hints, not separate sub-topics."
+        }
+      ]
+    },
+    {
+      "key": "management",
+      "official_name": "Library Organization and Management",
+      "short_name": "Management",
+      "weight_percent": 20,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Knowledge Relating to the Development of Organization/Management",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Trace the historical development of organization and management",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Explain the basic principles / concepts involved in organization / management",
+              "tos_items": 8,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Apply the basic principles / concepts of organization / management to library operations",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "Identify / differentiate various management styles and leadership qualities / traits",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "2",
+          "name": "Administration of the Library",
+          "tos_items": 15,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Relate the work of the librarian within and outside of the organization",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Differentiate the various types of libraries as to objectives, functions, collections, staff and services",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Define the composition and functions of the Library Board / Committee",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "3",
+          "name": "Major Administrative Concerns",
+          "tos_items": 45,
+          "subtopics": [
+            {
+              "code": "3.1",
+              "name": "Familiarize oneself with the various elements involved in personnel management",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.2",
+              "name": "Identify the various sources of library support and explain the various ways of preparing the library budget",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.3",
+              "name": "Differentiate and perform the major services of the library",
+              "tos_items": 8,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.4",
+              "name": "Determine the physical requirements of a library in terms of space, facilities, equipment and furniture",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.5",
+              "name": "Explain how the library collection should be managed, preserved and conserved",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.6",
+              "name": "Describe different ways of promoting the library",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.7",
+              "name": "Identify the various ways of evaluating library services",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "4",
+          "name": "Laws, Related Practices, and Trends",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "4.1",
+              "name": "Understand RA 9246 and other laws and issuances related to Philippine librarianship",
+              "tos_items": 8,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.2",
+              "name": "Understand the Code of Ethics for Filipino Librarians",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "4.3",
+              "name": "Discuss trends and practices in the field of librarianship",
+              "tos_items": 8,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "reference",
+      "official_name": "Reference, Bibliography and User Services",
+      "short_name": "Reference",
+      "weight_percent": 20,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Knowledge Relating to the Nature, Historical Development and Functions of Reference and Information Services",
+          "tos_items": 25,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Define the nature of reference service",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Trace the historical development of reference service",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Identify / differentiate the functions of reference service",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "Describe the organizational structure of the reference department",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.5",
+              "name": "Describe the qualities and qualifications of a reference librarian",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.6",
+              "name": "Enumerate the duties and responsibilities of a reference librarian",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.7",
+              "name": "Relate reference service with the other services of the library",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "2",
+          "name": "Reference and Information Sources",
+          "tos_items": 30,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Define the nature and scope of reference and information sources (both general and specific)",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Identify / classify the different types of reference sources",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Evaluate the various reference and information sources",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.4",
+              "name": "Utilize appropriate reference sources to various information needs",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "3",
+          "name": "Reference and Information Services",
+          "tos_items": 45,
+          "subtopics": [
+            {
+              "code": "3.1",
+              "name": "Describe the reference process",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.2",
+              "name": "Differentiate the types of reference questions",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.3",
+              "name": "Identify the various methods and techniques involved in a reference interview",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.4",
+              "name": "Distinguish direct and indirect types of reference services",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.5",
+              "name": "Identify the types and functions of information service",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.6",
+              "name": "Demonstrate the use of computers in reference service",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.7",
+              "name": "Determine the use and functions of bibliographic networks in reference service",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "selection",
+      "official_name": "Selection and Acquisition",
+      "short_name": "Selection",
+      "weight_percent": 15,
+      "topics": [
+        {
+          "code": "1",
+          "name": "Selection of Multi-media Information Sources",
+          "tos_items": 30,
+          "subtopics": [
+            {
+              "code": "1.1",
+              "name": "Identify/describe basic principles for collection development",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.2",
+              "name": "Apply basic concepts and principles of collection and selection",
+              "tos_items": 7,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.3",
+              "name": "Understand and apply criteria for selection and collection of print and non-print materials",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.4",
+              "name": "Apply standards of collection development in libraries",
+              "tos_items": 7,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "1.5",
+              "name": "Define the responsibility and place of librarians as selectors of library materials",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "Sub-topic 1.5 has no number in the original."
+        },
+        {
+          "code": "2",
+          "name": "Acquisition Process",
+          "tos_items": 25,
+          "subtopics": [
+            {
+              "code": "2.1",
+              "name": "Identify the different methods of acquisition",
+              "tos_items": 6,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.2",
+              "name": "Describe ordering, work flow, procedures, forms, records, etc.",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.3",
+              "name": "Explain factors affecting acquisition work",
+              "tos_items": 5,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "2.4",
+              "name": "Familiarize with the procedures in the distribution of library materials",
+              "tos_items": 4,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "3",
+          "name": "Evaluation of Collection",
+          "tos_items": 20,
+          "subtopics": [
+            {
+              "code": "3.1",
+              "name": "Identify approaches to collection evaluation",
+              "tos_items": 13,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "3.2",
+              "name": "Apply deselection and weeding criteria and processes",
+              "tos_items": 7,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "4",
+          "name": "Formulation of Collection Development Evaluation",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "4.1",
+              "name": "Design collection development policies",
+              "tos_items": 10,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ],
+          "source_note": "The scope page calls this topic 'Formulation of Collection Policies'."
+        },
+        {
+          "code": "5",
+          "name": "Preservation and Conservation",
+          "tos_items": 5,
+          "subtopics": [
+            {
+              "code": "5.1",
+              "name": "Identify/describe preservation and conservation procedures",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "5.2",
+              "name": "Apply preservation and conservation",
+              "tos_items": 2,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        },
+        {
+          "code": "6",
+          "name": "Issues and Trends in Collection Development",
+          "tos_items": 10,
+          "subtopics": [
+            {
+              "code": "6.1",
+              "name": "Be aware of the automation and trends of collection development",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.2",
+              "name": "Understand access, ownership and ethical issues",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.3",
+              "name": "Apply censorship in selection and collection development",
+              "tos_items": 3,
+              "keyword_hints": [
+                null
+              ]
+            },
+            {
+              "code": "6.4",
+              "name": "Describe/understand resource sharing",
+              "tos_items": 1,
+              "keyword_hints": [
+                null
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
