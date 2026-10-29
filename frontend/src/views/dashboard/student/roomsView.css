@@ -899,3 +899,12 @@
   font-weight: 600;
   color: var(--dk-fg-lnu-navy-deep, var(--lnu-navy-deep));
 }
+
+/* The exam's type ("Pre-test", "Mock board"...). Beats `.rooms-exam-meta span`. */
+.rooms-exam-meta .rooms-exam-type {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink);
+  padding: 0 8px;
+}

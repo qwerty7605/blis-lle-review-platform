@@ -164,6 +164,10 @@
                     <div class="examrow-cell-copy" :title="`Sources: ${examQuestionBankSummaryText(exam)}`">
                       <strong>{{ exam.title }}</strong>
                       <span>{{ examQuestionBankSubject(exam) }}</span>
+                      <span class="exam-type-line">
+                        <span class="pill neutral exam-type-tag">{{ exam.exam_type_label || examTypeLabel(exam.exam_type) }}</span>
+                        <small v-if="exam.series">{{ exam.series.name }}</small>
+                      </span>
                       <small>{{ examRulesText(exam) }}</small>
                       <small v-if="seesEveryTeacher && exam.creator?.name" class="owner-line">By {{ exam.creator.name }}</small>
                     </div>
@@ -253,6 +257,10 @@
                 <span class="directory-row-copy">
                   <strong>{{ exam.title }}</strong>
                   <span>{{ examRowMeta(exam) }}</span>
+                  <span class="exam-type-line">
+                    <span class="pill neutral exam-type-tag">{{ exam.exam_type_label || examTypeLabel(exam.exam_type) }}</span>
+                    <small v-if="exam.series">{{ exam.series.name }}</small>
+                  </span>
                 </span>
                 <span class="pill" :class="examWindowPill(exam)">{{ examWindow(exam).label }}</span>
                 <ChevronDown :size="18" class="directory-row-more directory-row-chevron" aria-hidden="true" />
@@ -352,6 +360,45 @@
                       <span class="field-label">Title</span>
                       <input v-model.trim="examForm.title" type="text" class="text-input" maxlength="255" />
                     </label>
+
+                    <label class="field-stack">
+                      <span class="field-label">
+                        Exam type
+                        <InfoTip text="Regular mock exams are practice and battery exams are given each semester. A pre-test or a mock board is the LLE review: six exams, one per board subject, kept together as a series. Only pre-tests and mock boards feed the students' Estimated Outcome." />
+                      </span>
+                      <select v-model="examForm.exam_type" class="text-input" required>
+                        <option v-for="option in EXAM_TYPE_OPTIONS" :key="option.value" :value="option.value">
+                          {{ option.label }} ({{ option.hint }})
+                        </option>
+                      </select>
+                    </label>
+
+                    <div v-if="formNeedsSeries" class="field-stack exam-series-field">
+                      <label class="field-stack">
+                        <span class="field-label">Series</span>
+                        <select v-model="examForm.exam_series_id" class="text-input">
+                          <option :value="null" disabled>Choose the {{ examTypeLabel(examForm.exam_type).toLowerCase() }} this exam is one subject of</option>
+                          <option v-for="series in seriesForType" :key="series.id" :value="series.id">
+                            {{ series.name }}{{ series.missing_subjects.length ? ` (needs ${series.missing_subjects.length} more)` : ' (all six subjects)' }}
+                          </option>
+                        </select>
+                      </label>
+                      <div class="inline-form exam-series-new">
+                        <input
+                          v-model.trim="newSeriesName"
+                          type="text"
+                          class="text-input"
+                          maxlength="120"
+                          :placeholder="examForm.exam_type === 'pre_test' ? 'New series, e.g. 2026 Pre-test' : 'New series, e.g. 2026 Mock Board 1'"
+                          @keydown.enter.prevent="createSeriesFromForm"
+                        />
+                        <button type="button" class="ghost-btn" :disabled="!newSeriesName || seriesSaving" @click="createSeriesFromForm">
+                          {{ seriesSaving ? 'Creating...' : 'Create series' }}
+                        </button>
+                      </div>
+                      <small v-if="seriesError" class="field-error" role="alert">{{ seriesError }}</small>
+                      <small class="muted">One exam per board subject in a series. The subject is the one its question sets are filed under.</small>
+                    </div>
 
                     <div class="inline-form exam-meta-row">
                       <label class="field-stack narrow">
@@ -809,7 +856,7 @@ import {
   parseDateTime,
 } from '../composables/useDashboardFormatters'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
-import { useExamsModule } from '../composables/useExamsModule'
+import { EXAM_TYPE_OPTIONS, examTypeLabel, useExamsModule } from '../composables/useExamsModule'
 import { beatAt, now } from '@/utils/clock'
 import { vScrollHint } from '@/utils/scrollHint'
 import { useAuthStore } from '@/store/auth.store'
@@ -945,6 +992,12 @@ const {
   showDeleteExamModal,
   selectedExam,
   examForm,
+  seriesForType,
+  formNeedsSeries,
+  newSeriesName,
+  seriesSaving,
+  seriesError,
+  createSeriesFromForm,
   examQuestionBankCount,
   examQuestionBankSubject,
   examQuestionBankSummaryText,
