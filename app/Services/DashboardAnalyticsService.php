@@ -516,8 +516,8 @@ class DashboardAnalyticsService
     }
 
     /**
-     * Below this many answered items an area is one unlucky guess, not a
-     * finding worth sending a student to study. Matches
+     * Below this many items an area is one unlucky guess, not a finding worth
+     * sending a student to study. Matches
      * ExamResultFeedbackService::TOPIC_MIN_ITEMS so the dashboard headline
      * and the post-exam result page never name different weakest areas for
      * the same student.
@@ -527,18 +527,17 @@ class DashboardAnalyticsService
     /**
      * The student's weakest mapped area, most specific level that has data.
      *
-     * Ranked by Bayesian Knowledge Tracing rather than percent correct, so the
-     * area that surfaces is the one the student is least likely to actually
-     * know -- which is not the same as the one with the lowest score. See
-     * MasteryProfileBuilder and KnowledgeTracingService.
+     * Topics and sub-topics are ranked by Bayesian Knowledge Tracing (one
+     * update per exam) rather than percent correct, so the area that surfaces
+     * is the one the student is least likely to actually know -- which is not
+     * the same as the one with the lowest score. See MasteryProfileBuilder
+     * and KnowledgeTracingService. Subjects are not traced; a subject is
+     * ranked by its percent correct.
      *
      * Runs the subtopic -> topic -> subject cascade twice: first over areas
-     * backed by enough answered items to mean something, then, only if the
-     * student has not answered that many anywhere yet, over everything, so
-     * someone a week into the term still gets a recommendation instead of a
-     * blank panel. Without that first pass a single missed question outranks
-     * a sustained weakness, because one wrong answer drops mastery below where
-     * several mixed answers land.
+     * backed by enough items to mean something, then, only if the student
+     * has not met that many anywhere yet, over everything, so someone a week
+     * into the term still gets a recommendation instead of a blank panel.
      *
      * @return array<string, mixed>|array{}
      */
@@ -685,135 +684,147 @@ class DashboardAnalyticsService
     }
 
     /**
+     * A student's percent correct per subject, over the same items mastery is
+     * traced from (MasteryProfileBuilder::latestSittingItems()): every exam's
+     * latest submitted sitting, every item the student was dealt in it, a
+     * blank counted wrong -- the way the exam itself was scored.
+     * `attempted_count` is the number of those items.
+     *
      * @return array<int, array<string, mixed>>
      */
     public function buildSubjectWeaknessPerformance(User $student): array
     {
-        $rows = DB::table('exam_attempt_answers')
-            ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
-            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
-            ->where('exam_attempts.user_id', $student->id)
-            ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
-            ->selectRaw("
-                COALESCE(NULLIF(question_bank_questions.subject, ''), 'Uncategorized') as label,
-                COUNT(*) as attempted_count,
-                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
-                MAX(exam_attempts.submitted_at) as last_submitted_at
-            ")
-            ->groupBy('label')
-            ->get();
-
-        return collect($rows)
-            ->map(function ($row): array {
-                $attemptedCount = (int) ($row->attempted_count ?? 0);
-                $correctCount = (int) ($row->correct_count ?? 0);
-
-                return [
-                    'label' => (string) ($row->label ?? 'Uncategorized'),
-                    'attempted_count' => $attemptedCount,
-                    'correct_count' => $correctCount,
-                    'score' => $attemptedCount > 0
-                        ? round(($correctCount / $attemptedCount) * 100, 2)
-                        : null,
-                    'last_submitted_at' => $row->last_submitted_at,
-                ];
-            })
-            ->sortBy(fn (array $subject): string => Str::lower((string) $subject['label']))
-            ->values()
-            ->all();
+        return $this->areaPerformance(
+            $student,
+            fn (array $item): ?string => $item['subject'],
+            fn (array $item): array => ['label' => $item['subject']],
+        );
     }
 
     /**
+     * Percent correct per TOS topic, over the same items as
+     * buildSubjectWeaknessPerformance(). "Other / Unclassified" counts toward
+     * the subject, never as a topic.
+     *
      * @return array<int, array<string, mixed>>
      */
     public function buildTopicWeaknessPerformance(User $student): array
     {
-        $rows = DB::table('exam_attempt_answers')
-            ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
-            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
-            ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
-            // "Other / Unclassified" counts toward the subject, never as a topic.
-            ->where('topics.name', '!=', LleTaxonomy::OTHER_TOPIC)
-            ->where('exam_attempts.user_id', $student->id)
-            ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
-            ->selectRaw("
-                topics.id as topic_id,
-                topics.name as label,
-                COALESCE(NULLIF(question_bank_questions.subject, ''), topics.subject, 'Uncategorized') as subject,
-                COUNT(*) as attempted_count,
-                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
-                MAX(exam_attempts.submitted_at) as last_submitted_at
-            ")
-            ->groupBy('topics.id', 'topics.name', 'topics.subject', 'question_bank_questions.subject')
-            ->get();
+        return $this->areaPerformance(
+            $student,
+            fn (array $item): ?string => $item['topic_id'] !== null && !$item['other'] ? (string) $item['topic_id'] : null,
+            fn (array $item): array => [
+                'topic_id' => (int) $item['topic_id'],
+                'label' => (string) ($item['topic'] ?? 'Untitled Topic'),
+                'subject' => $item['subject'],
+            ],
+        );
+    }
 
-        return collect($rows)
-            ->map(function ($row): array {
-                $attemptedCount = (int) ($row->attempted_count ?? 0);
-                $correctCount = (int) ($row->correct_count ?? 0);
+    /**
+     * Percent correct per TOS sub-topic, over the same items as
+     * buildSubjectWeaknessPerformance().
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function buildSubtopicWeaknessPerformance(User $student): array
+    {
+        return $this->areaPerformance(
+            $student,
+            fn (array $item): ?string => $item['subtopic_id'] !== null && $item['topic_id'] !== null && !$item['other'] ? (string) $item['subtopic_id'] : null,
+            fn (array $item): array => [
+                'subtopic_id' => (int) $item['subtopic_id'],
+                'label' => (string) ($item['subtopic'] ?? 'Untitled Subtopic'),
+                'topic_id' => (int) $item['topic_id'],
+                'topic' => (string) ($item['topic'] ?? ''),
+                'subject' => $item['subject'],
+            ],
+        );
+    }
 
-                return [
-                    'topic_id' => (int) ($row->topic_id ?? 0),
-                    'label' => (string) ($row->label ?? 'Untitled Topic'),
-                    'subject' => (string) ($row->subject ?? 'Uncategorized'),
-                    'attempted_count' => $attemptedCount,
-                    'correct_count' => $correctCount,
-                    'score' => $attemptedCount > 0
-                        ? round(($correctCount / $attemptedCount) * 100, 2)
-                        : null,
-                    'last_submitted_at' => $row->last_submitted_at,
-                ];
-            })
-            ->sortBy(fn (array $topic): string => Str::lower((string) $topic['label']))
+    /**
+     * Percent correct per area at one level, sorted by name (natural order,
+     * so "1.2" comes before "1.10").
+     *
+     * @param  callable(array<string, mixed>): ?string  $areaOf  an item's area, or null to leave it out
+     * @param  callable(array<string, mixed>): array<string, mixed>  $describe  the area's identifying fields
+     * @return array<int, array<string, mixed>>
+     */
+    private function areaPerformance(User $student, callable $areaOf, callable $describe): array
+    {
+        $areas = [];
+
+        foreach ($this->masteryProfileBuilder->latestSittingItems($student) as $item) {
+            $area = $areaOf($item);
+
+            if ($area === null) {
+                continue;
+            }
+
+            $areas[$area] ??= $describe($item) + ['attempted_count' => 0, 'correct_count' => 0, 'last_submitted_at' => null];
+            $areas[$area]['attempted_count']++;
+            $areas[$area]['correct_count'] += $item['correct'] ? 1 : 0;
+            $areas[$area]['last_submitted_at'] = max((string) $areas[$area]['last_submitted_at'], $item['submitted_at']);
+        }
+
+        return collect($areas)
+            ->map(fn (array $area): array => $area + [
+                'score' => $area['attempted_count'] > 0
+                    ? round(($area['correct_count'] / $area['attempted_count']) * 100, 2)
+                    : null,
+            ])
+            ->sortBy(fn (array $area): string => Str::lower((string) $area['label']), SORT_NATURAL)
             ->values()
             ->all();
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * The student's topic and sub-topic mastery, grouped under their subject:
+     * each subject with its percent correct (subjects are not traced), each
+     * of its TOS topics with its traced mastery and percent correct, and each
+     * topic's sub-topics the same way. Subjects in TOS order, then any other
+     * subject; topics and sub-topics in TOS order.
+     *
+     * @return list<array<string, mixed>>
      */
-    public function buildSubtopicWeaknessPerformance(User $student): array
+    public function buildMasteryBySubject(User $student): array
     {
-        $rows = DB::table('exam_attempt_answers')
-            ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
-            ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
-            ->join('subtopics', 'subtopics.id', '=', 'question_bank_questions.subtopic_id')
-            ->join('topics', 'topics.id', '=', 'subtopics.topic_id')
-            ->where('exam_attempts.user_id', $student->id)
-            ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
-            ->selectRaw("
-                subtopics.id as subtopic_id,
-                subtopics.name as label,
-                topics.id as topic_id,
-                topics.name as topic,
-                COALESCE(NULLIF(question_bank_questions.subject, ''), topics.subject, 'Uncategorized') as subject,
-                COUNT(*) as attempted_count,
-                SUM(CASE WHEN exam_attempt_answers.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
-                MAX(exam_attempts.submitted_at) as last_submitted_at
-            ")
-            ->groupBy('subtopics.id', 'subtopics.name', 'topics.id', 'topics.name', 'topics.subject', 'question_bank_questions.subject')
-            ->get();
+        $mastery = $this->masteryProfileBuilder->build($student);
+        $subjects = collect($this->buildSubjectWeaknessPerformance($student))->keyBy('label');
+        $topics = collect($this->attachMastery($this->buildTopicWeaknessPerformance($student), $mastery['topics'], 'topic_id'))->groupBy('subject');
+        $subtopics = collect($this->attachMastery($this->buildSubtopicWeaknessPerformance($student), $mastery['subtopics'], 'subtopic_id'))->groupBy('topic_id');
+        $tosOrder = array_flip(LleTaxonomy::subjectNames());
 
-        return collect($rows)
-            ->map(function ($row): array {
-                $attemptedCount = (int) ($row->attempted_count ?? 0);
-                $correctCount = (int) ($row->correct_count ?? 0);
-
-                return [
-                    'subtopic_id' => (int) ($row->subtopic_id ?? 0),
-                    'label' => (string) ($row->label ?? 'Untitled Subtopic'),
-                    'topic_id' => (int) ($row->topic_id ?? 0),
-                    'topic' => (string) ($row->topic ?? ''),
-                    'subject' => (string) ($row->subject ?? 'Uncategorized'),
-                    'attempted_count' => $attemptedCount,
-                    'correct_count' => $correctCount,
-                    'score' => $attemptedCount > 0
-                        ? round(($correctCount / $attemptedCount) * 100, 2)
-                        : null,
-                    'last_submitted_at' => $row->last_submitted_at,
-                ];
-            })
-            ->sortBy(fn (array $subtopic): string => Str::lower((string) $subtopic['label']))
+        return $subjects
+            ->sortBy(fn (array $subject): string => sprintf('%02d %s', $tosOrder[$subject['label']] ?? 99, Str::lower($subject['label'])))
+            ->map(fn (array $subject): array => [
+                'subject' => $subject['label'],
+                'score' => $subject['score'],
+                'items' => $subject['attempted_count'],
+                'correct' => $subject['correct_count'],
+                'topics' => collect($topics->get($subject['label'], []))
+                    ->map(fn (array $topic): array => [
+                        'topic_id' => $topic['topic_id'],
+                        'label' => $topic['label'],
+                        'score' => $topic['score'],
+                        'items' => $topic['attempted_count'],
+                        'correct' => $topic['correct_count'],
+                        'mastery' => $topic['mastery'],
+                        'subtopics' => collect($subtopics->get($topic['topic_id'], []))
+                            ->map(fn (array $subtopic): array => [
+                                'subtopic_id' => $subtopic['subtopic_id'],
+                                'label' => $subtopic['label'],
+                                'score' => $subtopic['score'],
+                                'items' => $subtopic['attempted_count'],
+                                'correct' => $subtopic['correct_count'],
+                                'mastery' => $subtopic['mastery'],
+                            ])
+                            ->values()
+                            ->all(),
+                    ])
+                    ->values()
+                    ->all(),
+            ])
             ->values()
             ->all();
     }

@@ -165,6 +165,21 @@
           </div>
         </section>
 
+        <!-- Topics -->
+        <section v-show="activeTab === 'topics'" class="analytics-section" aria-labelledby="analytics-topics-heading">
+          <header class="analytics-section-head">
+            <h2 id="analytics-topics-heading" class="analytics-section-title">Topics</h2>
+            <InfoTip :text="topicsDescription" label="About topic mastery" />
+          </header>
+
+          <div v-if="isInitialLoading" class="analytics-empty">
+            <RefreshCw :size="22" class="spin-soft" />
+            <p>Loading your topics...</p>
+          </div>
+
+          <TopicMastery v-else :subjects="mastery" />
+        </section>
+
         <!-- Study plan -->
         <section v-show="activeTab === 'plan'" class="analytics-section" aria-labelledby="analytics-plan-heading">
           <header class="analytics-section-head">
@@ -338,7 +353,7 @@
                 <div
                   class="mastery-track"
                   role="img"
-                  :aria-label="`Estimated grasp ${reviewNarrative.headline.mastery.percent} percent, based on ${reviewNarrative.headline.mastery.attempted} answers`"
+                  :aria-label="`Estimated grasp ${reviewNarrative.headline.mastery.percent} percent, based on ${reviewNarrative.headline.mastery.attempted} questions in ${reviewNarrative.headline.mastery.exams} exams`"
                 >
                   <span
                     class="mastery-fill"
@@ -351,7 +366,7 @@
                   <component :is="trendStyle(reviewNarrative.headline.mastery.trend).icon" :size="12" />
                   <span>{{ trendStyle(reviewNarrative.headline.mastery.trend).label }}</span>
                   <span class="mastery-dot" aria-hidden="true">·</span>
-                  <span>from {{ reviewNarrative.headline.mastery.attempted }} answered {{ reviewNarrative.headline.mastery.attempted === 1 ? 'item' : 'items' }}</span>
+                  <span>from {{ reviewNarrative.headline.mastery.attempted }} {{ reviewNarrative.headline.mastery.attempted === 1 ? 'question' : 'questions' }} in {{ reviewNarrative.headline.mastery.exams }} {{ reviewNarrative.headline.mastery.exams === 1 ? 'exam' : 'exams' }}</span>
                 </p>
               </div>
 
@@ -422,6 +437,7 @@ import { formatDateTime } from '../composables/useDashboardFormatters'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
 import NextStepsList from '@/components/NextStepsList.vue'
+import TopicMastery from '@/components/TopicMastery.vue'
 
 const {
   analyticsLoading,
@@ -435,6 +451,7 @@ const {
   scoreHistory,
   studyPlan,
   actionPlan,
+  mastery,
   predictivePanel,
   loadAnalytics,
   examHistory,
@@ -548,9 +565,15 @@ const isInitialLoading = computed(() => analyticsLoading.value && !analyticsLoad
 // Same wording as the dashboard's Estimated Outcome card.
 const readiness = computed(() => describeReadiness(predictivePanel.value))
 
-// The three sections of the page, shown one at a time.
+// The sections of the page, shown one at a time.
+
+const topicsDescription = 'Each subject shows the share of its questions you got right. Under it, '
+  + 'each topic of the Table of Specifications shows how well you seem to know it: '
+  + 'an estimate that moves once per exam, in the order you took them, '
+  + 'so a topic you are climbing into reads differently from one you are slipping on.'
 const tabs = [
   { key: 'subjects', label: 'Subjects', icon: LayoutGrid },
+  { key: 'topics', label: 'Topics', icon: ListTree },
   { key: 'plan', label: 'Study Plan', icon: ListOrdered },
   { key: 'history', label: 'Exam History', icon: History },
   { key: 'readiness', label: 'Exam Outcome', icon: ShieldCheck },
