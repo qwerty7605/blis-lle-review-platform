@@ -2,28 +2,29 @@
 
 namespace App\Services\MachineLearning;
 
+use App\Support\LleTaxonomy;
 use RuntimeException;
 
 /**
- * The records the original model was trained on: `ml/data/lle_clean.arff`,
- * kept in the project as the base of every retraining. A retrained model
- * learns from these rows plus the graduates whose real board result has been
- * recorded since; it never starts again from the new results alone.
+ * The records the model is trained on before anything this system adds:
+ * `ml/data/LLE_dataset_all_ExamType.arff`, 128 review exams (85 pre-tests,
+ * 43 mock boards), each with the examinee's real LLE result. Every
+ * retraining learns from all of its rows plus the graduates recorded since.
  *
- * The file is Weka's ARFF: the model's eight attributes (reference,
- * management, indexing, selection, cataloging, it, overall, board_result),
- * one review exam a student took to a line, labelled with that student's real
- * board result, `?` where a score is missing.
+ * The file is WEKA's ARFF: `Exam_Type {pretest, mockboard}`, the six subject
+ * scores under their official names, and `LLE_Result {FAILED, PASSED}`;
+ * `?` is a missing score. Columns are read by name (a subject by
+ * LleTaxonomy, so by its key), never by position.
  */
 class LetBaseDataset
 {
-    public const PATH = 'ml/data/lle_clean.arff';
+    public const PATH = 'ml/data/LLE_dataset_all_ExamType.arff';
 
     public const SOURCE = 'base';
 
     private readonly string $path;
 
-    /** @var array<int, array{key: string, features: array<string, ?float>, label: string, source: string}>|null */
+    /** @var list<array{key: string, features: array<string, mixed>, label: string, source: string}>|null */
     private ?array $rows = null;
 
     public function __construct(?string $path = null)
@@ -37,7 +38,7 @@ class LetBaseDataset
     }
 
     /**
-     * @return array<int, array{key: string, features: array<string, ?float>, label: string, source: string}>
+     * @return list<array{key: string, features: array<string, mixed>, label: string, source: string}>
      *
      * @throws RuntimeException when the file is missing or is not the model's dataset
      */
@@ -48,13 +49,12 @@ class LetBaseDataset
         }
 
         if (!$this->exists()) {
-            throw new RuntimeException('The base dataset is missing. Put lle_clean.arff at ' . self::PATH . '.');
+            throw new RuntimeException('The base dataset is missing. Put LLE_dataset_all_ExamType.arff at ' . self::PATH . '.');
         }
 
         $columns = [];
         $inData = false;
         $rows = [];
-        $features = LetPredictionService::requiredFeatures();
 
         foreach (file($this->path, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
             $line = trim($line);
@@ -65,15 +65,13 @@ class LetBaseDataset
 
             if (!$inData) {
                 if (preg_match('/^@attribute\s+[\'"]?([^\s\'"]+)[\'"]?\s/i', $line, $match)) {
-                    $columns[] = strtolower($match[1]);
+                    $columns[] = self::columnKey($match[1]);
                 } elseif (preg_match('/^@data\b/i', $line)) {
                     $inData = true;
+                    $missing = array_diff([...LogisticModel::INPUTS, 'result'], $columns);
 
-                    if (array_diff([...$features, 'board_result'], $columns) !== []) {
-                        throw new RuntimeException(sprintf(
-                            'The base dataset does not have the model\'s attributes. Expected %s, board_result.',
-                            implode(', ', $features),
-                        ));
+                    if ($missing !== []) {
+                        throw new RuntimeException('The base dataset does not have the model\'s attributes: missing ' . implode(', ', $missing) . '.');
                     }
                 }
 
@@ -86,25 +84,43 @@ class LetBaseDataset
             }
 
             $values = array_combine($columns, $cells);
-            $result = strtoupper($values['board_result']);
+            $result = strtoupper($values['result']);
 
             if (!in_array($result, ['PASSED', 'FAILED'], true)) {
                 continue; // an examinee with no result teaches nothing
             }
 
-            $row = [];
-            foreach ($features as $feature) {
-                $row[$feature] = is_numeric($values[$feature]) ? (float) $values[$feature] : null;
+            $features = [
+                'exam_type' => match (strtolower($values['exam_type'])) {
+                    'mockboard', 'mock_board' => 'mock_board',
+                    'pretest', 'pre_test' => 'pre_test',
+                    default => null,
+                },
+            ];
+            foreach (LogisticModel::SUBJECTS as $subject) {
+                $features[$subject] = is_numeric($values[$subject]) ? (float) $values[$subject] : null;
             }
 
             $rows[] = [
                 'key' => self::SOURCE . ':' . (count($rows) + 1),
-                'features' => $row,
+                'features' => $features,
                 'label' => $result === 'PASSED' ? LetPredictionService::RESULT_PASS : LetPredictionService::RESULT_FAIL,
                 'source' => self::SOURCE,
             ];
         }
 
         return $this->rows = $rows;
+    }
+
+    /** What a column of the file is: exam_type, a subject key, result, or its own name. */
+    private static function columnKey(string $name): string
+    {
+        $normalized = LleTaxonomy::normalize($name);
+
+        return match (true) {
+            $normalized === 'exam type' => 'exam_type',
+            in_array($normalized, ['lle result', 'result', 'board result'], true) => 'result',
+            default => LleTaxonomy::subjectKey($name) ?? $normalized,
+        };
     }
 }

@@ -576,7 +576,7 @@ const tabs = [
   { key: 'topics', label: 'Topics', icon: ListTree },
   { key: 'plan', label: 'Study Plan', icon: ListOrdered },
   { key: 'history', label: 'Exam History', icon: History },
-  { key: 'readiness', label: 'Exam Outcome', icon: ShieldCheck },
+  { key: 'readiness', label: 'Estimated Outcome', icon: ShieldCheck },
 ]
 const activeTab = ref('subjects')
 

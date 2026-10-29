@@ -171,10 +171,8 @@ class ModelRelationshipsTest extends TestCase
     {
         $admin = $this->makeAdmin();
         $setting = SystemSetting::create(['key' => 'announcement_banner', 'value' => 'Exam week', 'updated_by' => $admin->id]);
-        $model = LetModel::create([
-            'status' => 'retired', 'version' => 2, 'trained_by' => $admin->id,
-            'training_count' => 10, 'graduate_count' => 0, 'imported_count' => 0, 'training_keys' => [], 'metrics' => [], 'trigger' => 'manual', 'tree' => ['leaf' => 'PASSED'],
-        ]);
+        $model = LetModel::query()->where('version', 1)->sole()->replicate();
+        $model->forceFill(['version' => 2, 'status' => 'retired', 'trained_by' => $admin->id, 'trigger' => 'manual'])->save();
 
         $this->assertTrue($setting->updater->is($admin));
         $this->assertTrue($model->trainer->is($admin));

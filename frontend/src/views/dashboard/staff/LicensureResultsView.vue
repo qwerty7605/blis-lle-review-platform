@@ -11,7 +11,7 @@
           <Award :size="18" />
           <h3>
             Record a licensure result
-            <InfoTip text="Board results are published by the PRC, so they are transcribed here once a batch has sat the exam. Each recorded outcome pairs with that graduate's fourth-year subject scores to form one training row for the Exam Outcome model." />
+            <InfoTip text="Board results are published by the PRC, so they are transcribed here once a batch has sat the exam. Each recorded outcome, with every pre-test and mock board that graduate completed before the LLE, gives the Estimated Outcome model one training row per series." />
           </h3>
         </div>
       </header>
@@ -132,26 +132,26 @@
         <div class="room-page-title">
           <BrainCircuit :size="18" />
           <h3>
-            Exam Outcome model
-            <InfoTip text="It is retrained only when an administrator asks, on the original records plus every graduate with a confirmed board result. A new version is used only if its accuracy is at least the baseline and its Kappa at least that of the version in use." />
+            Estimated Outcome model
+            <InfoTip text="Logistic regression with a ridge penalty, read from a completed pre-test or mock board. It is retrained only when an administrator asks, on the original review-exam records plus every graduate's completed pre-tests and mock boards. A new version is used only if it meets both targets, beats ZeroR on Kappa, and its ROC area is at least the version in use's." />
           </h3>
         </div>
         <button
           v-if="canManageModel"
           type="button"
           class="primary-btn"
-          :disabled="modelBusy || modelLoading || !modelStatus?.can_retrain"
+          :disabled="modelBusy || modelLoading || modelStatus?.training || !modelStatus?.can_retrain"
           :title="modelStatus?.retrain_blocked_reason || ''"
           @click="retrainModel"
         >
-          <RefreshCw :size="14" :class="{ 'spin-soft': modelBusy }" />
-          {{ modelBusy ? 'Retraining…' : 'Retrain model' }}
+          <RefreshCw :size="14" :class="{ 'spin-soft': modelBusy || modelStatus?.training }" />
+          {{ modelStatus?.training ? 'Retraining…' : 'Retrain model' }}
         </button>
       </header>
 
       <div v-if="modelLoading && !modelStatus" class="room-empty-state">
         <RefreshCw :size="18" class="spin-soft" />
-        <p>Loading the Exam Outcome model…</p>
+        <p>Loading the Estimated Outcome model…</p>
       </div>
 
       <template v-else-if="modelStatus">
@@ -171,8 +171,9 @@
             <dt>Graduates with a confirmed result</dt>
             <dd>
               {{ modelStatus.data.confirmed_graduates }}
+              <small class="muted">{{ modelStatus.data.graduate_rows }} completed {{ modelStatus.data.graduate_rows === 1 ? 'series' : 'series' }}</small>
               <small v-if="modelStatus.data.skipped_graduates > 0" class="muted">
-                {{ modelStatus.data.skipped_graduates }} more left out: no complete fourth-year semester
+                {{ modelStatus.data.skipped_graduates }} more left out: no pre-test or mock board completed before their LLE
               </small>
             </dd>
           </div>
@@ -185,29 +186,41 @@
           </div>
         </dl>
 
-        <p v-if="modelStatus.retrain_blocked_reason" class="muted lle-intro">
+        <p v-if="modelStatus.training" class="feedback info lle-intro" role="status">
+          Retraining is running. It takes a few minutes; the new version appears below when it is done.
+        </p>
+        <p v-else-if="modelStatus.retrain_blocked_reason" class="muted lle-intro">
           {{ modelStatus.retrain_blocked_reason }}
+        </p>
+
+        <p class="muted lle-intro">
+          Targets: ROC area at least {{ modelStatus.targets.roc_area.toFixed(2) }} and FAILED recall at least
+          {{ modelStatus.targets.failed_recall.toFixed(2) }}, with "at risk" meaning a chance of failing of
+          {{ Math.round(modelStatus.targets.at_risk_cutoff * 100) }}% or more. Each version's figures come from its own training rows.
         </p>
 
         <div class="directory-table-wrap lle-versions-wrap">
           <table class="directory-table lle-versions">
-            <caption class="visually-hidden">Every version of the Exam Outcome model and the figures it was judged on</caption>
+            <caption class="visually-hidden">Every version of the Estimated Outcome model and the figures it was judged on</caption>
             <thead>
               <tr>
                 <th scope="col">Version</th>
-                <th scope="col">Trained</th>
                 <th scope="col" class="numeric">Rows</th>
-                <th scope="col" class="numeric">Failed rows</th>
+                <th scope="col" class="numeric">
+                  ROC area
+                  <InfoTip text="Every figure is the mean of stratified 10-fold cross-validation repeated with seeds 1 to 10, the ridge chosen again inside each training fold. All but the ROC area are read at the at-risk cutoff." label="How these figures are measured" />
+                </th>
+                <th scope="col" class="numeric">FAILED recall</th>
+                <th scope="col" class="numeric">
+                  False alarms
+                  <InfoTip text="The share of examinees who passed that the model flagged as at risk." label="What False alarms means" />
+                </th>
+                <th scope="col" class="numeric">Precision · F</th>
                 <th scope="col" class="numeric">
                   Accuracy
-                  <InfoTip text="Accuracy, Kappa and Failed recall are from 10-fold cross-validation with random seed 1." label="How these figures are measured" />
+                  <InfoTip text="In brackets: ZeroR, which always answers PASSED, on the same folds." label="What the bracket means" />
                 </th>
                 <th scope="col" class="numeric">Kappa</th>
-                <th scope="col" class="numeric">Failed recall</th>
-                <th scope="col" class="numeric">
-                  Baseline
-                  <InfoTip text="The share of rows that passed: what always answering &quot;passed&quot; would score." label="What Baseline means" />
-                </th>
                 <th scope="col">Status</th>
               </tr>
             </thead>
@@ -215,16 +228,21 @@
               <tr v-for="version in modelStatus.versions" :key="version.version">
                 <td>
                   <strong>v{{ version.version }}</strong>
-                  <small class="muted lle-version-label">{{ version.label }}</small>
-                  <code class="lle-version-file">{{ version.file_path }}</code>
+                  <small class="muted lle-version-label">{{ version.label }}{{ version.trained_at ? `, ${new Date(version.trained_at).toLocaleDateString()}` : '' }}</small>
+                  <small class="muted lle-version-label">Ridge {{ version.ridge }}</small>
+                  <small v-if="version.confusion" class="muted lle-version-label">
+                    At risk: {{ fixed(version.confusion.failed_at_risk, 1) }} of {{ fixed(version.confusion.failed_at_risk + version.confusion.failed_not_at_risk, 0) }} who failed,
+                    {{ fixed(version.confusion.passed_at_risk, 1) }} of {{ fixed(version.confusion.passed_at_risk + version.confusion.passed_not_at_risk, 0) }} who passed
+                  </small>
+                  <code v-if="version.file_path" class="lle-version-file">{{ version.file_path }}</code>
                 </td>
-                <td>{{ version.trained_at ? new Date(version.trained_at).toLocaleDateString() : 'Shipped with the system' }}</td>
-                <td class="numeric">{{ version.rows ?? '—' }}</td>
-                <td class="numeric">{{ version.failed ?? '—' }}</td>
-                <td class="numeric">{{ percent(version.accuracy) }}</td>
-                <td class="numeric">{{ version.kappa === null ? '—' : Number(version.kappa).toFixed(4) }}</td>
-                <td class="numeric">{{ percent(version.failed_recall) }}</td>
-                <td class="numeric">{{ percent(version.baseline) }}</td>
+                <td class="numeric">{{ version.rows }}<small class="muted lle-version-label">{{ version.failed }} failed</small></td>
+                <td class="numeric">{{ fixed(version.roc_area) }}</td>
+                <td class="numeric">{{ fixed(version.failed_recall) }}</td>
+                <td class="numeric">{{ fixed(version.false_alarm_rate) }}</td>
+                <td class="numeric">{{ fixed(version.failed_precision) }} · {{ fixed(version.failed_f_measure) }}</td>
+                <td class="numeric">{{ fixed(version.accuracy) }} <small class="muted">({{ fixed(version.zero_r_accuracy) }})</small></td>
+                <td class="numeric">{{ fixed(version.kappa) }} <small class="muted">({{ fixed(version.zero_r_kappa) }})</small></td>
                 <td>
                   <span v-if="version.active" class="pill success">In use</span>
                   <button
@@ -238,7 +256,8 @@
                     Use this version
                   </button>
                   <span v-else class="pill neutral">{{ version.status === 'rejected' ? 'Not taken up' : 'Not in use' }}</span>
-                  <small v-if="version.note" class="muted lle-version-note">{{ version.note }}</small>
+                  <small v-if="!version.meets_targets" class="muted lle-version-note">Does not meet both targets.</small>
+                  <small v-for="check in version.failed_checks" :key="check" class="muted lle-version-note">Failed: {{ check }}</small>
                 </td>
               </tr>
             </tbody>
@@ -517,17 +536,15 @@ function refreshAfterBatch() {
 
 const modelInUse = computed(() => {
   const live = modelStatus.value?.live
-  if (!live) return ''
+  if (!live) return 'No version of the Estimated Outcome model is in use.'
 
-  if (live.source === 'built_in') {
-    return `Exam Outcome results are using version ${live.version}, the original model, trained on ${live.trained_on} past review-exam records.`
-  }
-
-  return `Exam Outcome results are using version ${live.version}, retrained on ${live.trained_on} rows.`
+  return live.source === 'weka'
+    ? `The Estimated Outcome uses version ${live.version}, trained in WEKA on ${live.trained_on} review-exam records (ridge ${live.ridge}).`
+    : `The Estimated Outcome uses version ${live.version}, retrained here on ${live.trained_on} rows (ridge ${live.ridge}).`
 })
 
-function percent(value) {
-  return value === null || value === undefined ? '—' : `${Number(value).toFixed(2)}%`
+function fixed(value, places = 3) {
+  return value === null || value === undefined ? '—' : Number(value).toFixed(places)
 }
 </script>
 

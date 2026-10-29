@@ -1,0 +1,31 @@
+Cross-validated Parameter selection.
+Classifier: weka.classifiers.functions.Logistic
+Cross-validation Parameter: '-R' ranged from 0.5 to 10.0 with 20.0 steps
+Classifier Options: -R 0.5 -M -1 -num-decimal-places 4
+
+Logistic Regression with ridge parameter of 0.5
+Coefficients...
+                                              Class
+Variable                                     FAILED
+===================================================
+Exam_Type=mockboard                          2.4513
+Library_Organization_and_Management         -0.0302
+Reference_Bibliography_and_User_Services    -0.0304
+Indexing_and_Abstracting                    -0.0122
+Selection_and_Acquisition                   -0.1135
+Cataloging_and_Classification                0.0275
+Information_Technology                      -0.0352
+Intercept                                    8.8524
+
+
+Odds Ratios...
+                                              Class
+Variable                                     FAILED
+===================================================
+Exam_Type=mockboard                          11.603
+Library_Organization_and_Management          0.9703
+Reference_Bibliography_and_User_Services       0.97
+Indexing_and_Abstracting                     0.9879
+Selection_and_Acquisition                    0.8927
+Cataloging_and_Classification                1.0279
+Information_Technology                       0.9655
