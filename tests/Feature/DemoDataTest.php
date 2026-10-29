@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Exam;
 use App\Models\ExamAttempt;
+use App\Models\ExamSeries;
+use App\Models\LleResult;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
@@ -11,6 +13,7 @@ use App\Models\Topic;
 use App\Models\User;
 use App\Services\Demo\DemoData;
 use App\Services\Demo\DemoDataPurger;
+use App\Services\MachineLearning\LetModelTrainer;
 use Database\Seeders\ShowcaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -116,38 +119,55 @@ class DemoDataTest extends TestCase
         $this->assertSame(0, $mismatched);
     }
 
-    public function test_the_demo_shows_the_estimated_outcome_locked_as_an_early_warning_and_as_a_prediction(): void
+    public function test_the_demo_shows_the_estimated_outcome_ready_and_locked(): void
     {
         $this->seed(ShowcaseSeeder::class);
 
-        // A featured fourth year has sat all six subjects this semester.
+        // A featured fourth year finished the pre-test and then the mock board:
+        // the mock board, completed last, is the one read.
         Sanctum::actingAs(User::query()->where('email', 'markanthony.villareal@' . DemoData::EMAIL_DOMAIN)->firstOrFail());
-        $this->getJson('/api/student/analytics')
-            ->assertOk()
-            ->assertJsonPath('predictive_model.status', 'ready')
-            ->assertJsonPath('predictive_model.mode', 'board_readiness');
+        $outcome = $this->getJson('/api/student/analytics')->assertOk()->json('predictive_model');
+        $this->assertSame('ready', $outcome['status']);
+        $this->assertSame('mock_board', $outcome['series']['type']);
+        $this->assertStringStartsWith('Mock Board 1, AY', $outcome['series']['name']);
+        $this->assertContains($outcome['label'], ['At risk', 'Not at risk']);
 
-        // A third year who has sat all six gets the early warning.
-        $thirdYear = User::query()
-            ->where('is_demo', true)->where('year_level', 3)->where('is_active', true)
-            ->whereIn('id', ExamAttempt::query()
+        // A fourth year with four pre-test subjects done sees how far along it is.
+        $underWay = User::query()
+            ->where('is_demo', true)->where('year_level', 4)->where('is_active', true)
+            ->whereNotIn('id', ExamAttempt::query()
                 ->where('status', ExamAttempt::STATUS_SUBMITTED)
+                ->whereIn('exam_id', Exam::query()->where('exam_type', Exam::TYPE_MOCK_BOARD)->select('id'))
                 ->groupBy('user_id')
                 ->havingRaw('count(distinct exam_id) >= 6')
                 ->select('user_id'))
             ->firstOrFail();
-        Sanctum::actingAs($thirdYear);
-        $this->getJson('/api/student/analytics')
-            ->assertOk()
-            ->assertJsonPath('predictive_model.status', 'ready')
-            ->assertJsonPath('predictive_model.mode', 'early_warning');
+        Sanctum::actingAs($underWay);
+        $locked = $this->getJson('/api/student/analytics')->assertOk()->json('predictive_model');
+        $this->assertSame('locked', $locked['status']);
+        $this->assertNotEmpty($locked['in_progress']);
 
-        // The first years have two subjects so far.
-        Sanctum::actingAs(User::query()->where('is_demo', true)->where('year_level', 1)->where('is_active', true)->firstOrFail());
+        // Third years sit battery exams, which never feed it.
+        Sanctum::actingAs(User::query()->where('is_demo', true)->where('year_level', 3)->where('is_active', true)->firstOrFail());
         $this->getJson('/api/student/analytics')
             ->assertOk()
             ->assertJsonPath('predictive_model.status', 'locked')
-            ->assertJsonPath('predictive_model.message', 'Complete all 6 subject exams this semester to unlock your result.');
+            ->assertJsonPath('predictive_model.in_progress', [])
+            ->assertJsonPath('predictive_model.message', 'Your Estimated Outcome appears after you finish all six subjects of a pre-test or mock board.');
+    }
+
+    public function test_graduated_cohorts_have_series_before_their_lle_and_never_train_the_model(): void
+    {
+        $this->seed(ShowcaseSeeder::class);
+
+        // One graduated cohort here (SHOWCASE_HISTORY_YEARS=1): its two series and this year's two.
+        $this->assertSame(4, ExamSeries::query()->count());
+        $this->assertTrue(LleResult::query()->exists());
+
+        // Every result belongs to a demo account, so nothing is new to learn from.
+        $status = app(LetModelTrainer::class)->status();
+        $this->assertSame(0, $status['data']['confirmed_graduates']);
+        $this->assertFalse($status['can_retrain']);
     }
 
     public function test_purge_removes_the_demo_and_leaves_real_records_alone(): void

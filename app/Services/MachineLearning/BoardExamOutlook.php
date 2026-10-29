@@ -3,44 +3,36 @@
 namespace App\Services\MachineLearning;
 
 use App\Models\User;
+use App\Support\LleTaxonomy;
 
 /**
- * What a student, and staff looking at that student, are shown from the board
- * exam model.
+ * The Estimated Outcome card, for a student and for staff looking at that
+ * student. The same wording for every student, whatever their year level.
  *
- * Locked until the student has completed all six subject exams in at least
- * one semester in this system. After that the model is read the six scores of
- * the latest complete semester, never a semester with an exam still missing.
- *
- * What is said about the answer depends on the student's current year level:
- *  - years 1 to 3, an early warning: "On track" or "At risk", never the words
- *    passed or failed, since these are not the scores a student takes to the
- *    board exam;
- *  - year 4 (and above, and graduates), a board readiness prediction:
- *    "Likely to pass" or "At risk of failing".
- *
- * A transferee is treated like anyone else: the year level they are in now
- * picks the wording, and only exams taken here count.
+ * Locked until the student has completed a pre-test or mock board series
+ * (all six subject exams submitted); any series under way is shown with what
+ * it still needs. Then the most recently completed series (the one whose
+ * last subject was submitted most recently) is read: the estimated chance of
+ * passing, "At risk" when the chance of failing is 25% or more, which series
+ * and when, and the six subject scores it is based on. Battery and regular
+ * mock exams never feed it.
  */
 class BoardExamOutlook
 {
-    public const MODE_EARLY_WARNING = 'early_warning';
-    public const MODE_BOARD_READINESS = 'board_readiness';
-
     public const STATUS_LOCKED = 'locked';
+
     public const STATUS_READY = 'ready';
 
-    public const OUTCOME_ON_TRACK = 'on_track';
-    public const OUTCOME_AT_RISK = 'at_risk';
+    public const STATUS_UNAVAILABLE = 'unavailable';
 
-    public const NOTE_EARLY_WARNING = 'Early warning only. Based on your current semester scores, not a board exam prediction.';
-    public const NOTE_BOARD_READINESS = 'This prediction is based on past review-exam data and is a guide, not a guarantee.';
+    public const LABEL_AT_RISK = 'At risk';
 
-    /** The year level a board readiness prediction is given from. */
-    public const BOARD_READINESS_FROM_YEAR = 4;
+    public const LABEL_NOT_AT_RISK = 'Not at risk';
+
+    public const NOTE = 'This is an estimate based on past review-exam results, for review planning only. It does not say whether you will pass the actual LLE.';
 
     public function __construct(
-        private readonly LetReadinessFeatureBuilder $features,
+        private readonly ReviewSeriesFeatureBuilder $series,
         private readonly LetPredictionService $predictor,
     ) {
     }
@@ -50,130 +42,72 @@ class BoardExamOutlook
      */
     public function for(User $student): array
     {
-        $mode = $this->modeFor($student);
-        $semesters = $this->features->semesters($student);
+        $all = $this->series->seriesFor($student);
+        $completed = array_values(array_filter($all, static fn (array $entry): bool => $entry['complete']));
+        $latest = $completed[0] ?? null;
 
-        $complete = null;
-        foreach (array_reverse($semesters) as $semester) {
-            if ($semester['complete']) {
-                $complete = $semester;
-                break;
-            }
-        }
+        // Series still under way, newest first: all of them while locked, and
+        // the ones begun since the series read once it is not.
+        $inProgress = array_values(array_map(
+            fn (array $entry): array => $this->progress($entry),
+            array_filter($all, static fn (array $entry): bool => !$entry['complete']
+                && ($latest === null || $entry['last_submitted_at'] > $latest['completed_at'])),
+        ));
 
-        $payload = [
-            'title' => 'Exam Outcome Model',
-            'mode' => $mode,
-            'mode_label' => $mode === self::MODE_BOARD_READINESS ? 'Board readiness prediction' : 'Early warning',
-        ];
+        $payload = ['title' => 'Estimated Outcome', 'in_progress' => $inProgress];
 
-        if ($complete === null) {
-            $latest = $semesters === [] ? null : end($semesters);
-
+        if ($latest === null) {
             return $payload + [
                 'status' => self::STATUS_LOCKED,
-                'message' => LetReadinessFeatureBuilder::LOCKED_MESSAGE,
-                // How far along the semester in progress is, if there is one.
-                'progress' => $latest === null ? null : [
-                    'semester' => $latest['label'],
-                    'completed' => count(LetReadinessFeatureBuilder::SUBJECTS) - count($latest['missing']),
-                    'required' => count(LetReadinessFeatureBuilder::SUBJECTS),
-                    'missing' => $latest['missing'],
-                ],
+                'message' => ReviewSeriesFeatureBuilder::LOCKED_MESSAGE,
             ];
         }
 
-        $features = LetReadinessFeatureBuilder::features($complete['scores']);
-        $prediction = $this->predictor->predict($features);
-        $passes = $prediction['prediction'] === LetPredictionService::RESULT_PASS;
+        $prediction = $this->predictor->predict(ReviewSeriesFeatureBuilder::features($latest));
 
-        $scores = [];
-        foreach (LetReadinessFeatureBuilder::SUBJECTS as $key => $subject) {
-            $scores[] = ['key' => $key, 'subject' => $subject, 'score' => $complete['scores'][$key]];
+        if ($prediction === null) {
+            return $payload + [
+                'status' => self::STATUS_UNAVAILABLE,
+                'message' => 'No Estimated Outcome model is in use right now.',
+            ];
         }
 
-        // The two lowest subjects. On equal scores the model's own subject
-        // order decides, so the same scores always name the same two.
-        $lowest = $scores;
-        usort($lowest, static fn (array $left, array $right): int => $left['score'] <=> $right['score']);
+        $scores = [];
+        foreach (LleTaxonomy::keys() as $key) {
+            $scores[] = ['key' => $key, 'subject' => LleTaxonomy::subjectName($key), 'score' => $latest['scores'][$key]];
+        }
 
         return $payload + [
             'status' => self::STATUS_READY,
-            'outcome' => $passes ? self::OUTCOME_ON_TRACK : self::OUTCOME_AT_RISK,
-            'label' => match (true) {
-                $mode === self::MODE_BOARD_READINESS && $passes => 'Likely to pass',
-                $mode === self::MODE_BOARD_READINESS => 'At risk of failing',
-                $passes => 'On track',
-                default => 'At risk',
-            },
-            'note' => $mode === self::MODE_BOARD_READINESS ? self::NOTE_BOARD_READINESS : self::NOTE_EARLY_WARNING,
-            'semester' => [
-                'school_year' => $complete['school_year'],
-                'semester' => $complete['semester'],
-                'label' => $complete['label'],
+            'probability_passing' => round($prediction['probability_passing'], 4),
+            'percent_passing' => $prediction['percent_passing'],
+            'at_risk' => $prediction['at_risk'],
+            'label' => $prediction['at_risk'] ? self::LABEL_AT_RISK : self::LABEL_NOT_AT_RISK,
+            'note' => self::NOTE,
+            'series' => [
+                'id' => $latest['series_id'],
+                'name' => $latest['name'],
+                'type' => $latest['type'],
+                'type_label' => $latest['type_label'],
+                'completed_at' => $latest['completed_at'],
             ],
             'scores' => $scores,
-            'overall' => $features['overall'],
-            'risk_flags' => $this->riskFlags($this->predictor->liveModel()['tree'], $features),
-            'focus_areas' => array_slice($lowest, 0, 2),
-            'confidence' => $prediction['confidence'],
-            'model_version' => $this->predictor->liveModel()['version'],
+            'model_version' => $prediction['version'],
         ];
     }
 
-    public function modeFor(User $student): string
-    {
-        $finished = $student->student_status === User::STUDENT_STATUS_GRADUATED;
-
-        return $finished || (int) $student->year_level >= self::BOARD_READINESS_FROM_YEAR
-            ? self::MODE_BOARD_READINESS
-            : self::MODE_EARLY_WARNING;
-    }
-
     /**
-     * The subjects the model in use treats as risk indicators, where this
-     * student is on the wrong side of them: every cut in the tree with a
-     * FAILED leaf directly on one side. For the original model that is
-     * Selection and Acquisition at or below 43, and Information Technology at
-     * or below 32. They are read off the tree, so they follow a retrained one.
-     *
-     * @param  array<string, mixed>  $node
-     * @param  array<string, ?float>  $features
-     * @return array<int, array{key: string, subject: string, score: float, limit: float, rule: string}>
+     * @param  array<string, mixed>  $entry
+     * @return array{name: string, type_label: string, done: int, required: int, missing: list<string>}
      */
-    private function riskFlags(array $node, array $features): array
+    private function progress(array $entry): array
     {
-        if (isset($node['leaf'])) {
-            return [];
-        }
-
-        $flags = [];
-        $key = $node['attribute'];
-        $score = $features[$key] ?? null;
-        $limit = (float) $node['threshold'];
-
-        foreach (['le' => '≤', 'gt' => '>'] as $side => $sign) {
-            $child = $node[$side];
-            $onThisSide = $score !== null && ($side === 'le' ? $score <= $limit : $score > $limit);
-
-            if ($onThisSide && ($child['leaf'] ?? null) === LetPredictionService::RESULT_FAIL) {
-                $flags[] = [
-                    'key' => $key,
-                    'subject' => LetReadinessFeatureBuilder::SUBJECTS[$key] ?? 'Overall average',
-                    'score' => (float) $score,
-                    'limit' => $limit,
-                    'rule' => sprintf('%s %s %s', $key, $sign, rtrim(rtrim(number_format($limit, 2, '.', ''), '0'), '.')),
-                ];
-            }
-
-            $flags = [...$flags, ...$this->riskFlags($child, $features)];
-        }
-
-        // A subject is flagged once, however many cuts the tree makes on it.
-        return array_values(array_reduce($flags, static function (array $unique, array $flag): array {
-            $unique[$flag['key']] ??= $flag;
-
-            return $unique;
-        }, []));
+        return [
+            'name' => $entry['name'],
+            'type_label' => $entry['type_label'],
+            'done' => $entry['done'],
+            'required' => $entry['required'],
+            'missing' => $entry['missing'],
+        ];
     }
 }

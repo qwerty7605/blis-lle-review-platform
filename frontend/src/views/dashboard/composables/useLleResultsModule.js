@@ -113,7 +113,7 @@ export function useLleResultsModule() {
       const { data } = await services.getLetModelStatus()
       modelStatus.value = data
     } catch (error) {
-      if (!silent) modelError.value = firstApiError(error, 'Unable to load the Exam Outcome model.')
+      if (!silent) modelError.value = firstApiError(error, 'Unable to load the Estimated Outcome model.')
     } finally {
       if (!silent) modelLoading.value = false
     }
@@ -139,12 +139,12 @@ export function useLleResultsModule() {
   }
 
   function retrainModel() {
-    return changeModel(() => services.retrainLetModel(), 'Unable to retrain the Exam Outcome model.')
+    return changeModel(() => services.retrainLetModel(), 'Unable to retrain the Estimated Outcome model.')
   }
 
   function activateModelVersion(version) {
     if (typeof window !== 'undefined') {
-      const confirmed = window.confirm(`Use version ${version} of the Exam Outcome model from now on?`)
+      const confirmed = window.confirm(`Use version ${version} of the Estimated Outcome model from now on?`)
       if (!confirmed) return Promise.resolve()
     }
 
@@ -152,6 +152,15 @@ export function useLleResultsModule() {
   }
 
   // Read again when someone comes back to this page.
+  // While a retraining runs on the queue, look again every 5 seconds until
+  // the server says it is done.
+  let trainingTimer = null
+  watch(() => modelStatus.value?.training, (training) => {
+    clearInterval(trainingTimer)
+    trainingTimer = training ? setInterval(() => loadModelStatus({ silent: true }), 5000) : null
+  })
+  onUnmounted(() => clearInterval(trainingTimer))
+
   useLiveRefresh(() => Promise.all([loadResults({ silent: true }), loadModelStatus({ silent: true })]), {
     when: () => !resultsLoading.value && !saving.value && !modelBusy.value,
   })

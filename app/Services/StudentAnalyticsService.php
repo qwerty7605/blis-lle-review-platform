@@ -205,9 +205,9 @@ class StudentAnalyticsService
                 ];
             });
 
-        // Locked until one semester has all six subject exams; then an early
-        // warning (years 1 to 3) or a board readiness prediction (year 4), from
-        // the latest complete semester. See BoardExamOutlook.
+        // The Estimated Outcome: locked until a pre-test or mock board series
+        // is complete, then the chance of passing from the latest completed
+        // series. See BoardExamOutlook.
         $predictiveModel = app(\App\Services\MachineLearning\BoardExamOutlook::class)->for($student);
 
         return [
