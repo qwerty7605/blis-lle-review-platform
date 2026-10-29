@@ -183,12 +183,13 @@ class LibraryRoutesTest extends TestCase
 
         $response = $this->postJson('/api/library/banks', [
             'title' => '  Reference Set  ',
+            // An old spelling is saved under the official name.
             'subject' => 'Reference Services',
             'source_filename' => ' reference.docx ',
             'questions' => [
                 [
                     'text' => 'What is a ready reference question?',
-                    'topic_name' => 'Reference Interview',
+                    'topic_name' => '3. Reference and Information Services',
                     'options' => [
                         ['label' => 'A', 'text' => 'A quick factual question', 'is_correct' => true],
                         ['label' => 'B', 'text' => 'A research project'],
@@ -200,8 +201,11 @@ class LibraryRoutesTest extends TestCase
         $bank = QuestionBank::findOrFail($response->json('bank.id'));
         $this->assertSame('Reference Set', $bank->title);
         $this->assertSame('reference.docx', $bank->source_filename);
+        $this->assertSame('Reference, Bibliography and User Services', $bank->subject);
         $question = $bank->questions()->first();
-        $this->assertSame('Reference Interview', $question->topic?->name);
+        $this->assertSame('3. Reference and Information Services', $question->topic?->name);
+        $this->assertSame('3', $question->topic?->code);
+        $this->assertSame(45, $question->topic?->tos_items);
     }
 
     public function test_a_set_with_no_subject_is_saved_without_one(): void
@@ -321,18 +325,27 @@ class LibraryRoutesTest extends TestCase
             ->assertJsonStructure(['curated_topics']);
     }
 
-    public function test_a_subject_s_topics_combine_the_curated_ones_and_those_already_used(): void
+    public function test_a_subject_s_topics_are_the_tos_topics_in_order_whatever_was_typed_before(): void
     {
-        $topic = $this->makeTopic('Reference Services', 'A Local Topic');
-        $this->makeSubtopic($topic, 'A Local Subtopic');
+        // A topic someone once typed by hand is not offered: the TOS is the list.
+        $this->makeTopic('Reference, Bibliography and User Services', 'A Local Topic');
 
-        $response = $this->getJson('/api/library/topics?subject=Reference Services&topic=A Local Topic')->assertOk();
+        $response = $this->getJson('/api/library/topics?subject=Reference Services&topic=2. Reference and Information Sources')->assertOk();
 
-        $this->assertSame('Reference Services', $response->json('subject'));
-        $this->assertContains('A Local Topic', $response->json('topics'));
-        $this->assertGreaterThan(1, count($response->json('topics')));
-        $this->assertContains('A Local Subtopic', $response->json('subtopics'));
-        $this->assertArrayHasKey('curated_subtopics', $response->json());
+        $this->assertSame('Reference, Bibliography and User Services', $response->json('subject'));
+        $this->assertSame([
+            '1. Knowledge Relating to the Nature, Historical Development and Functions of Reference and Information Services',
+            '2. Reference and Information Sources',
+            '3. Reference and Information Services',
+            'Other / Unclassified',
+        ], $response->json('topics'));
+        $this->assertSame([
+            '2.1 Define the nature and scope of reference and information sources (both general and specific)',
+            '2.2 Identify / classify the different types of reference sources',
+            '2.3 Evaluate the various reference and information sources',
+            '2.4 Utilize appropriate reference sources to various information needs',
+        ], $response->json('subtopics'));
+        $this->assertSame($response->json('subtopics'), $response->json('curated_subtopics'));
     }
 
     public function test_without_a_topic_no_subtopic_list_is_sent(): void

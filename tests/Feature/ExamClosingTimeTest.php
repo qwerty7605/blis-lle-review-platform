@@ -163,7 +163,7 @@ class ExamClosingTimeTest extends TestCase
 
         $bank = QuestionBank::create([
             'title' => 'Reference Set',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'source_filename' => 'reference.docx',
             'total_items' => 3,
             'created_by' => $staff->id,
@@ -173,7 +173,7 @@ class ExamClosingTimeTest extends TestCase
             QuestionBankQuestion::create([
                 'question_bank_id' => $bank->id,
                 'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
-                'subject' => 'Reference Services',
+                'subject' => 'Reference, Bibliography and User Services',
                 'item_number' => $itemNumber,
                 'question_text' => "Question {$itemNumber}",
                 'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
@@ -187,7 +187,7 @@ class ExamClosingTimeTest extends TestCase
 
         $exam = Exam::create([
             'title' => 'Reference Quiz',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'question_bank_id' => $bank->id,
             'total_items' => 3,
             'duration_minutes' => 30,

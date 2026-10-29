@@ -28,7 +28,7 @@ class ReviewBotServiceTest extends TestCase
     use BuildsBlisData;
     use RefreshDatabase;
 
-    private const SUBJECT = 'Reference Services';
+    private const SUBJECT = 'Reference, Bibliography and User Services';
 
     private User $teacher;
 
@@ -208,7 +208,7 @@ class ReviewBotServiceTest extends TestCase
         $this->assertSame('Selection and Acquisition', $service->subjectLabel('acquisition/selection'));
         $this->assertSame('Information Technology', $service->subjectLabel('IT'));
         // Contains a known name.
-        $this->assertSame('Reference Services', $service->subjectLabel('Intro to Reference Services 2'));
+        $this->assertSame('Reference, Bibliography and User Services', $service->subjectLabel('Intro to Reference Services 2'));
         // Nothing known: tidied up and kept.
         $this->assertSame('Archival Studies', $service->subjectLabel('archival   studies'));
     }

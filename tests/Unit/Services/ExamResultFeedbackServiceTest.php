@@ -49,7 +49,7 @@ class ExamResultFeedbackServiceTest extends TestCase
         $teacher = $this->makeTeacher();
         $student = $this->makeStudent();
         $room = $this->makeRoom($teacher, [$student]);
-        $topic = $this->makeTopic('Reference Services', 'Reference Interview', $teacher);
+        $topic = $this->makeTopic('Reference, Bibliography and User Services', 'Reference Interview', $teacher);
         $subtopic = $this->makeSubtopic($topic, 'Open questions', $teacher);
         $bank = $this->makeBank($teacher, 4, [], ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id]);
         $exam = $this->makeExam($teacher, $bank, [$room]);
@@ -66,7 +66,7 @@ class ExamResultFeedbackServiceTest extends TestCase
     public function test_each_score_band_has_its_own_readiness_level_and_summary(): void
     {
         $service = $this->exposed();
-        $focus = ['label' => 'Reference Services'];
+        $focus = ['label' => 'Reference, Bibliography and User Services'];
 
         $bands = [
             95.0 => ['exam_ready', 'excellent'],
@@ -81,10 +81,10 @@ class ExamResultFeedbackServiceTest extends TestCase
             $this->assertSame($tone, $service->buildSummary($this->scored($score), null)['tone'], (string) $score);
         }
 
-        $this->assertStringContainsString('weakest slice of this attempt was Reference Services', $service->buildSummary($this->scored(95), $focus)['message']);
+        $this->assertStringContainsString('weakest slice of this attempt was Reference, Bibliography and User Services', $service->buildSummary($this->scored(95), $focus)['message']);
         $this->assertStringContainsString('Keep reviewing to maintain this level', $service->buildSummary($this->scored(95), null)['message']);
-        $this->assertStringContainsString('Reference Services pulled your score down', $service->buildSummary($this->scored(80), $focus)['message']);
-        $this->assertStringContainsString('Reference Services needs targeted review', $service->buildSummary($this->scored(65), $focus)['message']);
+        $this->assertStringContainsString('Reference, Bibliography and User Services pulled your score down', $service->buildSummary($this->scored(80), $focus)['message']);
+        $this->assertStringContainsString('Reference, Bibliography and User Services needs targeted review', $service->buildSummary($this->scored(65), $focus)['message']);
         $this->assertStringContainsString('several concepts still need review', $service->buildSummary($this->scored(65), null)['message']);
     }
 

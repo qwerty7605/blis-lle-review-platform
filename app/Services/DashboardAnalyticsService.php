@@ -9,6 +9,7 @@ use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\MachineLearning\MasteryProfileBuilder;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -731,6 +732,8 @@ class DashboardAnalyticsService
             ->join('exam_attempts', 'exam_attempts.id', '=', 'exam_attempt_answers.exam_attempt_id')
             ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
             ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
+            // "Other / Unclassified" counts toward the subject, never as a topic.
+            ->where('topics.name', '!=', LleTaxonomy::OTHER_TOPIC)
             ->where('exam_attempts.user_id', $student->id)
             ->where('exam_attempts.status', ExamAttempt::STATUS_SUBMITTED)
             ->selectRaw("
@@ -1065,6 +1068,8 @@ class DashboardAnalyticsService
         $rows = DB::table('exam_attempt_answers')
             ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_answers.question_bank_question_id')
             ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
+            // "Other / Unclassified" counts toward the subject, never as a topic.
+            ->where('topics.name', '!=', LleTaxonomy::OTHER_TOPIC)
             ->whereIn('exam_attempt_answers.exam_attempt_id', $attemptIds->all())
             ->selectRaw("
                 topics.id as topic_id,

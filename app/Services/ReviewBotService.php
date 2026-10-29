@@ -8,6 +8,7 @@ use App\Models\ReviewBotAttemptAnswer;
 use App\Models\ReviewBotAttemptQuestion;
 use App\Models\ReviewBotItemState;
 use App\Models\User;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,34 +29,35 @@ class ReviewBotService
 
     /**
      * Static copy for the subject picker (description/focus areas only --
-     * actual question inventory always comes from the database).
+     * actual question inventory always comes from the database), keyed by
+     * subject key; the names come from the Table of Specifications.
      *
      * @var array<string, array{description: string, focus_areas: array<int, string>}>
      */
     private const SUBJECT_PROFILES = [
-        'Cataloging and Classification' => [
-            'description' => 'Bibliographic description, call numbers, and subject access tools used to organize collections.',
-            'focus_areas' => ['RDA and descriptive cataloging', 'Classification systems and call numbers', 'Subject headings and access points'],
+        'cataloging' => [
+            'description' => 'Describing, classifying and organizing library materials: AACR2, subject headings, DDC and LC call numbers, and MARC.',
+            'focus_areas' => ['Descriptive Cataloging', 'Subject Cataloging', 'Classification'],
         ],
-        'Indexing and Abstracting' => [
-            'description' => 'Indexing terms, abstracts, retrieval quality, and subject analysis.',
-            'focus_areas' => ['Descriptors and controlled vocabulary', 'Abstract types and functions', 'Precision, recall, and retrieval quality'],
+        'indexing' => [
+            'description' => 'Writing abstracts, building indexes and thesauri, and judging retrieval by recall and precision.',
+            'focus_areas' => ['Abstracting', 'Indexing', 'Automated Abstracting and Indexing'],
         ],
-        'Information Technology' => [
-            'description' => 'Search systems, metadata, digital tools, and technology used in libraries.',
-            'focus_areas' => ['OPAC, ILS, and discovery tools', 'Search strategy and Boolean logic', 'Digital systems, security, and interoperability'],
+        'it' => [
+            'description' => 'Information storage and retrieval, library systems and databases, networks, and the issues technology raises.',
+            'focus_areas' => ['Computer Applications in Library Operations', 'Computer Technologies', 'Issues in Information Technology'],
         ],
-        'Reference Services' => [
-            'description' => 'User assistance, reference interviews, source evaluation, and information service delivery.',
-            'focus_areas' => ['Reference interview and user needs', 'Ready reference and referral', 'Information literacy and source evaluation'],
+        'management' => [
+            'description' => 'Management theory, library administration, personnel and budget, and the laws on Philippine librarianship.',
+            'focus_areas' => ['Major Administrative Concerns', 'Administration of the Library', 'Laws, Related Practices, and Trends'],
         ],
-        'Library Management' => [
-            'description' => 'Management functions, policy work, budgeting, staff support, and service quality decisions.',
-            'focus_areas' => ['Planning, organizing, leading, and controlling', 'Policy, budgeting, and assessment', 'Staff development and risk management'],
+        'reference' => [
+            'description' => 'The nature and functions of reference service, reference sources, the reference interview and information services.',
+            'focus_areas' => ['Reference and Information Sources', 'Reference and Information Services', 'Functions of Reference Service'],
         ],
-        'Selection and Acquisition' => [
-            'description' => 'Choosing materials, verifying records, ordering resources, and managing vendors.',
-            'focus_areas' => ['Selection criteria and policy alignment', 'Acquisition methods and ordering workflow', 'Vendor review and bibliographic verification'],
+        'selection' => [
+            'description' => 'Collection development principles, the acquisition process, collection evaluation and policy, and preservation.',
+            'focus_areas' => ['Selection of Multi-media Information Sources', 'Acquisition Process', 'Evaluation of Collection'],
         ],
     ];
 
@@ -107,13 +109,15 @@ class ReviewBotService
         $bySubject = $counts->groupBy(fn ($row) => $this->normalizeSubjectLabel($row->subject));
 
         return collect(self::SUBJECT_PROFILES)
-            ->map(function (array $profile, string $subject) use ($bySubject, $difficulties): array {
+            ->map(function (array $profile, string $key) use ($bySubject, $difficulties): array {
+                $subject = (string) LleTaxonomy::subjectName($key);
                 $rows = $bySubject->get($subject, collect());
 
-                // Rows with no topic still count toward the subject total, but
-                // cannot be listed under a topic heading.
+                // Rows with no topic, or "Other / Unclassified", still count
+                // toward the subject total, but are not listed under a topic
+                // heading: Other is not a topic to practise.
                 $topics = $rows
-                    ->filter(fn ($row) => $row->topic_id !== null && $row->topic_name !== null)
+                    ->filter(fn ($row) => $row->topic_id !== null && $row->topic_name !== null && !LleTaxonomy::isOther($row->topic_name))
                     ->groupBy('topic_id')
                     ->map(function (Collection $topicRows): array {
                         $first = $topicRows->first();
@@ -126,7 +130,8 @@ class ReviewBotService
                                 'question_count' => (int) $row->question_count,
                             ])
                             ->values()
-                            ->sortBy('name')
+                            // Names start with their TOS code: "1.2" before "1.10".
+                            ->sortBy('name', SORT_NATURAL)
                             ->values()
                             ->all();
 
@@ -138,7 +143,7 @@ class ReviewBotService
                         ];
                     })
                     ->values()
-                    ->sortBy('name')
+                    ->sortBy('name', SORT_NATURAL)
                     ->values()
                     ->all();
 
@@ -850,6 +855,10 @@ class ReviewBotService
         return Str::lower(trim((string) $value));
     }
 
+    /**
+     * A board subject's official name for any of its spellings; anything
+     * else title-cased, and an empty subject "General".
+     */
     protected function normalizeSubjectLabel(mixed $subject): string
     {
         $raw = trim((string) $subject);
@@ -858,43 +867,6 @@ class ReviewBotService
             return 'General';
         }
 
-        $normalized = Str::of($raw)
-            ->lower()
-            ->replace('&', 'and')
-            ->replace('/', ' ')
-            ->replace('-', ' ')
-            ->replaceMatches('/\s+/', ' ')
-            ->trim()
-            ->toString();
-
-        $map = [
-            'cataloging and classification' => 'Cataloging and Classification',
-            'cataloguing and classification' => 'Cataloging and Classification',
-            'cataloging classification' => 'Cataloging and Classification',
-            'indexing and abstracting' => 'Indexing and Abstracting',
-            'indexing abstracting' => 'Indexing and Abstracting',
-            'information technology' => 'Information Technology',
-            'it' => 'Information Technology',
-            'reference services' => 'Reference Services',
-            'reference service' => 'Reference Services',
-            'reference' => 'Reference Services',
-            'library management' => 'Library Management',
-            'selection and acquisition' => 'Selection and Acquisition',
-            'selection acquisition' => 'Selection and Acquisition',
-            'acquisition and selection' => 'Selection and Acquisition',
-            'acquisition selection' => 'Selection and Acquisition',
-        ];
-
-        if (array_key_exists($normalized, $map)) {
-            return $map[$normalized];
-        }
-
-        foreach ($map as $key => $canonical) {
-            if (str_contains($normalized, $key) || str_contains($key, $normalized)) {
-                return $canonical;
-            }
-        }
-
-        return Str::title($normalized);
+        return LleTaxonomy::canonicalSubject($raw) ?? Str::title(LleTaxonomy::normalize($raw));
     }
 }

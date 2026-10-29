@@ -338,6 +338,7 @@ import InfoTip from '@/components/InfoTip.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
+import { SUBJECT_SHORT_NAMES } from '@/constants/librarySubjects'
 
 // Kept in step with the 1000px rule in this file's styles: from there down
 // the two panels sit one above the other and the page scrolls.
@@ -417,17 +418,8 @@ const progressPercent = computed(() => {
   return Math.round((answeredCount.value / total) * 100)
 })
 
-const shortSubjectLookup = {
-  'Cataloging and Classification': 'Cataloging',
-  'Indexing and Abstracting': 'Indexing',
-  'Information Technology': 'IT',
-  'Reference Services': 'Reference',
-  'Library Management': 'Management',
-  'Selection and Acquisition': 'Acquisition',
-}
-
 function shortSubjectLabel(subject) {
-  return shortSubjectLookup[subject] ?? subject
+  return SUBJECT_SHORT_NAMES[subject] ?? subject
 }
 
 function scoreToneClass(score) {

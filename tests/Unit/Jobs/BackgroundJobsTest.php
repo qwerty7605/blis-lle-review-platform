@@ -90,7 +90,7 @@ class BackgroundJobsTest extends TestCase
     {
         Cache::put('review-bot-lock-test', true, 600);
 
-        (new GenerateReviewBotQuestionsJob(999999, 1, 'Reference Services', null, null, 5, null, 'review-bot-lock-test'))
+        (new GenerateReviewBotQuestionsJob(999999, 1, 'Reference, Bibliography and User Services', null, null, 5, null, 'review-bot-lock-test'))
             ->handle(app(ReviewBotAdminService::class));
 
         $this->assertFalse(Cache::has('review-bot-lock-test'));
@@ -100,7 +100,7 @@ class BackgroundJobsTest extends TestCase
     {
         Cache::put('review-bot-lock-crash', true, 600);
 
-        (new GenerateReviewBotQuestionsJob(1, 1, 'Reference Services', null, null, 5, null, 'review-bot-lock-crash'))
+        (new GenerateReviewBotQuestionsJob(1, 1, 'Reference, Bibliography and User Services', null, null, 5, null, 'review-bot-lock-crash'))
             ->failed(new \RuntimeException('Timed out'));
 
         $this->assertFalse(Cache::has('review-bot-lock-crash'));
@@ -108,13 +108,13 @@ class BackgroundJobsTest extends TestCase
 
     public function test_discarded_duplicates_are_logged(): void
     {
-        $bank = QuestionBank::create(['title' => 'RB', 'subject' => 'Reference Services', 'total_items' => 0, 'created_by' => $this->makeTeacher()->id]);
+        $bank = QuestionBank::create(['title' => 'RB', 'subject' => 'Reference, Bibliography and User Services', 'total_items' => 0, 'created_by' => $this->makeTeacher()->id]);
         $service = $this->partialMock(ReviewBotAdminService::class, function ($mock): void {
             $mock->shouldReceive('generate')->andReturn(['created' => 1, 'rejected' => [['reason' => 'near_duplicate']], 'errors' => []]);
         });
         Log::spy();
 
-        (new GenerateReviewBotQuestionsJob($bank->id, 1, 'Reference Services', null, null, 5))->handle($service);
+        (new GenerateReviewBotQuestionsJob($bank->id, 1, 'Reference, Bibliography and User Services', null, null, 5))->handle($service);
 
         Log::shouldHaveReceived('info')->withArgs(fn ($message) => str_contains($message, 'near-duplicate'))->once();
     }

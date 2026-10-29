@@ -54,7 +54,7 @@ class RoomGradeExportTest extends TestCase
         $student = $this->makeUser('room-export-csv@example.com', User::ROLE_STUDENT, '2302002');
         $room->members()->attach($student->id);
 
-        $exam = $this->makeExam($staff, 'Reference Services Mock', 'Reference Services', 40);
+        $exam = $this->makeExam($staff, 'Reference Services Mock', 'Reference, Bibliography and User Services', 40);
         $this->assignExamToRoom($exam, $room, $staff);
 
         ExamAttempt::create([
