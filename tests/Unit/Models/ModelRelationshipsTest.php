@@ -92,7 +92,11 @@ class ModelRelationshipsTest extends TestCase
         $blank = $this->makeBank($teacher, 1, ['subject' => '']);
 
         $this->assertSame('Multiple Subjects', Exam::summarizeQuestionBankSubject([$one, $two]));
-        $this->assertSame('Cataloging', Exam::summarizeQuestionBankSubject([$one, $one]));
+        // A board subject under its official name, whatever spelling the set has.
+        $this->assertSame('Cataloging and Classification', Exam::summarizeQuestionBankSubject([$one, $one]));
+        $official = $this->makeBank($teacher, 1, ['subject' => 'Cataloging and Classification']);
+        $this->assertSame('Cataloging and Classification', Exam::summarizeQuestionBankSubject([$one, $official]));
+        $this->assertSame('Archival Studies', Exam::summarizeQuestionBankSubject([$this->makeBank($teacher, 1, ['subject' => 'Archival Studies'])]));
         $this->assertNull(Exam::summarizeQuestionBankSubject([$blank]));
     }
 

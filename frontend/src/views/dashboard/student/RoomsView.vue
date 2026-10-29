@@ -142,6 +142,7 @@
 
                 <div class="rooms-exam-row-foot">
                   <div class="rooms-exam-meta">
+                    <span v-if="exam.exam_type_label" class="pill neutral rooms-exam-type">{{ exam.exam_type_label }}</span>
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
                     <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
@@ -186,6 +187,7 @@
 
                 <div class="rooms-exam-row-foot">
                   <div class="rooms-exam-meta">
+                    <span v-if="exam.exam_type_label" class="pill neutral rooms-exam-type">{{ exam.exam_type_label }}</span>
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
                     <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
