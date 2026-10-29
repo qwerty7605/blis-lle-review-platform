@@ -8,13 +8,12 @@ use App\Models\LleResult;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use App\Models\ReviewBotAttempt;
-use App\Models\Subtopic;
-use App\Models\Topic;
 use App\Models\User;
 use App\Services\Demo\DemoData;
 use App\Services\Demo\DemoDataPurger;
 use App\Services\QuestionMappingService;
 use App\Services\ReviewBotAdminService;
+use App\Support\LleTaxonomy;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Demo\DemoNames;
 use Database\Seeders\Demo\DemoQuestions;
@@ -71,8 +70,8 @@ class ShowcaseSeeder extends Seeder
         'Cataloging and Classification',
         'Indexing and Abstracting',
         'Information Technology',
-        'Reference Services',
-        'Library Management',
+        'Reference, Bibliography and User Services',
+        'Library Organization and Management',
         'Selection and Acquisition',
     ];
 
@@ -94,9 +93,9 @@ class ShowcaseSeeder extends Seeder
 
     /** Quizzes the lower years sat this term: year level => [subject, kind]. */
     private const LOWER_YEAR_EXAMS = [
-        1 => [['Information Technology', 'Diagnostic Quiz'], ['Reference Services', 'Diagnostic Quiz']],
+        1 => [['Information Technology', 'Diagnostic Quiz'], ['Reference, Bibliography and User Services', 'Diagnostic Quiz']],
         2 => [['Cataloging and Classification', 'Midterm Quiz'], ['Indexing and Abstracting', 'Midterm Quiz']],
-        3 => [['Library Management', 'Unit Test'], ['Selection and Acquisition', 'Unit Test']],
+        3 => [['Library Organization and Management', 'Unit Test'], ['Selection and Acquisition', 'Unit Test']],
     ];
 
     /**
@@ -308,18 +307,13 @@ class ShowcaseSeeder extends Seeder
             foreach ($mapping->curatedTopicsForSubject($subject) as $topicName) {
                 // Only created when missing, so a topic real uploads already
                 // use is shared rather than duplicated -- and survives a purge.
-                $topic = Topic::query()->firstOrCreate(
-                    ['subject' => $subject, 'name' => $topicName],
-                    ['created_by' => $this->staff['chair']],
-                );
+                // Through the mapping service, so each carries its TOS code.
+                $topic = $mapping->resolveTopic($subject, $topicName, $this->staff['chair']);
 
                 $subtopics = [];
 
                 foreach ($mapping->curatedSubtopicsForTopic($subject, $topicName) as $subtopicName) {
-                    $subtopics[$subtopicName] = (int) Subtopic::query()->firstOrCreate(
-                        ['topic_id' => $topic->id, 'name' => $subtopicName],
-                        ['created_by' => $this->staff['chair']],
-                    )->id;
+                    $subtopics[$subtopicName] = (int) $mapping->resolveSubtopic($topic, $subtopicName, $this->staff['chair'])->id;
                 }
 
                 $this->taxonomy[$subject][$topicName] = ['id' => (int) $topic->id, 'subtopics' => $subtopics];
@@ -358,7 +352,7 @@ class ShowcaseSeeder extends Seeder
         $failedAt = $this->now->subDays(3)->setTime(15, 12);
         $failed = $this->insertBank([
             'title' => 'Reference Services Quiz Set B',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'source_filename' => 'Reference_Services_Quiz_Set_B.docx',
             'mapping_status' => QuestionBank::MAPPING_STATUS_FAILED,
             'mapping_mode' => QuestionBank::MAPPING_MODE_AUTO,
@@ -369,7 +363,7 @@ class ShowcaseSeeder extends Seeder
             'created_at' => $failedAt,
             'updated_at' => $failedAt->addMinutes(6),
         ]);
-        $this->insertItems($failed, 'Reference Services', array_slice(DemoQuestions::forSubject('Reference Services'), 0, 6), $failedAt, false);
+        $this->insertItems($failed, 'Reference, Bibliography and User Services', array_slice(DemoQuestions::forSubject('Reference, Bibliography and User Services'), 0, 6), $failedAt, false);
 
         // A file nobody has mapped yet -- the "Map Items" call to action.
         $idleAt = $this->now->subDay()->setTime(9, 40);
@@ -406,7 +400,10 @@ class ShowcaseSeeder extends Seeder
         $count = count($items);
 
         foreach ($items as $index => $item) {
-            $pair = $this->taxonomy[$subject][$item['topic'] ?? ''] ?? null;
+            // Items name their topic and sub-topic by TOS code.
+            $topicLabel = LleTaxonomy::topic($subject, $item['topic'] ?? null)['label'] ?? null;
+            $subtopicLabel = LleTaxonomy::subtopic($subject, $item['topic'] ?? null, $item['subtopic'] ?? null)['label'] ?? null;
+            $pair = $topicLabel !== null ? ($this->taxonomy[$subject][$topicLabel] ?? null) : null;
 
             // The classifier leaves an item it is unsure of for a teacher to
             // confirm; the last item of each mapped file shows that state.
@@ -429,7 +426,7 @@ class ShowcaseSeeder extends Seeder
                 'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
                 'subject' => $subject,
                 'topic_id' => $tagged ? $pair['id'] : null,
-                'subtopic_id' => $tagged ? ($pair['subtopics'][$item['subtopic']] ?? null) : null,
+                'subtopic_id' => $tagged ? ($pair['subtopics'][$subtopicLabel] ?? null) : null,
                 'difficulty' => $item['difficulty'],
                 'tag_status' => $tagged
                     ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
@@ -833,7 +830,7 @@ class ShowcaseSeeder extends Seeder
 
         // A quiz its teacher has since archived from one section, after the
         // section sat it -- the archived-assignment state.
-        $archived = $this->exams['3:Library Management'];
+        $archived = $this->exams['3:Library Organization and Management'];
         DB::table('exam_room')
             ->where('exam_id', $archived['id'])
             ->where('room_id', $this->sections[3][0])
@@ -906,7 +903,11 @@ class ShowcaseSeeder extends Seeder
 
     private function describe(string $subject): string
     {
-        $topics = app(QuestionMappingService::class)->curatedTopicsForSubject($subject);
+        // The TOS topics by their plain names, without "Other / Unclassified".
+        $topics = array_values(array_map(
+            fn (array $topic): string => $topic['name'],
+            array_filter(LleTaxonomy::topics($subject), fn (array $topic): bool => !$topic['other']),
+        ));
         $last = array_pop($topics);
 
         return $topics === []
@@ -1713,7 +1714,7 @@ class ShowcaseSeeder extends Seeder
             $entries[] =[$exam['owner'], 'exam.create', 'exam', $exam['id'], 'Exam created', ['title' => $exam['title']], $exam['start']->subDays(4)->setTime(10, 20)];
         }
 
-        $entries[] = [$examiner, 'room.exam.archive', 'exam', $this->exams['3:Library Management']['id'], 'Exam archived for room', ['room_id' => $this->sections[3][0]], $this->now->subDays(2)->setTime(16, 2)];
+        $entries[] = [$examiner, 'room.exam.archive', 'exam', $this->exams['3:Library Organization and Management']['id'], 'Exam archived for room', ['room_id' => $this->sections[3][0]], $this->now->subDays(2)->setTime(16, 2)];
         $entries[] = [$chair, 'library.mapping.bulk_confirm', 'question_bank', $this->libraryBanks['Cataloging and Classification'], 'Bulk confirmed AI-suggested item tags', ['confirmed' => 16], $this->now->subDays(15)->setTime(9, 12)];
         $entries[] = [$chair, 'review-bot.admin.publish', 'question_bank_question', null, 'Published Review Bot question(s)', ['subject' => 'Cataloging and Classification'], $this->now->subDays(10)->setTime(15, 30)];
         $entries[] = [$chair, 'review-bot.admin.reject', 'question_bank_question', null, 'Declined Review Bot question(s)', ['subject' => 'Indexing and Abstracting'], $this->now->subDays(9)->setTime(11, 5)];

@@ -82,10 +82,15 @@ class QuestionMappingServiceUnitTest extends TestCase
         $teacher = $this->makeTeacher();
         $question = $this->makeBank($teacher, 1)->questions->first();
 
-        $tagged = $this->service()->applyManualTags($question, 'Ready Reference', 'hard', 'analysis', $teacher->id, 'Almanacs');
+        // A topic may be named by its code and name, its plain name or its code.
+        $tagged = $this->service()->applyManualTags($question, 'Reference and Information Sources', 'hard', 'analysis', $teacher->id, '2.2');
 
-        $this->assertSame('Ready Reference', $tagged->topic->name);
-        $this->assertSame('Almanacs', $tagged->subtopic->name);
+        $this->assertSame('2. Reference and Information Sources', $tagged->topic->name);
+        $this->assertSame('2', $tagged->topic->code);
+        $this->assertSame(30, $tagged->topic->tos_items);
+        $this->assertSame('2.2 Identify / classify the different types of reference sources', $tagged->subtopic->name);
+        $this->assertSame('2.2', $tagged->subtopic->code);
+        $this->assertSame(10, $tagged->subtopic->tos_items);
         $this->assertSame('hard', $tagged->difficulty);
         $this->assertSame('analysis', $tagged->cognitive_level);
         $this->assertSame(QuestionBankQuestion::TAG_STATUS_CONFIRMED, $tagged->tag_status);
@@ -93,20 +98,40 @@ class QuestionMappingServiceUnitTest extends TestCase
 
         // A subtopic alone goes under the topic the question already has;
         // an unknown difficulty or level is ignored.
-        $retagged = $this->service()->applyManualTags($tagged, null, 'impossible', 'telepathy', $teacher->id, 'Yearbooks');
-        $this->assertSame('Yearbooks', $retagged->subtopic->name);
+        $retagged = $this->service()->applyManualTags($tagged, null, 'impossible', 'telepathy', $teacher->id, '2.4 Utilize appropriate reference sources to various information needs');
+        $this->assertSame('2.4 Utilize appropriate reference sources to various information needs', $retagged->subtopic->name);
         $this->assertSame('hard', $retagged->difficulty);
         $this->assertSame('analysis', $retagged->cognitive_level);
     }
 
-    public function test_blank_names_make_no_topic_or_subtopic(): void
+    public function test_only_the_table_of_specifications_gives_topics_and_subtopics(): void
     {
-        $topic = $this->makeTopic();
+        $service = $this->service();
+        $topic = $service->resolveTopic('Reference Services', '2. Reference and Information Sources');
 
-        $this->assertNull($this->service()->resolveTopic('', 'Ready Reference'));
-        $this->assertNull($this->service()->resolveTopic('Reference Services', '  '));
-        $this->assertNull($this->service()->resolveSubtopic($topic, ''));
-        $this->assertSame($topic->id, $this->service()->resolveTopic($topic->subject, $topic->name)->id);
+        // Saved under the official subject name, once.
+        $this->assertSame('Reference, Bibliography and User Services', $topic->subject);
+        $this->assertSame($topic->id, $service->resolveTopic('Reference, Bibliography and User Services', '2')->id);
+
+        $this->assertNull($service->resolveTopic('', '2. Reference and Information Sources'));
+        $this->assertNull($service->resolveTopic('Reference, Bibliography and User Services', '  '));
+        $this->assertNull($service->resolveTopic('Reference, Bibliography and User Services', 'Ready Reference'));
+        $this->assertNull($service->resolveTopic('General', 'Basic Concepts'));
+        $this->assertNull($service->resolveSubtopic($topic, ''));
+        // A sub-topic of another topic is not one of this topic's.
+        $this->assertNull($service->resolveSubtopic($topic, '3.3 Identify the various methods and techniques involved in a reference interview'));
+
+        // Other / Unclassified is a topic of every subject, with no sub-topics.
+        $other = $service->resolveTopic('Cataloging and Classification', 'Other / Unclassified');
+        $this->assertNull($other->code);
+        $this->assertSame(99, $other->sort_order);
+        $this->assertNull($service->resolveSubtopic($other, '1.1'));
+
+        $this->assertNull($service->tagProblem('Reference Services', '2', '2.3'));
+        $this->assertNull($service->tagProblem('Reference Services', null, null));
+        $this->assertStringContainsString('is not a topic', $service->tagProblem('Reference Services', 'Ready Reference', null));
+        $this->assertStringContainsString('is not a sub-topic', $service->tagProblem('Reference Services', '2', '3.3'));
+        $this->assertStringContainsString('six board subjects', $service->tagProblem('General', '2', null));
     }
 
     public function test_the_answer_is_worked_out_from_the_choices(): void

@@ -61,8 +61,8 @@ class StudentHistoryBuildersTest extends TestCase
 
     public function test_semesters_average_each_subject_and_say_what_is_missing(): void
     {
-        $this->sat('Reference Services', 80, 2025, 1);
-        $this->sat('Reference Services', 60, 2025, 1);
+        $this->sat('Reference, Bibliography and User Services', 80, 2025, 1);
+        $this->sat('Reference, Bibliography and User Services', 60, 2025, 1);
         $this->sat('Information Technology', 90, 2025, 1);
         // Not a board subject: ignored.
         $this->sat('Archival Studies', 10, 2025, 1);
@@ -79,7 +79,7 @@ class StudentHistoryBuildersTest extends TestCase
 
     public function test_an_exam_with_no_term_is_filed_by_the_date_it_was_handed_in(): void
     {
-        $exam = $this->sat('Reference Services', 75, 2025, 1, Carbon::create(2026, 3, 1));
+        $exam = $this->sat('Reference, Bibliography and User Services', 75, 2025, 1, Carbon::create(2026, 3, 1));
         DB::table('exams')->where('id', $exam->id)->update(['school_year' => null, 'semester' => null]);
 
         $semesters = (new LetReadinessFeatureBuilder())->semesters($this->student);
@@ -113,7 +113,7 @@ class StudentHistoryBuildersTest extends TestCase
     {
         // Complete, but a year before their last exams.
         $this->allSix(2023, 1, 70, Carbon::create(2023, 10, 1));
-        $this->sat('Reference Services', 50, 2025, 1, Carbon::create(2025, 10, 1));
+        $this->sat('Reference, Bibliography and User Services', 50, 2025, 1, Carbon::create(2025, 10, 1));
         LleResult::create(['user_id' => $this->student->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_FAIL]);
 
         $other = $this->makeStudent();
@@ -127,15 +127,15 @@ class StudentHistoryBuildersTest extends TestCase
 
     public function test_mastery_is_traced_per_subject_topic_and_subtopic_and_reused_for_the_same_student(): void
     {
-        $topic = $this->makeTopic('Reference Services', 'Ready Reference', $this->teacher);
+        $topic = $this->makeTopic('Reference, Bibliography and User Services', 'Ready Reference', $this->teacher);
         $subtopic = $this->makeSubtopic($topic, 'Almanacs', $this->teacher);
-        $this->sat('Reference Services', 100, 2025, 1, null, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id]);
-        $this->sat('Reference Services', 100, 2025, 1);
+        $this->sat('Reference, Bibliography and User Services', 100, 2025, 1, null, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id]);
+        $this->sat('Reference, Bibliography and User Services', 100, 2025, 1);
 
         $builder = app(MasteryProfileBuilder::class);
         $profile = $builder->build($this->student);
 
-        $this->assertSame(2, $profile['subjects']['Reference Services']['opportunities']);
+        $this->assertSame(2, $profile['subjects']['Reference, Bibliography and User Services']['opportunities']);
         $this->assertSame(1, $profile['topics'][$topic->id]['opportunities']);
         $this->assertSame(1, $profile['subtopics'][$subtopic->id]['opportunities']);
         $this->assertSame($profile, $builder->build($this->student));

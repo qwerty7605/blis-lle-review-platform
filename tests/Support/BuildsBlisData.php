@@ -59,7 +59,7 @@ trait BuildsBlisData
         return $room;
     }
 
-    protected function makeTopic(string $subject = 'Reference Services', string $name = 'Reference Interview', ?User $owner = null): Topic
+    protected function makeTopic(string $subject = 'Reference, Bibliography and User Services', string $name = 'Reference Interview', ?User $owner = null): Topic
     {
         return Topic::firstOrCreate(
             ['subject' => $subject, 'name' => $name],
@@ -80,7 +80,7 @@ trait BuildsBlisData
      */
     protected function makeBank(User $owner, int $count = 3, array $attributes = [], array $questionAttributes = []): QuestionBank
     {
-        $subject = $attributes['subject'] ?? 'Reference Services';
+        $subject = $attributes['subject'] ?? 'Reference, Bibliography and User Services';
 
         $bank = QuestionBank::create([
             'title' => $subject . ' Set ' . Str::random(4),
@@ -127,7 +127,7 @@ trait BuildsBlisData
     {
         $exam = Exam::create([
             'title' => 'Exam ' . Str::random(5),
-            'subject' => $bank?->subject ?? 'Reference Services',
+            'subject' => $bank?->subject ?? 'Reference, Bibliography and User Services',
             'question_bank_id' => $bank?->id,
             'total_items' => $bank ? $bank->questions()->count() : 3,
             'duration_minutes' => 30,

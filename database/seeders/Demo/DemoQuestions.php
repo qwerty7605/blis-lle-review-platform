@@ -3,9 +3,9 @@
 namespace Database\Seeders\Demo;
 
 /**
- * Exam items for the demo Library: one per curated subtopic
- * (QuestionMappingService::CURATED_TOPICS), so every topic- and
- * subtopic-level view has real evidence behind it.
+ * Exam items for the demo Library, each tagged with the topic and sub-topic
+ * of the LLE Table of Specifications it tests (docs/lle_tos.json, by TOS
+ * code), so every topic- and subtopic-level view has real evidence behind it.
  *
  * Written for this demo in the style of the Librarians' Licensure Examination.
  * For multiple choice, the correct answer is always options[0]; the seeder
@@ -65,43 +65,43 @@ final class DemoQuestions
     private const ITEMS = [
         'Cataloging and Classification' => [
             [
-                'topic' => 'RDA and Descriptive Cataloging',
-                'subtopic' => 'Core Elements of Description',
+                'topic' => '2',
+                'subtopic' => '2.4',
                 'difficulty' => 'medium',
                 'question' => 'Which of the following is a core element in RDA for describing a manifestation?',
                 'options' => ['Title proper', 'Summary of content', 'Illustrative content', 'Colour content'],
             ],
             [
-                'topic' => 'RDA and Descriptive Cataloging',
-                'subtopic' => 'FRBR/LRM Concepts',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'medium',
                 'question' => "In the FRBR model, an English translation of Rizal's Noli Me Tangere is an example of which Group 1 entity?",
                 'options' => ['Expression', 'Work', 'Manifestation', 'Item'],
             ],
             [
-                'topic' => 'RDA and Descriptive Cataloging',
-                'subtopic' => 'Content, Media, and Carrier Types',
+                'topic' => '2',
+                'subtopic' => '2.4',
                 'difficulty' => 'hard',
                 'question' => 'Which RDA element records the general type of device needed to view, play or run a resource, such as "unmediated", "computer" or "video"?',
                 'options' => ['Media type', 'Content type', 'Carrier type', 'Mode of issuance'],
             ],
             [
-                'topic' => 'Classification Systems and Call Numbers',
-                'subtopic' => 'Dewey Decimal Classification (DDC)',
+                'topic' => '4',
+                'subtopic' => '4.3',
                 'difficulty' => 'easy',
                 'question' => 'In the Dewey Decimal Classification, the 300s are assigned to which main class?',
                 'options' => ['Social sciences', 'Language', 'Technology', 'History and geography'],
             ],
             [
-                'topic' => 'Classification Systems and Call Numbers',
-                'subtopic' => 'Library of Congress Classification (LCC)',
+                'topic' => '4',
+                'subtopic' => '4.6',
                 'difficulty' => 'medium',
                 'question' => 'Which Library of Congress Classification main class covers bibliography, library science and general information resources?',
                 'options' => ['Class Z', 'Class A', 'Class L', 'Class P'],
             ],
             [
-                'topic' => 'Classification Systems and Call Numbers',
-                'subtopic' => 'Universal Decimal Classification (UDC)',
+                'topic' => '4',
+                'subtopic' => '4.1',
                 'difficulty' => 'medium',
                 'question' => 'Which classification scheme uses auxiliary signs such as the colon (:) to show relationships between subjects?',
                 'options' => [
@@ -112,15 +112,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Subject Headings and Authority Control',
-                'subtopic' => 'Library of Congress Subject Headings (LCSH)',
+                'topic' => '3',
+                'subtopic' => '3.2',
                 'difficulty' => 'easy',
                 'question' => 'In the subject heading "Libraries--Philippines", what kind of subdivision is "Philippines"?',
                 'options' => ['Geographic subdivision', 'Topical subdivision', 'Chronological subdivision', 'Form subdivision'],
             ],
             [
-                'topic' => 'Subject Headings and Authority Control',
-                'subtopic' => 'Authority Records and Cross-References',
+                'topic' => '2',
+                'subtopic' => '2.7',
                 'difficulty' => 'medium',
                 'question' => 'In an authority file, a "see" reference leads the catalog user',
                 'options' => [
@@ -131,8 +131,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Subject Headings and Authority Control',
-                'subtopic' => 'Name Authority Control',
+                'topic' => '2',
+                'subtopic' => '2.6',
                 'difficulty' => 'easy',
                 'question' => 'What is the main purpose of name authority control in a library catalog?',
                 'options' => [
@@ -143,15 +143,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Cutter Numbers and Shelf Arrangement',
-                'subtopic' => 'Cutter-Sanborn Tables',
+                'topic' => '4',
+                'subtopic' => '4.4',
                 'difficulty' => 'easy',
                 'question' => 'Cutter-Sanborn tables are used to construct which part of a call number?',
                 'options' => ['The author (book) number', 'The class number', 'The accession number', 'The volume number'],
             ],
             [
-                'topic' => 'Cutter Numbers and Shelf Arrangement',
-                'subtopic' => 'Shelflisting Practices',
+                'topic' => '5',
+                'subtopic' => '5.1',
                 'difficulty' => 'medium',
                 'question' => 'Shelflisting is done mainly to',
                 'options' => [
@@ -162,22 +162,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Cutter Numbers and Shelf Arrangement',
-                'subtopic' => 'Alternate Shelving Schemes',
+                'topic' => '5',
+                'subtopic' => '5.3',
                 'difficulty' => 'medium',
                 'question' => "Shelving fiction alphabetically by the author's surname instead of by class number is an example of",
                 'options' => ['an alternative shelving arrangement', 'shelflisting', 'fixed location shelving', 'closed-stack access'],
             ],
             [
-                'topic' => 'MARC Format and Bibliographic Records',
-                'subtopic' => 'MARC 21 Field Structure',
+                'topic' => '6',
+                'subtopic' => '6.2',
                 'difficulty' => 'easy',
                 'question' => 'In a MARC 21 bibliographic record, which field holds the title statement?',
                 'options' => ['245', '100', '260', '650'],
             ],
             [
-                'topic' => 'MARC Format and Bibliographic Records',
-                'subtopic' => 'Fixed and Variable Fields',
+                'topic' => '6',
+                'subtopic' => '6.2',
                 'difficulty' => 'medium',
                 'question' => 'The MARC 21 008 field is best described as a',
                 'options' => [
@@ -188,8 +188,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'MARC Format and Bibliographic Records',
-                'subtopic' => 'Bibliographic vs Authority Records',
+                'topic' => '2',
+                'subtopic' => '2.6',
                 'difficulty' => 'medium',
                 'question' => 'Which MARC 21 format records the authorized forms of names, subjects and uniform titles together with their cross-references?',
                 'options' => [
@@ -200,8 +200,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Edition and Physical Description',
-                'subtopic' => 'Edition Statements',
+                'topic' => '2',
+                'subtopic' => '2.3',
                 'difficulty' => 'easy',
                 'question' => 'In a catalog record, the statement "2nd ed." belongs to which area of the description?',
                 'options' => [
@@ -212,15 +212,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Edition and Physical Description',
-                'subtopic' => 'Physical Description Area',
+                'topic' => '2',
+                'subtopic' => '2.3',
                 'difficulty' => 'easy',
                 'question' => 'The statement "xii, 356 pages : illustrations ; 24 cm" is recorded in which part of a catalog record?',
                 'options' => ['Physical description', 'Note area', 'Publication statement', 'Series statement'],
             ],
             [
-                'topic' => 'Edition and Physical Description',
-                'subtopic' => 'Series Statements',
+                'topic' => '2',
+                'subtopic' => '2.3',
                 'difficulty' => 'easy',
                 'type' => 'true_false',
                 'answer' => false,
@@ -230,8 +230,8 @@ final class DemoQuestions
 
         'Indexing and Abstracting' => [
             [
-                'topic' => 'Controlled Vocabulary and Thesauri',
-                'subtopic' => 'Preferred and Non-Preferred Terms',
+                'topic' => '2',
+                'subtopic' => '2.13',
                 'difficulty' => 'easy',
                 'question' => 'In a thesaurus, the instruction USE leads the indexer',
                 'options' => [
@@ -242,51 +242,51 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Controlled Vocabulary and Thesauri',
-                'subtopic' => 'Broader/Narrower/Related Terms',
+                'topic' => '2',
+                'subtopic' => '2.13',
                 'difficulty' => 'easy',
                 'question' => 'In the thesaurus entry for "Academic libraries", the line "BT Libraries" means that "Libraries" is',
                 'options' => ['a broader term', 'a narrower term', 'a related term', 'a non-preferred term'],
             ],
             [
-                'topic' => 'Controlled Vocabulary and Thesauri',
-                'subtopic' => 'Thesaurus Construction',
+                'topic' => '2',
+                'subtopic' => '2.12',
                 'difficulty' => 'hard',
                 'question' => 'Which standard gives guidelines for constructing and managing monolingual controlled vocabularies such as thesauri?',
                 'options' => ['ANSI/NISO Z39.19', 'ANSI/NISO Z39.50', 'ISO 2709', 'ISO 690'],
             ],
             [
-                'topic' => 'Abstract Types and Functions',
-                'subtopic' => 'Informative Abstracts',
+                'topic' => '1',
+                'subtopic' => '1.5',
                 'difficulty' => 'easy',
                 'question' => "An abstract that reports a study's purpose, methods, results and conclusions, so that it can sometimes stand in for the full text, is",
                 'options' => ['an informative abstract', 'an indicative abstract', 'a critical abstract', 'an annotation'],
             ],
             [
-                'topic' => 'Abstract Types and Functions',
-                'subtopic' => 'Indicative Abstracts',
+                'topic' => '1',
+                'subtopic' => '1.5',
                 'difficulty' => 'easy',
                 'type' => 'true_false',
                 'answer' => false,
                 'question' => 'An indicative abstract gives the specific findings and conclusions of the document it describes.',
             ],
             [
-                'topic' => 'Abstract Types and Functions',
-                'subtopic' => 'Critical/Evaluative Abstracts',
+                'topic' => '1',
+                'subtopic' => '1.5',
                 'difficulty' => 'medium',
                 'question' => "An abstract that includes the abstractor's judgment of a document's quality, validity or significance is",
                 'options' => ['a critical abstract', 'an indicative abstract', 'an informative abstract', 'a structured abstract'],
             ],
             [
-                'topic' => 'Precision, Recall, and Retrieval Quality',
-                'subtopic' => 'Precision vs Recall Tradeoff',
+                'topic' => '2',
+                'subtopic' => '2.11',
                 'difficulty' => 'hard',
                 'question' => 'A search retrieves 40 documents, 30 of which are relevant. The collection holds 60 relevant documents in all. What is the precision of the search?',
                 'options' => ['75%', '50%', '67%', '40%'],
             ],
             [
-                'topic' => 'Precision, Recall, and Retrieval Quality',
-                'subtopic' => 'Relevance Ranking',
+                'topic' => '4',
+                'subtopic' => '4.1',
                 'difficulty' => 'hard',
                 'question' => "In relevance-ranked retrieval, a term's TF-IDF weight in a document is highest when the term",
                 'options' => [
@@ -297,8 +297,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Precision, Recall, and Retrieval Quality',
-                'subtopic' => 'Search Result Evaluation',
+                'topic' => '2',
+                'subtopic' => '2.11',
                 'difficulty' => 'medium',
                 'question' => 'Recall measures the proportion of',
                 'options' => [
@@ -309,22 +309,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Citation Indexing',
-                'subtopic' => 'Citation Analysis',
+                'topic' => '2',
+                'subtopic' => '2.10.5',
                 'difficulty' => 'medium',
                 'question' => 'Who developed the Science Citation Index, the foundation of modern citation indexing?',
                 'options' => ['Eugene Garfield', 'S. R. Ranganathan', 'Hans Peter Luhn', 'Calvin Mooers'],
             ],
             [
-                'topic' => 'Citation Indexing',
-                'subtopic' => 'Bibliographic Coupling',
+                'topic' => '2',
+                'subtopic' => '2.10.5',
                 'difficulty' => 'hard',
                 'question' => 'Two papers that both cite the same earlier paper are linked by',
                 'options' => ['bibliographic coupling', 'co-citation', 'self-citation', 'citation chaining'],
             ],
             [
-                'topic' => 'Citation Indexing',
-                'subtopic' => 'Co-Citation',
+                'topic' => '2',
+                'subtopic' => '2.10.5',
                 'difficulty' => 'hard',
                 'question' => 'Co-citation occurs when',
                 'options' => [
@@ -335,22 +335,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Exhaustivity and Specificity',
-                'subtopic' => 'Depth of Indexing',
+                'topic' => '2',
+                'subtopic' => '2.8',
                 'difficulty' => 'medium',
                 'question' => "Assigning enough index terms to represent the minor as well as the major topics of a document increases the indexing's",
                 'options' => ['exhaustivity', 'specificity', 'consistency', 'precision'],
             ],
             [
-                'topic' => 'Exhaustivity and Specificity',
-                'subtopic' => 'Term Specificity',
+                'topic' => '2',
+                'subtopic' => '2.8',
                 'difficulty' => 'medium',
                 'question' => 'Indexing an article about the Philippine eagle under "Philippine eagle" rather than "Birds" applies the principle of',
                 'options' => ['specificity', 'exhaustivity', 'consistency', 'pre-coordination'],
             ],
             [
-                'topic' => 'Exhaustivity and Specificity',
-                'subtopic' => 'Indexing Consistency',
+                'topic' => '2',
+                'subtopic' => '2.8',
                 'difficulty' => 'medium',
                 'question' => 'The degree to which different indexers assign the same terms to the same document is called',
                 'options' => ['inter-indexer consistency', 'exhaustivity', 'specificity', 'recall'],
@@ -359,15 +359,15 @@ final class DemoQuestions
 
         'Information Technology' => [
             [
-                'topic' => 'OPAC and Discovery Systems',
-                'subtopic' => 'OPAC Search Features',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'easy',
                 'question' => 'Which OPAC feature lets a user narrow a result list by format, language or publication year after the first search?',
                 'options' => ['Faceted navigation', 'Authority control', 'Stemming', 'Relevance ranking'],
             ],
             [
-                'topic' => 'OPAC and Discovery Systems',
-                'subtopic' => 'Discovery Layer Tools',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'medium',
                 'question' => 'A discovery layer such as EBSCO Discovery Service, Primo or VuFind is best described as',
                 'options' => [
@@ -378,8 +378,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'OPAC and Discovery Systems',
-                'subtopic' => 'Federated Search',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'medium',
                 'question' => 'Federated search differs from a central-index discovery service because it',
                 'options' => [
@@ -390,22 +390,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Boolean Search and Query Strategy',
-                'subtopic' => 'AND/OR/NOT Operators',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => 'Which search statement retrieves the largest number of records?',
                 'options' => ['libraries OR archives', 'libraries AND archives', 'libraries NOT archives', '"libraries and archives"'],
             ],
             [
-                'topic' => 'Boolean Search and Query Strategy',
-                'subtopic' => 'Truncation and Wildcards',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => 'Searching catalog* to retrieve catalog, catalogs, cataloging and cataloger is an example of',
                 'options' => ['truncation', 'nesting', 'proximity searching', 'field searching'],
             ],
             [
-                'topic' => 'Boolean Search and Query Strategy',
-                'subtopic' => 'Nested Queries',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'medium',
                 'question' => 'In the query (school OR academic) AND libraries, the parentheses',
                 'options' => [
@@ -416,22 +416,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Metadata and Interoperability Standards',
-                'subtopic' => 'Dublin Core',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'easy',
                 'question' => 'How many elements make up the Dublin Core Metadata Element Set (Simple Dublin Core)?',
                 'options' => ['15', '10', '12', '25'],
             ],
             [
-                'topic' => 'Metadata and Interoperability Standards',
-                'subtopic' => 'MARC-to-Dublin Core Mapping',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'medium',
                 'question' => 'In a MARC 21 to Dublin Core crosswalk, the 245 (Title Statement) field maps to which Dublin Core element?',
                 'options' => ['Title', 'Creator', 'Description', 'Identifier'],
             ],
             [
-                'topic' => 'Metadata and Interoperability Standards',
-                'subtopic' => 'Z39.50/SRU Protocols',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'medium',
                 'question' => 'Z39.50 is a client-server protocol used mainly for',
                 'options' => [
@@ -442,15 +442,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Integrated Library Systems',
-                'subtopic' => 'ILS Modules',
+                'topic' => '3',
+                'subtopic' => '3.1.1',
                 'difficulty' => 'easy',
                 'question' => 'Which ILS module handles ordering, receiving and invoicing of library materials?',
                 'options' => ['Acquisitions', 'Circulation', 'OPAC', 'Cataloging'],
             ],
             [
-                'topic' => 'Integrated Library Systems',
-                'subtopic' => 'Circulation and Cataloging Integration',
+                'topic' => '3',
+                'subtopic' => '3.1.2',
                 'difficulty' => 'medium',
                 'question' => 'In an integrated library system, a newly cataloged item can be lent out right away because the cataloging and circulation modules',
                 'options' => [
@@ -461,29 +461,29 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Integrated Library Systems',
-                'subtopic' => 'Vendor ILS Platforms',
+                'topic' => '3',
+                'subtopic' => '3.1.3',
                 'difficulty' => 'easy',
                 'question' => 'Which of the following is an open-source integrated library system widely used by Philippine libraries?',
                 'options' => ['Koha', 'Microsoft Access', 'Zotero', 'Adobe Acrobat'],
             ],
             [
-                'topic' => 'Digital Security and Data Protection',
-                'subtopic' => 'Authentication and Access Control',
+                'topic' => '6',
+                'subtopic' => '6.2',
                 'difficulty' => 'easy',
                 'question' => "Asking for a password and then a one-time code sent to the user's phone before granting access is an example of",
                 'options' => ['multi-factor authentication', 'single sign-on', 'encryption at rest', 'role-based access control'],
             ],
             [
-                'topic' => 'Digital Security and Data Protection',
-                'subtopic' => 'Phishing and Social Engineering',
+                'topic' => '6',
+                'subtopic' => '6.2',
                 'difficulty' => 'easy',
                 'question' => 'A staff member gets an email that appears to come from the ILS vendor, asking them to confirm their admin password through a link. This is most likely',
                 'options' => ['a phishing attempt', 'a routine software update', 'a denial-of-service attack', 'a firewall alert'],
             ],
             [
-                'topic' => 'Digital Security and Data Protection',
-                'subtopic' => 'Data Backup Practices',
+                'topic' => '6',
+                'subtopic' => '6.2',
                 'difficulty' => 'medium',
                 'question' => 'The 3-2-1 backup rule recommends keeping',
                 'options' => [
@@ -494,33 +494,33 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'RFID, Barcodes, and Automation',
-                'subtopic' => 'RFID Tagging',
+                'topic' => '3',
+                'subtopic' => '3.1.2',
                 'difficulty' => 'easy',
                 'type' => 'true_false',
                 'answer' => false,
                 'question' => "Like barcodes, RFID tags must be in the reader's direct line of sight to be read.",
             ],
             [
-                'topic' => 'RFID, Barcodes, and Automation',
-                'subtopic' => 'Self-Check Kiosks',
+                'topic' => '3',
+                'subtopic' => '3.1.2',
                 'difficulty' => 'hard',
                 'question' => 'Which protocol do self-check kiosks commonly use to communicate with the ILS for checkouts and returns?',
                 'options' => ['SIP2', 'OAI-PMH', 'Z39.50', 'FTP'],
             ],
             [
-                'topic' => 'RFID, Barcodes, and Automation',
-                'subtopic' => 'Inventory Automation',
+                'topic' => '3',
+                'subtopic' => '3.1.5',
                 'difficulty' => 'easy',
                 'question' => 'Scanning the shelves with a handheld RFID reader and comparing the results with the ILS holdings is done mainly for',
                 'options' => ['inventory', 'cataloging', 'acquisitions', 'reference service'],
             ],
         ],
 
-        'Reference Services' => [
+        'Reference, Bibliography and User Services' => [
             [
-                'topic' => 'Reference Interview and User Needs',
-                'subtopic' => 'Open vs Closed Questions',
+                'topic' => '3',
+                'subtopic' => '3.3',
                 'difficulty' => 'easy',
                 'question' => 'Which of these is an open question a librarian might ask during a reference interview?',
                 'options' => [
@@ -531,8 +531,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Reference Interview and User Needs',
-                'subtopic' => 'Negotiating the Query',
+                'topic' => '3',
+                'subtopic' => '3.3',
                 'difficulty' => 'easy',
                 'question' => 'A student asks for "something on Rizal." What should the librarian do next?',
                 'options' => [
@@ -543,8 +543,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Reference Interview and User Needs',
-                'subtopic' => 'Nonverbal Cues',
+                'topic' => '3',
+                'subtopic' => '3.3',
                 'difficulty' => 'medium',
                 'question' => 'Under the RUSA guidelines for reference service, which behavior best shows approachability?',
                 'options' => [
@@ -555,22 +555,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Ready Reference and Referral',
-                'subtopic' => 'Quick-Fact Sources',
+                'topic' => '2',
+                'subtopic' => '2.4',
                 'difficulty' => 'easy',
                 'question' => 'Which source is best for quickly finding the population of a Philippine province?',
                 'options' => ['A statistical yearbook or almanac', 'A thesaurus', 'A biographical dictionary', 'A concordance'],
             ],
             [
-                'topic' => 'Ready Reference and Referral',
-                'subtopic' => 'Interlibrary Referral',
+                'topic' => '3',
+                'subtopic' => '3.4',
                 'difficulty' => 'medium',
                 'question' => 'Directing a patron to another library, agency or expert that can better answer the question is called',
                 'options' => ['referral service', 'interlibrary loan', "reader's advisory", 'bibliographic instruction'],
             ],
             [
-                'topic' => 'Ready Reference and Referral',
-                'subtopic' => 'Escalation to Specialists',
+                'topic' => '3',
+                'subtopic' => '3.4',
                 'difficulty' => 'medium',
                 'question' => 'A patron asks a legal question that calls for professional advice. What is the most appropriate response?',
                 'options' => [
@@ -581,29 +581,29 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Source Evaluation and Information Literacy',
-                'subtopic' => 'Authority and Currency Evaluation',
+                'topic' => '2',
+                'subtopic' => '2.3',
                 'difficulty' => 'easy',
                 'question' => 'In the CRAAP test, the criterion that asks when the information was published or last updated is',
                 'options' => ['Currency', 'Relevance', 'Authority', 'Purpose'],
             ],
             [
-                'topic' => 'Source Evaluation and Information Literacy',
-                'subtopic' => 'Teaching Search Strategies',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'medium',
                 'question' => 'Teaching students to break a topic into key concepts and list synonyms before searching mainly builds their',
                 'options' => ['search strategy skills', 'cataloging skills', 'circulation skills', 'book selection skills'],
             ],
             [
-                'topic' => 'Source Evaluation and Information Literacy',
-                'subtopic' => 'Citation Guidance',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => 'Which citation style do research papers in psychology and education most commonly follow?',
                 'options' => ['APA', 'MLA', 'IEEE', 'Chicago notes and bibliography'],
             ],
             [
-                'topic' => 'Current Awareness Services',
-                'subtopic' => 'Selective Dissemination of Information (SDI)',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'medium',
                 'question' => 'Selective Dissemination of Information (SDI) is a service that',
                 'options' => [
@@ -614,15 +614,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Current Awareness Services',
-                'subtopic' => 'New Acquisitions Alerts',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'easy',
                 'question' => 'A monthly list of newly acquired books sent to the faculty is an example of',
                 'options' => ['a current awareness service', 'retrospective searching', "reader's advisory", 'interlibrary loan'],
             ],
             [
-                'topic' => 'Current Awareness Services',
-                'subtopic' => 'RSS/Table-of-Contents Alerts',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'medium',
                 'question' => 'A researcher wants to be notified automatically whenever a new issue of a journal comes out. What should the librarian recommend?',
                 'options' => [
@@ -633,22 +633,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => "Reader's Advisory",
-                'subtopic' => 'Genre and Appeal Factors',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'medium',
                 'question' => "In reader's advisory, qualities such as pacing, tone, characterization and storyline are called",
                 'options' => ['appeal factors', 'access points', 'subject headings', 'call number elements'],
             ],
             [
-                'topic' => "Reader's Advisory",
-                'subtopic' => 'Read-Alike Recommendations',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => 'A patron who enjoyed a novel asks for "another book just like it." Suggesting titles with similar appeal is called',
                 'options' => ['recommending read-alikes', 'writing a book review', 'bibliographic instruction', 'interlibrary loan'],
             ],
             [
-                'topic' => "Reader's Advisory",
-                'subtopic' => 'Book Talks',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'type' => 'true_false',
                 'answer' => false,
@@ -656,17 +656,17 @@ final class DemoQuestions
             ],
         ],
 
-        'Library Management' => [
+        'Library Organization and Management' => [
             [
-                'topic' => 'Planning and Policy Development',
-                'subtopic' => 'Strategic Planning',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => "Which document sets a library's long-term direction, usually over three to five years, with its goals and strategies?",
                 'options' => ['Strategic plan', 'Annual accomplishment report', 'Daily work schedule', 'Accession record'],
             ],
             [
-                'topic' => 'Planning and Policy Development',
-                'subtopic' => 'Collection Development Policy',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'easy',
                 'question' => 'A written collection development policy mainly serves to',
                 'options' => [
@@ -677,58 +677,58 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Planning and Policy Development',
-                'subtopic' => 'Mission and Vision Statements',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'type' => 'true_false',
                 'answer' => true,
                 'question' => 'A vision statement describes what the library hopes to become, while a mission statement describes its present purpose.',
             ],
             [
-                'topic' => 'Budgeting and Resource Allocation',
-                'subtopic' => 'Line-Item Budgeting',
+                'topic' => '3',
+                'subtopic' => '3.2',
                 'difficulty' => 'easy',
                 'question' => 'A budget that lists expenditures by category, such as salaries, books, supplies and equipment, is a',
                 'options' => ['line-item budget', 'program budget', 'zero-based budget', 'performance budget'],
             ],
             [
-                'topic' => 'Budgeting and Resource Allocation',
-                'subtopic' => 'Cost-Benefit Analysis',
+                'topic' => '3',
+                'subtopic' => '3.2',
                 'difficulty' => 'medium',
                 'question' => 'Before subscribing to a new database, the library weighs its subscription fee against its expected use and value to users. This is',
                 'options' => ['a cost-benefit analysis', 'zero-based budgeting', 'a SWOT analysis', 'an inventory'],
             ],
             [
-                'topic' => 'Budgeting and Resource Allocation',
-                'subtopic' => 'Grant and Fund Sourcing',
+                'topic' => '3',
+                'subtopic' => '3.2',
                 'difficulty' => 'easy',
                 'question' => 'A library that submits a project proposal to an outside funding agency to support a digitization project is engaged in',
                 'options' => ['grant seeking', 'line-item budgeting', 'encumbrance', 'depreciation'],
             ],
             [
-                'topic' => 'Staff Development and Supervision',
-                'subtopic' => 'Training Programs',
+                'topic' => '3',
+                'subtopic' => '3.1',
                 'difficulty' => 'easy',
                 'question' => 'Orientation for new employees and in-service training for current staff are forms of',
                 'options' => ['staff development', 'collection development', 'performance appraisal', 'recruitment'],
             ],
             [
-                'topic' => 'Staff Development and Supervision',
-                'subtopic' => 'Performance Appraisal',
+                'topic' => '3',
+                'subtopic' => '3.1',
                 'difficulty' => 'easy',
                 'question' => "The systematic evaluation of an employee's work against set standards is called",
                 'options' => ['performance appraisal', 'job analysis', 'delegation', 'orientation'],
             ],
             [
-                'topic' => 'Staff Development and Supervision',
-                'subtopic' => 'Delegation and Motivation',
+                'topic' => '1',
+                'subtopic' => '1.4',
                 'difficulty' => 'hard',
                 'question' => "In Herzberg's two-factor theory, which of the following is a motivator rather than a hygiene factor?",
                 'options' => ['Recognition for achievement', 'Salary', 'Working conditions', 'Company policy'],
             ],
             [
-                'topic' => 'Assessment and Performance Indicators',
-                'subtopic' => 'Library Performance Metrics',
+                'topic' => '3',
+                'subtopic' => '3.7',
                 'difficulty' => 'medium',
                 'question' => 'Which of the following is an output measure of library performance?',
                 'options' => [
@@ -739,15 +739,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Assessment and Performance Indicators',
-                'subtopic' => 'SWOT Analysis',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'medium',
                 'question' => 'In a SWOT analysis, a new government grant program that the library could apply for is',
                 'options' => ['an opportunity', 'a strength', 'a weakness', 'a threat'],
             ],
             [
-                'topic' => 'Assessment and Performance Indicators',
-                'subtopic' => 'User Satisfaction Surveys',
+                'topic' => '3',
+                'subtopic' => '3.7',
                 'difficulty' => 'medium',
                 'question' => 'LibQUAL+ is a tool libraries use to',
                 'options' => [
@@ -758,15 +758,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Disaster and Risk Management',
-                'subtopic' => 'Disaster Preparedness Plans',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'easy',
                 'question' => 'During an emergency such as a fire or an earthquake, the first priority of a library disaster plan is',
                 'options' => ['the safety of people', 'saving the rare books', 'protecting the computers', 'securing the circulation records'],
             ],
             [
-                'topic' => 'Disaster and Risk Management',
-                'subtopic' => 'Collection Salvage Procedures',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'medium',
                 'question' => 'After a flood, wet books that cannot be dried within 48 hours should be',
                 'options' => [
@@ -777,8 +777,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Disaster and Risk Management',
-                'subtopic' => 'Business Continuity Planning',
+                'topic' => '3',
+                'subtopic' => '3.5',
                 'difficulty' => 'medium',
                 'question' => 'A plan that keeps essential services running, such as moving services online while the building is closed after a typhoon, is a',
                 'options' => ['business continuity plan', 'collection development policy', 'weeding plan', 'strategic budget'],
@@ -787,15 +787,15 @@ final class DemoQuestions
 
         'Selection and Acquisition' => [
             [
-                'topic' => 'Selection Criteria and Collection Policy',
-                'subtopic' => 'Community/User Needs Assessment',
+                'topic' => '1',
+                'subtopic' => '1.1',
                 'difficulty' => 'easy',
                 'question' => "Before building the collection of a new branch library, the librarian studies the community's demographics, interests and information needs. This is",
                 'options' => ['a community analysis', 'weeding', 'bibliographic verification', 'encumbrance'],
             ],
             [
-                'topic' => 'Selection Criteria and Collection Policy',
-                'subtopic' => 'Selection Aids and Reviews',
+                'topic' => '1',
+                'subtopic' => '1.2',
                 'difficulty' => 'medium',
                 'question' => 'Which of the following is a selection aid librarians use to evaluate new books?',
                 'options' => [
@@ -806,30 +806,30 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Selection Criteria and Collection Policy',
-                'subtopic' => 'Weeding Criteria',
+                'topic' => '3',
+                'subtopic' => '3.2',
                 'difficulty' => 'hard',
                 'question' => 'In the CREW method of weeding, MUSTIE stands for Misleading, Ugly, Superseded, Trivial, Irrelevant and',
                 'options' => ['obtainable Elsewhere', 'Expensive', 'Expired', 'Excessive'],
             ],
             [
-                'topic' => 'Acquisition Methods and Ordering Workflow',
-                'subtopic' => 'Purchase, Gift, and Exchange',
+                'topic' => '2',
+                'subtopic' => '2.1',
                 'difficulty' => 'easy',
                 'question' => 'Two universities regularly send each other their institutional journals without payment. They are acquiring materials through',
                 'options' => ['exchange', 'purchase', 'an approval plan', 'a standing order'],
             ],
             [
-                'topic' => 'Acquisition Methods and Ordering Workflow',
-                'subtopic' => 'Standing and Blanket Orders',
+                'topic' => '2',
+                'subtopic' => '2.1',
                 'difficulty' => 'medium',
                 'type' => 'true_false',
                 'answer' => true,
                 'question' => 'Under a standing order, the vendor automatically supplies each new volume of a series as it is published.',
             ],
             [
-                'topic' => 'Acquisition Methods and Ordering Workflow',
-                'subtopic' => 'Approval Plans',
+                'topic' => '2',
+                'subtopic' => '2.1',
                 'difficulty' => 'medium',
                 'question' => 'Under an approval plan, the vendor',
                 'options' => [
@@ -840,8 +840,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Vendor Evaluation and Bibliographic Verification',
-                'subtopic' => 'Vendor Reliability Assessment',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'easy',
                 'question' => "Which factors matter most when evaluating a book vendor's performance?",
                 'options' => [
@@ -852,8 +852,8 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Vendor Evaluation and Bibliographic Verification',
-                'subtopic' => 'Pre-Order Bibliographic Verification',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'medium',
                 'question' => 'Checking the catalog and the on-order file before placing an order is done mainly to',
                 'options' => [
@@ -864,15 +864,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Vendor Evaluation and Bibliographic Verification',
-                'subtopic' => 'Price Comparison',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'easy',
                 'question' => 'Asking several suppliers to quote prices for the same list of titles before buying is called',
                 'options' => ['canvassing', 'encumbrance', 'weeding', 'accessioning'],
             ],
             [
-                'topic' => 'Gifts and Donations Management',
-                'subtopic' => 'Gift Evaluation Criteria',
+                'topic' => '1',
+                'subtopic' => '1.3',
                 'difficulty' => 'easy',
                 'question' => 'Donated materials should be added to the collection only if they',
                 'options' => [
@@ -883,15 +883,15 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Gifts and Donations Management',
-                'subtopic' => 'Deed of Gift Agreements',
+                'topic' => '2',
+                'subtopic' => '2.1',
                 'difficulty' => 'medium',
                 'question' => 'The document that transfers ownership of donated materials to the library, including any conditions, is a',
                 'options' => ['deed of gift', 'purchase order', 'memorandum receipt', 'accession record'],
             ],
             [
-                'topic' => 'Gifts and Donations Management',
-                'subtopic' => 'Disposal of Unwanted Gifts',
+                'topic' => '2',
+                'subtopic' => '2.1',
                 'difficulty' => 'medium',
                 'question' => "Gift items that do not meet the library's selection criteria should be",
                 'options' => [
@@ -902,22 +902,22 @@ final class DemoQuestions
                 ],
             ],
             [
-                'topic' => 'Budgeting for Acquisitions',
-                'subtopic' => 'Encumbrance Tracking',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'medium',
                 'question' => 'Setting aside funds for items that have been ordered but not yet received and paid for is called',
                 'options' => ['encumbrance', 'depreciation', 'liquidation', 'allocation'],
             ],
             [
-                'topic' => 'Budgeting for Acquisitions',
-                'subtopic' => 'Fund Allocation by Subject',
+                'topic' => '2',
+                'subtopic' => '2.3',
                 'difficulty' => 'medium',
                 'question' => 'Dividing the book budget among departments or subjects using a formula based on enrollment, costs and use is called',
                 'options' => ['fund allocation', 'encumbrance', 'canvassing', 'weeding'],
             ],
             [
-                'topic' => 'Budgeting for Acquisitions',
-                'subtopic' => 'Approval and Purchase Orders',
+                'topic' => '2',
+                'subtopic' => '2.2',
                 'difficulty' => 'easy',
                 'question' => 'Which document does the library send to a supplier to authorize buying specific items at agreed prices?',
                 'options' => ['Purchase order', 'Deed of gift', 'Invoice', 'Delivery receipt'],

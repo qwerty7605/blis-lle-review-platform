@@ -474,8 +474,8 @@ const SUBJECT_ICONS = {
   'Cataloging and Classification': BookMarked,
   'Indexing and Abstracting': ListTree,
   'Information Technology': Laptop,
-  'Reference Services': BookOpen,
-  'Library Management': Building2,
+  'Reference, Bibliography and User Services': BookOpen,
+  'Library Organization and Management': Building2,
   'Selection and Acquisition': PackageSearch,
 }
 

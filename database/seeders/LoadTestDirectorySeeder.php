@@ -66,8 +66,8 @@ class LoadTestDirectorySeeder extends Seeder
         'Cataloging and Classification',
         'Indexing and Abstracting',
         'Information Technology',
-        'Reference Services',
-        'Library Management',
+        'Reference, Bibliography and User Services',
+        'Library Organization and Management',
         'Selection and Acquisition',
     ];
 

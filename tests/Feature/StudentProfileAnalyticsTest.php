@@ -27,7 +27,7 @@ class StudentProfileAnalyticsTest extends TestCase
         $room->members()->attach($student->id);
 
         $this->submitAttempt($this->makeExam($staff, 'Cataloging Mock', 'Cataloging'), $room, $student, 80);
-        $this->submitAttempt($this->makeExam($staff, 'Reference Mock', 'Reference Services'), $room, $student, 60);
+        $this->submitAttempt($this->makeExam($staff, 'Reference Mock', 'Reference, Bibliography and User Services'), $room, $student, 60);
 
         Sanctum::actingAs($student);
         $own = $this->getJson('/api/student/analytics')->assertOk()->json();

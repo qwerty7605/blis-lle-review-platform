@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Exam;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
+use App\Services\QuestionMappingService;
 use App\Services\ReviewBotAdminService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,7 @@ class ReviewBotAdminController extends Controller
 {
     public function __construct(
         private readonly ReviewBotAdminService $reviewBotAdminService,
+        private readonly QuestionMappingService $questionMappingService,
     ) {
     }
 
@@ -112,6 +114,18 @@ class ReviewBotAdminController extends Controller
             'options.*.text' => ['required_with:options', 'string'],
             'options.*.is_correct' => ['nullable', 'boolean'],
         ]);
+
+        // Only TOS topics and sub-topics; a sub-topic sent on its own belongs
+        // to the topic the question already has.
+        $tagProblem = $this->questionMappingService->tagProblem(
+            $question->subject,
+            filled($validated['topic_name'] ?? null) ? $validated['topic_name'] : $question->topic?->name,
+            $validated['subtopic_name'] ?? null,
+        );
+
+        if ($tagProblem !== null && (filled($validated['topic_name'] ?? null) || filled($validated['subtopic_name'] ?? null))) {
+            return response()->json(['message' => $tagProblem, 'errors' => ['topic_name' => [$tagProblem]]], 422);
+        }
 
         $question = $this->reviewBotAdminService->updateQuestion($question, $validated);
 

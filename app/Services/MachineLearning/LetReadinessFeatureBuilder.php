@@ -5,8 +5,8 @@ namespace App\Services\MachineLearning;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\User;
+use App\Support\LleTaxonomy;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Str;
 
 /**
  * Turns a student's exams into what the board exam model reads: one score in
@@ -24,10 +24,14 @@ use Illuminate\Support\Str;
  */
 class LetReadinessFeatureBuilder
 {
-    /** The model's subject attributes, in its own order, and the subject each one is. */
+    /**
+     * The model's subject attributes, in its own order, and the subject each
+     * one is, by its official name (docs/lle_tos.json; the keys are its
+     * subject keys).
+     */
     public const SUBJECTS = [
-        'reference' => 'Reference Services',
-        'management' => 'Library Management',
+        'reference' => 'Reference, Bibliography and User Services',
+        'management' => 'Library Organization and Management',
         'indexing' => 'Indexing and Abstracting',
         'selection' => 'Selection and Acquisition',
         'cataloging' => 'Cataloging and Classification',
@@ -45,25 +49,6 @@ class LetReadinessFeatureBuilder
     ];
 
     public const LOCKED_MESSAGE = 'Complete all 6 subject exams this semester to unlock your result.';
-
-    /**
-     * The same subject spellings the student analytics page folds together
-     * (see $buildStudentAnalytics in routes/api/student.php).
-     */
-    private const SUBJECT_ALIASES = [
-        'cataloging and classification' => 'Cataloging and Classification',
-        'cataloguing and classification' => 'Cataloging and Classification',
-        'cataloging' => 'Cataloging and Classification',
-        'indexing and abstracting' => 'Indexing and Abstracting',
-        'indexing' => 'Indexing and Abstracting',
-        'information technology' => 'Information Technology',
-        'it' => 'Information Technology',
-        'reference' => 'Reference Services',
-        'reference services' => 'Reference Services',
-        'library management' => 'Library Management',
-        'selection and acquisition' => 'Selection and Acquisition',
-        'selection' => 'Selection and Acquisition',
-    ];
 
     /**
      * Every semester the student has a graded exam in, oldest first.
@@ -180,8 +165,6 @@ class LetReadinessFeatureBuilder
             $subject = (string) (Exam::summarizeQuestionBankSubject($exam->resolvedQuestionBanks()) ?? '');
         }
 
-        $normalized = Str::of($subject)->lower()->replace('&', 'and')->replace('/', ' ')->replace('-', ' ')->squish()->toString();
-
-        return self::SUBJECT_ALIASES[$normalized] ?? $subject;
+        return LleTaxonomy::canonicalSubject($subject) ?? $subject;
     }
 }

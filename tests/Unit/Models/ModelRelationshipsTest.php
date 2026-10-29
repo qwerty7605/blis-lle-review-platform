@@ -143,7 +143,7 @@ class ModelRelationshipsTest extends TestCase
         $option = $question->options->first();
 
         $attempt = ReviewBotAttempt::create([
-            'user_id' => $student->id, 'subject' => 'Reference Services', 'source' => ReviewBotAttempt::SOURCE_MANUAL,
+            'user_id' => $student->id, 'subject' => 'Reference, Bibliography and User Services', 'source' => ReviewBotAttempt::SOURCE_MANUAL,
             'status' => ReviewBotAttempt::STATUS_SUBMITTED, 'total_items' => 1, 'answered_count' => 1, 'correct_answers' => 1,
             'started_at' => now(),
         ]);
