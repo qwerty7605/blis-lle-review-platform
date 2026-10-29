@@ -140,6 +140,18 @@
           </ul>
         </article>
 
+        <!-- Topic mastery, grouped under each subject -->
+        <article class="profile-card" aria-labelledby="profile-topics-heading">
+          <header class="profile-card-head">
+            <h3 id="profile-topics-heading">
+              <ListTree :size="17" />Topics
+              <InfoTip text="Each subject's share of questions right, and under it how well this student seems to know each topic of the Table of Specifications: an estimate that moves once per exam, in the order the exams were taken." />
+            </h3>
+          </header>
+
+          <TopicMastery :subjects="mastery" empty-text="Topic mastery appears here once this student submits an exam." />
+        </article>
+
         <div class="profile-bottom-grid">
           <!-- Weakest topics -->
           <article class="profile-card" aria-labelledby="profile-weak-heading">
@@ -203,12 +215,14 @@ import {
   Gauge,
   GraduationCap,
   LayoutGrid,
+  ListTree,
   RefreshCw,
   Target,
   TrendingUp,
 } from 'lucide-vue-next'
 import { studentsApi } from '@/api/students.api'
 import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
+import TopicMastery from '@/components/TopicMastery.vue'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 import { describeReadiness } from '../composables/readiness'
@@ -246,6 +260,7 @@ const stats = computed(() => ({
 }))
 const subjects = computed(() => profile.value?.subjects ?? [])
 const studyPlan = computed(() => profile.value?.study_plan ?? [])
+const mastery = computed(() => profile.value?.mastery ?? [])
 const recentAttempts = computed(() => profile.value?.recent_attempts ?? [])
 
 // Worded for someone reading about the student, not for the student.

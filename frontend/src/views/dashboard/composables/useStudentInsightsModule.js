@@ -55,6 +55,8 @@ export function useStudentInsightsModule() {
   const examHistory = ref([])
   const studyPlanRows = ref([])
   const actionPlanRows = ref([])
+  // Topic and sub-topic mastery grouped under each subject (TopicMastery.vue).
+  const masteryRows = ref([])
   const weakAreaRaw = ref(null)
   // The board exam model's answer for this student, as the server words it
   // (BoardExamOutlook.php); null until the first load.
@@ -193,8 +195,9 @@ export function useStudentInsightsModule() {
 
     // mastery is the Bayesian Knowledge Tracing estimate for this area (see
     // KnowledgeTracingService): the probability the student actually knows it,
-    // read off the order their answers arrived in rather than the raw
-    // percentage. Null for an area the tracer had no sequence for.
+    // updated once per exam in the order the exams were taken, rather than
+    // the raw percentage. Null for a subject (subjects are not traced) or an
+    // area with no exam behind it.
     const mastery = raw.mastery ?? null
 
     return {
@@ -210,6 +213,7 @@ export function useStudentInsightsModule() {
       masteryPercent: mastery?.mastery_percent === undefined ? null : Number(mastery.mastery_percent),
       trend: mastery?.trend ?? null,
       band: mastery?.band ?? null,
+      examCount: Number(mastery?.opportunities ?? 0),
       // Same deep link the study plan and "Review Your Weak Areas" already use.
       reviewQuery: {
         subject: raw.subject,
@@ -253,6 +257,7 @@ export function useStudentInsightsModule() {
       band: area.band,
       trend: area.trend,
       attempted: area.attemptedCount,
+      exams: area.examCount,
     }
   }
 
@@ -377,6 +382,7 @@ export function useStudentInsightsModule() {
       examHistory.value = asList(data?.exam_history)
       studyPlanRows.value = asList(data?.study_plan)
       actionPlanRows.value = asList(data?.action_plan)
+      masteryRows.value = asList(data?.mastery)
       weakAreaRaw.value = data?.weak_area ?? null
       predictiveModel.value = {
         ...(data?.predictive_model ?? {}),
@@ -399,6 +405,7 @@ export function useStudentInsightsModule() {
       examHistory.value = []
       studyPlanRows.value = []
       actionPlanRows.value = []
+      masteryRows.value = []
       weakAreaRaw.value = null
     } finally {
       if (!silent) analyticsLoading.value = false
@@ -433,6 +440,7 @@ export function useStudentInsightsModule() {
     recentAttempts,
     studyPlan,
     actionPlan,
+    mastery: masteryRows,
     weakArea,
     reviewNarrative,
     predictivePanel,

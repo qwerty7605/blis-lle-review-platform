@@ -125,17 +125,19 @@ class StudentHistoryBuildersTest extends TestCase
         $this->assertSame(2, $set['skipped']);
     }
 
-    public function test_mastery_is_traced_per_subject_topic_and_subtopic_and_reused_for_the_same_student(): void
+    public function test_mastery_is_traced_per_topic_and_subtopic_never_subject_and_reused_for_the_same_student(): void
     {
-        $topic = $this->makeTopic('Reference, Bibliography and User Services', 'Ready Reference', $this->teacher);
-        $subtopic = $this->makeSubtopic($topic, 'Almanacs', $this->teacher);
+        $topic = $this->makeTopic('Reference, Bibliography and User Services', '2. Reference and Information Sources', $this->teacher);
+        $subtopic = $this->makeSubtopic($topic, '2.2 Identify / classify the different types of reference sources', $this->teacher);
         $this->sat('Reference, Bibliography and User Services', 100, 2025, 1, null, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id]);
         $this->sat('Reference, Bibliography and User Services', 100, 2025, 1);
 
         $builder = app(MasteryProfileBuilder::class);
         $profile = $builder->build($this->student);
 
-        $this->assertSame(2, $profile['subjects']['Reference, Bibliography and User Services']['opportunities']);
+        // Subjects show their percent correct instead; the untagged exam is no skill.
+        $this->assertSame([], $profile['subjects']);
+        $this->assertSame([$topic->id], array_keys($profile['topics']));
         $this->assertSame(1, $profile['topics'][$topic->id]['opportunities']);
         $this->assertSame(1, $profile['subtopics'][$subtopic->id]['opportunities']);
         $this->assertSame($profile, $builder->build($this->student));

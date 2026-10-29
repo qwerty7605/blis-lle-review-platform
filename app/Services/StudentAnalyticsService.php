@@ -242,6 +242,9 @@ class StudentAnalyticsService
             // justified, and only ever offered when the practice behind them
             // exists. See StudyActionPlanner.
             'action_plan' => $this->dashboardAnalyticsService->buildActionPlan($student),
+            // Topic and sub-topic mastery (Bayesian Knowledge Tracing, one
+            // update per exam) grouped under each subject's percent correct.
+            'mastery' => $this->dashboardAnalyticsService->buildMasteryBySubject($student),
         ];
     }
 }

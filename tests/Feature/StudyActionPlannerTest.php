@@ -122,23 +122,27 @@ class StudyActionPlannerTest extends TestCase
         $slipping = $this->makeTopic($staff, 'Descriptive Cataloging');
         $weakest = $this->makeTopic($staff, 'Authority Control');
 
-        $questions = [
-            // Descriptive Cataloging: right, right, right, wrong, wrong -> slipping
+        // Mastery moves once per exam, so slipping takes two exams.
+        // Descriptive Cataloging: 3 of 3, then 0 of 2 -> slipping.
+        // Authority Control: 0 of 2, then 0 of 1 -> lower mastery outright.
+        $first = [
             $this->makeQuestion($bank, $slipping, 1),
             $this->makeQuestion($bank, $slipping, 2),
             $this->makeQuestion($bank, $slipping, 3),
-            $this->makeQuestion($bank, $slipping, 4),
-            $this->makeQuestion($bank, $slipping, 5),
-            // Authority Control: all wrong -> lower mastery outright
-            $this->makeQuestion($bank, $weakest, 6),
-            $this->makeQuestion($bank, $weakest, 7),
+            $this->makeQuestion($bank, $weakest, 4),
+            $this->makeQuestion($bank, $weakest, 5),
+        ];
+        $second = [
+            $this->makeQuestion($bank, $slipping, 6),
+            $this->makeQuestion($bank, $slipping, 7),
             $this->makeQuestion($bank, $weakest, 8),
         ];
 
-        $this->makeSubmittedAttempt($exam, $room, $student, $questions, [
-            true, true, true, false, false,
-            false, false, false,
-        ]);
+        $laterExam = $exam->replicate();
+        $laterExam->save();
+
+        $this->makeSubmittedAttempt($exam, $room, $student, $first, [true, true, true, false, false], now()->subDays(2));
+        $this->makeSubmittedAttempt($laterExam, $room, $student, $second, [false, false, false], now()->subDay());
 
         $this->publishReviewQuestions($bank, $slipping, 6);
         $this->publishReviewQuestions($bank, $weakest, 6);
@@ -296,8 +300,10 @@ class StudyActionPlannerTest extends TestCase
         User $student,
         array $questions,
         array $correctness,
+        ?\Illuminate\Support\Carbon $submittedAt = null,
     ): ExamAttempt {
         $correctAnswers = count(array_filter($correctness));
+        $submittedAt ??= now();
 
         $attempt = ExamAttempt::create([
             'exam_id' => $exam->id,
@@ -309,8 +315,8 @@ class StudyActionPlannerTest extends TestCase
             'answered_count' => count($questions),
             'correct_answers' => $correctAnswers,
             'score_percent' => round(($correctAnswers / max(1, count($questions))) * 100, 2),
-            'started_at' => now()->subHour(),
-            'submitted_at' => now(),
+            'started_at' => $submittedAt->copy()->subHour(),
+            'submitted_at' => $submittedAt,
         ]);
 
         foreach ($questions as $index => $question) {
@@ -329,7 +335,7 @@ class StudyActionPlannerTest extends TestCase
                 'question_bank_option_id' => $selectedOption?->id,
                 'answer_text' => $selectedOption?->option_text,
                 'is_correct' => !empty($correctness[$index]),
-                'answered_at' => now(),
+                'answered_at' => $submittedAt,
             ]);
         }
 
