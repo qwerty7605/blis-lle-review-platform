@@ -21,6 +21,10 @@ use RuntimeException;
  * itself -- when a session's scope comes up short it queues a background
  * top-up job (see ReviewBotAdminService::queueTopUp()) so the bank fills
  * in for next time, rather than making the student wait on a live call.
+ *
+ * A student only ever sees questions built from exam items they were dealt
+ * in an exam that is finished for them (ReviewBotEligibility), in the
+ * catalog and in every session.
  */
 class ReviewBotService
 {
@@ -64,18 +68,14 @@ class ReviewBotService
     public function __construct(
         private readonly DashboardAnalyticsService $dashboardAnalyticsService,
         private readonly ReviewBotAdminService $reviewBotAdminService,
+        private readonly ReviewBotEligibility $eligibility,
     ) {
     }
 
     /**
-     * Every subject, with the real published-question inventory (topics,
-     * subtopics, difficulties, counts) so the student picker only ever
-     * offers combinations that actually have content.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    /**
-     * Subject/topic/subtopic counts for the student's Review Bot landing page.
+     * Subject/topic/subtopic counts for the student's Review Bot landing page:
+     * only the questions this student may practise, so the picker only ever
+     * offers combinations that have content for them.
      *
      * Counted in SQL. This used to hydrate every published Review Bot question
      * as an Eloquent model with its topic and subtopic relations attached,
@@ -85,13 +85,16 @@ class ReviewBotService
      *
      * @return array<int, array<string, mixed>>
      */
-    public function catalog(): array
+    public function catalog(User $student): array
     {
+        $sourceIds = $this->eligibility->sourceIds($student);
+
         $counts = DB::table('question_bank_questions as q')
             ->leftJoin('topics as t', 't.id', '=', 'q.topic_id')
             ->leftJoin('subtopics as st', 'st.id', '=', 'q.subtopic_id')
             ->where('q.usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->where('q.status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->tap(fn ($query) => $this->eligibility->constrain($query, $sourceIds, 'q.source_question_id'))
             ->groupBy('q.subject', 'q.topic_id', 't.name', 'q.subtopic_id', 'st.name')
             ->selectRaw('q.subject, q.topic_id, t.name as topic_name, q.subtopic_id, st.name as subtopic_name, COUNT(*) as question_count')
             ->get();
@@ -99,6 +102,7 @@ class ReviewBotService
         $difficulties = DB::table('question_bank_questions')
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->tap(fn ($query) => $this->eligibility->constrain($query, $sourceIds, 'source_question_id'))
             ->whereNotNull('difficulty')
             ->where('difficulty', '!=', '')
             ->distinct()
@@ -201,7 +205,7 @@ class ReviewBotService
         $questions = $selection['questions'];
 
         if ($questions->isEmpty()) {
-            throw new RuntimeException('No published Review Bot questions match this filter yet. Try a broader subject/topic, or check back after your teacher publishes more.');
+            throw new RuntimeException(ReviewBotEligibility::EMPTY_MESSAGE);
         }
 
         $attempt = ReviewBotAttempt::create([
@@ -282,6 +286,13 @@ class ReviewBotService
 
         $scopes['subject'] = fn ($query) => $query;
 
+        // Every scope only ever holds questions this student may practise.
+        $sourceIds = $this->eligibility->sourceIds($student);
+        $scopes = array_map(
+            fn (callable $scope): callable => fn ($query) => $scope($this->eligibility->constrain($query, $sourceIds)),
+            $scopes,
+        );
+
         $requestedScope = array_key_first($scopes);
         $picked = new Collection();
         $scopeUsed = $requestedScope;
@@ -330,7 +341,9 @@ class ReviewBotService
             || ($requestedScope !== 'missed' && $scopeUsed !== $requestedScope);
 
         if ($isShort) {
-            $this->reviewBotAdminService->queueTopUp($subject, $topicId, $subtopicId);
+            // Only from items this student may practise: variants of anything
+            // else would never reach them.
+            $this->reviewBotAdminService->queueTopUp($subject, $topicId, $subtopicId, $sourceIds);
         }
 
         return [

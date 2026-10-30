@@ -26,6 +26,7 @@ class DashboardAnalyticsService
         private readonly MasteryProfileBuilder $masteryProfileBuilder,
         private readonly StudyActionPlanner $studyActionPlanner,
         private readonly TeacherActionPlanner $teacherActionPlanner,
+        private readonly ReviewBotEligibility $reviewBotEligibility,
     ) {
     }
 
@@ -55,6 +56,7 @@ class DashboardAnalyticsService
         return $this->studyActionPlanner->build(
             $this->buildStudyPlan($student, 8),
             $this->buildSubjectWeaknessPerformance($student),
+            $student,
         );
     }
 
@@ -1217,7 +1219,8 @@ class DashboardAnalyticsService
      * an area whose own subtopic has no published practice questions but
      * whose parent topic does is deliberately downgraded to a topic-level
      * link, so the button still lands on something answerable instead of an
-     * empty session. review_ready is false only when neither level has any.
+     * empty session. review_ready is false only when neither level has any
+     * the student may practise (ReviewBotEligibility).
      *
      * @return array<int, array<string, mixed>>
      */
@@ -1293,8 +1296,9 @@ class DashboardAnalyticsService
             return [];
         }
 
-        $readyTopicIds = $this->publishedReviewBotIds('topic_id');
-        $readySubtopicIds = $this->publishedReviewBotIds('subtopic_id');
+        $sourceIds = $this->reviewBotEligibility->sourceIds($student);
+        $readyTopicIds = $this->publishedReviewBotIds($sourceIds, 'topic_id');
+        $readySubtopicIds = $this->publishedReviewBotIds($sourceIds, 'subtopic_id');
 
         return $entries
             ->map(function (array $row) use ($readyTopicIds, $readySubtopicIds): array {
@@ -1315,15 +1319,17 @@ class DashboardAnalyticsService
 
     /**
      * Distinct topic/subtopic ids that already have at least one published
-     * Review Bot question behind them.
+     * Review Bot question behind them that the student may practise.
      *
+     * @param  list<int>  $sourceIds  ReviewBotEligibility::sourceIds()
      * @return Collection<int, int>
      */
-    private function publishedReviewBotIds(string $column): Collection
+    private function publishedReviewBotIds(array $sourceIds, string $column): Collection
     {
         return DB::table('question_bank_questions')
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->tap(fn ($query) => $this->reviewBotEligibility->constrain($query, $sourceIds, 'source_question_id'))
             ->whereNotNull($column)
             ->distinct()
             ->pluck($column)

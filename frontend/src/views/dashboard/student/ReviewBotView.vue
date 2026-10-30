@@ -15,7 +15,7 @@
       <aside class="surface-card review-panel review-setup" aria-labelledby="review-setup-heading">
         <header class="review-panel-head">
           <div class="review-panel-head-copy">
-            <h2 id="review-setup-heading">Setup <InfoTip text="Practice sets are drawn from the review questions your teachers have published." /></h2>
+            <h2 id="review-setup-heading">Setup <InfoTip text="Practice sets are drawn from review questions built from the exam items you were given, once that exam's results are shown and you have no retake left." /></h2>
           </div>
           <span class="review-head-badge">{{ form.questionCount }} items</span>
         </header>
@@ -71,7 +71,7 @@
 
               <div v-else-if="readySubjects.length === 0" class="review-inline-empty">
                 <BookOpen :size="18" />
-                <p>No published questions yet. Check back after your teacher publishes some.</p>
+                <p>Practice questions for this topic appear after you take an exam that covers it.</p>
               </div>
 
               <div v-else class="review-subject-grid">

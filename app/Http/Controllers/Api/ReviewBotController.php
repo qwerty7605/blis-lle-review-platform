@@ -25,7 +25,7 @@ class ReviewBotController extends Controller
         }
 
         return response()->json([
-            'subjects' => $this->reviewBotService->catalog(),
+            'subjects' => $this->reviewBotService->catalog($user),
             'weak_area' => $this->reviewBotService->resolveWeakArea($user) ?: null,
         ]);
     }
