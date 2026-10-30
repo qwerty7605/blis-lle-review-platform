@@ -85,11 +85,14 @@ class ShowcaseSeeder extends Seeder
 
     /**
      * Fourth years the demo can be walked through by name: the score each
-     * centres on, and the subjects that pull it down.
+     * centres on, and the subjects that pull it down. Review-exam scores run
+     * low (the base dataset's sit around 50), and version 1 of the Estimated
+     * Outcome puts the at-risk line near 60 on a mock board, so the
+     * borderline student centres just under it.
      */
     private const FEATURED = [
         'top' => ['Angelica', 'Reyes', 'Dela Cruz', 90, []],
-        'borderline' => ['Mark Anthony', 'Santos', 'Villareal', 77, ['Cataloging and Classification', 'Indexing and Abstracting']],
+        'borderline' => ['Mark Anthony', 'Santos', 'Villareal', 59, ['Cataloging and Classification', 'Indexing and Abstracting']],
         'struggling' => ['Kristine Joy', 'Pacaña', 'Bacalso', 46, ['Cataloging and Classification', 'Information Technology', 'Selection and Acquisition']],
     ];
 
