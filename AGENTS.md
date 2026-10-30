@@ -47,40 +47,15 @@ This file is for coding agents. Keep it short, execution-focused, and updated wh
   - Audit: `$this->recordAudit()` (`AuditLogService::recordAction()`) adds `owner_id`, `owner_name` and "(belongs to ...)" when an admin acts on a teacher's room, exam or Library file. A route that has already deleted the thing passes `owner_id` in the metadata.
   - Pages: the admin's sidebar has Administration and Teaching headings (`dashboardNavGroupStarts`), and its menu scrolls with the account tile pinned. Exams, Library, Review Bot and the exam form show "By <teacher>" to an admin, and Exams, Library and the Dashboard take a teacher filter (`shared/OwnerFilter.vue`, `utils/owners.js`). Tests: `tests/Feature/AdminTeachingAccessTest.php`.
 
-## Current Seed Users (Local Dev)
+## Seed Data (Local Dev and Demo)
 
-Defined in `database/seeders/DatabaseSeeder.php`:
+`DatabaseSeeder` runs `ShowcaseSeeder` (the demo, `DEPLOYMENT.md` section 9); `migrate:fresh --seed` takes about two minutes. Every account it makes is `users.is_demo`, and `php artisan demo:purge` removes it all. The seed prints its sign-in table at the end:
 
-- Current students (120 total): `student@example.com`, `student1@example.com` ... `student119@example.com`
-  - Password: `pass`
-  - Role: `student`
-  - Year levels are grouped by section:
-    - `student@example.com` to `student29@example.com` = `1st Year`
-    - `student30@example.com` to `student59@example.com` = `2nd Year`
-    - `student60@example.com` to `student89@example.com` = `3rd Year`
-    - `student90@example.com` to `student119@example.com` = `4th Year`
-  - Student IDs: `2300001` ... `2301409`
-- Archived graduate samples (4 total): `graduate1@example.com` ... `graduate4@example.com`
-  - Password: `pass`
-  - Role: `student`
-  - Year level: `4`
-  - These accounts are archived for history/demo flows.
-- Teachers (3 total): `teacher@example.com`, `teacher1@example.com`, `teacher2@example.com`
-  - Password: `pass`
-  - Role: `staff_master_examiner`
-- Admin: `admin@example.com` / `pass` / `admin`
-
-## Seeded Demo Data (Local Dev)
-
-- `migrate:fresh --seed` now creates demo question banks, rooms, exams, memberships, audit logs, and exam attempts.
-- Seeded demo question banks all clone the single template at `tmp/question-set-tests/INDEXING-AND-ABSTRACTING.docx`; only the bank titles/subjects differ for sample data.
-- Demo rooms now represent single year/section rosters with `30` current students each. Archived graduate records remain in the data model for global student-history views, but archived student records are no longer shown inside room rosters.
-- `teacher@example.com` gets populated report data:
-  - Rooms: `BLIS 1A` (`B1A26`), `BLIS 2A` (`B2A26`)
-  - Exams: `Cataloging Midterm Mock`, `Reference Services Mock`, `Library Management Sprint`
-- `teacher1@example.com` gets `BLIS 3A` (`B3A26`) with `Indexing Drill Set`.
-- `teacher2@example.com` gets `BLIS 4A` (`B4A26`) with `Information Technology Quiz`.
-- `student@example.com` is enrolled in `BLIS 1A` and has both submitted and in-progress attempts, so student dashboard analytics are non-empty immediately after reseeding.
+- Admin: `DEMO_ADMIN_EMAIL` (default `2300001@lnu.edu.ph`) / `DEMO_ADMIN_PASSWORD`. Teachers: `teacher1@lnu.edu.ph` (programme chair), `teacher2@`, `teacher3@`. Students: `...@blis.test`. Everyone but the admin uses `DEMO_SEED_PASSWORD`. Both passwords fall back to defaults in `app/Services/Demo/DemoData.php`.
+- Three featured fourth years: `angelica.delacruz@blis.test` (top), `markanthony.villareal@blis.test` (near the line: Estimated Outcome about 80%, Not at risk), `kristinejoy.bacalso@blis.test` (struggling: At risk).
+- About 1,100 enrolled students in 98 sections, 3,000 graduates and leavers with ten cohorts of LLE results (demo, so never used to retrain), 143 exams: a pre-test and a mock board series (six subject exams each) for the fourth years this term and for every history cohort, battery exams for the third years, regular quizzes for the first and second years. Questions are tagged with the TOS; Review Bot questions are generated from the Library items, so each student sees those from exams they finished.
+- `SHOWCASE_COHORT_SIZE` (default 300) and `SHOWCASE_HISTORY_YEARS` (default 10) shrink it.
+- An older local database may still hold the earlier `student@example.com` / `teacher@example.com` / `admin@example.com` accounts (password `pass`); nothing seeds them any more.
 
 ## Phone and Tablet Layout
 
@@ -142,6 +117,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
 - Seed only: `docker compose exec -T php php artisan db:seed`
 - Run migrations: `docker compose exec -T php php artisan migrate`
 - Watch queued job logs: `docker compose logs -f queue`
+- Re-check scoring by hand: `docker compose exec -T php php artisan scoring:export` (30 submitted attempts, seed 1; `--count`, `--seed`, `--exam=`): two CSV files under `storage/app/private/scoring-check/`, every dealt item with its key, the answer and the stored result, and each attempt's stored score beside the score worked out from the key. Tests: `tests/Feature/ScoringExportTest.php`.
 - Install PHP deps in container: `docker compose exec -T php composer install`
 - List users/roles quickly:
   - `docker compose exec -T php php artisan tinker --execute="dump(App\\Models\\User::select('id','name','email','student_id','role')->get()->toArray());"`
