@@ -15,7 +15,7 @@
       <aside class="surface-card review-panel review-setup" aria-labelledby="review-setup-heading">
         <header class="review-panel-head">
           <div class="review-panel-head-copy">
-            <h2 id="review-setup-heading">Setup <InfoTip text="Practice sets are drawn from the review questions your teachers have published." /></h2>
+            <h2 id="review-setup-heading">Setup <InfoTip text="Practice sets are drawn from review questions built from the exam items you were given, once that exam's results are shown and you have no retake left." /></h2>
           </div>
           <span class="review-head-badge">{{ form.questionCount }} items</span>
         </header>
@@ -71,7 +71,7 @@
 
               <div v-else-if="readySubjects.length === 0" class="review-inline-empty">
                 <BookOpen :size="18" />
-                <p>No published questions yet. Check back after your teacher publishes some.</p>
+                <p>Practice questions for this topic appear after you take an exam that covers it.</p>
               </div>
 
               <div v-else class="review-subject-grid">
@@ -338,6 +338,7 @@ import InfoTip from '@/components/InfoTip.vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
+import { SUBJECT_SHORT_NAMES } from '@/constants/librarySubjects'
 
 // Kept in step with the 1000px rule in this file's styles: from there down
 // the two panels sit one above the other and the page scrolls.
@@ -417,17 +418,8 @@ const progressPercent = computed(() => {
   return Math.round((answeredCount.value / total) * 100)
 })
 
-const shortSubjectLookup = {
-  'Cataloging and Classification': 'Cataloging',
-  'Indexing and Abstracting': 'Indexing',
-  'Information Technology': 'IT',
-  'Reference Services': 'Reference',
-  'Library Management': 'Management',
-  'Selection and Acquisition': 'Acquisition',
-}
-
 function shortSubjectLabel(subject) {
-  return shortSubjectLookup[subject] ?? subject
+  return SUBJECT_SHORT_NAMES[subject] ?? subject
 }
 
 function scoreToneClass(score) {

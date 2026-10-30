@@ -62,7 +62,7 @@ class ExamRetakeScoresTest extends TestCase
         $first = $this->sitting($exam, $room, $student, 40, now()->subDays(2));
         $second = $this->sitting($exam, $room, $student, 80, now()->subDay());
 
-        $other = Exam::create(['title' => 'Other Exam', 'subject' => 'Reference Services', 'total_items' => 10, 'duration_minutes' => 30, 'created_by' => $exam->created_by]);
+        $other = Exam::create(['title' => 'Other Exam', 'subject' => 'Reference, Bibliography and User Services', 'total_items' => 10, 'duration_minutes' => 30, 'created_by' => $exam->created_by]);
         $only = $this->sitting($other, $room, $student, 70, now()->subDays(3));
 
         Sanctum::actingAs($student);

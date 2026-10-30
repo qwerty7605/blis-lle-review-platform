@@ -3,39 +3,48 @@
 namespace App\Services\MachineLearning;
 
 /**
- * Bayesian Knowledge Tracing (Corbett & Anderson, 1995).
+ * Bayesian Knowledge Tracing (Corbett & Anderson, 1995), one learning
+ * opportunity per exam.
  *
  * Percent-correct treats every answer as equally informative and has no memory
- * of the order they arrived in, so "wrong, wrong, right, right" and "right,
- * right, wrong, wrong" both read as 50% -- one student climbing out of a gap
- * and one falling into it, scored identically.
+ * of the order exams came in, so "weak, weak, strong, strong" and "strong,
+ * strong, weak, weak" both read as the same average -- one student climbing
+ * out of a gap and one falling into it, scored identically.
  *
  * BKT instead models mastery as a hidden state and estimates it from the
- * observable sequence, allowing for the two ways the observation lies:
+ * observable sequence, allowing for the two ways an answer lies:
  *
  *   slip  -- the student knows it and still answers wrong (careless error)
  *   guess -- the student does not know it and still answers right
  *
- * Each response drives two updates. First Bayes' rule revises the belief about
- * what the student knew *at that moment* given how they answered; then the
- * learning step allows that the practice opportunity itself may have taught
- * them something.
+ * Inside one exam the order of answers means nothing: items are shuffled,
+ * students skip around, and nobody is told mid-exam whether they were right.
+ * So each exam is one opportunity. Its answers on the skill are weighed
+ * together as one batch of evidence (Bayes' rule), and then one learning step
+ * allows that sitting the exam may itself have taught something. Order
+ * across exams still matters, and that is the order read here.
+ *
+ * One exam can only move the estimate so far. A skill with n items in an
+ * exam has its evidence weighted by w = min(1, C / n), C = EXAM_EVIDENCE_CAP:
+ * up to C items it is ordinary BKT on the batch; past C, the exam counts as
+ * much as C items at its proportion correct.
+ *
+ *   log L_known   = w * sum[ c_i log(1 - S) + (1 - c_i) log S ]
+ *   log L_unknown = w * sum[ c_i log G_i   + (1 - c_i) log(1 - G_i) ]
+ *   posterior     = p L_known / (p L_known + (1 - p) L_unknown)
+ *   p_next        = posterior + (1 - posterior) T
  *
  * Nothing here is trained. SLIP/PRIOR/LEARN_RATE are the standard values from
  * the intelligent-tutoring literature, and the guess rate is not fitted at all
  * -- it falls out of the item format, since one option in four is a 25% chance
- * of a blind correct answer. Fitting these to a specific cohort (EM or a grid
- * search over held-out sequences) is a refinement, not a prerequisite.
- *
- * @see LetPredictionService for the other model in this namespace -- same
- *      principle of keeping inference cheap enough to run inside a request.
+ * of a blind correct answer.
  */
 class KnowledgeTracingService
 {
-    /** P(L0) -- chance the student knew the skill before any practice. */
+    /** P(L0) -- chance the student knew the skill before any exam. */
     public const PRIOR = 0.25;
 
-    /** P(T) -- chance one practice opportunity moves them to knowing it. */
+    /** P(T) -- chance one exam moves them to knowing it. */
     public const LEARN_RATE = 0.15;
 
     /** P(S) -- chance of answering wrong despite knowing the skill. */
@@ -43,6 +52,12 @@ class KnowledgeTracingService
 
     /** P(G) when an item's option count is unknown (assumes 4 options). */
     public const DEFAULT_GUESS = 0.25;
+
+    /**
+     * C: how many items' worth of evidence one exam can give on one skill.
+     * With 3, one exam at 75% reads 0.63 (developing), not "mastered".
+     */
+    public const EXAM_EVIDENCE_CAP = 3;
 
     /**
      * Guess and slip must both stay under a half or the model goes degenerate:
@@ -56,69 +71,74 @@ class KnowledgeTracingService
     /** Mastery at or below this reads as "not known yet". */
     public const STRUGGLING_AT = 0.4;
 
-    /** Mastery has to move at least this much to count as a trend, not noise. */
+    /** Mastery has to move at least this much between exams to count as a trend, not noise. */
     private const TREND_DEADBAND = 0.05;
 
     /**
-     * Trace one ordered sequence of responses for a single skill.
+     * Trace one skill across exams.
      *
-     * @param  list<array{correct: bool, option_count?: int|null}>  $responses
-     *         Chronological -- oldest answer first. Order is the entire point;
-     *         passing these unordered produces a number that means nothing.
+     * @param  list<list<array{correct: bool, option_count?: int|null}>>  $exams
+     *         One entry per exam, oldest first; each is the skill's items in
+     *         that exam (a blank counts as not correct, as in scoring). An
+     *         exam with no items on the skill leaves the estimate unchanged.
      * @return array{
      *     mastery: float,
      *     mastery_percent: float,
      *     predicted_correct: float,
      *     opportunities: int,
+     *     items: int,
      *     correct: int,
      *     trend: string,
      *     band: string
      * }
      */
-    public function trace(array $responses): array
+    public function traceExams(array $exams): array
     {
         $mastery = self::PRIOR;
-        $series = [$mastery];
+        $afterEachExam = [];
+        $items = 0;
         $correct = 0;
 
-        foreach ($responses as $response) {
-            $isCorrect = (bool) ($response['correct'] ?? false);
-            $guess = $this->guessRateFor($response['option_count'] ?? null);
+        foreach ($exams as $exam) {
+            $count = count($exam);
 
-            if ($isCorrect) {
-                $correct++;
+            if ($count === 0) {
+                continue;
             }
 
-            // Step 1 -- evidence. Given how they answered, what did they know
-            // at that moment? A correct answer is explained either by knowing
-            // it (and not slipping) or by not knowing it (and guessing).
-            $knewAndAnsweredThisWay = $isCorrect
-                ? $mastery * (1.0 - self::SLIP)
-                : $mastery * self::SLIP;
+            $weight = min(1.0, self::EXAM_EVIDENCE_CAP / $count);
+            $logKnown = 0.0;
+            $logUnknown = 0.0;
 
-            $didNotKnowAndAnsweredThisWay = $isCorrect
-                ? (1.0 - $mastery) * $guess
-                : (1.0 - $mastery) * (1.0 - $guess);
+            foreach ($exam as $item) {
+                $isCorrect = (bool) ($item['correct'] ?? false);
+                $guess = $this->guessRateFor($item['option_count'] ?? null);
 
-            $evidence = $knewAndAnsweredThisWay + $didNotKnowAndAnsweredThisWay;
+                $logKnown += $isCorrect ? log(1.0 - self::SLIP) : log(self::SLIP);
+                $logUnknown += $isCorrect ? log($guess) : log(1.0 - $guess);
 
-            $posterior = $evidence > 0.0
-                ? $knewAndAnsweredThisWay / $evidence
-                : $mastery;
+                $items++;
+                $correct += $isCorrect ? 1 : 0;
+            }
 
-            // Step 2 -- learning. They have now had one more go at the skill,
-            // so some of the remaining "doesn't know it" mass transitions.
+            // Evidence: Bayes' rule on the weighted batch, written with the
+            // likelihood ratio so nothing under- or overflows.
+            $ratio = exp($weight * ($logUnknown - $logKnown));
+            $posterior = $mastery / ($mastery + (1.0 - $mastery) * $ratio);
+
+            // Learning: one step for the exam as a whole.
             $mastery = $posterior + ((1.0 - $posterior) * self::LEARN_RATE);
-            $series[] = $mastery;
+            $afterEachExam[] = $mastery;
         }
 
         return [
             'mastery' => round($mastery, 4),
             'mastery_percent' => round($mastery * 100, 1),
             'predicted_correct' => round($this->predictCorrect($mastery), 4),
-            'opportunities' => count($responses),
+            'opportunities' => count($afterEachExam),
+            'items' => $items,
             'correct' => $correct,
-            'trend' => $this->trendOf($series),
+            'trend' => $this->trendOf($afterEachExam),
             'band' => $this->bandOf($mastery),
         ];
     }
@@ -150,21 +170,20 @@ class KnowledgeTracingService
     }
 
     /**
-     * Which way mastery is moving, comparing where it ended against where it
-     * stood halfway through. Needs a few opportunities before the question
-     * means anything at all.
+     * Mastery after the latest exam against mastery after the one before it.
+     * With fewer than two exams on the skill there is nothing to compare.
+     *
+     * @param  list<float>  $afterEachExam
      */
-    private function trendOf(array $series): string
+    private function trendOf(array $afterEachExam): string
     {
-        $count = count($series);
+        $count = count($afterEachExam);
 
-        if ($count < 4) {
+        if ($count < 2) {
             return 'unclear';
         }
 
-        $midpoint = $series[intdiv($count, 2)];
-        $final = $series[$count - 1];
-        $movement = $final - $midpoint;
+        $movement = $afterEachExam[$count - 1] - $afterEachExam[$count - 2];
 
         if ($movement > self::TREND_DEADBAND) {
             return 'improving';

@@ -142,6 +142,7 @@
 
                 <div class="rooms-exam-row-foot">
                   <div class="rooms-exam-meta">
+                    <span v-if="exam.exam_type_label" class="pill neutral rooms-exam-type">{{ exam.exam_type_label }}</span>
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
                     <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
@@ -186,6 +187,7 @@
 
                 <div class="rooms-exam-row-foot">
                   <div class="rooms-exam-meta">
+                    <span v-if="exam.exam_type_label" class="pill neutral rooms-exam-type">{{ exam.exam_type_label }}</span>
                     <span><BookOpen :size="13" />{{ exam.total_items }} items</span>
                     <span><Clock3 :size="13" />{{ exam.duration_minutes }} mins</span>
                     <span v-if="studentAttemptSummary(exam)" class="rooms-exam-attempts">{{ studentAttemptSummary(exam) }}</span>
@@ -235,9 +237,6 @@
                 <p v-if="member.student_id">Student ID: {{ member.student_id }}</p>
                 <p v-else>{{ member.email }}</p>
               </div>
-              <span v-if="selectedRoomYearSummary.is_mixed" class="rooms-tag neutral small">
-                {{ member.year_level_label || yearLevelLabel(member.year_level) }}
-              </span>
             </div>
           </div>
         </article>
@@ -964,7 +963,6 @@ const {
   isCurrentQuestionInputLocked,
   studentExamUnansweredCount,
   questionHasAnswer,
-  yearLevelLabel,
   canStudentOpenExam,
   isStudentExamInProgress,
   isStudentExamCompleted,

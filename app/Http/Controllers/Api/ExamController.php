@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\ExamDeliveryModeService;
 use App\Services\ExamQuestionBanks;
+use App\Services\ExamSeriesRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -22,6 +23,7 @@ class ExamController extends Controller
         private readonly DashboardAnalyticsService $dashboardAnalyticsService,
         private readonly ExamDeliveryModeService $deliveryModeService,
         private readonly ExamQuestionBanks $examQuestionBanks,
+        private readonly ExamSeriesRules $examSeriesRules,
     ) {
     }
 
@@ -39,6 +41,7 @@ class ExamController extends Controller
                 'questionBank:id,title,subject,total_items',
                 'questionBanks:id,title,subject,total_items',
                 'rooms:id,name,code',
+                'series:id,name,type',
             ])
             ->withCount('rooms')
             ->when(!$this->oversees($user), fn ($query) => $query->where('created_by', $user->id))
@@ -79,6 +82,9 @@ class ExamController extends Controller
             'one_take_only' => ['nullable', 'boolean'],
             'shuffle_questions' => ['nullable', 'boolean'],
             'results_visibility_mode' => ['nullable', Rule::in(['hidden', 'visible'])],
+            // Left out, a regular mock exam.
+            'exam_type' => ['nullable', Rule::in(Exam::TYPES)],
+            'exam_series_id' => ['nullable', 'integer', 'exists:exam_series,id'],
             // Left out, they are taken from the exam's date (see Exam::booted()).
             'school_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
             'semester' => ['nullable', Rule::in(Exam::SEMESTERS)],
@@ -117,9 +123,21 @@ class ExamController extends Controller
             ], 422);
         }
 
+        $examSubject = Exam::summarizeQuestionBankSubject($selectedQuestionBanks);
+        $typing = $this->examSeriesRules->resolve(
+            $validated['exam_type'] ?? Exam::TYPE_REGULAR,
+            isset($validated['exam_series_id']) ? (int) $validated['exam_series_id'] : null,
+            $examSubject,
+        );
+
+        if (is_string($typing)) {
+            return response()->json(['message' => $typing, 'errors' => ['exam_series_id' => [$typing]]], 422);
+        }
+
         $exam = Exam::create([
             'title' => $validated['title'],
-            'subject' => Exam::summarizeQuestionBankSubject($selectedQuestionBanks),
+            'subject' => $examSubject,
+            ...$typing,
             'description' => $validated['description'] ?? null,
             'question_bank_id' => $selectedQuestionBankIds[0] ?? null,
             'total_items' => $validated['total_items'],
@@ -170,6 +188,7 @@ class ExamController extends Controller
             'questionBank:id,title,subject,total_items',
             'questionBanks:id,title,subject,total_items',
             'rooms:id,name,code',
+            'series:id,name,type',
         ])->loadCount('rooms');
         $exam->question_bank_ids = $exam->resolvedQuestionBankIds();
 
@@ -181,6 +200,8 @@ class ExamController extends Controller
             'Exam created',
             [
                 'title' => $exam->title,
+                'exam_type' => $exam->exam_type,
+                'exam_series_id' => $exam->exam_series_id,
                 'scheduled_at' => $exam->scheduled_at,
                 'schedule_start_at' => $exam->schedule_start_at,
                 'schedule_end_at' => $exam->schedule_end_at,
@@ -230,6 +251,8 @@ class ExamController extends Controller
             'one_take_only' => ['sometimes', 'boolean'],
             'shuffle_questions' => ['sometimes', 'boolean'],
             'results_visibility_mode' => ['sometimes', Rule::in(['hidden', 'visible'])],
+            'exam_type' => ['sometimes', 'required', Rule::in(Exam::TYPES)],
+            'exam_series_id' => ['sometimes', 'nullable', 'integer', 'exists:exam_series,id'],
             'school_year' => ['sometimes', 'required', 'integer', 'min:2000', 'max:2100'],
             'semester' => ['sometimes', 'required', Rule::in(Exam::SEMESTERS)],
             'room_ids' => ['sometimes', 'array'],
@@ -274,13 +297,33 @@ class ExamController extends Controller
             ], 422);
         }
 
+        $examSubject = Exam::summarizeQuestionBankSubject($resolvedQuestionBanks);
+        $typing = $this->examSeriesRules->resolve(
+            $validated['exam_type'] ?? (string) $exam->exam_type,
+            array_key_exists('exam_series_id', $validated)
+                ? ($validated['exam_series_id'] === null ? null : (int) $validated['exam_series_id'])
+                : ($exam->exam_series_id === null ? null : (int) $exam->exam_series_id),
+            $examSubject,
+            (int) $exam->id,
+        );
+
+        if (is_string($typing)) {
+            return response()->json(['message' => $typing, 'errors' => ['exam_series_id' => [$typing]]], 422);
+        }
+
+        $previousType = (string) $exam->exam_type;
+        $previousSeriesId = $exam->exam_series_id;
+
         $exam->fill(collect($validated)->except([
             'scheduled_at',
             'schedule_start_at',
             'schedule_end_at',
             'question_bank_ids',
+            'exam_type',
+            'exam_series_id',
         ])->all());
-        $exam->subject = Exam::summarizeQuestionBankSubject($resolvedQuestionBanks);
+        $exam->fill($typing);
+        $exam->subject = $examSubject;
         $exam->question_bank_id = $resolvedQuestionBankIds[0] ?? null;
         $exam->scheduled_at = $resolvedScheduleStart;
         $exam->schedule_start_at = $resolvedScheduleStart;
@@ -336,8 +379,38 @@ class ExamController extends Controller
             'questionBank:id,title,subject,total_items',
             'questionBanks:id,title,subject,total_items',
             'rooms:id,name,code',
+            'series:id,name,type',
         ])->loadCount('rooms');
         $exam->question_bank_ids = $exam->resolvedQuestionBankIds();
+
+        // A type (or series) is what puts an exam into students' Estimated
+        // Outcome. Changing it once there are results changes their outcomes,
+        // so it is written down on its own.
+        $attemptCount = ExamAttempt::query()->where('exam_id', $exam->id)->count();
+
+        if ($attemptCount > 0 && ($previousType !== $exam->exam_type || (int) $previousSeriesId !== (int) $exam->exam_series_id)) {
+            $this->recordAudit(
+                $user,
+                'exam.type.change',
+                'exam',
+                $exam->id,
+                sprintf(
+                    'Changed the type of "%s" from %s to %s with %d attempt(s) on record; students\' Estimated Outcomes follow it',
+                    $exam->title,
+                    Exam::TYPE_LABELS[$previousType] ?? $previousType,
+                    Exam::TYPE_LABELS[$exam->exam_type] ?? $exam->exam_type,
+                    $attemptCount,
+                ),
+                [
+                    'from_type' => $previousType,
+                    'to_type' => $exam->exam_type,
+                    'from_series_id' => $previousSeriesId,
+                    'to_series_id' => $exam->exam_series_id,
+                    'attempts' => $attemptCount,
+                ],
+                $request,
+            );
+        }
 
         $this->recordAudit(
             $user,

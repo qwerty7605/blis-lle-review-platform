@@ -24,7 +24,7 @@ class ReviewBotAdminServiceTest extends TestCase
     use BuildsBlisData;
     use RefreshDatabase;
 
-    private const SUBJECT = 'Reference Services';
+    private const SUBJECT = 'Reference, Bibliography and User Services';
 
     private function service(): ReviewBotAdminService
     {

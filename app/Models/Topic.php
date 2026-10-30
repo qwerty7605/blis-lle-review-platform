@@ -17,8 +17,22 @@ class Topic extends Model
     protected $fillable = [
         'subject',
         'name',
+        'code',
+        'tos_items',
+        'sort_order',
         'created_by',
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'tos_items' => 'integer',
+            'sort_order' => 'integer',
+        ];
+    }
 
     public function creator(): BelongsTo
     {

@@ -5,6 +5,21 @@ import { useLiveRefresh } from '@/utils/liveRefresh'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { normalizeExamDeliveryMode } from './useDashboardFormatters'
 
+// The four kinds of exam. A pre-test or a mock board is one of six subject
+// exams in a series, and only those two feed the Estimated Outcome.
+export const EXAM_TYPE_OPTIONS = [
+  { value: 'regular', label: 'Regular mock exam', hint: 'Practice' },
+  { value: 'battery', label: 'Battery exam', hint: 'Given each semester' },
+  { value: 'pre_test', label: 'Pre-test', hint: 'LLE review' },
+  { value: 'mock_board', label: 'Mock board', hint: 'LLE review' },
+]
+
+export const SERIES_EXAM_TYPES = ['pre_test', 'mock_board']
+
+export function examTypeLabel(type) {
+  return EXAM_TYPE_OPTIONS.find((option) => option.value === type)?.label ?? 'Regular mock exam'
+}
+
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
   if (messages.length > 0) return String(messages[0])
@@ -154,8 +169,18 @@ export function useExamsModule() {
     one_take_only: false,
     shuffle_questions: false,
     results_visibility_mode: 'hidden',
+    exam_type: 'regular',
+    exam_series_id: null,
     room_ids: [],
   })
+
+  // Every pre-test and mock board series, for the form's series picker.
+  const examSeries = ref([])
+  const newSeriesName = ref('')
+  const seriesSaving = ref(false)
+  const seriesError = ref('')
+  const formNeedsSeries = computed(() => SERIES_EXAM_TYPES.includes(examForm.exam_type))
+  const seriesForType = computed(() => examSeries.value.filter((series) => series.type === examForm.exam_type))
 
   // The semester an exam counts toward in the Estimated Outcome is not on the
   // form: a new exam is filed by the server from its start date, and an
@@ -226,6 +251,10 @@ export function useExamsModule() {
     examForm.schedule_end_at = ''
     examForm.ends_at_close = false
     examForm.room_ids = []
+    examForm.exam_type = 'regular'
+    examForm.exam_series_id = null
+    newSeriesName.value = ''
+    seriesError.value = ''
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
   }
@@ -261,6 +290,10 @@ export function useExamsModule() {
     examForm.one_take_only = Boolean(exam.one_take_only)
     examForm.shuffle_questions = Boolean(exam.shuffle_questions)
     examForm.results_visibility_mode = exam.results_visibility_mode || 'hidden'
+    examForm.exam_type = exam.exam_type || 'regular'
+    examForm.exam_series_id = exam.exam_series_id ?? null
+    newSeriesName.value = ''
+    seriesError.value = ''
     examStartAsOpened = examForm.schedule_start_at
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examError.value = ''
@@ -327,6 +360,35 @@ export function useExamsModule() {
     }
   }
 
+  async function fetchExamSeries({ keepOnFailure = false } = {}) {
+    try {
+      const { data } = await services.getExamSeries()
+      examSeries.value = data.series ?? []
+    } catch (error) {
+      if (!keepOnFailure) examSeries.value = []
+    }
+  }
+
+  // A new series made from the form, chosen for the exam at once.
+  async function createSeriesFromForm() {
+    const name = newSeriesName.value.trim()
+    if (!name || !formNeedsSeries.value) return
+
+    seriesSaving.value = true
+    seriesError.value = ''
+
+    try {
+      const { data } = await services.createExamSeries({ name, type: examForm.exam_type })
+      examSeries.value = [data.series, ...examSeries.value]
+      examForm.exam_series_id = data.series.id
+      newSeriesName.value = ''
+    } catch (error) {
+      seriesError.value = firstApiError(error, 'Unable to create the series.')
+    } finally {
+      seriesSaving.value = false
+    }
+  }
+
   // silent: the quiet refresh behind useLiveRefresh (below). Same requests,
   // but no loading state, no message cleared, and a failure kept to itself.
   async function loadExams({ silent = false } = {}) {
@@ -341,6 +403,7 @@ export function useExamsModule() {
         services.getExams(),
         fetchManageableRooms({ keepOnFailure: silent }),
         fetchExamQuestionBanks({ keepOnFailure: silent }),
+        fetchExamSeries({ keepOnFailure: silent }),
       ])
 
       exams.value = (examData.exams ?? [])
@@ -443,6 +506,12 @@ export function useExamsModule() {
       return
     }
 
+    if (formNeedsSeries.value && !examForm.exam_series_id) {
+      examError.value = `A ${examTypeLabel(examForm.exam_type).toLowerCase()} is one of six subject exams in a series. Choose its series, or create one.`
+      examSaving.value = false
+      return
+    }
+
     const payload = {
       title: examForm.title.trim(),
       description: examForm.description.trim() || null,
@@ -457,6 +526,8 @@ export function useExamsModule() {
       one_take_only: Boolean(examForm.one_take_only),
       shuffle_questions: Boolean(examForm.shuffle_questions),
       results_visibility_mode: examForm.results_visibility_mode,
+      exam_type: examForm.exam_type,
+      exam_series_id: formNeedsSeries.value ? examForm.exam_series_id : null,
       room_ids: [...examForm.room_ids],
     }
 
@@ -559,6 +630,13 @@ export function useExamsModule() {
     showDeleteExamModal,
     selectedExam,
     examForm,
+    examSeries,
+    seriesForType,
+    formNeedsSeries,
+    newSeriesName,
+    seriesSaving,
+    seriesError,
+    createSeriesFromForm,
     examQuestionBankCount,
     examQuestionBankSubject,
     examQuestionBankSummaryText,

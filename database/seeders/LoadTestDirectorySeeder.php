@@ -66,8 +66,8 @@ class LoadTestDirectorySeeder extends Seeder
         'Cataloging and Classification',
         'Indexing and Abstracting',
         'Information Technology',
-        'Reference Services',
-        'Library Management',
+        'Reference, Bibliography and User Services',
+        'Library Organization and Management',
         'Selection and Acquisition',
     ];
 
@@ -328,8 +328,8 @@ class LoadTestDirectorySeeder extends Seeder
 
     /**
      * Attempts are spread backwards from "now" across the student's time in the
-     * programme, so the chronological bucketing in LetReadinessFeatureBuilder
-     * has something plausibly shaped to work with.
+     * programme, so pages that read them in time order have something
+     * plausibly shaped to work with.
      *
      * @param  \Illuminate\Support\Collection<int, \stdClass>  $students
      * @param  list<int>  $exams

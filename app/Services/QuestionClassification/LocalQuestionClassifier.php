@@ -3,6 +3,7 @@
 namespace App\Services\QuestionClassification;
 
 use App\Models\QuestionBankQuestion;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -13,7 +14,9 @@ use Illuminate\Support\Str;
  * that persists anything.
  *
  * Four independent heuristics:
- *  - classifyTopic(): keyword/phrase scoring against TopicKeywordDictionary.
+ *  - classifyTopic(): keyword/phrase scoring against TopicKeywordDictionary,
+ *    the LLE Table of Specifications' sub-topics. A question no phrase
+ *    matches is its subject's "Other / Unclassified".
  *  - classifyCognitiveLevel(): Bloom's-style verb/stem cue matching.
  *  - classifyDifficulty(): a structural/linguistic proxy (negation, stem
  *    length, distractor similarity, scenario framing) -- NOT a claim of
@@ -22,7 +25,7 @@ use Illuminate\Support\Str;
  *    difficulty from the real percent-correct (p-value) instead of guessing
  *    from text. Out of scope for now.
  *  - classifySubjectForTexts(): the same keyword scoring, aggregated across
- *    a whole freshly-parsed question set to guess which of the 6 curated
+ *    a whole freshly-parsed question set to guess which of the 6 board
  *    subjects it belongs to (used to pre-fill "Subject Category" at upload).
  *
  * Every classify* method returns a confidence score (0-1) so
@@ -42,6 +45,9 @@ class LocalQuestionClassifier
 
     /** Roughly "one solid canonical phrase match" -- used to normalize absolute match strength into 0-1. */
     private const STRONG_TOPIC_MATCH = 4.0;
+
+    /** @var array<string, list<string>> each keyword phrase's searchable forms (see phraseForms()) */
+    private static array $phraseForms = [];
 
     /**
      * Bloom's-style stem cues, checked in this precedence order because a
@@ -112,7 +118,7 @@ class LocalQuestionClassifier
 
     public function classifyTopic(QuestionBankQuestion $question, string $subject): TopicClassification
     {
-        $topics = TopicKeywordDictionary::KEYWORDS[$subject] ?? [];
+        $topics = TopicKeywordDictionary::forSubject($subject);
 
         if ($topics === []) {
             return new TopicClassification(null, null, 0.0);
@@ -123,8 +129,8 @@ class LocalQuestionClassifier
 
         $scores = array_map(fn (array $result): float => $result['score'], $topicResults);
 
-        // Stable sort (PHP 8+ sorts are stable) preserves CURATED_TOPICS'
-        // declaration order among ties, so results are deterministic.
+        // Stable sort (PHP 8+ sorts are stable) keeps the TOS order among
+        // ties, so results are deterministic.
         arsort($scores);
         $orderedTopicNames = array_keys($scores);
         $bestTopic = $orderedTopicNames[0];
@@ -132,19 +138,9 @@ class LocalQuestionClassifier
         $secondScore = $scores[$orderedTopicNames[1] ?? $bestTopic] ?? 0.0;
 
         if ($bestScore <= 0.0) {
-            // Nothing matched any cue at all. Try a plain topic-name
-            // substring as a last-resort guess (never leave it null), but
-            // confidence stays 0 -- this is a guess, not evidence.
-            foreach ($orderedTopicNames as $topicName) {
-                if ($this->containsPhrase($searchText, Str::lower($topicName))) {
-                    $bestTopic = $topicName;
-                    break;
-                }
-            }
-
-            $bestSubtopic = $topicResults[$bestTopic]['subtopic'] ?? array_key_first($topics[$bestTopic]);
-
-            return new TopicClassification($bestTopic, $bestSubtopic, 0.0);
+            // No phrase of any sub-topic is in the question: it is the
+            // subject's "Other / Unclassified", not a guess at a topic.
+            return new TopicClassification(LleTaxonomy::OTHER_TOPIC, null, 0.0, unclassified: true);
         }
 
         $bestSubtopic = $topicResults[$bestTopic]['subtopic'] ?? array_key_first($topics[$bestTopic]);
@@ -154,7 +150,7 @@ class LocalQuestionClassifier
     }
 
     /**
-     * Guesses which of the 6 curated subjects a whole freshly-parsed
+     * Guesses which of the 6 board subjects a whole freshly-parsed
      * question set belongs to, by averaging each question's best-topic
      * score under every candidate subject. Used so the Library upload form
      * can pre-fill "Subject Category" instead of a teacher picking it
@@ -177,7 +173,7 @@ class LocalQuestionClassifier
 
         $averages = [];
 
-        foreach (array_keys(TopicKeywordDictionary::KEYWORDS) as $subject) {
+        foreach (LleTaxonomy::subjectNames() as $subject) {
             $total = 0.0;
 
             foreach ($searchTexts as $searchText) {
@@ -226,7 +222,7 @@ class LocalQuestionClassifier
      */
     private function scoreTopicsForSubject(string $normalizedSearchText, string $subject): array
     {
-        $topics = TopicKeywordDictionary::KEYWORDS[$subject] ?? [];
+        $topics = TopicKeywordDictionary::forSubject($subject);
         $results = [];
 
         foreach ($topics as $topicName => $subtopics) {
@@ -418,22 +414,76 @@ class LocalQuestionClassifier
         return $this->normalizeSearchText(implode(' ', $parts));
     }
 
-    /** Lowercases, strips punctuation (keeping intra-word - and /), collapses whitespace, and pads with a boundary space on both ends. */
+    /**
+     * Whether a keyword phrase occurs, as whole words, in a piece of text.
+     * Both are normalized the same way first, which is what lets a phrase
+     * written with punctuation ("z39.50") match.
+     */
+    public function matchesPhrase(string $text, string $phrase): bool
+    {
+        return $this->containsPhrase($this->normalizeSearchText($text), $phrase);
+    }
+
+    /**
+     * Lowercases, turns accented letters into plain ones ("précis" ->
+     * "precis"), strips punctuation (keeping intra-word - and /), collapses
+     * whitespace, and pads with a boundary space on both ends.
+     */
     private function normalizeSearchText(string $text): string
     {
-        $text = Str::lower($text);
+        $text = Str::lower(Str::ascii($text));
         $text = preg_replace('/[^a-z0-9\-\/\s]/', ' ', $text) ?? $text;
+        // A dash or slash is kept only inside a word ("co-citation",
+        // "tcp/ip"); one standing between words ("work - expression") is a
+        // separator like any other.
+        $text = preg_replace('/(?<![a-z0-9])[\-\/]+|[\-\/]+(?![a-z0-9])/', ' ', $text) ?? $text;
         $text = preg_replace('/\s+/', ' ', $text) ?? $text;
 
         return ' ' . trim($text) . ' ';
     }
 
-    /** $paddedText must already be normalized via normalizeSearchText(). Space-padding makes this whole-word/whole-phrase safe without needing a separate regex path for short cues. */
+    /**
+     * $paddedText must already be normalized via normalizeSearchText(). The
+     * phrase is normalized the same way, so a phrase can never miss text that
+     * contains it ("z39.50", "work, expression, manifestation" once could),
+     * and the space padding keeps the match to whole words and phrases.
+     */
     private function containsPhrase(string $paddedText, string $phrase): bool
     {
-        $needle = ' ' . trim(Str::lower($phrase)) . ' ';
+        foreach (self::$phraseForms[$phrase] ??= $this->phraseForms($phrase) as $form) {
+            if (str_contains($paddedText, $form)) {
+                return true;
+            }
+        }
 
-        return str_contains($paddedText, $needle);
+        return false;
+    }
+
+    /**
+     * A phrase as written, plus its last word with or without a plain plural
+     * "s" ("output measure" also finds "output measures", "call numbers" also
+     * finds "call number"). Short words are left alone, so "mets" never
+     * becomes "met", and so are words ending in "ss", "us" or "is".
+     *
+     * @return list<string>
+     */
+    private function phraseForms(string $phrase): array
+    {
+        $normalized = $this->normalizeSearchText($phrase);
+        $core = trim($normalized);
+        $forms = [$normalized];
+
+        if (preg_match('/(?:^| )([a-z]+)$/', $core, $match) === 1) {
+            $last = $match[1];
+
+            if (!str_ends_with($last, 's') && strlen($last) >= 3) {
+                $forms[] = ' ' . $core . 's ';
+            } elseif (strlen($last) >= 5 && preg_match('/(ss|us|is)$/', $last) !== 1) {
+                $forms[] = ' ' . substr($core, 0, -1) . ' ';
+            }
+        }
+
+        return $forms;
     }
 
     /**

@@ -27,8 +27,8 @@ class DashboardAnalyticsTest extends TestCase
         $roomB->members()->attach($student->id);
 
         $examA = $this->makeExam($staff, 'Cataloging Mock 1', 'Cataloging');
-        $examB = $this->makeExam($staff, 'Reference Mastery', 'Reference Services');
-        $examC = $this->makeExam($staff, 'Library Management Sprint', 'Library Management');
+        $examB = $this->makeExam($staff, 'Reference Mastery', 'Reference, Bibliography and User Services');
+        $examC = $this->makeExam($staff, 'Library Management Sprint', 'Library Organization and Management');
 
         $this->assignExamToRoom($examA, $roomA, $staff);
         $this->assignExamToRoom($examB, $roomA, $staff);
@@ -96,10 +96,10 @@ class DashboardAnalyticsTest extends TestCase
 
         $subjects = collect($response->json('subjects'));
         $this->assertEquals(80.0, $subjects->firstWhere('label', 'Cataloging')['score']);
-        $this->assertEquals(60.0, $subjects->firstWhere('label', 'Reference Services')['score']);
+        $this->assertEquals(60.0, $subjects->firstWhere('label', 'Reference, Bibliography and User Services')['score']);
 
         $focusSubjects = collect($response->json('focus_subjects'));
-        $this->assertSame('Reference Services', $focusSubjects->first()['label']);
+        $this->assertSame('Reference, Bibliography and User Services', $focusSubjects->first()['label']);
 
         $history = $response->json('score_history');
         $this->assertCount(2, $history);
@@ -125,7 +125,7 @@ class DashboardAnalyticsTest extends TestCase
         $roomBeta->members()->attach([$studentThree->id]);
 
         $examAlpha = $this->makeExam($staff, 'Cataloging Comprehensive', 'Cataloging');
-        $examBeta = $this->makeExam($staff, 'Reference Review', 'Reference Services');
+        $examBeta = $this->makeExam($staff, 'Reference Review', 'Reference, Bibliography and User Services');
 
         $this->assignExamToRoom($examAlpha, $roomAlpha, $staff);
         $this->assignExamToRoom($examBeta, $roomBeta, $staff);
@@ -225,7 +225,7 @@ class DashboardAnalyticsTest extends TestCase
 
         $subjectPerformance = collect($response->json('subject_performance'));
         $this->assertEquals(90.0, $subjectPerformance->firstWhere('label', 'Cataloging')['score']);
-        $this->assertEquals(70.0, $subjectPerformance->firstWhere('label', 'Reference Services')['score']);
+        $this->assertEquals(70.0, $subjectPerformance->firstWhere('label', 'Reference, Bibliography and User Services')['score']);
 
         $this->assertSame('Exported a summary report', $response->json('recent_activity.0.description'));
     }
@@ -239,7 +239,7 @@ class DashboardAnalyticsTest extends TestCase
         $room->members()->attach($student->id);
 
         $activeExam = $this->makeExam($staff, 'Active Exam', 'Cataloging');
-        $archivedExam = $this->makeExam($staff, 'Archived Exam', 'Reference Services');
+        $archivedExam = $this->makeExam($staff, 'Archived Exam', 'Reference, Bibliography and User Services');
 
         $this->assignExamToRoom($activeExam, $room, $staff);
         $this->assignExamToRoom($archivedExam, $room, $staff, now());
@@ -264,7 +264,7 @@ class DashboardAnalyticsTest extends TestCase
         $room->members()->attach([$currentStudent->id, $archivedStudent->id]);
 
         $activeExam = $this->makeExam($staff, 'Current Session Exam', 'Cataloging');
-        $archivedExam = $this->makeExam($staff, 'Archived Session Exam', 'Reference Services');
+        $archivedExam = $this->makeExam($staff, 'Archived Session Exam', 'Reference, Bibliography and User Services');
 
         $this->assignExamToRoom($activeExam, $room, $staff);
         $this->assignExamToRoom($archivedExam, $room, $staff, now()->subWeek());

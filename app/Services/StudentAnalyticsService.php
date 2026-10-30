@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\User;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Str;
 
 /**
@@ -24,47 +25,23 @@ class StudentAnalyticsService
 
     public function build(User $student): array
     {
-        $canonicalSubjects = [
-            'Cataloging and Classification',
-            'Indexing and Abstracting',
-            'Information Technology',
-            'Reference Services',
-            'Library Management',
-            'Selection and Acquisition',
-            'Archival Studies',
-        ];
+        // The six board subjects under their official names (old spellings
+        // folded in by LleTaxonomy), plus Archival Studies, which some
+        // programmes still teach as a separate subject.
+        $canonicalSubjects = [...LleTaxonomy::subjectNames(), 'Archival Studies'];
 
-        $subjectAliases = [
-            'cataloging and classification' => 'Cataloging and Classification',
-            'cataloguing and classification' => 'Cataloging and Classification',
-            'cataloging' => 'Cataloging and Classification',
-            'indexing and abstracting' => 'Indexing and Abstracting',
-            'indexing' => 'Indexing and Abstracting',
-            'information technology' => 'Information Technology',
-            'it' => 'Information Technology',
-            'reference' => 'Reference Services',
-            'reference services' => 'Reference Services',
-            'library management' => 'Library Management',
-            'selection and acquisition' => 'Selection and Acquisition',
-            'selection' => 'Selection and Acquisition',
-            'archival studies' => 'Archival Studies',
-            'archives' => 'Archival Studies',
-        ];
-
-        $normalizeSubject = function (?string $subject) use ($subjectAliases): ?string {
-            $normalized = Str::of((string) $subject)
-                ->lower()
-                ->replace('&', 'and')
-                ->replace('/', ' ')
-                ->replace('-', ' ')
-                ->squish()
-                ->toString();
+        $normalizeSubject = function (?string $subject): ?string {
+            $normalized = LleTaxonomy::normalize($subject);
 
             if ($normalized === '') {
                 return null;
             }
 
-            return $subjectAliases[$normalized] ?? trim((string) $subject);
+            if (in_array($normalized, ['archival studies', 'archives'], true)) {
+                return 'Archival Studies';
+            }
+
+            return LleTaxonomy::canonicalSubject($subject) ?? trim((string) $subject);
         };
 
         $attempts = ExamAttempt::query()
@@ -228,9 +205,9 @@ class StudentAnalyticsService
                 ];
             });
 
-        // Locked until one semester has all six subject exams; then an early
-        // warning (years 1 to 3) or a board readiness prediction (year 4), from
-        // the latest complete semester. See BoardExamOutlook.
+        // The Estimated Outcome: locked until a pre-test or mock board series
+        // is complete, then the chance of passing from the latest completed
+        // series. See BoardExamOutlook.
         $predictiveModel = app(\App\Services\MachineLearning\BoardExamOutlook::class)->for($student);
 
         return [
@@ -265,6 +242,9 @@ class StudentAnalyticsService
             // justified, and only ever offered when the practice behind them
             // exists. See StudyActionPlanner.
             'action_plan' => $this->dashboardAnalyticsService->buildActionPlan($student),
+            // Topic and sub-topic mastery (Bayesian Knowledge Tracing, one
+            // update per exam) grouped under each subject's percent correct.
+            'mastery' => $this->dashboardAnalyticsService->buildMasteryBySubject($student),
         ];
     }
 }

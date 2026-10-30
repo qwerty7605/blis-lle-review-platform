@@ -915,3 +915,41 @@
 .examrow-rooms-more:hover {
   background: var(--dk-bg-1a237e-a07, rgba(26, 35, 126, 0.07));
 }
+
+/* ---- Exam type tag and series picker ---- */
+.exam-type-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 3px 0 2px;
+}
+
+/* Beats `.examrow-cell-copy span`, which would shrink and grey the pill. */
+.examrow-cell-copy .exam-type-line .exam-type-tag,
+.directory-row-copy .exam-type-line .exam-type-tag {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--ink);
+  padding: 0 8px;
+}
+
+.exam-series-field {
+  gap: 8px;
+}
+
+.exam-series-new {
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.exam-series-new .text-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.exam-series-field .field-error {
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
+  font-weight: 600;
+}

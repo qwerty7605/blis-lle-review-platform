@@ -8,85 +8,88 @@ use RuntimeException;
 use Tests\TestCase;
 
 /**
- * LetBaseDataset reads ml/data/lle_clean.arff, the 156 review-exam records
- * the original model was trained on and every retraining starts from.
+ * The base dataset every retraining starts from:
+ * ml/data/LLE_dataset_all_ExamType.arff, read by attribute name.
  */
 class LetBaseDatasetTest extends TestCase
 {
-    /** @var list<string> */
-    private array $files = [];
-
-    protected function tearDown(): void
+    private function file(string $contents): string
     {
-        foreach ($this->files as $file) {
-            @unlink($file);
-        }
-
-        parent::tearDown();
-    }
-
-    private function arff(string $contents): string
-    {
-        $path = tempnam(sys_get_temp_dir(), 'arff');
+        $path = tempnam(sys_get_temp_dir(), 'lle') . '.arff';
         file_put_contents($path, $contents);
-        $this->files[] = $path;
 
         return $path;
     }
 
-    private function header(): string
+    public function test_the_project_s_dataset_has_its_128_review_exams(): void
     {
-        return "@RELATION test\n% a comment\n"
-            . implode("\n", array_map(fn ($name) => "@ATTRIBUTE {$name} numeric", LetPredictionService::requiredFeatures()))
-            . "\n@ATTRIBUTE board_result {FAILED,PASSED}\n\n@DATA\n";
-    }
+        $rows = (new LetBaseDataset())->rows();
+        $types = array_count_values(array_map(fn (array $row): string => $row['features']['exam_type'], $rows));
+        $labels = array_count_values(array_column($rows, 'label'));
 
-    public function test_the_project_s_dataset_has_its_156_records(): void
-    {
-        $dataset = new LetBaseDataset();
+        $this->assertCount(128, $rows);
+        $this->assertSame(['pre_test' => 85, 'mock_board' => 43], $types);
+        $this->assertSame([LetPredictionService::RESULT_PASS => 101, LetPredictionService::RESULT_FAIL => 27], $labels);
 
-        $this->assertTrue($dataset->exists());
-        $rows = $dataset->rows();
-        $this->assertCount(156, $rows);
+        // The first row, by subject key whatever the column order.
+        $this->assertSame([
+            'exam_type' => 'pre_test',
+            'management' => 53.0,
+            'reference' => 46.0,
+            'indexing' => 38.0,
+            'selection' => 55.0,
+            'cataloging' => 51.0,
+            'it' => 51.0,
+        ], $rows[0]['features']);
         $this->assertSame('base:1', $rows[0]['key']);
-        $this->assertSame(LetPredictionService::RESULT_PASS, $rows[0]['label']);
-        $this->assertSame(46.0, $rows[0]['features']['reference']);
-        $this->assertCount(30, array_filter($rows, fn ($row) => $row['label'] === LetPredictionService::RESULT_FAIL));
     }
 
-    public function test_a_missing_file_is_reported(): void
+    public function test_a_question_mark_is_a_missing_score_never_zero(): void
     {
-        $dataset = new LetBaseDataset('/nowhere/lle_clean.arff');
+        $rows = (new LetBaseDataset())->rows();
+        $missing = array_sum(array_map(fn (array $row): int => count(array_filter($row['features'], 'is_null')), $rows));
 
-        $this->assertFalse($dataset->exists());
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('The base dataset is missing.');
-        $dataset->rows();
+        $this->assertSame(10, $missing);
     }
 
-    public function test_a_file_without_the_model_s_attributes_is_refused(): void
+    public function test_columns_are_read_by_name_in_any_order(): void
     {
-        $dataset = new LetBaseDataset($this->arff("@RELATION x\n@ATTRIBUTE score numeric\n@ATTRIBUTE board_result {FAILED,PASSED}\n@DATA\n50,PASSED\n"));
+        $path = $this->file(implode("\n", [
+            '@relation shuffled',
+            '@attribute Information_Technology numeric',
+            '@attribute Exam_Type {pretest,mockboard}',
+            '@attribute Reference_Bibliography_and_User_Services numeric',
+            '@attribute Library_Organization_and_Management numeric',
+            '@attribute Indexing_and_Abstracting numeric',
+            '@attribute Selection_and_Acquisition numeric',
+            '@attribute Cataloging_and_Classification numeric',
+            '@attribute LLE_Result {FAILED,PASSED}',
+            '@data',
+            '10,mockboard,20,30,40,50,60,FAILED',
+            '1,pretest,2,3',
+            '?,pretest,?,30,40,50,60,?',
+        ]));
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('does not have the model\'s attributes');
-        $dataset->rows();
+        $rows = (new LetBaseDataset($path))->rows();
+
+        // A short row and one with no result are skipped.
+        $this->assertCount(1, $rows);
+        $this->assertSame(['exam_type' => 'mock_board', 'management' => 30.0, 'reference' => 20.0, 'indexing' => 40.0, 'selection' => 50.0, 'cataloging' => 60.0, 'it' => 10.0], $rows[0]['features']);
+        $this->assertSame(LetPredictionService::RESULT_FAIL, $rows[0]['label']);
     }
 
-    public function test_short_rows_and_rows_without_a_result_are_skipped_and_question_marks_are_missing(): void
+    public function test_a_missing_file_or_one_without_the_model_s_attributes_is_refused(): void
     {
-        $dataset = new LetBaseDataset($this->arff($this->header()
-            . "50,50,50,50,50,50,50,PASSED\n"
-            . "50,50,50\n"
-            . "40,40,40,40,40,40,40,?\n"
-            . "30,?,30,30,30,30,30,'FAILED'\n"));
+        $this->assertFalse((new LetBaseDataset('/nowhere/lle.arff'))->exists());
 
-        $rows = $dataset->rows();
+        try {
+            (new LetBaseDataset('/nowhere/lle.arff'))->rows();
+            $this->fail('A missing file was read.');
+        } catch (RuntimeException $exception) {
+            $this->assertStringContainsString(LetBaseDataset::PATH, $exception->getMessage());
+        }
 
-        $this->assertCount(2, $rows);
-        $this->assertNull($rows[1]['features']['management']);
-        $this->assertSame(LetPredictionService::RESULT_FAIL, $rows[1]['label']);
-        // Read once, then kept.
-        $this->assertSame($rows, $dataset->rows());
+        $this->expectExceptionMessage('missing exam_type');
+        (new LetBaseDataset($this->file("@attribute reference numeric\n@attribute LLE_Result {FAILED,PASSED}\n@data\n1,PASSED\n")))->rows();
     }
 }

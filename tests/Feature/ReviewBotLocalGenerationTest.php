@@ -28,13 +28,13 @@ class ReviewBotLocalGenerationTest extends TestCase
     use RefreshDatabase;
 
     private const SUBJECT = 'Cataloging and Classification';
-    private const TOPIC = 'Classification Systems and Call Numbers';
+    private const TOPIC = '4. Classification';
 
     public function test_generator_produces_a_variant_per_cognitive_level_when_a_sibling_subtopic_exists(): void
     {
         [$teacher, $bank, $topic] = $this->makeSubjectFixture();
-        $subtopicA = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Dewey Decimal Classification (DDC)', 'created_by' => $teacher->id]);
-        $subtopicB = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Library of Congress Classification (LCC)', 'created_by' => $teacher->id]);
+        $subtopicA = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.3 Summarize the historical background and general characteristics of DDC', 'created_by' => $teacher->id]);
+        $subtopicB = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.6 Paraphrase the historical background and general characteristics of LCC Scheme', 'created_by' => $teacher->id]);
 
         $source = $this->makeAssessmentQuestion(
             $bank, 1, $topic, $subtopicA,
@@ -73,7 +73,7 @@ class ReviewBotLocalGenerationTest extends TestCase
     public function test_generator_omits_analysis_when_no_sibling_subtopic_exists(): void
     {
         [$teacher, $bank, $topic] = $this->makeSubjectFixture();
-        $subtopic = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Dewey Decimal Classification (DDC)', 'created_by' => $teacher->id]);
+        $subtopic = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.3 Summarize the historical background and general characteristics of DDC', 'created_by' => $teacher->id]);
 
         $source = $this->makeAssessmentQuestion($bank, 1, $topic, $subtopic, 'What is the DDC?', 'Dewey Decimal Classification');
         // Extra same-subtopic items give the distractor pool enough to draw
@@ -93,7 +93,7 @@ class ReviewBotLocalGenerationTest extends TestCase
     public function test_distractor_pool_never_includes_or_duplicates_the_correct_answer(): void
     {
         [$teacher, $bank, $topic] = $this->makeSubjectFixture();
-        $subtopic = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Dewey Decimal Classification (DDC)', 'created_by' => $teacher->id]);
+        $subtopic = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.3 Summarize the historical background and general characteristics of DDC', 'created_by' => $teacher->id]);
 
         $source = $this->makeAssessmentQuestion($bank, 1, $topic, $subtopic, 'What is the DDC?', 'Dewey Decimal Classification');
         $this->makeAssessmentQuestion($bank, 2, $topic, $subtopic, 'Filler question two', 'Dewey Decimal Classification');
@@ -111,8 +111,8 @@ class ReviewBotLocalGenerationTest extends TestCase
     public function test_generation_runs_end_to_end_and_persists_rule_based_draft_rows(): void
     {
         [$teacher, $bank, $topic] = $this->makeSubjectFixture();
-        $subtopicA = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Dewey Decimal Classification (DDC)', 'created_by' => $teacher->id]);
-        $subtopicB = Subtopic::create(['topic_id' => $topic->id, 'name' => 'Library of Congress Classification (LCC)', 'created_by' => $teacher->id]);
+        $subtopicA = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.3 Summarize the historical background and general characteristics of DDC', 'created_by' => $teacher->id]);
+        $subtopicB = Subtopic::create(['topic_id' => $topic->id, 'name' => '4.6 Paraphrase the historical background and general characteristics of LCC Scheme', 'created_by' => $teacher->id]);
 
         $this->makeAssessmentQuestion($bank, 1, $topic, $subtopicA, 'What is the DDC used for in a library?', 'Organizing library materials by subject');
         $this->makeAssessmentQuestion($bank, 2, $topic, $subtopicB, 'What is the LCC used for in a library?', 'Organizing academic and research library collections');

@@ -59,7 +59,7 @@ trait BuildsBlisData
         return $room;
     }
 
-    protected function makeTopic(string $subject = 'Reference Services', string $name = 'Reference Interview', ?User $owner = null): Topic
+    protected function makeTopic(string $subject = 'Reference, Bibliography and User Services', string $name = 'Reference Interview', ?User $owner = null): Topic
     {
         return Topic::firstOrCreate(
             ['subject' => $subject, 'name' => $name],
@@ -80,7 +80,7 @@ trait BuildsBlisData
      */
     protected function makeBank(User $owner, int $count = 3, array $attributes = [], array $questionAttributes = []): QuestionBank
     {
-        $subject = $attributes['subject'] ?? 'Reference Services';
+        $subject = $attributes['subject'] ?? 'Reference, Bibliography and User Services';
 
         $bank = QuestionBank::create([
             'title' => $subject . ' Set ' . Str::random(4),
@@ -127,7 +127,7 @@ trait BuildsBlisData
     {
         $exam = Exam::create([
             'title' => 'Exam ' . Str::random(5),
-            'subject' => $bank?->subject ?? 'Reference Services',
+            'subject' => $bank?->subject ?? 'Reference, Bibliography and User Services',
             'question_bank_id' => $bank?->id,
             'total_items' => $bank ? $bank->questions()->count() : 3,
             'duration_minutes' => 30,
@@ -208,6 +208,99 @@ trait BuildsBlisData
         ]);
 
         $this->fillAttempt($attempt, $questions, array_pad($answers, $questions->count(), null));
+
+        return $attempt;
+    }
+
+    /**
+     * Lets $student practise these Review Bot questions, as
+     * ReviewBotEligibility asks: each one without a source item gets one, and
+     * the student a submitted sitting that dealt every source, of an exam with
+     * its results shown and one take only.
+     *
+     * @param  iterable<QuestionBankQuestion>  $reviewQuestions
+     */
+    protected function dealReviewBotSources(User $student, iterable $reviewQuestions, array $examAttributes = []): ExamAttempt
+    {
+        $owner = User::factory()->create(['role' => User::ROLE_STAFF_MASTER_EXAMINER]);
+        $questions = collect($reviewQuestions)->values();
+        $subject = $questions->first()?->subject ?? 'Reference, Bibliography and User Services';
+
+        $bank = QuestionBank::create([
+            'title' => 'Dealt items ' . Str::random(5),
+            'subject' => $subject,
+            'source_filename' => 'set.docx',
+            'total_items' => $questions->count(),
+            'created_by' => $owner->id,
+        ]);
+
+        $sourceIds = $questions->map(function (QuestionBankQuestion $question, int $index) use ($bank): int {
+            if ($question->source_question_id) {
+                return (int) $question->source_question_id;
+            }
+
+            $source = $this->makeQuestion($bank, $index + 1, [
+                'subject' => $question->subject,
+                'topic_id' => $question->topic_id,
+                'subtopic_id' => $question->subtopic_id,
+            ]);
+            $question->forceFill(['source_question_id' => $source->id])->save();
+
+            return (int) $source->id;
+        })->unique()->values();
+
+        $room = Room::create([
+            'name' => 'Dealt ' . Str::upper(Str::random(3)),
+            'code' => Str::upper(Str::random(6)),
+            'created_by' => $owner->id,
+        ]);
+        $exam = $this->makeExam($owner, $bank, [$room], ['one_take_only' => true, ...$examAttributes]);
+        $submittedAt = now()->subHour();
+
+        $attempt = ExamAttempt::create([
+            'exam_id' => $exam->id,
+            'room_id' => $room->id,
+            'user_id' => $student->id,
+            'status' => ExamAttempt::STATUS_SUBMITTED,
+            'total_items' => $sourceIds->count(),
+            'duration_minutes' => 30,
+            'answered_count' => 0,
+            'correct_answers' => 0,
+            'score_percent' => 0,
+            'started_at' => $submittedAt->copy()->subMinutes(20),
+            'expires_at' => $submittedAt->copy()->addMinutes(10),
+            'submitted_at' => $submittedAt,
+        ]);
+
+        // Every item answered correctly, so the sitting gives the student no
+        // weak area of its own.
+        $sources = QuestionBankQuestion::query()->with('options')->findMany($sourceIds)->keyBy('id');
+
+        foreach ($sourceIds as $index => $sourceId) {
+            ExamAttemptQuestion::create([
+                'exam_attempt_id' => $attempt->id,
+                'question_bank_question_id' => $sourceId,
+                'item_number' => $index + 1,
+                'is_bookmarked' => false,
+            ]);
+
+            $option = $sources->get($sourceId)?->options->firstWhere('is_correct', true);
+
+            ExamAttemptAnswer::create([
+                'exam_attempt_id' => $attempt->id,
+                'question_bank_question_id' => $sourceId,
+                'question_bank_option_id' => $option?->id,
+                'answer_text' => $option?->option_text,
+                'is_correct' => true,
+                'answered_at' => $submittedAt,
+            ]);
+        }
+
+        $attempt->forceFill([
+            'answered_count' => $sourceIds->count(),
+            'correct_answers' => $sourceIds->count(),
+            'score_percent' => 100,
+        ])->save();
 
         return $attempt;
     }

@@ -223,7 +223,7 @@ class AdminTeachingAccessTest extends TestCase
 
         return [
             'title' => $title,
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'questions' => [$question('First question?'), $question('Second question?')],
         ];
     }

@@ -24,7 +24,7 @@ class QuestionGenerationTest extends TestCase
     use BuildsBlisData;
     use RefreshDatabase;
 
-    private const SUBJECT = 'Reference Services';
+    private const SUBJECT = 'Reference, Bibliography and User Services';
 
     public function test_every_curated_subject_has_scenario_sentences_with_a_place_for_the_concept(): void
     {
@@ -77,8 +77,8 @@ class QuestionGenerationTest extends TestCase
     public function test_a_tagged_item_with_enough_neighbours_yields_a_variant_per_level(): void
     {
         $teacher = $this->makeTeacher();
-        $topic = $this->makeTopic(self::SUBJECT, 'Ready Reference', $teacher);
-        $subtopic = $this->makeSubtopic($topic, 'Quick-Fact Sources', $teacher);
+        $topic = $this->makeTopic(self::SUBJECT, '2. Reference and Information Sources', $teacher);
+        $subtopic = $this->makeSubtopic($topic, '2.2 Identify / classify the different types of reference sources', $teacher);
         $bank = $this->makeBank($teacher, 4, [], ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id, 'explanation' => 'Because.']);
 
         $generated = (new LocalReviewQuestionGenerator())->generate($bank->questions->take(2)->values(), self::SUBJECT);
@@ -90,6 +90,13 @@ class QuestionGenerationTest extends TestCase
             $this->assertContains($item['source_index'], [0, 1]);
             $this->assertCount(1, array_filter($item['options'], fn ($option) => $option['id'] === $item['correct_option_id']));
         }
+
+        // The sub-topic is named by its short concept, never by the TOS
+        // competency statement, which would read oddly inside a question.
+        $application = collect($generated)->firstWhere('cognitive_level', 'application');
+        $this->assertNotNull($application);
+        $this->assertStringContainsString('the types of reference sources', $application['prompt']);
+        $this->assertStringNotContainsString('Identify / classify', $application['prompt']);
     }
 
     public function test_an_item_with_no_wording_or_no_answer_yields_nothing(): void

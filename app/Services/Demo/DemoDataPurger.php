@@ -140,6 +140,14 @@ final class DemoDataPurger
             }
 
             $removed['exams'] = DB::table('exams')->whereIn('id', $scope['exams'])->delete();
+
+            // The demo's pre-test and mock board series go with their exams;
+            // one a real teacher has since put an exam into stays, unowned.
+            $demoSeries = DB::table('exam_series')->whereIn('created_by', DB::table('users')->where('is_demo', true)->select('id'));
+            $removed['exam_series'] = (clone $demoSeries)
+                ->whereNotExists(fn ($query) => $query->from('exams')->whereColumn('exams.exam_series_id', 'exam_series.id'))
+                ->delete();
+            $demoSeries->update(['created_by' => null]);
             $removed['rooms'] = DB::table('rooms')->whereIn('id', $scope['rooms'])->delete();
             $removed['library_files'] = DB::table('question_banks')->whereIn('id', $scope['banks'])->delete();
 

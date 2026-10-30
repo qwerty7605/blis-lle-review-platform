@@ -1,0 +1,76 @@
+@relation lle_first_64_rows_for_tests
+
+@attribute Exam_Type {pretest,mockboard}
+@attribute Library_Organization_and_Management numeric
+@attribute Reference_Bibliography_and_User_Services numeric
+@attribute Indexing_and_Abstracting numeric
+@attribute Selection_and_Acquisition numeric
+@attribute Cataloging_and_Classification numeric
+@attribute Information_Technology numeric
+@attribute LLE_Result {FAILED,PASSED}
+
+@data
+pretest,53,46,38,55,51,51,PASSED
+pretest,59,35,50,52,53,51,PASSED
+pretest,45,51,54,49,40,57,PASSED
+pretest,46,40,32,53,42,53,PASSED
+pretest,52,42,40,48,49,46,PASSED
+pretest,53,47,47,59,56,57,PASSED
+pretest,40,38,47,50,48,41,PASSED
+pretest,38,35,42,41,50,49,FAILED
+pretest,43,44,42,55,51,58,PASSED
+pretest,34,25,30,38,44,53,PASSED
+pretest,43,50,38,53,53,50,PASSED
+pretest,29,46,37,51,38,49,PASSED
+pretest,36,38,47,51,34,46,PASSED
+pretest,37,38,35,41,47,45,FAILED
+pretest,35,34,38,26,56,45,FAILED
+pretest,49,43,45,52,42,62,PASSED
+pretest,40,50,23,54,31,44,PASSED
+pretest,32,44,25,62,28,?,FAILED
+pretest,28,61,33,64,26,40,PASSED
+pretest,52,65,62,76,36,50,PASSED
+pretest,50,48,42,72,48,37,PASSED
+pretest,67,78,55,76,53,67,PASSED
+pretest,66,68,53,77,32,45,PASSED
+pretest,53,63,42,69,43,45,PASSED
+pretest,26,54,31,53,43,46,FAILED
+pretest,32,29,?,33,?,?,FAILED
+pretest,40,55,47,65,31,37,PASSED
+pretest,44,63,38,72,43,51,PASSED
+pretest,44,55,33,61,36,38,PASSED
+pretest,48,51,42,66,36,44,PASSED
+pretest,42,44,34,43,30,45,FAILED
+pretest,50,62,36,68,29,40,PASSED
+pretest,44,46,40,71,36,41,PASSED
+pretest,47,57,73,57,63,62,PASSED
+pretest,57,62,38,67,37,52,PASSED
+pretest,52,56,36,60,24,44,PASSED
+pretest,40,41,25,45,30,34,PASSED
+pretest,40,63,36,75,35,39,PASSED
+pretest,40,46,27,62,34,39,PASSED
+pretest,42,46,30,52,35,32,FAILED
+pretest,49,44,38,56,37,32,FAILED
+pretest,41,43,33,52,36,31,FAILED
+pretest,49,59,29,59,35,40,PASSED
+pretest,41,53,28,57,35,39,PASSED
+pretest,33,44,36,42,27,36,FAILED
+mockboard,40,39,50,50,35,53,FAILED
+mockboard,73,49,43,66,69,56,FAILED
+mockboard,83,60,73,70,45,61,PASSED
+mockboard,75,39,54,34,37,52,FAILED
+mockboard,66,63,73,54,66,57,FAILED
+mockboard,95,66,71,69,46,59,PASSED
+mockboard,96,57,62,57,52,55,PASSED
+mockboard,100,56,89,70,65,73,PASSED
+mockboard,81,46,56,55,47,52,PASSED
+mockboard,90,69,75,72,62,78,PASSED
+mockboard,91,58,64,74,40,51,PASSED
+mockboard,75,35,40,43,42,42,FAILED
+mockboard,94,50,58,54,46,62,FAILED
+mockboard,75,53,70,60,50,60,PASSED
+mockboard,93,53,80,66,34,70,PASSED
+pretest,50,50,?,?,33,?,FAILED
+pretest,47,42,37,63,37,45,PASSED
+pretest,37,32,34,31,28,40,FAILED
+pretest,55,44,46,72,45,51,PASSED

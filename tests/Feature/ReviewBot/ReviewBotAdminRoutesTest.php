@@ -127,8 +127,8 @@ class ReviewBotAdminRoutesTest extends TestCase
             'explanation' => 'Because of the rule.',
             'difficulty' => 'hard',
             'cognitive_level' => 'analysis',
-            'topic_name' => 'Authority Control',
-            'subtopic_name' => 'Name headings',
+            'topic_name' => '2. Descriptive Cataloging',
+            'subtopic_name' => '2.6 Design a name authority file',
             'options' => [
                 ['id' => $options[0]->id, 'text' => 'Now wrong', 'is_correct' => false],
                 ['id' => $options[1]->id, 'text' => 'Now right', 'is_correct' => true],
@@ -139,8 +139,8 @@ class ReviewBotAdminRoutesTest extends TestCase
         $draft->refresh()->load('topic', 'subtopic');
         $this->assertSame('hard', $draft->difficulty);
         $this->assertSame('analysis', $draft->cognitive_level);
-        $this->assertSame('Authority Control', $draft->topic->name);
-        $this->assertSame('Name headings', $draft->subtopic->name);
+        $this->assertSame('2. Descriptive Cataloging', $draft->topic->name);
+        $this->assertSame('2.6 Design a name authority file', $draft->subtopic->name);
         $this->assertSame('B', $draft->answer_label);
         $this->assertSame('Now right', $draft->answer_text);
         $this->assertTrue(AuditLog::where('action', 'review-bot.admin.update-question')->exists());
@@ -149,15 +149,21 @@ class ReviewBotAdminRoutesTest extends TestCase
     public function test_a_new_topic_clears_the_old_subtopic_and_an_empty_subtopic_removes_it(): void
     {
         [$draft] = $this->drafts(1);
-        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['topic_name' => 'Authority Control', 'subtopic_name' => 'Name headings'])->assertOk();
+        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['topic_name' => '2. Descriptive Cataloging', 'subtopic_name' => '2.6 Design a name authority file'])->assertOk();
 
-        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['topic_name' => 'Subject Headings'])->assertOk();
+        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['topic_name' => '3. Subject Cataloging'])->assertOk();
         $this->assertNull($draft->fresh()->subtopic_id);
 
-        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['subtopic_name' => 'LCSH'])->assertOk();
+        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['subtopic_name' => '3.4'])->assertOk();
         $this->assertNotNull($draft->fresh()->subtopic_id);
         $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['subtopic_name' => ''])->assertOk();
         $this->assertNull($draft->fresh()->subtopic_id);
+
+        // Only the Table of Specifications' topics and sub-topics are taken.
+        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['topic_name' => 'Invented Topic'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', '"Invented Topic" is not a topic of Cataloging and Classification in the Table of Specifications.');
+        $this->patchJson("/api/library/review-bot/questions/{$draft->id}", ['subtopic_name' => '1.1'])->assertStatus(422);
     }
 
     public function test_publish_unpublish_and_decline_only_count_rows_that_change(): void

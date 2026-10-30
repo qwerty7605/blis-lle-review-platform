@@ -9,6 +9,7 @@ use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Services\Library\DocxQuestionParser;
 use App\Services\QuestionMappingService;
+use App\Support\LleTaxonomy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -225,9 +226,7 @@ class LibraryController extends Controller
         }
 
         $bank = DB::transaction(function () use ($validated, $questions, $user) {
-            $bankSubject = filled($validated['subject'] ?? null)
-                ? trim((string) $validated['subject'])
-                : null;
+            $bankSubject = $this->subjectToSave($validated['subject'] ?? null);
 
             $createdBank = QuestionBank::create([
                 'title' => trim((string) $validated['title']),
@@ -324,7 +323,7 @@ class LibraryController extends Controller
         ]);
 
         $newTitle = trim((string) $validated['title']);
-        $newSubject = filled($validated['subject'] ?? null) ? trim((string) $validated['subject']) : null;
+        $newSubject = $this->subjectToSave($validated['subject'] ?? null);
         $subjectChanged = trim((string) $bank->subject) !== trim((string) $newSubject);
         $resetCount = 0;
 
@@ -537,31 +536,24 @@ class LibraryController extends Controller
             return response()->json(['curated_topics' => $this->questionMappingService->curatedTopics(), 'topics' => []]);
         }
 
-        $existingTopicNames = Topic::query()
-            ->where('subject', $subject)
-            ->orderBy('name')
-            ->pluck('name');
-
+        // The Table of Specifications is the only list: topics and
+        // sub-topics in its order, each named by its code and name.
+        $subject = LleTaxonomy::canonicalSubject($subject) ?? $subject;
         $curated = $this->questionMappingService->curatedTopicsForSubject($subject);
 
         $response = [
             'subject' => $subject,
             'curated_topics' => $curated,
-            'topics' => $existingTopicNames->concat($curated)->unique()->sort()->values(),
+            'topics' => $curated,
         ];
 
         $topic = trim((string) ($validated['topic'] ?? ''));
 
         if ($topic !== '') {
-            $existingSubtopicNames = Subtopic::query()
-                ->whereHas('topic', fn ($query) => $query->where('subject', $subject)->where('name', $topic))
-                ->orderBy('name')
-                ->pluck('name');
-
             $curatedSubtopics = $this->questionMappingService->curatedSubtopicsForTopic($subject, $topic);
 
             $response['curated_subtopics'] = $curatedSubtopics;
-            $response['subtopics'] = $existingSubtopicNames->concat($curatedSubtopics)->unique()->sort()->values();
+            $response['subtopics'] = $curatedSubtopics;
         }
 
         return response()->json($response);
@@ -714,6 +706,16 @@ class LibraryController extends Controller
             'cognitive_level' => ['nullable', Rule::in(QuestionBankQuestion::COGNITIVE_LEVELS)],
         ]);
 
+        $tagProblem = $this->questionMappingService->tagProblem(
+            $question->subject,
+            $validated['topic_name'] ?? null,
+            $validated['subtopic_name'] ?? null,
+        );
+
+        if ($tagProblem !== null) {
+            return response()->json(['message' => $tagProblem, 'errors' => ['topic_name' => [$tagProblem]]], 422);
+        }
+
         // "Which option counts as correct" is resolved identically to bank
         // creation -- see QuestionMappingService::resolveQuestionContent().
         $resolved = $this->questionMappingService->resolveQuestionContent(
@@ -778,5 +780,22 @@ class LibraryController extends Controller
             'message' => 'Question updated.',
             'question' => $question,
         ]);
+    }
+
+    /**
+     * A set's subject as it is saved: a board subject under its official
+     * name whatever spelling was typed or detected ("Reference Services" is
+     * saved as "Reference, Bibliography and User Services"), anything else as
+     * typed.
+     */
+    private function subjectToSave(mixed $subject): ?string
+    {
+        $subject = trim((string) $subject);
+
+        if ($subject === '') {
+            return null;
+        }
+
+        return LleTaxonomy::canonicalSubject($subject) ?? $subject;
     }
 }

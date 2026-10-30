@@ -92,7 +92,11 @@ class ModelRelationshipsTest extends TestCase
         $blank = $this->makeBank($teacher, 1, ['subject' => '']);
 
         $this->assertSame('Multiple Subjects', Exam::summarizeQuestionBankSubject([$one, $two]));
-        $this->assertSame('Cataloging', Exam::summarizeQuestionBankSubject([$one, $one]));
+        // A board subject under its official name, whatever spelling the set has.
+        $this->assertSame('Cataloging and Classification', Exam::summarizeQuestionBankSubject([$one, $one]));
+        $official = $this->makeBank($teacher, 1, ['subject' => 'Cataloging and Classification']);
+        $this->assertSame('Cataloging and Classification', Exam::summarizeQuestionBankSubject([$one, $official]));
+        $this->assertSame('Archival Studies', Exam::summarizeQuestionBankSubject([$this->makeBank($teacher, 1, ['subject' => 'Archival Studies'])]));
         $this->assertNull(Exam::summarizeQuestionBankSubject([$blank]));
     }
 
@@ -143,7 +147,7 @@ class ModelRelationshipsTest extends TestCase
         $option = $question->options->first();
 
         $attempt = ReviewBotAttempt::create([
-            'user_id' => $student->id, 'subject' => 'Reference Services', 'source' => ReviewBotAttempt::SOURCE_MANUAL,
+            'user_id' => $student->id, 'subject' => 'Reference, Bibliography and User Services', 'source' => ReviewBotAttempt::SOURCE_MANUAL,
             'status' => ReviewBotAttempt::STATUS_SUBMITTED, 'total_items' => 1, 'answered_count' => 1, 'correct_answers' => 1,
             'started_at' => now(),
         ]);
@@ -167,10 +171,8 @@ class ModelRelationshipsTest extends TestCase
     {
         $admin = $this->makeAdmin();
         $setting = SystemSetting::create(['key' => 'announcement_banner', 'value' => 'Exam week', 'updated_by' => $admin->id]);
-        $model = LetModel::create([
-            'status' => 'retired', 'version' => 2, 'trained_by' => $admin->id,
-            'training_count' => 10, 'graduate_count' => 0, 'imported_count' => 0, 'training_keys' => [], 'metrics' => [], 'trigger' => 'manual', 'tree' => ['leaf' => 'PASSED'],
-        ]);
+        $model = LetModel::query()->where('version', 1)->sole()->replicate();
+        $model->forceFill(['version' => 2, 'status' => 'retired', 'trained_by' => $admin->id, 'trigger' => 'manual'])->save();
 
         $this->assertTrue($setting->updater->is($admin));
         $this->assertTrue($model->trainer->is($admin));

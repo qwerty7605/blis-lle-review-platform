@@ -140,6 +140,8 @@ class RoomController extends Controller
                     'exams.id',
                     'exams.title',
                     'exams.subject',
+                    'exams.exam_type',
+                    'exams.exam_series_id',
                     'exams.question_bank_id',
                     'exams.total_items',
                     'exams.duration_minutes',
