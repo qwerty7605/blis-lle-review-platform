@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\QuestionBankQuestion;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -51,6 +52,7 @@ class StudyActionPlanner
 
     public function __construct(
         private readonly QuestionMappingService $questionMapping,
+        private readonly ReviewBotEligibility $reviewBotEligibility,
     ) {
     }
 
@@ -59,9 +61,9 @@ class StudyActionPlanner
      * @param  array<int, array<string, mixed>>  $subjectPerformance  from buildSubjectWeaknessPerformance()
      * @return list<array<string, mixed>>
      */
-    public function build(array $studyPlan, array $subjectPerformance): array
+    public function build(array $studyPlan, array $subjectPerformance, User $student): array
     {
-        $published = $this->publishedCounts();
+        $published = $this->publishedCounts($student);
 
         $actions = array_filter([
             $this->reverseASlide($studyPlan, $published),
@@ -370,9 +372,9 @@ class StudyActionPlanner
             'area_key' => $this->areaKey($weakest),
             'title' => (string) $weakest['label'],
             'subject' => (string) ($weakest['subject'] ?? ''),
-            'summary' => 'This is your weakest topic, but there are no practice questions for it yet. Go over your marked exam and tell your teacher.',
+            'summary' => 'This is your weakest topic, but there are no practice questions for it you can use yet. Go over your marked exam and tell your teacher.',
             'advice' => $this->advice(
-                "Your weakest area has no practice set yet.",
+                "Your weakest area has no practice set for you yet.",
                 [
                     $this->block('What happened', [
                         sprintf(
@@ -380,7 +382,7 @@ class StudyActionPlanner
                             $weakest['label'],
                             $weakest['subject'] ?? 'your results',
                         ),
-                        'Your teacher has not published any review questions for it.',
+                        'No review questions built from your finished exams cover it yet. Practice questions for a topic appear after you take an exam that covers it, once its results are shown and you have no retake left.',
                     ]),
                     $this->block('Why it matters', [
                         'There is no drill to send you to, so this is the one weak spot you cannot fix inside the app right now.',
@@ -494,16 +496,18 @@ class StudyActionPlanner
     }
 
     /**
-     * Published Review Bot stock, counted at every level an action might ask
-     * for it, so a drill is only ever offered when the questions exist.
+     * Published Review Bot stock this student may practise, counted at every
+     * level an action might ask for it, so a drill is only ever offered when
+     * the questions exist for them.
      *
      * @return array<string, int>
      */
-    private function publishedCounts(): array
+    private function publishedCounts(User $student): array
     {
         $rows = DB::table('question_bank_questions')
             ->where('usage_type', QuestionBankQuestion::USAGE_REVIEW_BOT)
             ->where('status', QuestionBankQuestion::STATUS_PUBLISHED)
+            ->tap(fn ($query) => $this->reviewBotEligibility->constrain($query, $this->reviewBotEligibility->sourceIds($student), 'source_question_id'))
             ->selectRaw('subject, topic_id, subtopic_id, COUNT(*) as total')
             ->groupBy('subject', 'topic_id', 'subtopic_id')
             ->get();

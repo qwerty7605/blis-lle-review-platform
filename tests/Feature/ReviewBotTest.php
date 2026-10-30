@@ -19,10 +19,12 @@ use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use App\Jobs\GenerateReviewBotQuestionsJob;
 use RuntimeException;
+use Tests\Support\BuildsBlisData;
 use Tests\TestCase;
 
 class ReviewBotTest extends TestCase
 {
+    use BuildsBlisData;
     use RefreshDatabase;
 
     private const SUBJECT = 'Cataloging and Classification';
@@ -36,14 +38,17 @@ class ReviewBotTest extends TestCase
         $topic = Topic::create(['subject' => self::SUBJECT, 'name' => 'Descriptive Cataloging', 'created_by' => $teacher->id]);
         $subtopic = Subtopic::create(['topic_id' => $topic->id, 'name' => 'RDA', 'created_by' => $teacher->id]);
 
-        $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id, 'difficulty' => 'easy']);
-        $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id, 'difficulty' => 'hard']);
-        $this->makeReviewQuestion($bank, ['topic_id' => $topic->id]);
-        // Neither of these may be counted.
-        $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'status' => QuestionBankQuestion::STATUS_DRAFT]);
-        $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'status' => QuestionBankQuestion::STATUS_REJECTED]);
+        $student = $this->makeStudent();
+        $this->dealReviewBotSources($student, [
+            $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id, 'difficulty' => 'easy']),
+            $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'subtopic_id' => $subtopic->id, 'difficulty' => 'hard']),
+            $this->makeReviewQuestion($bank, ['topic_id' => $topic->id]),
+            // Neither of these may be counted.
+            $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'status' => QuestionBankQuestion::STATUS_DRAFT]),
+            $this->makeReviewQuestion($bank, ['topic_id' => $topic->id, 'status' => QuestionBankQuestion::STATUS_REJECTED]),
+        ]);
 
-        $catalog = collect(app(ReviewBotService::class)->catalog())->keyBy('subject');
+        $catalog = collect(app(ReviewBotService::class)->catalog($student))->keyBy('subject');
         $entry = $catalog[self::SUBJECT];
 
         $this->assertSame(3, $entry['question_count']);
@@ -58,7 +63,7 @@ class ReviewBotTest extends TestCase
 
     public function test_catalog_reports_subjects_with_no_published_questions_as_not_ready(): void
     {
-        $catalog = collect(app(ReviewBotService::class)->catalog())->keyBy('subject');
+        $catalog = collect(app(ReviewBotService::class)->catalog($this->makeStudent()))->keyBy('subject');
 
         $this->assertSame(0, $catalog[self::SUBJECT]['question_count']);
         $this->assertFalse($catalog[self::SUBJECT]['bot_ready']);
@@ -135,6 +140,7 @@ class ReviewBotTest extends TestCase
         $bank = $this->makeBank($teacher);
         $question = $this->makeReviewQuestion($bank);
         $student = $this->makeStudent();
+        $this->dealReviewBotSources($student, [$question]);
         $service = app(ReviewBotService::class);
 
         foreach ([true, true, false] as $index => $answerCorrectly) {
@@ -241,8 +247,10 @@ class ReviewBotTest extends TestCase
         $bank = $this->makeBank($teacher);
         $published = $this->makeReviewQuestion($bank);
         $rejected = $this->makeReviewQuestion($bank, ['status' => QuestionBankQuestion::STATUS_REJECTED]);
+        $student = $this->makeStudent();
+        $this->dealReviewBotSources($student, [$published, $rejected]);
 
-        $session = app(ReviewBotService::class)->startSession($this->makeStudent(), [
+        $session = app(ReviewBotService::class)->startSession($student, [
             'subject' => self::SUBJECT,
             'question_count' => 10,
         ]);
@@ -493,6 +501,7 @@ class ReviewBotTest extends TestCase
         }
 
         $student = $this->makeStudent();
+        $this->dealReviewBotSources($student, $questions);
         $session = app(ReviewBotService::class)->startSession($student, [
             'subject' => self::SUBJECT,
             'question_count' => $count,

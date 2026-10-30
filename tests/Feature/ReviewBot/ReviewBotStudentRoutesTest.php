@@ -31,6 +31,9 @@ class ReviewBotStudentRoutesTest extends TestCase
 
     private Topic $topic;
 
+    /** @var list<QuestionBankQuestion> */
+    private array $published = [];
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -43,6 +46,12 @@ class ReviewBotStudentRoutesTest extends TestCase
         Sanctum::actingAs($this->student);
     }
 
+    /** A finished exam that dealt the student every published question's source. */
+    private function dealPublished(): void
+    {
+        $this->dealReviewBotSources($this->student, $this->published);
+    }
+
     private function publishReviewQuestions(int $count): void
     {
         $bank = QuestionBank::create([
@@ -53,7 +62,7 @@ class ReviewBotStudentRoutesTest extends TestCase
         ]);
 
         for ($number = 1; $number <= $count; $number++) {
-            $this->makeQuestion($bank, $number, [
+            $this->published[] = $this->makeQuestion($bank, $number, [
                 'usage_type' => QuestionBankQuestion::USAGE_REVIEW_BOT,
                 'status' => QuestionBankQuestion::STATUS_PUBLISHED,
                 'subject' => self::SUBJECT,
@@ -76,13 +85,22 @@ class ReviewBotStudentRoutesTest extends TestCase
     {
         $response = $this->getJson('/api/student/review-bot/catalog')->assertOk();
 
+        // Published, but from no exam this student has taken.
         $entry = collect($response->json('subjects'))->firstWhere('subject', self::SUBJECT);
-        $this->assertSame(5, $entry['question_count']);
+        $this->assertSame(0, $entry['question_count']);
+        $this->assertFalse($entry['bot_ready']);
         $this->assertNull($response->json('weak_area'));
+
+        $this->dealPublished();
+
+        $entry = collect($this->getJson('/api/student/review-bot/catalog')->assertOk()->json('subjects'))
+            ->firstWhere('subject', self::SUBJECT);
+        $this->assertSame(5, $entry['question_count']);
     }
 
     public function test_a_session_by_subject_starts_hands_in_and_reads_back(): void
     {
+        $this->dealPublished();
         $start = $this->beginSession()->assertCreated();
 
         $attemptId = $start->json('attempt.id');
@@ -105,6 +123,7 @@ class ReviewBotStudentRoutesTest extends TestCase
 
     public function test_a_session_cannot_be_handed_in_twice(): void
     {
+        $this->dealPublished();
         $start = $this->beginSession()->assertCreated();
         $attemptId = $start->json('attempt.id');
         $answers = [['question_id' => $start->json('questions.0.question_id'), 'option_id' => null]];
@@ -119,7 +138,7 @@ class ReviewBotStudentRoutesTest extends TestCase
     {
         $this->beginSession(['subject' => 'Information Technology'])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'No published Review Bot questions match this filter yet. Try a broader subject/topic, or check back after your teacher publishes more.');
+            ->assertJsonPath('message', 'Practice questions for this topic appear after you take an exam that covers it.');
     }
 
     public function test_a_session_needs_a_subject_and_a_sensible_question_count(): void
@@ -141,8 +160,13 @@ class ReviewBotStudentRoutesTest extends TestCase
     {
         $room = $this->makeRoom($this->teacher, [$this->student]);
         $bank = $this->makeBank($this->teacher, 3, ['subject' => self::SUBJECT], ['topic_id' => $this->topic->id]);
-        $exam = $this->makeExam($this->teacher, $bank, [$room]);
+        $exam = $this->makeExam($this->teacher, $bank, [$room], ['one_take_only' => true]);
         $this->makeSubmittedAttempt($exam, $room, $this->student, [false, false, false]);
+
+        // The practice questions were built from the items the student missed.
+        foreach ($this->published as $index => $question) {
+            $question->forceFill(['source_question_id' => $bank->questions[$index % 3]->id])->save();
+        }
 
         $weakArea = $this->getJson('/api/student/review-bot/catalog')->assertOk()->json('weak_area');
         $this->assertSame('Authority Control', $weakArea['topic']);
@@ -154,6 +178,7 @@ class ReviewBotStudentRoutesTest extends TestCase
 
     public function test_only_the_student_who_owns_a_session_can_hand_it_in_or_read_it(): void
     {
+        $this->dealPublished();
         $attemptId = $this->beginSession()->assertCreated()->json('attempt.id');
         $body = ['answers' => [['question_id' => 1]]];
 
@@ -170,6 +195,7 @@ class ReviewBotStudentRoutesTest extends TestCase
 
     public function test_a_disabled_student_is_signed_out_of_the_review_bot(): void
     {
+        $this->dealPublished();
         $attemptId = $this->beginSession()->assertCreated()->json('attempt.id');
         $this->student->forceFill(['is_active' => false])->save();
 

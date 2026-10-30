@@ -201,6 +201,15 @@ class StudyActionPlannerTest extends TestCase
 
     private function publishReviewQuestions(QuestionBank $bank, Topic $topic, int $count): void
     {
+        // Built from the topic's exam items, which the student was dealt in a
+        // finished exam, so the student may practise them (ReviewBotEligibility).
+        $sources = QuestionBankQuestion::query()
+            ->where('usage_type', QuestionBankQuestion::USAGE_ASSESSMENT)
+            ->where('topic_id', $topic->id)
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
+
         for ($index = 1; $index <= $count; $index++) {
             $this->publishedSoFar++;
             QuestionBankQuestion::create([
@@ -215,6 +224,7 @@ class StudyActionPlannerTest extends TestCase
                 'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
                 'answer_label' => 'A',
                 'answer_text' => 'Correct answer',
+                'source_question_id' => $sources[($index - 1) % max(1, count($sources))] ?? null,
             ]);
         }
     }

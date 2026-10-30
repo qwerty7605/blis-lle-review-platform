@@ -11,6 +11,7 @@ use App\Models\Topic;
 use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\ReviewBotAdminService;
+use App\Services\ReviewBotEligibility;
 use App\Services\ReviewBotService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -55,7 +56,7 @@ class ReviewBotServiceTest extends TestCase
 
     private function exposed(): object
     {
-        return new class(app(DashboardAnalyticsService::class), app(ReviewBotAdminService::class)) extends ReviewBotService {
+        return new class(app(DashboardAnalyticsService::class), app(ReviewBotAdminService::class), app(ReviewBotEligibility::class)) extends ReviewBotService {
             public function subjectLabel(mixed $subject): string
             {
                 return $this->normalizeSubjectLabel($subject);
@@ -73,14 +74,19 @@ class ReviewBotServiceTest extends TestCase
         };
     }
 
-    /** Publishes Review Bot questions in the subject, under the given topic and subtopic. */
+    /**
+     * Publishes Review Bot questions in the subject, under the given topic and
+     * subtopic, and deals their sources to the student in a finished exam.
+     */
     private function publish(int $count, ?int $topicId = null, ?int $subtopicId = null, string $difficulty = 'medium'): void
     {
         $bank = app(ReviewBotAdminService::class)->reviewBotBankFor(self::SUBJECT, $this->teacher->id);
         $start = QuestionBankQuestion::where('question_bank_id', $bank->id)->count();
 
+        $published = [];
+
         for ($number = 1; $number <= $count; $number++) {
-            $this->makeQuestion($bank, $start + $number, [
+            $published[] = $this->makeQuestion($bank, $start + $number, [
                 'usage_type' => QuestionBankQuestion::USAGE_REVIEW_BOT,
                 'status' => QuestionBankQuestion::STATUS_PUBLISHED,
                 'subject' => self::SUBJECT,
@@ -89,6 +95,8 @@ class ReviewBotServiceTest extends TestCase
                 'difficulty' => $difficulty,
             ]);
         }
+
+        $this->dealReviewBotSources($this->student, $published);
     }
 
     private function attempt(array $attributes = []): ReviewBotAttempt

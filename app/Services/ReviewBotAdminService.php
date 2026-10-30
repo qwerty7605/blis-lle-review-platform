@@ -202,9 +202,19 @@ class ReviewBotAdminService
      * Deliberately quiet on every "can't do it right now" path (no bank set
      * up yet, already queued recently) -- there is no student-facing error to
      * surface, this is a best-effort background nicety.
+     *
+     * $sourceQuestionIds, when given, limits the run to those exam items: the
+     * ones the student who came up short may practise
+     * (ReviewBotEligibility). An empty list queues nothing.
+     *
+     * @param  list<int>|null  $sourceQuestionIds
      */
-    public function queueTopUp(string $subject, ?int $topicId, ?int $subtopicId): void
+    public function queueTopUp(string $subject, ?int $topicId, ?int $subtopicId, ?array $sourceQuestionIds = null): void
     {
+        if ($sourceQuestionIds === []) {
+            return;
+        }
+
         $bank = QuestionBank::query()
             ->where('title', QuestionBank::REVIEW_BOT_BANK_TITLE_PREFIX . $subject)
             ->where('subject', $subject)
@@ -235,6 +245,7 @@ class ReviewBotAdminService
             $topicId,
             $subtopicId,
             self::TOP_UP_SOURCE_LIMIT,
+            sourceQuestionIds: $sourceQuestionIds,
         )->afterCommit();
     }
 
@@ -245,11 +256,12 @@ class ReviewBotAdminService
      * $sourceLimit caps how many *source items* a single run processes, not how
      * many questions come out -- each item yields up to four.
      *
+     * @param  list<int>|null  $sourceQuestionIds  only these exam items (a student's top-up)
      * @return array{created: int, sources_processed: int, rejected: array<int, array<string, string>>, errors: array<int, string>}
      */
-    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit, ?int $sourceBankId = null): array
+    public function generate(QuestionBank $bank, int $teacherId, string $subject, ?int $topicId, ?int $subtopicId, int $sourceLimit, ?int $sourceBankId = null, ?array $sourceQuestionIds = null): array
     {
-        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit, $sourceBankId);
+        $sourceQuestions = $this->resolveSourceQuestions($subject, $topicId, $subtopicId, $sourceLimit, $sourceBankId, $sourceQuestionIds);
 
         if ($sourceQuestions->isEmpty()) {
             return [
@@ -372,7 +384,7 @@ class ReviewBotAdminService
      *
      * @return Collection<int, QuestionBankQuestion>
      */
-    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $limit, ?int $sourceBankId = null): Collection
+    protected function resolveSourceQuestions(string $subject, ?int $topicId, ?int $subtopicId, int $limit, ?int $sourceBankId = null, ?array $sourceQuestionIds = null): Collection
     {
         return QuestionBankQuestion::query()
             ->with([
@@ -391,6 +403,7 @@ class ReviewBotAdminService
             // specific upload; the system-triggered top-up (see queueTopUp())
             // leaves this null and draws from every matching file instead.
             ->when($sourceBankId, fn ($query) => $query->where('question_bank_id', $sourceBankId))
+            ->when($sourceQuestionIds !== null, fn ($query) => $query->whereIntegerInRaw('id', $sourceQuestionIds ?: [0]))
             ->when($subtopicId, fn ($query) => $query->where('subtopic_id', $subtopicId))
             ->when(!$subtopicId && $topicId, fn ($query) => $query->where('topic_id', $topicId))
             // Rejected variants do not count: an item whose whole batch was
