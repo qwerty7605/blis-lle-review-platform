@@ -109,24 +109,28 @@ class WeakAreaRecommendationTest extends TestCase
         $falling = $this->makeTopic($staff, 'Descriptive Cataloging');
         $climbing = $this->makeTopic($staff, 'Authority Control');
 
-        $questions = [
-            // Descriptive Cataloging: right, right, right, wrong, wrong -> 60%
+        // Mastery moves once per exam, so the two directions take two exams.
+        // Descriptive Cataloging: 3 of 3, then 0 of 2 -> 60% overall.
+        // Authority Control: 0 of 2, then 2 of 2 -> 50% overall.
+        $first = [
             $this->makeQuestion($bank, $falling, 1),
             $this->makeQuestion($bank, $falling, 2),
             $this->makeQuestion($bank, $falling, 3),
-            $this->makeQuestion($bank, $falling, 4),
-            $this->makeQuestion($bank, $falling, 5),
-            // Authority Control: wrong, wrong, right, right -> 50%
-            $this->makeQuestion($bank, $climbing, 6),
-            $this->makeQuestion($bank, $climbing, 7),
+            $this->makeQuestion($bank, $climbing, 4),
+            $this->makeQuestion($bank, $climbing, 5),
+        ];
+        $second = [
+            $this->makeQuestion($bank, $falling, 6),
+            $this->makeQuestion($bank, $falling, 7),
             $this->makeQuestion($bank, $climbing, 8),
             $this->makeQuestion($bank, $climbing, 9),
         ];
 
-        $this->makeSubmittedAttempt($exam, $room, $student, $questions, [
-            true, true, true, false, false,
-            false, false, true, true,
-        ]);
+        $laterExam = $exam->replicate();
+        $laterExam->save();
+
+        $this->makeSubmittedAttempt($exam, $room, $student, $first, [true, true, true, false, false], now()->subDays(2));
+        $this->makeSubmittedAttempt($laterExam, $room, $student, $second, [false, false, true, true], now()->subDay());
 
         $weakArea = app(DashboardAnalyticsService::class)->buildWeakAreaRecommendation($student);
 
@@ -241,8 +245,10 @@ class WeakAreaRecommendationTest extends TestCase
         User $student,
         array $questions,
         array $correctness,
+        ?\Illuminate\Support\Carbon $submittedAt = null,
     ): ExamAttempt {
         $correctAnswers = count(array_filter($correctness));
+        $submittedAt ??= now();
 
         $attempt = ExamAttempt::create([
             'exam_id' => $exam->id,
@@ -254,8 +260,8 @@ class WeakAreaRecommendationTest extends TestCase
             'answered_count' => count($questions),
             'correct_answers' => $correctAnswers,
             'score_percent' => round(($correctAnswers / max(1, count($questions))) * 100, 2),
-            'started_at' => now()->subHour(),
-            'submitted_at' => now(),
+            'started_at' => $submittedAt->copy()->subHour(),
+            'submitted_at' => $submittedAt,
         ]);
 
         foreach ($questions as $index => $question) {
@@ -274,7 +280,7 @@ class WeakAreaRecommendationTest extends TestCase
                 'question_bank_option_id' => $selectedOption?->id,
                 'answer_text' => $selectedOption?->option_text,
                 'is_correct' => !empty($correctness[$index]),
-                'answered_at' => now(),
+                'answered_at' => $submittedAt,
             ]);
         }
 

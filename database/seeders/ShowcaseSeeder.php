@@ -8,13 +8,12 @@ use App\Models\LleResult;
 use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use App\Models\ReviewBotAttempt;
-use App\Models\Subtopic;
-use App\Models\Topic;
 use App\Models\User;
 use App\Services\Demo\DemoData;
 use App\Services\Demo\DemoDataPurger;
 use App\Services\QuestionMappingService;
 use App\Services\ReviewBotAdminService;
+use App\Support\LleTaxonomy;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Demo\DemoNames;
 use Database\Seeders\Demo\DemoQuestions;
@@ -35,16 +34,18 @@ use RuntimeException;
  *    fourth years to walk through by name (top, borderline, struggling);
  *  - a Library of board-exam-style items, one per curated subtopic, plus a
  *    file whose mapping failed and one nobody has mapped yet;
- *  - this term's exams: a mock board exam per subject for fourth years (one
- *    open right now, with students mid-attempt), quizzes for the lower years,
- *    and a pre-board exam still to come;
- *  - the third years' other four subject exams this semester, so the three
- *    states of the Estimated Outcome all show: locked (first and second
- *    years), an early warning (third years) and a board readiness prediction
- *    (fourth years);
+ *  - this term's exams: for the fourth years a pre-test series and a mock
+ *    board series, six subject exams each (one mock board exam open right
+ *    now, with students mid-attempt), regular quizzes for the first and
+ *    second years, battery exams for the third years, and a pre-board exam
+ *    still to come. The Estimated Outcome shows ready for the fourth years
+ *    who finished a series, locked with a series under way for the rest, and
+ *    locked for the lower years, whose exams never feed it;
  *  - Review Bot questions made by the app's own generator from those items --
  *    published, declined and awaiting review -- and students' practice on them;
- *  - ten graduated cohorts of history, with their board exam results.
+ *  - ten graduated cohorts of history, each with a pre-test and a mock board
+ *    series before their LLE, and their LLE results (demo data, so never
+ *    used to retrain the model).
  *
  * Sign-ins (see DemoData): the admin is DEMO_ADMIN_EMAIL / DEMO_ADMIN_PASSWORD,
  * the teachers are teacher1-3@lnu.edu.ph, and students are on the reserved
@@ -71,8 +72,8 @@ class ShowcaseSeeder extends Seeder
         'Cataloging and Classification',
         'Indexing and Abstracting',
         'Information Technology',
-        'Reference Services',
-        'Library Management',
+        'Reference, Bibliography and User Services',
+        'Library Organization and Management',
         'Selection and Acquisition',
     ];
 
@@ -84,19 +85,24 @@ class ShowcaseSeeder extends Seeder
 
     /**
      * Fourth years the demo can be walked through by name: the score each
-     * centres on, and the subjects that pull it down.
+     * centres on, and the subjects that pull it down. Review-exam scores run
+     * low (the base dataset's sit around 50), and version 1 of the Estimated
+     * Outcome puts the at-risk line near 64 on a mock board (all subjects
+     * equal). The borderline student centres on 59 with weak subjects the
+     * model weighs lightly, which lands them close to the line, on its safe
+     * side (about 80% chance of passing).
      */
     private const FEATURED = [
         'top' => ['Angelica', 'Reyes', 'Dela Cruz', 90, []],
-        'borderline' => ['Mark Anthony', 'Santos', 'Villareal', 77, ['Cataloging and Classification', 'Indexing and Abstracting']],
+        'borderline' => ['Mark Anthony', 'Santos', 'Villareal', 59, ['Cataloging and Classification', 'Indexing and Abstracting']],
         'struggling' => ['Kristine Joy', 'Pacaña', 'Bacalso', 46, ['Cataloging and Classification', 'Information Technology', 'Selection and Acquisition']],
     ];
 
     /** Quizzes the lower years sat this term: year level => [subject, kind]. */
     private const LOWER_YEAR_EXAMS = [
-        1 => [['Information Technology', 'Diagnostic Quiz'], ['Reference Services', 'Diagnostic Quiz']],
+        1 => [['Information Technology', 'Diagnostic Quiz'], ['Reference, Bibliography and User Services', 'Diagnostic Quiz']],
         2 => [['Cataloging and Classification', 'Midterm Quiz'], ['Indexing and Abstracting', 'Midterm Quiz']],
-        3 => [['Library Management', 'Unit Test'], ['Selection and Acquisition', 'Unit Test']],
+        3 => [['Library Organization and Management', 'Unit Test'], ['Selection and Acquisition', 'Unit Test']],
     ];
 
     /**
@@ -308,18 +314,13 @@ class ShowcaseSeeder extends Seeder
             foreach ($mapping->curatedTopicsForSubject($subject) as $topicName) {
                 // Only created when missing, so a topic real uploads already
                 // use is shared rather than duplicated -- and survives a purge.
-                $topic = Topic::query()->firstOrCreate(
-                    ['subject' => $subject, 'name' => $topicName],
-                    ['created_by' => $this->staff['chair']],
-                );
+                // Through the mapping service, so each carries its TOS code.
+                $topic = $mapping->resolveTopic($subject, $topicName, $this->staff['chair']);
 
                 $subtopics = [];
 
                 foreach ($mapping->curatedSubtopicsForTopic($subject, $topicName) as $subtopicName) {
-                    $subtopics[$subtopicName] = (int) Subtopic::query()->firstOrCreate(
-                        ['topic_id' => $topic->id, 'name' => $subtopicName],
-                        ['created_by' => $this->staff['chair']],
-                    )->id;
+                    $subtopics[$subtopicName] = (int) $mapping->resolveSubtopic($topic, $subtopicName, $this->staff['chair'])->id;
                 }
 
                 $this->taxonomy[$subject][$topicName] = ['id' => (int) $topic->id, 'subtopics' => $subtopics];
@@ -358,7 +359,7 @@ class ShowcaseSeeder extends Seeder
         $failedAt = $this->now->subDays(3)->setTime(15, 12);
         $failed = $this->insertBank([
             'title' => 'Reference Services Quiz Set B',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'source_filename' => 'Reference_Services_Quiz_Set_B.docx',
             'mapping_status' => QuestionBank::MAPPING_STATUS_FAILED,
             'mapping_mode' => QuestionBank::MAPPING_MODE_AUTO,
@@ -369,7 +370,7 @@ class ShowcaseSeeder extends Seeder
             'created_at' => $failedAt,
             'updated_at' => $failedAt->addMinutes(6),
         ]);
-        $this->insertItems($failed, 'Reference Services', array_slice(DemoQuestions::forSubject('Reference Services'), 0, 6), $failedAt, false);
+        $this->insertItems($failed, 'Reference, Bibliography and User Services', array_slice(DemoQuestions::forSubject('Reference, Bibliography and User Services'), 0, 6), $failedAt, false);
 
         // A file nobody has mapped yet -- the "Map Items" call to action.
         $idleAt = $this->now->subDay()->setTime(9, 40);
@@ -406,7 +407,10 @@ class ShowcaseSeeder extends Seeder
         $count = count($items);
 
         foreach ($items as $index => $item) {
-            $pair = $this->taxonomy[$subject][$item['topic'] ?? ''] ?? null;
+            // Items name their topic and sub-topic by TOS code.
+            $topicLabel = LleTaxonomy::topic($subject, $item['topic'] ?? null)['label'] ?? null;
+            $subtopicLabel = LleTaxonomy::subtopic($subject, $item['topic'] ?? null, $item['subtopic'] ?? null)['label'] ?? null;
+            $pair = $topicLabel !== null ? ($this->taxonomy[$subject][$topicLabel] ?? null) : null;
 
             // The classifier leaves an item it is unsure of for a teacher to
             // confirm; the last item of each mapped file shows that state.
@@ -429,7 +433,7 @@ class ShowcaseSeeder extends Seeder
                 'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
                 'subject' => $subject,
                 'topic_id' => $tagged ? $pair['id'] : null,
-                'subtopic_id' => $tagged ? ($pair['subtopics'][$item['subtopic']] ?? null) : null,
+                'subtopic_id' => $tagged ? ($pair['subtopics'][$subtopicLabel] ?? null) : null,
                 'difficulty' => $item['difficulty'],
                 'tag_status' => $tagged
                     ? QuestionBankQuestion::TAG_STATUS_CONFIRMED
@@ -522,9 +526,9 @@ class ShowcaseSeeder extends Seeder
                     'year_level' => $yearLevel,
                     'ability' => (float) $ability,
                     'featured' => $featured,
-                    // Most fourth years have sat every subject this term,
-                    // which is what unlocks the board exam prediction; the
-                    // rest have a semester in progress, so "locked" shows too.
+                    // Most fourth years have finished a pre-test and a mock
+                    // board, which is what unlocks the Estimated Outcome; the
+                    // rest have a series under way, so "locked" shows too.
                     'prediction_ready' => $yearLevel === 4 && ($featured !== null || $i < (int) round($count * 0.6)),
                 ];
             }
@@ -756,6 +760,39 @@ class ShowcaseSeeder extends Seeder
 
     private function seedCurrentExams(): void
     {
+        $academicYear = sprintf('AY %d-%d', $this->termStart->year, $this->termStart->year + 1);
+        $owner = $this->yearLevelTeacher(4);
+
+        // The fourth years' LLE review: a pre-test early in the term, closed,
+        // and the first mock board, one subject still open. Both are series of
+        // six subject exams; they are what the Estimated Outcome reads.
+        $preTest = $this->insertSeries("Pre-test, {$academicYear}", Exam::TYPE_PRE_TEST, $owner, $this->termStart->addDays(3));
+        $mockBoard = $this->insertSeries("Mock Board 1, {$academicYear}", Exam::TYPE_MOCK_BOARD, $owner, $this->termStart->addDays(3));
+
+        foreach (self::SUBJECTS as $index => $subject) {
+            $start = $this->termStart->addWeeks(2)->addDays($index)->setTime(8, 0);
+
+            if ($start->greaterThan($this->now->subDays(30))) {
+                $start = $this->now->subDays(30 - $index)->setTime(8, 0);
+            }
+
+            $this->exams["pretest:{$subject}"] = $this->insertExam([
+                'title' => "{$subject} Pre-test",
+                'subject' => $subject,
+                'type' => Exam::TYPE_PRE_TEST,
+                'series' => $preTest,
+                'description' => $this->describe($subject),
+                'bank' => $this->libraryBanks[$subject],
+                'duration' => 60,
+                'start' => $start,
+                'end' => $start->addDays(1)->setTime(17, 0),
+                'results' => 'visible',
+                'one_take_only' => true,
+                'shuffle' => true,
+                'owner' => $owner,
+            ], $this->sections[4]);
+        }
+
         foreach (self::SUBJECTS as $index => $subject) {
             // One is open right now, so the live board has students mid-attempt;
             // the rest have closed. None is upcoming: the predictor needs an
@@ -767,6 +804,8 @@ class ShowcaseSeeder extends Seeder
             $this->exams["mock:{$subject}"] = $this->insertExam([
                 'title' => "{$subject} Mock Board Exam",
                 'subject' => $subject,
+                'type' => Exam::TYPE_MOCK_BOARD,
+                'series' => $mockBoard,
                 'description' => $this->describe($subject),
                 'bank' => $this->libraryBanks[$subject],
                 'duration' => 60,
@@ -818,6 +857,8 @@ class ShowcaseSeeder extends Seeder
                 $this->exams["{$yearLevel}:{$subject}"] = $this->insertExam([
                     'title' => "{$subject} {$kind}",
                     'subject' => $subject,
+                    // The third years' unit tests are this semester's battery.
+                    'type' => $yearLevel === 3 ? Exam::TYPE_BATTERY : Exam::TYPE_REGULAR,
                     'description' => $this->describe($subject),
                     'bank' => $this->libraryBanks[$subject],
                     'duration' => 45,
@@ -833,7 +874,7 @@ class ShowcaseSeeder extends Seeder
 
         // A quiz its teacher has since archived from one section, after the
         // section sat it -- the archived-assignment state.
-        $archived = $this->exams['3:Library Management'];
+        $archived = $this->exams['3:Library Organization and Management'];
         DB::table('exam_room')
             ->where('exam_id', $archived['id'])
             ->where('room_id', $this->sections[3][0])
@@ -857,6 +898,9 @@ class ShowcaseSeeder extends Seeder
         $id = (int) DB::table('exams')->insertGetId([
             'title' => $exam['title'],
             'subject' => $exam['subject'],
+            'exam_type' => $exam['type'] ?? Exam::TYPE_REGULAR,
+            'exam_series_id' => $exam['series'] ?? null,
+            'series_subject' => isset($exam['series']) ? LleTaxonomy::subjectKey($exam['subject']) : null,
             'description' => $exam['description'],
             'question_bank_id' => $exam['bank'],
             'total_items' => $total,
@@ -888,6 +932,18 @@ class ShowcaseSeeder extends Seeder
         return ['id' => $id, 'total' => $total] + $exam;
     }
 
+    /** A pre-test or mock board series: the six subject exams that belong together. */
+    private function insertSeries(string $name, string $type, int $owner, CarbonImmutable $at): int
+    {
+        return (int) DB::table('exam_series')->insertGetId([
+            'name' => $name,
+            'type' => $type,
+            'created_by' => $owner,
+            'created_at' => $at,
+            'updated_at' => $at,
+        ]);
+    }
+
     /**
      * @param  list<int>  $roomIds
      */
@@ -906,7 +962,11 @@ class ShowcaseSeeder extends Seeder
 
     private function describe(string $subject): string
     {
-        $topics = app(QuestionMappingService::class)->curatedTopicsForSubject($subject);
+        // The TOS topics by their plain names, without "Other / Unclassified".
+        $topics = array_values(array_map(
+            fn (array $topic): string => $topic['name'],
+            array_filter(LleTaxonomy::topics($subject), fn (array $topic): bool => !$topic['other']),
+        ));
         $last = array_pop($topics);
 
         return $topics === []
@@ -924,6 +984,15 @@ class ShowcaseSeeder extends Seeder
         foreach ($this->students as $student) {
             if ($student['year_level'] < 4) {
                 continue;
+            }
+
+            // The pre-test: those ready for a prediction sat all six; the
+            // rest have four, so their card shows a series still under way.
+            $preTestSubjects = $student['prediction_ready'] ? self::SUBJECTS : array_slice(self::SUBJECTS, 0, 4);
+
+            foreach ($preTestSubjects as $subject) {
+                $exam = $this->exams["pretest:{$subject}"];
+                $this->queueAttempt($student, $exam, $this->scoreFor($student, $subject) - 7, $this->sittingTime($exam));
             }
 
             $subjects = $student['prediction_ready'] ? self::SUBJECTS : array_slice(self::SUBJECTS, 0, 2);
@@ -1234,10 +1303,9 @@ class ShowcaseSeeder extends Seeder
     // ---------------------------------------------------------------- history
 
     /**
-     * The four subjects the third years have no quiz in yet this semester
-     * (LOWER_YEAR_EXAMS gives them two). With all six sat they get the early
-     * warning the Estimated Outcome gives before fourth year; the first and
-     * second years, with two subjects each, stay locked.
+     * The third years' battery exams in the four subjects LOWER_YEAR_EXAMS
+     * does not give them. Battery exams never feed the Estimated Outcome, so
+     * the third years' card stays locked however many they sit.
      */
     private function seedThirdYearSemester(): void
     {
@@ -1254,6 +1322,7 @@ class ShowcaseSeeder extends Seeder
             $exam = $this->exams["3:{$subject}"] = $this->insertExam([
                 'title' => "{$subject} Unit Test",
                 'subject' => $subject,
+                'type' => Exam::TYPE_BATTERY,
                 'description' => $this->describe($subject),
                 'bank' => $this->libraryBanks[$subject],
                 'duration' => 45,
@@ -1314,26 +1383,38 @@ class ShowcaseSeeder extends Seeder
                 );
             }
 
+            // Their LLE review in the final year: a pre-test in September and a
+            // mock board in February, each a series of six subject exams, both
+            // before the LLE that September. That is the shape the model's
+            // retraining rows come in (demo results are never trained on).
             $exams = [];
+            $review = [
+                'pretest' => [Exam::TYPE_PRE_TEST, "Pre-test, {$academicYear}", CarbonImmutable::create($graduationYear - 1, 9, 2), 'Pre-test'],
+                'mock' => [Exam::TYPE_MOCK_BOARD, "Mock Board, {$academicYear}", CarbonImmutable::create($graduationYear, 2, 3), 'Mock Board Exam'],
+            ];
 
-            foreach (self::SUBJECTS as $i => $subject) {
-                // Spread across the four years, so a student's history has a
-                // real chronology for the semester buckets to split.
-                $sat = CarbonImmutable::create($admissionYear + 1, 1, 12)->addMonths($i * 8)->setTime(8, 0);
+            foreach ($review as $kind => [$type, $seriesName, $from, $label]) {
+                $series = $this->insertSeries($seriesName, $type, $this->staff['chair'], $from->subWeeks(2));
 
-                $exams[$subject] = $this->insertExam([
-                    'title' => "{$subject} Mock Board Exam ({$academicYear})",
-                    'subject' => $subject,
-                    'description' => $this->describe($subject),
-                    'bank' => $this->libraryBanks[$subject],
-                    'duration' => 60,
-                    'start' => $sat,
-                    'end' => $sat->addDays(2)->setTime(17, 0),
-                    'results' => 'visible',
-                    'one_take_only' => false,
-                    'shuffle' => false,
-                    'owner' => $this->staff['chair'],
-                ], $sections, $closedAt);
+                foreach (self::SUBJECTS as $i => $subject) {
+                    $sat = $from->addDays($i * 2)->setTime(8, 0);
+
+                    $exams[$kind][$subject] = $this->insertExam([
+                        'title' => "{$subject} {$label} ({$academicYear})",
+                        'subject' => $subject,
+                        'type' => $type,
+                        'series' => $series,
+                        'description' => $this->describe($subject),
+                        'bank' => $this->libraryBanks[$subject],
+                        'duration' => 60,
+                        'start' => $sat,
+                        'end' => $sat->addDays(1)->setTime(17, 0),
+                        'results' => 'visible',
+                        'one_take_only' => false,
+                        'shuffle' => false,
+                        'owner' => $this->staff['chair'],
+                    ], $sections, $closedAt);
+                }
             }
 
             $rows = [];
@@ -1373,20 +1454,24 @@ class ShowcaseSeeder extends Seeder
                 $joinedAt = CarbonImmutable::create($graduationYear - 1, 8, 1)->addDays(mt_rand(0, 10));
                 $memberships[] = ['room_id' => $member['room_id'], 'user_id' => $student['id'], 'created_at' => $joinedAt, 'updated_at' => $joinedAt];
 
-                // A dropout stops sitting exams partway -- censored, not failed.
-                $subjects = $member['dropped'] ? array_slice(self::SUBJECTS, 0, 2) : self::SUBJECTS;
+                // A dropout stops partway through the pre-test -- censored,
+                // not failed -- and never reaches the mock board.
+                $sittings = $member['dropped']
+                    ? ['pretest' => array_slice(self::SUBJECTS, 0, 2)]
+                    : ['pretest' => self::SUBJECTS, 'mock' => self::SUBJECTS];
 
-                foreach ($subjects as $round => $subject) {
-                    // A gentle climb across the degree.
-                    $drift = ($round / max(1, count($subjects) - 1)) * 9;
-                    $exam = $exams[$subject];
+                foreach ($sittings as $kind => $subjects) {
+                    foreach ($subjects as $subject) {
+                        // The mock board comes after months of review.
+                        $exam = $exams[$kind][$subject];
 
-                    $this->queueAttempt(
-                        $student,
-                        $exam,
-                        $member['ability'] + $drift + mt_rand(-7, 7),
-                        $exam['start']->addDays(mt_rand(0, 1))->setTime(mt_rand(8, 15), mt_rand(0, 59), mt_rand(0, 59)),
-                    );
+                        $this->queueAttempt(
+                            $student,
+                            $exam,
+                            $member['ability'] + ($kind === 'mock' ? 4 : -4) + mt_rand(-7, 7),
+                            $exam['start']->addHours(mt_rand(0, 8))->addMinutes(mt_rand(0, 59)),
+                        );
+                    }
                 }
 
                 if (!$member['dropped']) {
@@ -1713,7 +1798,7 @@ class ShowcaseSeeder extends Seeder
             $entries[] =[$exam['owner'], 'exam.create', 'exam', $exam['id'], 'Exam created', ['title' => $exam['title']], $exam['start']->subDays(4)->setTime(10, 20)];
         }
 
-        $entries[] = [$examiner, 'room.exam.archive', 'exam', $this->exams['3:Library Management']['id'], 'Exam archived for room', ['room_id' => $this->sections[3][0]], $this->now->subDays(2)->setTime(16, 2)];
+        $entries[] = [$examiner, 'room.exam.archive', 'exam', $this->exams['3:Library Organization and Management']['id'], 'Exam archived for room', ['room_id' => $this->sections[3][0]], $this->now->subDays(2)->setTime(16, 2)];
         $entries[] = [$chair, 'library.mapping.bulk_confirm', 'question_bank', $this->libraryBanks['Cataloging and Classification'], 'Bulk confirmed AI-suggested item tags', ['confirmed' => 16], $this->now->subDays(15)->setTime(9, 12)];
         $entries[] = [$chair, 'review-bot.admin.publish', 'question_bank_question', null, 'Published Review Bot question(s)', ['subject' => 'Cataloging and Classification'], $this->now->subDays(10)->setTime(15, 30)];
         $entries[] = [$chair, 'review-bot.admin.reject', 'question_bank_question', null, 'Declined Review Bot question(s)', ['subject' => 'Indexing and Abstracting'], $this->now->subDays(9)->setTime(11, 5)];

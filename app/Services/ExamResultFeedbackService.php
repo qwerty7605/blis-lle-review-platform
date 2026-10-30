@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ExamAttempt;
 use App\Models\User;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -255,6 +256,8 @@ class ExamResultFeedbackService
         $rows = DB::table('exam_attempt_questions')
             ->join('question_bank_questions', 'question_bank_questions.id', '=', 'exam_attempt_questions.question_bank_question_id')
             ->join('topics', 'topics.id', '=', 'question_bank_questions.topic_id')
+            // "Other / Unclassified" counts toward the subject, never as a topic.
+            ->where('topics.name', '!=', LleTaxonomy::OTHER_TOPIC)
             ->leftJoin('subtopics', 'subtopics.id', '=', 'question_bank_questions.subtopic_id')
             ->leftJoin('exam_attempt_answers', function ($join) use ($attempt) {
                 $join->on('exam_attempt_answers.question_bank_question_id', '=', 'exam_attempt_questions.question_bank_question_id')

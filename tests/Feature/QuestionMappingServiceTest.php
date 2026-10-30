@@ -30,8 +30,8 @@ class QuestionMappingServiceTest extends TestCase
             questionText: 'Which of the following is the classification system that assigns call numbers, also known as the Dewey Decimal Classification?',
         );
         $topic = $classifier->classifyTopic($cataloging, 'Cataloging and Classification');
-        $this->assertSame('Classification Systems and Call Numbers', $topic->topic);
-        $this->assertSame('Dewey Decimal Classification (DDC)', $topic->subtopic);
+        $this->assertSame('4. Classification', $topic->topic);
+        $this->assertSame('4.3 Summarize the historical background and general characteristics of DDC', $topic->subtopic);
         $this->assertGreaterThan(LocalQuestionClassifier::TOPIC_CONFIDENCE_THRESHOLD, $topic->confidence);
 
         $it = $this->makeQuestion(
@@ -39,16 +39,17 @@ class QuestionMappingServiceTest extends TestCase
             questionText: 'A boolean operator such as AND, OR, or NOT is used to combine search terms in a boolean search of the library catalog.',
         );
         $topic = $classifier->classifyTopic($it, 'Information Technology');
-        $this->assertSame('Boolean Search and Query Strategy', $topic->topic);
-        $this->assertSame('AND/OR/NOT Operators', $topic->subtopic);
+        $this->assertSame('1. Concepts of Information Storage and Retrieval Systems', $topic->topic);
+        $this->assertSame('1.3 Identify/describe principles of information storage and retrieval systems', $topic->subtopic);
 
         $management = $this->makeQuestion(
-            subject: 'Library Management',
+            subject: 'Library Organization and Management',
             questionText: 'Conducting a SWOT analysis helps identify the strengths, weaknesses, opportunities, and threats facing the library.',
         );
+        // An old spelling of the subject reads the same keywords.
         $topic = $classifier->classifyTopic($management, 'Library Management');
-        $this->assertSame('Assessment and Performance Indicators', $topic->topic);
-        $this->assertSame('SWOT Analysis', $topic->subtopic);
+        $this->assertSame('1. Knowledge Relating to the Development of Organization/Management', $topic->topic);
+        $this->assertSame('1.3 Apply the basic principles / concepts of organization / management to library operations', $topic->subtopic);
     }
 
     public function test_cognitive_level_heuristic_matches_each_bloom_tier(): void
@@ -141,8 +142,37 @@ class QuestionMappingServiceTest extends TestCase
         $question->refresh();
         $this->assertSame(QuestionBankQuestion::TAG_STATUS_CONFIRMED, $question->tag_status);
         $this->assertSame(QuestionBankQuestion::TAG_SOURCE_RULE_BASED, $question->tag_source);
-        $this->assertSame('Classification Systems and Call Numbers', $question->topic?->name);
-        $this->assertSame('Dewey Decimal Classification (DDC)', $question->subtopic?->name);
+        $this->assertSame('4. Classification', $question->topic?->name);
+        $this->assertSame('4.3 Summarize the historical background and general characteristics of DDC', $question->subtopic?->name);
+        $this->assertSame('4.3', $question->subtopic?->code);
+    }
+
+    public function test_a_question_no_keyword_matches_is_other_unclassified_without_a_review_of_its_own(): void
+    {
+        $bank = $this->makeBank();
+        $question = QuestionBankQuestion::create([
+            'question_bank_id' => $bank->id,
+            'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
+            'subject' => 'Cataloging and Classification',
+            'item_number' => 1,
+            // A cue for the cognitive level and no keyword of any sub-topic.
+            'question_text' => 'What is the definition of a quorum at a staff meeting?',
+            'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,
+            'answer_label' => 'A',
+            'answer_text' => 'A majority present',
+        ]);
+        $question->options()->createMany([
+            ['sort_order' => 1, 'option_label' => 'A', 'option_text' => 'A majority present', 'is_correct' => true],
+            ['sort_order' => 2, 'option_label' => 'B', 'option_text' => 'Everyone present', 'is_correct' => false],
+            ['sort_order' => 3, 'option_label' => 'C', 'option_text' => 'Nobody absent today', 'is_correct' => false],
+        ]);
+
+        app(QuestionMappingService::class)->queueBankMapping($bank, QuestionBank::MAPPING_MODE_AUTO);
+
+        $question->refresh();
+        $this->assertSame('Other / Unclassified', $question->topic?->name);
+        $this->assertNull($question->subtopic_id);
+        $this->assertSame(QuestionBankQuestion::TAG_STATUS_CONFIRMED, $question->tag_status);
     }
 
     public function test_queue_bank_mapping_completes_synchronously_without_http_calls(): void
@@ -223,22 +253,27 @@ class QuestionMappingServiceTest extends TestCase
     public function test_topic_dictionary_keys_match_curated_topics_exactly(): void
     {
         $curated = app(QuestionMappingService::class)->curatedTopics();
-        $dictionary = TopicKeywordDictionary::KEYWORDS;
 
-        $this->assertSame(array_keys($curated), array_keys($dictionary), 'subjects must match exactly, in the same order');
+        $this->assertSame(
+            ['Cataloging and Classification', 'Indexing and Abstracting', 'Information Technology', 'Library Organization and Management', 'Reference, Bibliography and User Services', 'Selection and Acquisition'],
+            array_keys($curated),
+            'subjects must be the six official names, in the TOS order',
+        );
 
         foreach ($curated as $subject => $topics) {
-            $this->assertArrayHasKey($subject, $dictionary);
-            $this->assertSame(
-                array_keys($topics),
-                array_keys($dictionary[$subject]),
-                "topics for subject \"{$subject}\" must match exactly",
-            );
+            $dictionary = TopicKeywordDictionary::forSubject($subject);
+
+            // Every TOS topic has keywords; "Other / Unclassified" (last) has none.
+            $this->assertSame('Other / Unclassified', array_key_last($topics), $subject);
+            $this->assertSame([], $topics['Other / Unclassified'], $subject);
+            unset($topics['Other / Unclassified']);
+
+            $this->assertSame(array_keys($topics), array_keys($dictionary), "topics for subject \"{$subject}\" must match exactly");
 
             foreach ($topics as $topicName => $subtopicNames) {
                 $this->assertSame(
                     $subtopicNames,
-                    array_keys($dictionary[$subject][$topicName]),
+                    array_keys($dictionary[$topicName]),
                     "subtopics for \"{$subject} / {$topicName}\" must match exactly",
                 );
             }

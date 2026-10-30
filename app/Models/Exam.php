@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\LleTaxonomy;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,45 @@ class Exam extends Model
 
     public const DELIVERY_MODE_OPEN_NAVIGATION = 'open_navigation';
 
+    /** Practice; the default. */
+    public const TYPE_REGULAR = 'regular';
+
+    /** Given each semester. */
+    public const TYPE_BATTERY = 'battery';
+
+    /** The LLE review: a pre-test and the mock boards. */
+    public const TYPE_PRE_TEST = 'pre_test';
+
+    public const TYPE_MOCK_BOARD = 'mock_board';
+
+    /** @var list<string> */
+    public const TYPES = [
+        self::TYPE_REGULAR,
+        self::TYPE_BATTERY,
+        self::TYPE_PRE_TEST,
+        self::TYPE_MOCK_BOARD,
+    ];
+
+    /** @var array<string, string> */
+    public const TYPE_LABELS = [
+        self::TYPE_REGULAR => 'Regular mock exam',
+        self::TYPE_BATTERY => 'Battery exam',
+        self::TYPE_PRE_TEST => 'Pre-test',
+        self::TYPE_MOCK_BOARD => 'Mock board',
+    ];
+
+    /**
+     * The types that belong to an exam series, one exam per board subject,
+     * and that the Estimated Outcome model is trained on and reads. Battery
+     * and regular mock exams never feed it.
+     *
+     * @var list<string>
+     */
+    public const SERIES_TYPES = [
+        self::TYPE_PRE_TEST,
+        self::TYPE_MOCK_BOARD,
+    ];
+
     /**
      * The attributes that are mass assignable.
      *
@@ -24,6 +64,9 @@ class Exam extends Model
     protected $fillable = [
         'title',
         'subject',
+        'exam_type',
+        'exam_series_id',
+        'series_subject',
         'description',
         'question_bank_id',
         'total_items',
@@ -57,13 +100,20 @@ class Exam extends Model
         'semester' => 'integer',
     ];
 
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'exam_type' => self::TYPE_REGULAR,
+    ];
+
+    /** @var list<string> */
+    protected $appends = ['exam_type_label'];
+
     public const SEMESTERS = [1, 2];
 
     /**
-     * The school year and semester an exam is filed under decide which
-     * semester its score belongs to in the board exam prediction (see
-     * LetReadinessFeatureBuilder). The teacher sets them on the exam form;
-     * an exam saved without them takes them from its date.
+     * The school year and semester an exam is filed under. The Estimated
+     * Outcome no longer reads them (it reads exam series). An exam saved
+     * without them takes them from its date.
      */
     protected static function booted(): void
     {
@@ -96,6 +146,31 @@ class Exam extends Model
     public static function termLabel(int $schoolYear, int $semester): string
     {
         return sprintf('%s Semester, AY %d-%d', $semester === 1 ? '1st' : '2nd', $schoolYear, $schoolYear + 1);
+    }
+
+    public static function isSeriesType(?string $type): bool
+    {
+        return in_array($type, self::SERIES_TYPES, true);
+    }
+
+    /** "Regular mock exam", "Pre-test", ...; null when the type was not loaded. */
+    public function getExamTypeLabelAttribute(): ?string
+    {
+        if (!array_key_exists('exam_type', $this->attributes)) {
+            return null;
+        }
+
+        return self::TYPE_LABELS[$this->attributes['exam_type']] ?? (string) $this->attributes['exam_type'];
+    }
+
+    /**
+     * The pre-test or mock board this exam is one subject of.
+     *
+     * @return BelongsTo<ExamSeries, $this>
+     */
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(ExamSeries::class, 'exam_series_id');
     }
 
     /**
@@ -314,7 +389,8 @@ class Exam extends Model
     }
 
     /**
-     * Summarize the exam subject from its linked question banks.
+     * Summarize the exam subject from its linked question banks. Two sets
+     * filed under different spellings of one board subject are one subject.
      *
      * @param  iterable<QuestionBank>  $questionBanks
      */
@@ -322,6 +398,7 @@ class Exam extends Model
     {
         $subjects = collect($questionBanks)
             ->map(fn (QuestionBank $bank) => trim((string) ($bank->subject ?? '')))
+            ->map(fn (string $subject) => LleTaxonomy::canonicalSubject($subject) ?? $subject)
             ->filter()
             ->unique()
             ->values();

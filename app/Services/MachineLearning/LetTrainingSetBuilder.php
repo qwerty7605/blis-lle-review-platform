@@ -7,43 +7,45 @@ use App\Models\User;
 use Illuminate\Support\Carbon;
 
 /**
- * Gathers what the board exam model learns from: the base dataset, and one
- * row for each graduate whose real board result has been recorded.
+ * Gathers what the Estimated Outcome model learns from: every row of the
+ * base dataset, plus, for each graduate with a recorded LLE result, one row
+ * per pre-test or mock board series they completed before their LLE date,
+ * each with its series' exam type. That matches the base dataset, where one
+ * examinee contributes several review exams.
  *
- * A graduate's row is the six subject scores of their last complete semester
- * and the result they got. That semester has to be in their final school year
- * here, which is their fourth: a complete third-year semester followed by an
- * incomplete fourth year gives no row, because the model reads the scores a
- * student has on the way to the board exam, not ones from a year earlier.
- *
- * Nothing the model itself predicted is ever a row. A row needs an
- * lle_results record, and those are typed in from the real results.
+ * Never used: battery or regular mock exams, sittings submitted after the
+ * LLE date (an exam's latest sitting on or before that day is the one that
+ * counts), anything the model itself predicted (a row needs an lle_results
+ * record, typed in from the real results), and demo accounts, whose results
+ * are invented.
  */
 class LetTrainingSetBuilder
 {
     public const SOURCE_GRADUATE = 'graduate';
 
     public function __construct(
-        private readonly LetReadinessFeatureBuilder $features,
+        private readonly ReviewSeriesFeatureBuilder $series,
         private readonly LetBaseDataset $base,
     ) {
     }
 
     /**
      * @return array{
-     *   base: array<int, array{key: string, features: array<string, ?float>, label: string, source: string}>,
-     *   graduates: array<int, array{key: string, features: array<string, ?float>, label: string, source: string}>,
+     *   base: list<array{key: string, features: array<string, mixed>, label: string, source: string}>,
+     *   graduates: list<array{key: string, features: array<string, mixed>, label: string, source: string}>,
+     *   results: list<array{key: string, label: string, rows: int}>,
      *   skipped: int
-     * } `skipped` counts graduates with a result but no complete semester in their final year to describe them by
+     * } `results` is one entry per graduate who gave rows; `skipped` counts graduates with a result but no series completed before it
      */
     public function build(): array
     {
-        $graduates = [];
+        $rows = [];
+        $results = [];
         $skipped = 0;
 
-        // The first sitting is the one the exams were preparation for. A
-        // later retake is a real result too, but its row would be the same
-        // student's same scores, counted twice.
+        // The first sitting is the one the review exams were preparation
+        // for. A retake is a real result too, but its rows would be the same
+        // student's same series counted twice.
         $sittings = LleResult::query()
             ->with('student')
             ->orderBy('exam_year')
@@ -54,61 +56,44 @@ class LetTrainingSetBuilder
         foreach ($sittings as $sitting) {
             $student = $sitting->student;
 
-            // Demo accounts carry invented outcomes; they must not teach the
-            // model anything about real students.
             if (!$student || $student->role !== User::ROLE_STUDENT || $student->is_demo) {
                 continue;
             }
 
+            // The LLE date; with none recorded, the end of the exam year.
             $until = $sitting->taken_at
                 ? Carbon::parse($sitting->taken_at)->endOfDay()
                 : Carbon::create((int) $sitting->exam_year, 12, 31)->endOfDay();
 
-            $scores = $this->finalYearScores($student, $until);
+            $label = $sitting->isPass() ? LetPredictionService::RESULT_PASS : LetPredictionService::RESULT_FAIL;
+            $completed = array_values(array_filter(
+                $this->series->seriesFor($student, $until),
+                static fn (array $entry): bool => $entry['complete'],
+            ));
 
-            if ($scores === null) {
+            if ($completed === []) {
                 $skipped++;
 
                 continue;
             }
 
-            $graduates[] = [
-                'key' => 'student:' . $student->id,
-                'features' => LetReadinessFeatureBuilder::features($scores),
-                'label' => $sitting->isPass() ? LetPredictionService::RESULT_PASS : LetPredictionService::RESULT_FAIL,
-                'source' => self::SOURCE_GRADUATE,
-            ];
+            foreach ($completed as $entry) {
+                $rows[] = [
+                    'key' => 'student:' . $student->id . ':series:' . $entry['series_id'],
+                    'features' => ReviewSeriesFeatureBuilder::features($entry),
+                    'label' => $label,
+                    'source' => self::SOURCE_GRADUATE,
+                ];
+            }
+
+            $results[] = ['key' => 'student:' . $student->id, 'label' => $label, 'rows' => count($completed)];
         }
 
         return [
             'base' => $this->base->exists() ? $this->base->rows() : [],
-            'graduates' => $graduates,
+            'graduates' => $rows,
+            'results' => $results,
             'skipped' => $skipped,
         ];
-    }
-
-    /**
-     * The scores of the student's last complete semester before $until, if
-     * that semester is in the last school year they sat exams in.
-     *
-     * @return array<string, ?float>|null
-     */
-    private function finalYearScores(User $student, Carbon $until): ?array
-    {
-        $semesters = $this->features->semesters($student, $until);
-
-        if ($semesters === []) {
-            return null;
-        }
-
-        $finalYear = end($semesters)['school_year'];
-
-        foreach (array_reverse($semesters) as $semester) {
-            if ($semester['complete']) {
-                return $semester['school_year'] === $finalYear ? $semester['scores'] : null;
-            }
-        }
-
-        return null;
     }
 }

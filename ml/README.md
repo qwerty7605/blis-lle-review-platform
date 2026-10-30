@@ -1,143 +1,206 @@
-# ML: board exam pass/fail predictor
+# ML: the Estimated Outcome model
 
-This folder holds the Weka-trained model, its base dataset, and the tooling
-used to check the PHP code the app actually runs against Weka. The app never
-loads the `.model` file at runtime: this stack has no Java or Python, so the
-tree is written out in PHP and retrained in PHP, and both are checked here
-against the real Weka.
+This folder holds the WEKA-trained model, its base dataset, and the tooling
+used to check the PHP code the app actually runs against WEKA. The app never
+loads a `.model` file at runtime: this stack has no Java or Python, so the
+model is computed, trained and evaluated in PHP, and all three are checked
+here against the real WEKA 3.8.6.
+
+## The model
+
+Ridge-penalized logistic regression, built in WEKA as
+
+```
+weka.classifiers.meta.CVParameterSelection -P "R 0.5 10.0 20.0" -X 10 -S 1 \
+  -W weka.classifiers.functions.Logistic -- -M -1
+```
+
+CVParameterSelection tries the ridge at 0.5, 1.0, ... 10.0 by 10-fold
+cross-validation (seed 1) and keeps the one with the fewest errors (the first
+on a tie); Logistic is then fitted on every row with it.
+
+- Inputs: `Exam_Type {pretest, mockboard}` and the six subject scores
+  (Library Organization and Management, Reference Bibliography and User
+  Services, Indexing and Abstracting, Selection and Acquisition, Cataloging
+  and Classification, Information Technology). Class: `LLE_Result {FAILED,
+  PASSED}`.
+- A row is one review exam series (a pre-test or a mock board, all six
+  subjects) a student sat, labelled with that student's real LLE result, so
+  one examinee gives several rows.
+- "At risk" means P(FAILED) ≥ 0.25. The card shows P(PASSED) as the chance
+  of passing.
+
+### Version 1
+
+Trained on `data/LLE_dataset_all_ExamType.arff` (128 rows, 27 FAILED). The
+ridge chosen is 0.5 (it ties with 1.0 and 2.5 at 18 errors of 128; the first
+wins). Coefficients for class FAILED, in raw score units:
+
+| Variable | Coefficient | Odds ratio |
+|---|---:|---:|
+| Exam_Type=mockboard | 2.4513 | 11.603 |
+| Library Organization and Management | -0.0302 | 0.9703 |
+| Reference Bibliography and User Services | -0.0304 | 0.9700 |
+| Indexing and Abstracting | -0.0122 | 0.9879 |
+| Selection and Acquisition | -0.1135 | 0.8927 |
+| Cataloging and Classification | 0.0275 | 1.0279 |
+| Information Technology | -0.0352 | 0.9655 |
+| Intercept | 8.8524 | |
+
+Its evaluation: stratified 10-fold cross-validation repeated with seeds 1 to
+10, the ridge chosen again inside every training fold; each repeat's 128
+predictions pooled, then the ten repeats averaged. Everything except ROC area
+is at the 0.25 cutoff.
+
+| Figure | Model | ZeroR |
+|---|---:|---:|
+| ROC area | 0.8631 | |
+| FAILED recall | 0.7148 | |
+| False alarm rate | 0.2109 | |
+| FAILED precision | 0.4760 | |
+| FAILED F-measure | 0.5711 | |
+| Accuracy | 0.7734 | 0.7891 |
+| Kappa | 0.4256 | 0 |
+
+Mean confusion matrix (actual FAILED / PASSED by predicted FAILED / PASSED):
+19.3 / 7.7 and 21.3 / 79.7.
 
 ## What's here
 
-- `models/New_Model_LLE.model` — the original model: a Weka J48 (C4.5)
-  decision tree, options `-C 0.25 -M 2`, trained on `lle_board_exam_clean`
-  (156 review-exam records, 30 of them FAILED; a row is one review exam a
-  student took, labelled with that student's real board result, so a student
-  can appear more than once). Its attributes, in order:
-  `reference, management, indexing, selection, cataloging, it, overall,
-  board_result {FAILED,PASSED}`. Its whole tree:
-
-  ```
-  selection <= 43: FAILED (13.17/2.08)
-  selection > 43
-  |   it <= 32: FAILED (3.79/0.66)
-  |   it > 32: PASSED (139.04/15.78)
-  ```
-
-- `data/lle_clean.arff` — the base dataset the model was trained on. **Keep
-  it in the project.** Every retraining learns from all of its rows plus the
-  graduates confirmed since. Without it "Retrain model" is refused.
-- `tools/InspectModel.java` — loads a `.model` file with Weka and prints its
-  tree, attributes and options.
-- `tools/GenerateTestVectors.java` — asks the real model what it predicts for
-  a spread of cases (either side of every cut, random scores, scores missing)
-  and writes them to `tools/test_vectors.csv`. Also prints each leaf's exact
-  training weight.
-- `tools/verify_port.php` — replays `test_vectors.csv` through
-  `LetPredictionService` and fails if an outcome or a confidence disagrees
-  with the real model.
-- `tools/CompareWithWeka.java`, `tools/compare_with_weka.php` — train Weka's
-  J48 and the app's own trainer on the same datasets and compare the trees and
-  the cross-validation figures.
-- `tools/weka-stable.jar` — Weka 3.8.6, from Maven Central. Not needed by the
+- `data/LLE_dataset_all_ExamType.arff` — the base dataset. **Keep it in the
+  project.** Every retraining learns from all of its rows plus the graduates
+  confirmed since. Without it "Retrain model" is refused.
+- `models/logistic-v1.json` — version 1 as WEKA built it: coefficients,
+  the filters' fill values, means and standard deviations, the ridge
+  candidates and their error rates, and the 10 × 10 evaluation. The
+  migration `2026_11_03_000000_rebuild_let_models_for_logistic_regression`
+  loads it into `let_models`. `logistic-v1.model` (WEKA's serialized model)
+  and `logistic-v1.txt` (WEKA's printout) are kept beside it.
+- `tools/LleLogistic.java` — the model in WEKA: `train` builds version 1 and
+  its evaluation, `vectors` writes P(PASSED) for a spread of made-up
+  students to `tools/logistic_vectors.csv`, `compare` trains and evaluates on
+  the made-up datasets of the trainer check.
+- `tools/compare_logistic.php` — the same in the app's code, compared with
+  WEKA's output (`vectors`, `base`, `generate`, `check`).
+- `tools/weka-stable.jar` — WEKA 3.8.6, from Maven Central. Not needed by the
   running app; only by the tools above.
+- `tools/org/bounce/net/DefaultAuthenticator.java` — a stand-in for a class
+  WEKA wants at start-up that is not inside `weka-stable.jar`.
+- History, no longer used by the app: `models/New_Model_LLE.model` (the J48
+  tree the app used before, `-C 0.25 -M 2`) and `data/lle_clean.arff` (the 156
+  rows it was trained on).
 
 ## Where the app uses this
 
 All in `app/Services/MachineLearning/`:
 
-- `LetPredictionService` — the tree as a nested array (version 1, the
-  starting model) and `predict()`, which walks whichever version is in use. A
-  missing score is treated as Weka treats `?`: the case goes down both
-  branches in the proportion the training data did. It is never read as 0.
-- `LetReadinessFeatureBuilder` — a student's exams turned into the model's
-  attributes. Each exam is filed under a school year and semester
-  (`exams.school_year`, `exams.semester`, set on the exam form, defaulting from
-  the date). Within a semester an exam counts once (its latest sitting) and a
-  subject's score is the average of its exams. `overall` is the weighted
-  average of the subjects that have a score (reference 0.20, management 0.20,
-  indexing 0.15, selection 0.15, cataloging 0.20, it 0.10), divided by the
-  weights present.
-- `BoardExamOutlook` — what a student is shown. Locked until one semester has
-  all six subject exams ("Complete all 6 subject exams this semester to unlock
-  your result."). Then the latest complete semester is read: years 1 to 3 get
-  an early warning ("On track" / "At risk"), year 4 a board readiness
-  prediction ("Likely to pass" / "At risk of failing"). Also the subjects the
-  model treats as risk indicators (read off the tree in use: for the original,
-  selection ≤ 43 and it ≤ 32) and the two lowest subjects.
-- `DecisionTreeTrainer` — J48 `-C 0.25 -M 2` in PHP, missing values and
-  subtree raising included.
-- `LetModelEvaluator`, `JavaRandom` — 10-fold cross-validation with random
-  seed 1, dealt into folds the way Weka deals them.
-- `LetBaseDataset`, `LetTrainingSetBuilder`, `LetModelTrainer` — retraining.
+- `LogisticModel` — one version's numbers and the arithmetic, as WEKA does
+  it: a missing score filled with the training mean (ReplaceMissingValues),
+  exam type as 0/1, each input standardized, then
+  P(FAILED) = 1 / (1 + e^-z). `isAtRisk()` compares the unrounded P(FAILED)
+  with 0.25.
+- `LetPredictionService` — the version in use (the active row of
+  `let_models`) and `predict()`.
+- `ReviewSeriesFeatureBuilder` — a student's exams turned into the model's
+  inputs. Exams of type pre-test or mock board belong to a series with one
+  exam per subject; a series is complete once all six have a submitted
+  sitting, and an exam sat twice counts by its latest sitting. Battery and
+  regular exams never feed it.
+- `BoardExamOutlook` — what the card shows: locked until a series is
+  complete, then the most recently completed series.
+- `LogisticRegressionTrainer` — Logistic's fit: ridge on the
+  standardized inputs, intercept not penalized, minimized by Newton's method.
+- `RidgeSelector` — CVParameterSelection's choice of the ridge.
+- `LetModelEvaluator`, `WekaFolds`, `JavaRandom` — the repeated
+  cross-validation, dealt into folds the way WEKA deals them, ROC area as
+  WEKA's ThresholdCurve computes it, and ZeroR on the same folds.
+- `LetBaseDataset`, `LetTrainingSetBuilder`, `LetModelTrainer` and
+  `app/Jobs/RetrainLetModelJob.php` — retraining.
 
-**Data quality caveat:** 156 records is small, and the tree looks at two of
-the six subjects. A prediction is a guide, not a guarantee, and the notes the
-pages show say so. Do not strip them out.
+**Data quality caveat:** 128 rows is small, and 27 of them FAILED. An estimate
+is a guide for review planning, not a prediction of the actual LLE, and the
+note on the card says so. Do not strip it out.
 
 ## How the model learns from new results
 
 Only when an administrator clicks "Retrain model" on the Licensure page.
 Nothing retrains by itself.
 
-1. Staff record each graduate's real board result and exam date (Licensure
+1. Staff record each graduate's real LLE result and exam date (Licensure
    page, `lle_results`).
-2. A training row is one graduate with a recorded result: the six scores of
-   their last complete semester, which must be in their final school year
-   here (their fourth), and the real result. Scores from years 1 to 3 are
-   never a row, nor is anything the model itself predicted. Demo accounts are
-   left out.
-3. The training set is every row of `data/lle_clean.arff` plus those rows.
+2. A training row is one pre-test or mock board series a graduate completed
+   before their LLE date (with no date recorded, December 31 of the exam
+   year), with its exam type, the six scores and the real result. Only the
+   graduate's first LLE sitting is used. Battery and regular exams are never
+   a row, nor is anything the model itself predicted. Demo accounts are left
+   out.
+3. The training set is every row of the base dataset plus those rows.
 4. Retraining is refused until there are 10 confirmed results the last
    training did not have.
-5. A J48 tree is trained and scored by 10-fold cross-validation, seed 1. The
-   baseline is the share of rows that PASSED.
-6. The new tree is taken up only if its accuracy is at least the baseline and
-   its Kappa at least that of the model in use. Otherwise the current model
-   stays and the administrator is told why.
-7. Every tree trained is kept as a numbered version in `let_models` (version,
-   date, rows, FAILED rows, accuracy, Kappa, FAILED recall, baseline, file
-   path, active) with its file under `storage/app/private/let-models/`. The
-   original is version 1. An administrator can go back to any version that
-   was once in use.
+5. It runs on the queue (it fits about twenty thousand models): the ridge is
+   chosen and the model fitted as above, then evaluated 10 × 10 as above.
+6. The new version is put into use only if its ROC area is at least 0.70, its
+   FAILED recall at least 0.60, its Kappa above ZeroR's (0), and its ROC area
+   at least that of the version in use. Otherwise it is kept, not in use, with
+   the check it failed.
+7. Every version is kept in `let_models` with its figures, ridge,
+   coefficients and evaluation, and a file under
+   `storage/app/private/let-models/`. An administrator can put any version
+   that meets both targets into use.
 
-## Checking the PHP code against Weka
+## Checking the PHP code against WEKA
 
-Both checks need a JDK, which this project's containers do not have, so the
-Java side runs in a throwaway container. From the repo root:
-
-**The port of the model.** Must report 0 mismatches:
-
-```
-docker run --rm -v "<absolute path to>/ml:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
-  "javac -cp weka-stable.jar InspectModel.java GenerateTestVectors.java && \
-   java -cp weka-stable.jar:. InspectModel /ml/models/New_Model_LLE.model && \
-   java -cp weka-stable.jar:. GenerateTestVectors /ml/models/New_Model_LLE.model /ml/tools/test_vectors.csv"
-docker compose exec -T php php ml/tools/verify_port.php
-```
-
-**The trainer and the cross-validation.** Must report ALL MATCH: the same
-trees, and the same accuracy, Kappa and FAILED recall, as Weka's J48 on eight
-made-up datasets (40 to 1000 rows, up to a fifth of the scores missing):
+These need a JDK, which this project's containers do not have, so the Java
+side runs in a throwaway container. From the repo root, with `ML` the
+absolute path to this folder:
 
 ```
-docker compose exec -T php php ml/tools/compare_with_weka.php generate
-docker run --rm -v "<absolute path to>/ml:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
-  "javac -cp weka-stable.jar org/bounce/net/DefaultAuthenticator.java CompareWithWeka.java && \
-   java -Djava.awt.headless=true -cp weka-stable.jar:. CompareWithWeka compare/*.csv"
-docker compose exec -T php php ml/tools/compare_with_weka.php check
+docker run --rm -u "$(id -u):$(id -g)" -v "$ML:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
+  "javac -cp weka-stable.jar org/bounce/net/DefaultAuthenticator.java LleLogistic.java"
 ```
 
-`tools/org/bounce/net/DefaultAuthenticator.java` is a stand-in for a class
-Weka wants at start-up that is not inside `weka-stable.jar`.
+**Version 1.** Rebuilds `models/logistic-v1.*` from the base dataset (only
+needed if the dataset changes), then checks the app's trainer and evaluator
+on it against the WEKA export. Must end ALL MATCH:
 
-## Replacing the built-in tree by hand
+```
+docker run --rm -u "$(id -u):$(id -g)" -v "$ML:/ml" -w /ml/tools eclipse-temurin:17-jdk \
+  java -Djava.awt.headless=true -cp weka-stable.jar:. LleLogistic train \
+  /ml/data/LLE_dataset_all_ExamType.arff /ml/models/logistic-v1
+docker compose exec -T php php ml/tools/compare_logistic.php base
+```
 
-Only needed to change version 1 itself, from a model trained in Weka:
+**The arithmetic.** P(PASSED) from the app's model against WEKA's for 410
+made-up students (missing scores included). Must end ALL MATCH:
 
-1. Put the new `.model` file in `ml/models/` and its dataset at
-   `ml/data/lle_clean.arff`.
-2. Run `InspectModel.java` and `GenerateTestVectors.java` against it (above).
-3. Update the `TREE` constant in `LetPredictionService.php` from the printed
-   tree and exact leaves, and `LetReadinessFeatureBuilder::SUBJECTS` if the
-   attributes changed.
-4. Run `verify_port.php`. It must report 0 mismatches before shipping.
+```
+docker run --rm -u "$(id -u):$(id -g)" -v "$ML:/ml" -w /ml/tools eclipse-temurin:17-jdk \
+  java -Djava.awt.headless=true -cp weka-stable.jar:. LleLogistic vectors \
+  /ml/models/logistic-v1.model /ml/tools/logistic_vectors.csv
+docker compose exec -T php php ml/tools/compare_logistic.php vectors
+```
+
+**The trainer and the evaluation.** The same ridge, coefficients and
+figures as WEKA on four made-up datasets (40 to 300 rows, some scores
+missing). `tools/compare/` is not committed; `generate` writes it. Must end
+ALL MATCH:
+
+```
+docker compose exec -T php php ml/tools/compare_logistic.php generate
+docker run --rm -u "$(id -u):$(id -g)" -v "$ML:/ml" -w /ml/tools eclipse-temurin:17-jdk sh -c \
+  "java -Djava.awt.headless=true -cp weka-stable.jar:. LleLogistic compare /ml/tools/compare/logistic_*.arff"
+docker compose exec -T php php ml/tools/compare_logistic.php check
+```
+
+Last run (2026-10-30): all three ALL MATCH; coefficients within 6e-5 of
+WEKA's, evaluation figures within 1e-15.
+
+## Replacing version 1 by hand
+
+Only needed to change version 1 itself, from a new base dataset:
+
+1. Put the dataset at `ml/data/LLE_dataset_all_ExamType.arff` (same
+   attributes, same order).
+2. Run `LleLogistic train` and `vectors` (above), then the three checks.
+3. A database that already ran the migration keeps its old version 1;
+   on an empty database `migrate:fresh` loads the new one.

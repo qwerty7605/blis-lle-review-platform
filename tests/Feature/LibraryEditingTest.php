@@ -100,7 +100,7 @@ class LibraryEditingTest extends TestCase
 
         $topic = Topic::create([
             'subject' => 'Cataloging and Classification',
-            'name' => 'Classification Systems and Call Numbers',
+            'name' => '4. Classification',
             'created_by' => $staff->id,
         ]);
 
@@ -173,18 +173,18 @@ class LibraryEditingTest extends TestCase
 
         $bank = QuestionBank::create([
             'title' => 'Old Name',
-            'subject' => 'Library Management',
+            'subject' => 'Library Organization and Management',
             'source_filename' => null,
             'total_items' => 1,
             'created_by' => $staff->id,
         ]);
 
-        $topic = Topic::create(['subject' => 'Library Management', 'name' => 'SWOT Topic', 'created_by' => $staff->id]);
+        $topic = Topic::create(['subject' => 'Library Organization and Management', 'name' => 'SWOT Topic', 'created_by' => $staff->id]);
 
         $question = QuestionBankQuestion::create([
             'question_bank_id' => $bank->id,
             'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
-            'subject' => 'Library Management',
+            'subject' => 'Library Organization and Management',
             'topic_id' => $topic->id,
             'tag_status' => QuestionBankQuestion::TAG_STATUS_CONFIRMED,
             'tag_source' => QuestionBankQuestion::TAG_SOURCE_RULE_BASED,
@@ -197,7 +197,7 @@ class LibraryEditingTest extends TestCase
 
         $this->patchJson("/api/library/banks/{$bank->id}", [
             'title' => 'New Name',
-            'subject' => 'Library Management',
+            'subject' => 'Library Organization and Management',
         ])->assertOk();
 
         $question->refresh();
@@ -242,8 +242,8 @@ class LibraryEditingTest extends TestCase
                 ['label' => 'A', 'text' => 'New wrong answer', 'is_correct' => false],
                 ['label' => 'B', 'text' => 'New correct answer', 'is_correct' => true],
             ],
-            'topic_name' => 'Classification Systems and Call Numbers',
-            'subtopic_name' => 'Dewey Decimal Classification (DDC)',
+            'topic_name' => '4. Classification',
+            'subtopic_name' => '4.3 Summarize the historical background and general characteristics of DDC',
             'difficulty' => 'hard',
             'cognitive_level' => 'analysis',
         ]);
@@ -256,8 +256,8 @@ class LibraryEditingTest extends TestCase
         $this->assertCount(2, $question->options);
         $this->assertSame('B', $question->answer_label);
         $this->assertSame('New correct answer', $question->answer_text);
-        $this->assertSame('Classification Systems and Call Numbers', $question->topic?->name);
-        $this->assertSame('Dewey Decimal Classification (DDC)', $question->subtopic?->name);
+        $this->assertSame('4. Classification', $question->topic?->name);
+        $this->assertSame('4.3 Summarize the historical background and general characteristics of DDC', $question->subtopic?->name);
         $this->assertSame('hard', $question->difficulty);
         $this->assertSame('analysis', $question->cognitive_level);
         $this->assertSame(QuestionBankQuestion::TAG_SOURCE_FACULTY, $question->tag_source);
@@ -268,8 +268,8 @@ class LibraryEditingTest extends TestCase
         // and saving the question again cleared it.
         $this->getJson("/api/library/banks/{$bank->id}/questions")
             ->assertOk()
-            ->assertJsonPath('questions.0.topic.name', 'Classification Systems and Call Numbers')
-            ->assertJsonPath('questions.0.subtopic.name', 'Dewey Decimal Classification (DDC)')
+            ->assertJsonPath('questions.0.topic.name', '4. Classification')
+            ->assertJsonPath('questions.0.subtopic.name', '4.3 Summarize the historical background and general characteristics of DDC')
             ->assertJsonPath('questions.0.difficulty', 'hard')
             ->assertJsonPath('questions.0.cognitive_level', 'analysis');
     }
@@ -280,7 +280,7 @@ class LibraryEditingTest extends TestCase
 
         $bank = QuestionBank::create([
             'title' => 'Tagged Bank',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'total_items' => 3,
             'mapping_status' => QuestionBank::MAPPING_STATUS_COMPLETED,
             'created_by' => $staff->id,
@@ -295,7 +295,7 @@ class LibraryEditingTest extends TestCase
             QuestionBankQuestion::create([
                 'question_bank_id' => $bank->id,
                 'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
-                'subject' => 'Reference Services',
+                'subject' => 'Reference, Bibliography and User Services',
                 'item_number' => $index + 1,
                 'question_text' => 'Question ' . ($index + 1) . '?',
                 'question_type' => QuestionBankQuestion::TYPE_OPEN_ENDED,
@@ -329,7 +329,7 @@ class LibraryEditingTest extends TestCase
 
         $bank = QuestionBank::create([
             'title' => 'Open Ended Bank',
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'total_items' => 1,
             'created_by' => $staff->id,
         ]);
@@ -337,7 +337,7 @@ class LibraryEditingTest extends TestCase
         $question = QuestionBankQuestion::create([
             'question_bank_id' => $bank->id,
             'usage_type' => QuestionBankQuestion::USAGE_ASSESSMENT,
-            'subject' => 'Reference Services',
+            'subject' => 'Reference, Bibliography and User Services',
             'item_number' => 1,
             'question_text' => 'A multiple choice question.',
             'question_type' => QuestionBankQuestion::TYPE_MULTIPLE_CHOICE,

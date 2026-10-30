@@ -29,6 +29,15 @@ class ExamsApi {
   itemAnalytics(examId) {
     return http.get(`/exams/${examId}/item-analytics`)
   }
+
+  /** Pre-test and mock board series (the six subject exams that belong together). */
+  listSeries() {
+    return http.get('/exam-series')
+  }
+
+  createSeries(payload) {
+    return http.post('/exam-series', payload)
+  }
 }
 
 export const examsApi = new ExamsApi()

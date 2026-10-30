@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -90,5 +92,31 @@ class ExamAttempt extends Model
     public function answers(): HasMany
     {
         return $this->hasMany(ExamAttemptAnswer::class);
+    }
+
+    /**
+     * Each exam's latest submitted sitting for one student, oldest first.
+     *
+     * An exam sat twice counts by its latest sitting, as it does everywhere
+     * else; ordered by when that sitting was submitted, which is the order a
+     * student's exams are read in (mastery, the Estimated Outcome series).
+     * $until leaves out anything submitted after it.
+     *
+     * @return Collection<int, ExamAttempt>
+     */
+    public static function latestSubmittedPerExam(int $userId, ?CarbonInterface $until = null): Collection
+    {
+        return self::query()
+            ->where('user_id', $userId)
+            ->where('status', self::STATUS_SUBMITTED)
+            ->whereNotNull('submitted_at')
+            ->when($until !== null, fn ($query) => $query->where('submitted_at', '<=', $until))
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('id')
+            ->get(['id', 'exam_id', 'room_id', 'user_id', 'score_percent', 'total_items', 'submitted_at'])
+            // Newest first, so the first sitting met for an exam is its latest.
+            ->unique('exam_id')
+            ->sortBy(fn (ExamAttempt $attempt): string => $attempt->submitted_at->format('Y-m-d H:i:s.u') . sprintf('%012d', $attempt->id))
+            ->values();
     }
 }

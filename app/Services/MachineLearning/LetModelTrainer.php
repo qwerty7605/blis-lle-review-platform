@@ -4,57 +4,116 @@ namespace App\Services\MachineLearning;
 
 use App\Models\LetModel;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Retrains the board exam model when an administrator asks for it, and
- * decides whether the result is fit to replace the model in use.
+ * Retrains the Estimated Outcome model when an administrator asks for it,
+ * and decides whether the new version may replace the one in use.
  *
- * Nothing here runs by itself. Retraining needs an administrator's click and
- * at least ten confirmed board results the last training did not have.
+ * Nothing here runs by itself: retraining needs an administrator's click and
+ * at least ten confirmed LLE results that the last training did not have.
+ * It runs on the queue (RetrainLetModelJob): the evaluation fits about
+ * twenty thousand models.
  *
- * The steps, each as the model was first made in Weka:
- *  1. the data: every row of the base dataset plus every graduate with a
- *     confirmed result (LetTrainingSetBuilder), missing scores left missing;
- *  2. a J48 tree, -C 0.25 -M 2 (DecisionTreeTrainer);
- *  3. 10-fold cross-validation, random seed 1 (LetModelEvaluator);
- *  4. the baseline: the share of rows that PASSED, which is what always
- *     answering PASSED would score;
- *  5. the new tree is taken up only if its accuracy is at least the baseline
- *     and its Kappa at least the current model's. Otherwise the current model
- *     stays, and the reason is given.
+ * The steps, each as version 1 was made in WEKA:
+ *  1. the rows: every row of the base dataset plus each graduate's completed
+ *     pre-tests and mock boards (LetTrainingSetBuilder);
+ *  2. the ridge chosen by CVParameterSelection's rule and a Logistic model
+ *     fitted on every row (RidgeSelector, LogisticRegressionTrainer);
+ *  3. stratified 10-fold cross-validation repeated with seeds 1 to 10, the
+ *     ridge chosen again inside every training fold, ZeroR on the same folds
+ *     (LetModelEvaluator);
+ *  4. taken up only if it meets both targets (ROC area >= 0.70, FAILED recall
+ *     >= 0.60 at the 25% cutoff), beats ZeroR on Kappa (above 0), and its ROC
+ *     area is at least the live version's. Otherwise it is kept as an
+ *     inactive version, with the test it failed.
  *
- * Every tree trained is kept as a numbered version in let_models, taken up or
- * not, with its file, so the record can be shown and any version that was
- * once in use gone back to.
+ * Every version is kept in let_models with its figures and a file under
+ * storage/app/private/let-models/.
  */
 class LetModelTrainer
 {
-    /** Confirmed results the last training had not seen, needed before training again. */
+    /** Confirmed LLE results the last training had not seen, needed before training again. */
     public const MIN_NEW_RESULTS = 10;
 
     public const OUTCOME_PROMOTED = 'promoted';
     public const OUTCOME_KEPT_CURRENT = 'kept_current';
     public const OUTCOME_NO_BASE_DATASET = 'no_base_dataset';
     public const OUTCOME_NOT_ENOUGH_NEW_RESULTS = 'not_enough_new_results';
+    public const OUTCOME_ALREADY_RUNNING = 'already_running';
+    public const OUTCOME_QUEUED = 'queued';
     public const OUTCOME_ACTIVATED = 'activated';
 
-    /** Where the original model's Weka file is kept. */
-    public const ORIGINAL_MODEL_FILE = 'ml/models/New_Model_LLE.model';
+    /** Set while a retraining is queued or running, so the page can say so. */
+    public const RUNNING_KEY = 'let-model-retraining';
 
-    /** Each retrained tree is written here, on the local disk. */
+    /** Each retrained version is written here, on the local disk. */
     private const MODEL_DIRECTORY = 'let-models';
 
     public function __construct(
         private readonly LetTrainingSetBuilder $trainingSet,
         private readonly LetBaseDataset $base,
-        private readonly DecisionTreeTrainer $trainer,
+        private readonly RidgeSelector $selector,
         private readonly LetModelEvaluator $evaluator,
     ) {
     }
 
     /**
+     * Why retraining cannot start now, or null when it can.
+     *
+     * @return array{outcome: string, message: string}|null
+     */
+    public function blockedReason(?array $set = null): ?array
+    {
+        $set ??= $this->trainingSet->build();
+
+        if ($set['base'] === []) {
+            return [
+                'outcome' => self::OUTCOME_NO_BASE_DATASET,
+                'message' => sprintf(
+                    'The base dataset is missing. Retraining adds new results to the original review-exam records, so put it at %s first.',
+                    LetBaseDataset::PATH,
+                ),
+            ];
+        }
+
+        $new = count($this->newSinceLastTraining($set['results']));
+
+        if ($new < self::MIN_NEW_RESULTS) {
+            return [
+                'outcome' => self::OUTCOME_NOT_ENOUGH_NEW_RESULTS,
+                'message' => sprintf(
+                    'Only %d new confirmed LLE result(s) since the last training. At least %d are needed before retraining.',
+                    $new,
+                    self::MIN_NEW_RESULTS,
+                ),
+            ];
+        }
+
+        return null;
+    }
+
+    public function isRunning(): bool
+    {
+        return Cache::has(self::RUNNING_KEY);
+    }
+
+    public function markRunning(): void
+    {
+        // A worker that dies mid-run must not leave the button off for good.
+        Cache::put(self::RUNNING_KEY, now()->toIso8601String(), now()->addHours(2));
+    }
+
+    public function markFinished(): void
+    {
+        Cache::forget(self::RUNNING_KEY);
+    }
+
+    /**
+     * Train, evaluate and judge a new version. Run by RetrainLetModelJob.
+     *
      * @return array{outcome: string, message: string, model: ?LetModel}
      */
     public function run(?User $by = null): array
@@ -66,44 +125,53 @@ class LetModelTrainer
             return $this->outcome($blocked['outcome'], $blocked['message']);
         }
 
-        $attributes = LetPredictionService::requiredFeatures();
-        $records = [...$set['base'], ...$set['graduates']];
+        $rows = [...$set['base'], ...$set['graduates']];
+        $fit = $this->selector->fit($rows);
+        $evaluation = $this->evaluator->evaluate($rows);
+        $figures = $evaluation['model'];
+        $live = LetModel::query()->active()->latest('id')->first();
 
-        $tree = $this->trainer->train($records, $attributes);
-        $scores = $this->evaluator->evaluate($records, $attributes);
-        $current = $this->currentModel($set['base'], $attributes);
+        $checks = [
+            'roc_area_target' => [
+                'passed' => $figures['roc_area'] >= LetModel::TARGET_ROC_AREA,
+                'text' => sprintf('ROC area %.3f against the target of %.2f', $figures['roc_area'], LetModel::TARGET_ROC_AREA),
+            ],
+            'failed_recall_target' => [
+                'passed' => $figures['failed_recall'] >= LetModel::TARGET_FAILED_RECALL,
+                'text' => sprintf('FAILED recall %.3f at the 25%% cutoff against the target of %.2f', $figures['failed_recall'], LetModel::TARGET_FAILED_RECALL),
+            ],
+            'beats_zero_r' => [
+                'passed' => $figures['kappa'] > $evaluation['zero_r']['kappa'],
+                'text' => sprintf('Kappa %.3f against ZeroR\'s %.3f', $figures['kappa'], $evaluation['zero_r']['kappa']),
+            ],
+            'roc_area_vs_live' => [
+                'passed' => $live === null || $figures['roc_area'] >= $live->roc_area,
+                'text' => $live === null
+                    ? 'No version is in use to compare with'
+                    : sprintf('ROC area %.3f against version %d\'s %.3f (measured on its own training rows)', $figures['roc_area'], $live->version, $live->roc_area),
+            ],
+        ];
 
-        $reasons = [];
-        if ($scores['accuracy'] < $scores['baseline']) {
-            $reasons[] = sprintf(
-                'its accuracy (%s%%) is below the baseline (%s%%), which is what always answering PASSED would score',
-                $scores['accuracy'],
-                $scores['baseline'],
-            );
-        }
-        if ($scores['kappa'] < $current['kappa']) {
-            $reasons[] = sprintf(
-                'its Kappa (%s) is below that of the model in use, version %d (%s)',
-                $this->kappa($scores['kappa']),
-                $current['version'],
-                $this->kappa($current['kappa']),
-            );
-        }
+        $promoted = !in_array(false, array_column($checks, 'passed'), true);
+        $failedChecks = array_values(array_map(
+            static fn (array $check): string => $check['text'],
+            array_filter($checks, static fn (array $check): bool => !$check['passed']),
+        ));
 
-        $promoted = $reasons === [];
-        $version = max((int) LetModel::query()->max('version'), LetPredictionService::BUILT_IN_VERSION) + 1;
+        $version = (int) LetModel::query()->max('version') + 1;
         $path = self::MODEL_DIRECTORY . "/model-v{$version}.json";
 
         Storage::disk('local')->put($path, (string) json_encode([
             'version' => $version,
             'trained_at' => now()->toIso8601String(),
-            'algorithm' => 'J48 -C 0.25 -M 2',
-            'attributes' => [...$attributes, 'board_result'],
-            'rows' => $scores['rows'],
-            'tree' => $tree,
+            'algorithm' => 'Logistic (ridge) in CVParameterSelection, as WEKA 3.8.6',
+            'parameters' => $fit['model']->toArray(),
+            'selection' => $fit['selection'],
+            'evaluation' => $evaluation,
+            'checks' => $checks,
         ], JSON_PRETTY_PRINT));
 
-        $model = DB::transaction(function () use ($promoted, $version, $tree, $scores, $set, $path, $current, $reasons, $by): LetModel {
+        $model = DB::transaction(function () use ($promoted, $version, $fit, $evaluation, $figures, $set, $checks, $path, $by): LetModel {
             if ($promoted) {
                 LetModel::query()->active()->update(['status' => LetModel::STATUS_RETIRED]);
             }
@@ -111,82 +179,83 @@ class LetModelTrainer
             return LetModel::query()->create([
                 'version' => $version,
                 'status' => $promoted ? LetModel::STATUS_ACTIVE : LetModel::STATUS_REJECTED,
-                'tree' => $tree,
-                'training_count' => $scores['rows'],
-                'failed_count' => $scores['failed'],
-                'graduate_count' => count($set['graduates']),
+                'source' => LetModel::SOURCE_RETRAINED,
+                'algorithm' => 'Logistic -R (chosen) in CVParameterSelection -P "R 0.5 10.0 20.0" -X 10 -S 1',
+                'parameters' => $fit['model']->toArray(),
+                'ridge' => $fit['model']->ridge,
+                'at_risk_cutoff' => LogisticModel::AT_RISK_CUTOFF,
+                'training_count' => $evaluation['rows'],
+                'failed_count' => $evaluation['failed_rows'],
                 'imported_count' => count($set['base']),
-                'accuracy' => $scores['accuracy'],
-                'kappa' => $scores['kappa'],
-                'failed_recall' => $scores['failed_recall'],
-                'baseline' => $scores['baseline'],
+                'graduate_count' => count($set['results']),
+                'roc_area' => $figures['roc_area'],
+                'failed_recall' => $figures['failed_recall'],
+                'false_alarm_rate' => $figures['false_alarm_rate'],
+                'failed_precision' => $figures['failed_precision'],
+                'failed_f_measure' => $figures['failed_f_measure'],
+                'accuracy' => $figures['accuracy'],
+                'kappa' => $figures['kappa'],
+                'zero_r_accuracy' => $evaluation['zero_r']['accuracy'],
+                'zero_r_kappa' => $evaluation['zero_r']['kappa'],
+                'meets_targets' => LetModel::meetsTargets($figures['roc_area'], $figures['failed_recall']),
+                'evaluation' => $evaluation,
+                'selection' => $fit['selection'],
+                'checks' => $checks,
+                'training_keys' => array_map($this->fingerprint(...), $set['results']),
                 'file_path' => $path,
-                'training_keys' => array_map($this->fingerprint(...), $set['graduates']),
-                'metrics' => [
-                    'compared_with_version' => $current['version'],
-                    'compared_with_kappa' => $current['kappa'],
-                    'not_taken_up_because' => $reasons,
-                    'confusion_matrix' => $scores['matrix'],
-                    'skipped_graduates' => $set['skipped'],
-                ],
                 'trigger' => LetModel::TRIGGER_MANUAL,
                 'trained_by' => $by?->id,
                 'activated_at' => $promoted ? now() : null,
             ]);
         });
 
-        $figures = sprintf(
-            'accuracy %s%%, Kappa %s, baseline %s%%',
-            $scores['accuracy'],
-            $this->kappa($scores['kappa']),
-            $scores['baseline'],
+        $summary = sprintf(
+            'ROC area %.3f, FAILED recall %.3f, false alarms %.3f, Kappa %.3f',
+            $figures['roc_area'],
+            $figures['failed_recall'],
+            $figures['false_alarm_rate'],
+            $figures['kappa'],
         );
 
         return $promoted
             ? $this->outcome(self::OUTCOME_PROMOTED, sprintf(
                 'Version %d was trained on %d rows and is now in use (%s).',
                 $version,
-                $scores['rows'],
-                $figures,
+                $evaluation['rows'],
+                $summary,
             ), $model)
             : $this->outcome(self::OUTCOME_KEPT_CURRENT, sprintf(
-                'Version %d was trained on %d rows (%s) but was not taken up: %s. Version %d stays in use.',
+                'Version %d was trained on %d rows (%s) but was not taken up: %s.',
                 $version,
-                $scores['rows'],
-                $figures,
-                implode(', and ', $reasons),
-                $current['version'],
+                $evaluation['rows'],
+                $summary,
+                implode('; ', $failedChecks),
             ), $model);
     }
 
     /**
-     * Put an earlier version back into use: $model, or the original model
-     * when null.
+     * Put a saved version into use: any that meets both targets.
      *
      * @return array{outcome: string, message: string, model: ?LetModel}|null null when that version cannot be used or already is
      */
-    public function activate(?LetModel $model): ?array
+    public function activate(LetModel $model): ?array
     {
-        $live = LetModel::query()->active()->latest('id')->first();
-
-        if ($model === null ? $live === null : !$model->canBeActivated()) {
+        if (!$model->canBeActivated()) {
             return null;
         }
 
         DB::transaction(function () use ($model): void {
             LetModel::query()->active()->update(['status' => LetModel::STATUS_RETIRED]);
-            $model?->update(['status' => LetModel::STATUS_ACTIVE, 'activated_at' => now()]);
+            $model->update(['status' => LetModel::STATUS_ACTIVE, 'activated_at' => now()]);
         });
 
-        return $this->outcome(self::OUTCOME_ACTIVATED, sprintf(
-            'Version %d is now the model in use.',
-            $model?->version ?? LetPredictionService::BUILT_IN_VERSION,
-        ), $model);
+        return $this->outcome(self::OUTCOME_ACTIVATED, sprintf('Version %d is now the model in use.', $model->version), $model->refresh());
     }
 
     /**
-     * What the Licensure page shows: the model in use, whether it can be
-     * retrained and why not, and every version with its figures.
+     * What the Licensure page shows: the version in use, whether a new one
+     * can be trained and why not, and every version with its figures side by
+     * side. Each version's figures come from its own training rows.
      *
      * @return array<string, mixed>
      */
@@ -194,56 +263,57 @@ class LetModelTrainer
     {
         $set = $this->trainingSet->build();
         $blocked = $this->blockedReason($set);
-        // Read afresh: a predictor remembers the model it first saw, and a
-        // retraining earlier in this request may have replaced it.
-        $live = (new LetPredictionService())->liveModel();
-        unset($live['tree']);
+        $live = LetModel::query()->active()->latest('id')->first();
 
-        $attributes = LetPredictionService::requiredFeatures();
-        $original = $set['base'] !== [] ? $this->evaluator->evaluate($set['base'], $attributes) : null;
-
-        $versions = [[
-            'id' => null,
-            'version' => LetPredictionService::BUILT_IN_VERSION,
-            'label' => 'Original model (Weka J48)',
-            'trained_at' => null,
-            'rows' => $original['rows'] ?? LetPredictionService::BUILT_IN_TRAINING_COUNT,
-            'failed' => $original['failed'] ?? null,
-            'accuracy' => $original['accuracy'] ?? null,
-            'kappa' => $original['kappa'] ?? null,
-            'failed_recall' => $original['failed_recall'] ?? null,
-            'baseline' => $original['baseline'] ?? null,
-            'file_path' => self::ORIGINAL_MODEL_FILE,
-            'active' => $live['source'] === 'built_in',
-            'status' => $live['source'] === 'built_in' ? LetModel::STATUS_ACTIVE : LetModel::STATUS_RETIRED,
-            'can_activate' => $live['source'] !== 'built_in',
-            'note' => null,
-        ]];
-
-        foreach (LetModel::query()->orderBy('version')->orderBy('id')->get() as $model) {
-            $versions[] = [
+        $versions = LetModel::query()
+            ->orderByDesc('version')
+            ->get()
+            ->map(fn (LetModel $model): array => [
                 'id' => (int) $model->id,
                 'version' => (int) $model->version,
-                'label' => 'Retrained',
+                'source' => $model->source,
+                'label' => $model->source === LetModel::SOURCE_WEKA ? 'Trained in WEKA' : 'Retrained here',
                 'trained_at' => $model->created_at?->toIso8601String(),
                 'rows' => (int) $model->training_count,
-                'failed' => $model->failed_count,
+                'failed' => (int) $model->failed_count,
+                'graduates' => (int) $model->graduate_count,
+                'ridge' => $model->ridge,
+                'roc_area' => $model->roc_area,
+                'failed_recall' => $model->failed_recall,
+                'false_alarm_rate' => $model->false_alarm_rate,
+                'failed_precision' => $model->failed_precision,
+                'failed_f_measure' => $model->failed_f_measure,
                 'accuracy' => $model->accuracy,
                 'kappa' => $model->kappa,
-                'failed_recall' => $model->failed_recall,
-                'baseline' => $model->baseline,
+                'zero_r_accuracy' => $model->zero_r_accuracy,
+                'zero_r_kappa' => $model->zero_r_kappa,
+                'confusion' => $model->evaluation['model']['confusion'] ?? null,
+                'meets_targets' => $model->meets_targets,
+                'failed_checks' => array_values(array_map(
+                    static fn (array $check): string => $check['text'],
+                    array_filter($model->checks ?? [], static fn (array $check): bool => !$check['passed']),
+                )),
                 'file_path' => $model->file_path,
                 'active' => $model->status === LetModel::STATUS_ACTIVE,
                 'status' => $model->status,
                 'can_activate' => $model->canBeActivated(),
-                'note' => $model->accuracy === null
-                    ? 'Trained under the earlier rules; cannot be used with the present model.'
-                    : (implode('; ', $model->metrics['not_taken_up_because'] ?? []) ?: null),
-            ];
-        }
+            ])
+            ->all();
 
         return [
-            'live' => $live,
+            'live' => $live === null ? null : [
+                'id' => (int) $live->id,
+                'version' => (int) $live->version,
+                'trained_on' => (int) $live->training_count,
+                'trained_at' => $live->created_at?->toIso8601String(),
+                'source' => $live->source,
+                'ridge' => $live->ridge,
+            ],
+            'targets' => [
+                'roc_area' => LetModel::TARGET_ROC_AREA,
+                'failed_recall' => LetModel::TARGET_FAILED_RECALL,
+                'at_risk_cutoff' => LogisticModel::AT_RISK_CUTOFF,
+            ],
             'base_dataset' => [
                 'present' => $this->base->exists(),
                 'path' => LetBaseDataset::PATH,
@@ -251,102 +321,45 @@ class LetModelTrainer
             ],
             'data' => [
                 'base_rows' => count($set['base']),
-                'confirmed_graduates' => count($set['graduates']),
+                'confirmed_graduates' => count($set['results']),
+                'graduate_rows' => count($set['graduates']),
                 'skipped_graduates' => $set['skipped'],
-                'new_since_last_training' => count($this->newSinceLastTraining($set['graduates'])),
+                'new_since_last_training' => count($this->newSinceLastTraining($set['results'])),
                 'minimum_new_results' => self::MIN_NEW_RESULTS,
             ],
-            'can_retrain' => $blocked === null,
-            'retrain_blocked_reason' => $blocked['message'] ?? null,
-            'versions' => array_reverse($versions),
+            'training' => $this->isRunning(),
+            'can_retrain' => $blocked === null && !$this->isRunning(),
+            'retrain_blocked_reason' => $this->isRunning() ? 'A retraining is already running.' : ($blocked['message'] ?? null),
+            'versions' => $versions,
         ];
-    }
-
-    /**
-     * @param  array{base: array<int, mixed>, graduates: array<int, array<string, mixed>>, skipped: int}  $set
-     * @return array{outcome: string, message: string}|null
-     */
-    private function blockedReason(array $set): ?array
-    {
-        if ($set['base'] === []) {
-            return [
-                'outcome' => self::OUTCOME_NO_BASE_DATASET,
-                'message' => sprintf(
-                    'The base dataset is missing. Retraining adds new results to the original records, so put lle_clean.arff at %s first.',
-                    LetBaseDataset::PATH,
-                ),
-            ];
-        }
-
-        $new = count($this->newSinceLastTraining($set['graduates']));
-
-        if ($new < self::MIN_NEW_RESULTS) {
-            return [
-                'outcome' => self::OUTCOME_NOT_ENOUGH_NEW_RESULTS,
-                'message' => sprintf(
-                    'Only %d new confirmed board result(s) since the last training. At least %d are needed before retraining.',
-                    $new,
-                    self::MIN_NEW_RESULTS,
-                ),
-            ];
-        }
-
-        return null;
     }
 
     /**
      * Graduates the most recent training did not have. A corrected result
      * counts as new, since it is new information.
      *
-     * @param  array<int, array{key: string, label: string}>  $graduates
-     * @return array<int, array{key: string, label: string}>
+     * @param  list<array{key: string, label: string}>  $results
+     * @return list<array{key: string, label: string}>
      */
-    private function newSinceLastTraining(array $graduates): array
+    private function newSinceLastTraining(array $results): array
     {
-        $last = LetModel::query()->currentRules()->latest('id')->first();
+        $last = LetModel::query()->latest('id')->first();
         $seen = array_flip($last?->training_keys ?? []);
 
         return array_values(array_filter(
-            $graduates,
-            fn (array $record): bool => !isset($seen[$this->fingerprint($record)]),
+            $results,
+            fn (array $result): bool => !isset($seen[$this->fingerprint($result)]),
         ));
     }
 
     /**
-     * The model in use and the Kappa a new one has to match. For a retrained
-     * version that is the Kappa recorded when it was trained. For the
-     * original it is worked out the same way, on the base dataset it was
-     * trained on.
+     * A graduate's identity together with their result.
      *
-     * @param  array<int, array<string, mixed>>  $base
-     * @param  array<int, string>  $attributes
-     * @return array{version: int, kappa: float}
+     * @param  array{key: string, label: string}  $result
      */
-    private function currentModel(array $base, array $attributes): array
+    private function fingerprint(array $result): string
     {
-        $live = LetModel::query()->active()->latest('id')->first();
-
-        return $live
-            ? ['version' => (int) $live->version, 'kappa' => (float) $live->kappa]
-            : [
-                'version' => LetPredictionService::BUILT_IN_VERSION,
-                'kappa' => $this->evaluator->evaluate($base, $attributes)['kappa'],
-            ];
-    }
-
-    /**
-     * A record's identity together with its outcome.
-     *
-     * @param  array{key: string, label: string}  $record
-     */
-    private function fingerprint(array $record): string
-    {
-        return $record['key'] . '=' . $record['label'];
-    }
-
-    private function kappa(float $value): string
-    {
-        return number_format($value, 4, '.', '');
+        return $result['key'] . '=' . $result['label'];
     }
 
     /**

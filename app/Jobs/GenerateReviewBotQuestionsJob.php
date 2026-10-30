@@ -35,6 +35,8 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
         public ?int $sourceBankId = null,
         /** Cache key held while this run is in flight, released in handle()/failed() so a teacher is not locked out for the full TTL after a run finishes. */
         public ?string $lockKey = null,
+        /** @var list<int>|null For a student's top-up, the exam items that student may practise (see ReviewBotEligibility); null for no limit. */
+        public ?array $sourceQuestionIds = null,
     ) {}
 
     /**
@@ -73,6 +75,7 @@ class GenerateReviewBotQuestionsJob implements ShouldQueue
                 $this->subtopicId,
                 $this->sourceLimit,
                 $this->sourceBankId,
+                $this->sourceQuestionIds,
             );
         } finally {
             // Released on the way out whether generation succeeded or threw --

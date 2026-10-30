@@ -10,6 +10,7 @@ use App\Models\Topic;
 use App\Services\QuestionClassification\LocalQuestionClassifier;
 use App\Services\QuestionClassification\ScalarClassification;
 use App\Services\QuestionClassification\TopicClassification;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -29,194 +30,17 @@ class QuestionMappingService
     }
 
     /**
-     * Curated topic -> subtopic list per BLIS core subject. The classifier
-     * is only ever allowed to choose from this list (never invent a topic or
-     * subtopic name), so results stay comparable across every teacher's
-     * uploads instead of fragmenting into near-duplicate names.
+     * The topics and sub-topics come from the LLE Table of Specifications
+     * (App\Support\LleTaxonomy) and nowhere else. The classifier, the
+     * Library editor and the Review Bot editor can only choose from it, so
+     * tags stay comparable across every teacher's uploads instead of
+     * fragmenting into near-duplicate names.
      *
-     * @var array<string, array<string, array<int, string>>>
-     */
-    private const CURATED_TOPICS = [
-        'Cataloging and Classification' => [
-            'RDA and Descriptive Cataloging' => [
-                'Core Elements of Description',
-                'FRBR/LRM Concepts',
-                'Content, Media, and Carrier Types',
-            ],
-            'Classification Systems and Call Numbers' => [
-                'Dewey Decimal Classification (DDC)',
-                'Library of Congress Classification (LCC)',
-                'Universal Decimal Classification (UDC)',
-            ],
-            'Subject Headings and Authority Control' => [
-                'Library of Congress Subject Headings (LCSH)',
-                'Authority Records and Cross-References',
-                'Name Authority Control',
-            ],
-            'Cutter Numbers and Shelf Arrangement' => [
-                'Cutter-Sanborn Tables',
-                'Shelflisting Practices',
-                'Alternate Shelving Schemes',
-            ],
-            'MARC Format and Bibliographic Records' => [
-                'MARC 21 Field Structure',
-                'Fixed and Variable Fields',
-                'Bibliographic vs Authority Records',
-            ],
-            'Edition and Physical Description' => [
-                'Edition Statements',
-                'Physical Description Area',
-                'Series Statements',
-            ],
-        ],
-        'Indexing and Abstracting' => [
-            'Controlled Vocabulary and Thesauri' => [
-                'Preferred and Non-Preferred Terms',
-                'Broader/Narrower/Related Terms',
-                'Thesaurus Construction',
-            ],
-            'Abstract Types and Functions' => [
-                'Informative Abstracts',
-                'Indicative Abstracts',
-                'Critical/Evaluative Abstracts',
-            ],
-            'Precision, Recall, and Retrieval Quality' => [
-                'Precision vs Recall Tradeoff',
-                'Relevance Ranking',
-                'Search Result Evaluation',
-            ],
-            'Citation Indexing' => [
-                'Citation Analysis',
-                'Bibliographic Coupling',
-                'Co-Citation',
-            ],
-            'Exhaustivity and Specificity' => [
-                'Depth of Indexing',
-                'Term Specificity',
-                'Indexing Consistency',
-            ],
-        ],
-        'Information Technology' => [
-            'OPAC and Discovery Systems' => [
-                'OPAC Search Features',
-                'Discovery Layer Tools',
-                'Federated Search',
-            ],
-            'Boolean Search and Query Strategy' => [
-                'AND/OR/NOT Operators',
-                'Truncation and Wildcards',
-                'Nested Queries',
-            ],
-            'Metadata and Interoperability Standards' => [
-                'Dublin Core',
-                'MARC-to-Dublin Core Mapping',
-                'Z39.50/SRU Protocols',
-            ],
-            'Integrated Library Systems' => [
-                'ILS Modules',
-                'Circulation and Cataloging Integration',
-                'Vendor ILS Platforms',
-            ],
-            'Digital Security and Data Protection' => [
-                'Authentication and Access Control',
-                'Phishing and Social Engineering',
-                'Data Backup Practices',
-            ],
-            'RFID, Barcodes, and Automation' => [
-                'RFID Tagging',
-                'Self-Check Kiosks',
-                'Inventory Automation',
-            ],
-        ],
-        'Reference Services' => [
-            'Reference Interview and User Needs' => [
-                'Open vs Closed Questions',
-                'Negotiating the Query',
-                'Nonverbal Cues',
-            ],
-            'Ready Reference and Referral' => [
-                'Quick-Fact Sources',
-                'Interlibrary Referral',
-                'Escalation to Specialists',
-            ],
-            'Source Evaluation and Information Literacy' => [
-                'Authority and Currency Evaluation',
-                'Teaching Search Strategies',
-                'Citation Guidance',
-            ],
-            'Current Awareness Services' => [
-                'Selective Dissemination of Information (SDI)',
-                'New Acquisitions Alerts',
-                'RSS/Table-of-Contents Alerts',
-            ],
-            "Reader's Advisory" => [
-                'Genre and Appeal Factors',
-                'Read-Alike Recommendations',
-                'Book Talks',
-            ],
-        ],
-        'Library Management' => [
-            'Planning and Policy Development' => [
-                'Strategic Planning',
-                'Collection Development Policy',
-                'Mission and Vision Statements',
-            ],
-            'Budgeting and Resource Allocation' => [
-                'Line-Item Budgeting',
-                'Cost-Benefit Analysis',
-                'Grant and Fund Sourcing',
-            ],
-            'Staff Development and Supervision' => [
-                'Training Programs',
-                'Performance Appraisal',
-                'Delegation and Motivation',
-            ],
-            'Assessment and Performance Indicators' => [
-                'Library Performance Metrics',
-                'SWOT Analysis',
-                'User Satisfaction Surveys',
-            ],
-            'Disaster and Risk Management' => [
-                'Disaster Preparedness Plans',
-                'Collection Salvage Procedures',
-                'Business Continuity Planning',
-            ],
-        ],
-        'Selection and Acquisition' => [
-            'Selection Criteria and Collection Policy' => [
-                'Community/User Needs Assessment',
-                'Selection Aids and Reviews',
-                'Weeding Criteria',
-            ],
-            'Acquisition Methods and Ordering Workflow' => [
-                'Purchase, Gift, and Exchange',
-                'Standing and Blanket Orders',
-                'Approval Plans',
-            ],
-            'Vendor Evaluation and Bibliographic Verification' => [
-                'Vendor Reliability Assessment',
-                'Pre-Order Bibliographic Verification',
-                'Price Comparison',
-            ],
-            'Gifts and Donations Management' => [
-                'Gift Evaluation Criteria',
-                'Deed of Gift Agreements',
-                'Disposal of Unwanted Gifts',
-            ],
-            'Budgeting for Acquisitions' => [
-                'Encumbrance Tracking',
-                'Fund Allocation by Subject',
-                'Approval and Purchase Orders',
-            ],
-        ],
-    ];
-
-    /**
      * @return array<int, string>
      */
     public function curatedTopicsForSubject(?string $subject): array
     {
-        return array_keys(self::CURATED_TOPICS[$this->normalizeSubjectLabel($subject)] ?? []);
+        return array_keys(LleTaxonomy::topics($subject));
     }
 
     /**
@@ -224,9 +48,7 @@ class QuestionMappingService
      */
     public function curatedSubtopicsForTopic(?string $subject, ?string $topic): array
     {
-        $normalizedTopic = trim((string) $topic);
-
-        return self::CURATED_TOPICS[$this->normalizeSubjectLabel($subject)][$normalizedTopic] ?? [];
+        return array_keys(LleTaxonomy::topic($subject, $topic)['subtopics'] ?? []);
     }
 
     /**
@@ -234,7 +56,35 @@ class QuestionMappingService
      */
     public function curatedTopics(): array
     {
-        return self::CURATED_TOPICS;
+        return LleTaxonomy::curated();
+    }
+
+    /**
+     * Why a topic / sub-topic pair cannot be saved on a question of this
+     * subject, or null when it can (or when neither is given).
+     */
+    public function tagProblem(?string $subject, ?string $topicName, ?string $subtopicName): ?string
+    {
+        $topicName = trim((string) $topicName);
+        $subtopicName = trim((string) $subtopicName);
+
+        if ($topicName === '' && $subtopicName === '') {
+            return null;
+        }
+
+        if (LleTaxonomy::subjectKey($subject) === null) {
+            return 'Set the question set\'s subject to one of the six board subjects before tagging its questions.';
+        }
+
+        if ($topicName !== '' && LleTaxonomy::topic($subject, $topicName) === null) {
+            return sprintf('"%s" is not a topic of %s in the Table of Specifications.', $topicName, LleTaxonomy::canonicalSubject($subject));
+        }
+
+        if ($topicName !== '' && $subtopicName !== '' && LleTaxonomy::subtopic($subject, $topicName, $subtopicName) === null) {
+            return sprintf('"%s" is not a sub-topic of "%s" in the Table of Specifications.', $subtopicName, $topicName);
+        }
+
+        return null;
     }
 
     /**
@@ -373,10 +223,10 @@ class QuestionMappingService
         $errors = [];
 
         foreach ($sourceQuestions->groupBy(fn (QuestionBankQuestion $question) => $this->normalizeSubjectLabel($question->subject)) as $subject => $subjectQuestions) {
-            $allowedTopics = self::CURATED_TOPICS[$subject] ?? [];
+            $allowedTopics = LleTaxonomy::curated()[$subject] ?? [];
             $hasCuratedTopics = $allowedTopics !== [];
 
-            // No curated topic list for this subject (typically an unset/
+            // Not one of the six board subjects (typically an unset/
             // undetected "General" subject) doesn't mean nothing can be
             // classified -- cognitive level and difficulty are subject-
             // independent. Only topic/subtopic get skipped (left null,
@@ -385,7 +235,7 @@ class QuestionMappingService
             // over one missing piece of metadata.
             if (!$hasCuratedTopics) {
                 $errors[] = sprintf(
-                    'Subject "%s" has no curated topic list yet, so those item(s) got difficulty and cognitive level applied automatically but no topic -- set a subject on the bank to enable topic mapping.',
+                    'Subject "%s" is not one of the six board subjects, so those item(s) got difficulty and cognitive level applied automatically but no topic -- set a board subject on the bank to enable topic mapping.',
                     $subject,
                 );
             }
@@ -460,32 +310,53 @@ class QuestionMappingService
         return $question->refresh();
     }
 
+    /**
+     * The topics row for a TOS topic of a board subject, created on first
+     * use with its code, question count and place in the TOS. A name the TOS
+     * does not have, or a subject that is not a board subject, gives null.
+     * The topic may be named by its label ("2. Descriptive Cataloging"), its
+     * plain name or its code.
+     */
     public function resolveTopic(?string $subject, ?string $topicName, ?int $actorId = null): ?Topic
     {
-        $normalizedSubject = trim((string) ($subject ?? ''));
-        $normalizedTopic = trim((string) ($topicName ?? ''));
+        $subjectName = LleTaxonomy::canonicalSubject($subject);
+        $entry = LleTaxonomy::topic($subjectName, $topicName);
 
-        if ($normalizedSubject === '' || $normalizedTopic === '') {
+        if ($subjectName === null || $entry === null) {
             return null;
         }
 
         return Topic::query()->firstOrCreate(
-            ['subject' => $normalizedSubject, 'name' => $normalizedTopic],
-            ['created_by' => $actorId],
+            ['subject' => $subjectName, 'name' => $entry['label']],
+            [
+                'code' => $entry['code'],
+                'tos_items' => $entry['tos_items'],
+                'sort_order' => $entry['sort_order'],
+                'created_by' => $actorId,
+            ],
         );
     }
 
+    /**
+     * The subtopics row for a TOS sub-topic of $topic, created on first use;
+     * null for a name the TOS does not list under that topic.
+     */
     public function resolveSubtopic(Topic $topic, ?string $subtopicName, ?int $actorId = null): ?Subtopic
     {
-        $normalizedSubtopic = trim((string) ($subtopicName ?? ''));
+        $entry = LleTaxonomy::subtopic($topic->subject, $topic->name, $subtopicName);
 
-        if ($normalizedSubtopic === '') {
+        if ($entry === null) {
             return null;
         }
 
         return Subtopic::query()->firstOrCreate(
-            ['topic_id' => $topic->id, 'name' => $normalizedSubtopic],
-            ['created_by' => $actorId],
+            ['topic_id' => $topic->id, 'name' => $entry['label']],
+            [
+                'code' => $entry['code'],
+                'tos_items' => $entry['tos_items'],
+                'sort_order' => $entry['sort_order'],
+                'created_by' => $actorId,
+            ],
         );
     }
 
@@ -577,7 +448,10 @@ class QuestionMappingService
             ? $this->resolveSubtopic($topicModel, $topic->subtopic)
             : null;
 
-        $isLowConfidence = $topic->confidence < LocalQuestionClassifier::TOPIC_CONFIDENCE_THRESHOLD
+        // A question no keyword matched is "Other / Unclassified" outright:
+        // that is not a weak topic guess, so it does not on its own send the
+        // question to review.
+        $isLowConfidence = (!$topic->unclassified && $topic->confidence < LocalQuestionClassifier::TOPIC_CONFIDENCE_THRESHOLD)
             || $cognitiveLevel->confidence < LocalQuestionClassifier::COGNITIVE_CONFIDENCE_THRESHOLD
             || $difficulty->confidence < LocalQuestionClassifier::DIFFICULTY_CONFIDENCE_THRESHOLD;
 
@@ -596,12 +470,12 @@ class QuestionMappingService
     }
 
     /**
-     * Guards against a dictionary-authoring typo or a future edit to
-     * CURATED_TOPICS that TopicKeywordDictionary wasn't updated to match --
-     * re-validates the classifier's own guess is an exact member of the
-     * allowed topic/subtopic list before it's ever persisted.
+     * Guards against a dictionary-authoring typo or a TOS edit that
+     * TopicKeywordDictionary wasn't updated to match -- re-validates the
+     * classifier's own guess is an exact member of the allowed topic/subtopic
+     * list before it's ever persisted.
      *
-     * @param  array<string, array<int, string>>  $allowedTopics topic name => subtopic names
+     * @param  array<string, array<int, string>>  $allowedTopics topic label => subtopic labels
      */
     protected function sanitizeLocalTopic(TopicClassification $topic, array $allowedTopics): TopicClassification
     {
@@ -614,9 +488,13 @@ class QuestionMappingService
             ? $topic->subtopic
             : null;
 
-        return new TopicClassification($topic->topic, $subtopic, $topic->confidence);
+        return new TopicClassification($topic->topic, $subtopic, $topic->confidence, $topic->unclassified);
     }
 
+    /**
+     * A board subject's official name for any of its spellings; anything
+     * else title-cased, and an empty subject "General".
+     */
     protected function normalizeSubjectLabel(mixed $subject): string
     {
         $raw = trim((string) $subject);
@@ -625,43 +503,6 @@ class QuestionMappingService
             return 'General';
         }
 
-        $normalized = Str::of($raw)
-            ->lower()
-            ->replace('&', 'and')
-            ->replace('/', ' ')
-            ->replace('-', ' ')
-            ->replaceMatches('/\s+/', ' ')
-            ->trim()
-            ->toString();
-
-        $map = [
-            'cataloging and classification' => 'Cataloging and Classification',
-            'cataloguing and classification' => 'Cataloging and Classification',
-            'cataloging classification' => 'Cataloging and Classification',
-            'indexing and abstracting' => 'Indexing and Abstracting',
-            'indexing abstracting' => 'Indexing and Abstracting',
-            'information technology' => 'Information Technology',
-            'it' => 'Information Technology',
-            'reference services' => 'Reference Services',
-            'reference service' => 'Reference Services',
-            'reference' => 'Reference Services',
-            'library management' => 'Library Management',
-            'selection and acquisition' => 'Selection and Acquisition',
-            'selection acquisition' => 'Selection and Acquisition',
-            'acquisition and selection' => 'Selection and Acquisition',
-            'acquisition selection' => 'Selection and Acquisition',
-        ];
-
-        if (array_key_exists($normalized, $map)) {
-            return $map[$normalized];
-        }
-
-        foreach ($map as $key => $canonical) {
-            if (str_contains($normalized, $key) || str_contains($key, $normalized)) {
-                return $canonical;
-            }
-        }
-
-        return Str::title($normalized);
+        return LleTaxonomy::canonicalSubject($raw) ?? Str::title(LleTaxonomy::normalize($raw));
     }
 }

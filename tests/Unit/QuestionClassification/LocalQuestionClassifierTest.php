@@ -6,7 +6,7 @@ use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
 use App\Services\QuestionClassification\LocalQuestionClassifier;
 use App\Services\QuestionClassification\TopicKeywordDictionary;
-use App\Services\QuestionMappingService;
+use App\Support\LleTaxonomy;
 use Illuminate\Database\Eloquent\Collection;
 use Tests\TestCase;
 
@@ -40,26 +40,78 @@ class LocalQuestionClassifierTest extends TestCase
         return $question;
     }
 
-    public function test_the_keyword_dictionary_has_exactly_the_curated_subjects_and_topics(): void
+    public function test_the_keyword_dictionary_has_exactly_the_tos_subjects_topics_and_subtopics(): void
     {
-        $curated = app(QuestionMappingService::class)->curatedTopics();
+        $this->assertSame(LleTaxonomy::keys(), array_keys(TopicKeywordDictionary::KEYWORDS));
 
-        $this->assertSame(array_keys($curated), array_keys(TopicKeywordDictionary::KEYWORDS));
-        foreach ($curated as $subject => $topics) {
-            $this->assertSame(array_keys($topics), array_keys(TopicKeywordDictionary::KEYWORDS[$subject]), $subject);
+        foreach (LleTaxonomy::subjects() as $key => $subject) {
+            $tosTopics = array_filter($subject['topics'], fn (array $topic): bool => !$topic['other']);
+            $this->assertSame(array_column($tosTopics, 'code'), array_map('strval', array_keys(TopicKeywordDictionary::KEYWORDS[$key])), $key);
+
+            foreach ($tosTopics as $topic) {
+                $entries = TopicKeywordDictionary::KEYWORDS[$key][$topic['code']];
+                $this->assertSame(array_column($topic['subtopics'], 'code'), array_map('strval', array_keys($entries)), "{$key} {$topic['code']}");
+
+                foreach ($entries as $code => $entry) {
+                    $this->assertNotSame('', trim($entry['concept']), "{$key} {$code} has no concept");
+                    $this->assertNotEmpty($entry['keywords'], "{$key} {$code} has no keywords");
+                }
+            }
+        }
+
+        // The TOS has 6 subjects, 29 topics and 154 sub-topics.
+        $this->assertSame(154, LleTaxonomy::subtopicCount());
+        $this->assertSame(29, array_sum(array_map(fn (array $topics): int => count($topics), TopicKeywordDictionary::KEYWORDS)));
+    }
+
+    public function test_every_phrase_matches_a_question_that_contains_it(): void
+    {
+        foreach (TopicKeywordDictionary::KEYWORDS as $subject => $topics) {
+            foreach ($topics as $subtopics) {
+                foreach ($subtopics as $code => $entry) {
+                    $phrases = array_column($entry['keywords'], 0);
+                    $this->assertSame(array_unique($phrases), $phrases, "{$subject} {$code} lists a phrase twice");
+
+                    foreach ($entry['keywords'] as [$phrase, $weight]) {
+                        $this->assertTrue(
+                            $this->classifier->matchesPhrase("Which of the following is true of {$phrase} in libraries?", $phrase),
+                            "\"{$phrase}\" ({$subject} {$code}) never matches",
+                        );
+                        $this->assertGreaterThanOrEqual(1.0, $weight);
+                        $this->assertLessThanOrEqual(3.0, $weight);
+                    }
+                }
+            }
         }
     }
 
-    public function test_a_question_full_of_a_topic_s_phrases_is_tagged_with_it_confidently(): void
+    public function test_phrases_with_punctuation_match_however_the_question_writes_them(): void
+    {
+        $this->assertTrue($this->classifier->matchesPhrase('Which protocol is Z39.50?', 'z39.50'));
+        $this->assertTrue($this->classifier->matchesPhrase('the Work - Expression - Manifestation chain', 'work, expression, manifestation'));
+        $this->assertTrue($this->classifier->matchesPhrase('What is a précis?', 'precis'));
+        $this->assertTrue($this->classifier->matchesPhrase('Under R.A. 9246, who may practise?', 'r.a. 9246'));
+        // Whole words only.
+        $this->assertFalse($this->classifier->matchesPhrase('The interpretation of rules', 'pret'));
+    }
+
+    public function test_a_question_full_of_a_subtopic_s_phrases_is_tagged_with_it_confidently(): void
     {
         $result = $this->classifier->classifyTopic(
-            $this->question('During the reference interview, when negotiating the query, should the librarian use an open-ended question?'),
+            $this->question('During the reference interview, should the librarian use neutral questioning or a closed question first?'),
             'Reference Services',
         );
 
-        $this->assertSame('Reference Interview and User Needs', $result->topic);
-        $this->assertNotNull($result->subtopic);
+        $this->assertSame('3. Reference and Information Services', $result->topic);
+        $this->assertSame('3.3 Identify the various methods and techniques involved in a reference interview', $result->subtopic);
+        $this->assertFalse($result->unclassified);
         $this->assertGreaterThan(0.45, $result->confidence);
+
+        $isbd = $this->classifier->classifyTopic(
+            $this->question('In the ISBD, which prescribed punctuation separates the areas of description?'),
+            'Cataloging and Classification',
+        );
+        $this->assertSame('2.3 Identify the basic parts of the International Standard Bibliographic Description', $isbd->subtopic);
     }
 
     public function test_a_subject_the_dictionary_does_not_know_gets_no_topic(): void
@@ -70,12 +122,13 @@ class LocalQuestionClassifierTest extends TestCase
         $this->assertSame(0.0, $result->confidence);
     }
 
-    public function test_with_no_keyword_at_all_a_topic_is_still_guessed_but_with_no_confidence(): void
+    public function test_with_no_keyword_at_all_the_question_is_other_unclassified(): void
     {
-        $result = $this->classifier->classifyTopic($this->question('Zzz qqq xxyy'), 'Reference Services');
+        $result = $this->classifier->classifyTopic($this->question('Zzz qqq xxyy'), 'Reference, Bibliography and User Services');
 
-        $this->assertNotNull($result->topic);
-        $this->assertSame(0.0, $result->confidence);
+        $this->assertSame('Other / Unclassified', $result->topic);
+        $this->assertNull($result->subtopic);
+        $this->assertTrue($result->unclassified);
     }
 
     public function test_a_whole_file_s_subject_is_guessed_from_its_questions(): void

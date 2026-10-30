@@ -4,8 +4,9 @@ namespace App\Services\QuestionGeneration;
 
 use App\Models\QuestionBankOption;
 use App\Models\QuestionBankQuestion;
-use App\Models\Subtopic;
 use App\Services\QuestionClassification\LocalQuestionClassifier;
+use App\Services\QuestionClassification\TopicKeywordDictionary;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -124,7 +125,7 @@ class LocalReviewQuestionGenerator
             return null;
         }
 
-        $correctPhrase = $this->stripInterrogativeLead($stem) ?? $source->subtopic?->name ?? $source->topic?->name;
+        $correctPhrase = $this->stripInterrogativeLead($stem) ?? $this->conceptOf($source, $subject);
 
         if (!$correctPhrase) {
             return null;
@@ -132,11 +133,13 @@ class LocalReviewQuestionGenerator
 
         $seed = (int) $source->id * 11 + 2;
 
-        $siblingSubtopics = Subtopic::query()
-            ->where('topic_id', $source->topic_id)
-            ->when($source->subtopic_id, fn ($query) => $query->where('id', '!=', $source->subtopic_id))
-            ->pluck('name')
-            ->filter(fn (string $name): bool => Str::lower($name) !== Str::lower($correctPhrase))
+        // The other sub-topics of the same TOS topic, each by its short
+        // concept phrase (a competency statement would give itself away).
+        $topicName = $source->topic?->name;
+        $siblingSubtopics = collect(LleTaxonomy::topic($subject, $topicName)['subtopics'] ?? [])
+            ->reject(fn (array $entry): bool => $entry['label'] === $source->subtopic?->name)
+            ->map(fn (array $entry): ?string => TopicKeywordDictionary::concept($subject, $topicName, $entry['label']))
+            ->filter(fn (?string $concept): bool => filled($concept) && Str::lower($concept) !== Str::lower($correctPhrase))
             ->values();
 
         $distractors = $siblingSubtopics->count() >= 3
@@ -172,7 +175,7 @@ class LocalReviewQuestionGenerator
 
     private function buildApplicationVariant(QuestionBankQuestion $source, string $subject, int $sourceIndex, string $answer): ?array
     {
-        $concept = $source->subtopic?->name ?? $source->topic?->name;
+        $concept = $this->conceptOf($source, $subject);
         $templates = ScenarioTemplateDictionary::TEMPLATES[$subject] ?? [];
 
         if (!$concept || $templates === []) {
@@ -219,7 +222,7 @@ class LocalReviewQuestionGenerator
             return null;
         }
 
-        $termA = $source->subtopic?->name ?? $source->topic?->name;
+        $termA = $this->conceptOf($source, $subject);
         $correctOption = $source->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
         $factA = trim((string) ($source->answer_text ?? $correctOption?->option_text ?? ''));
 
@@ -247,7 +250,7 @@ class LocalReviewQuestionGenerator
             return null;
         }
 
-        $termB = $sibling->subtopic?->name ?? $sibling->topic?->name;
+        $termB = $this->conceptOf($sibling, $subject);
         $siblingCorrect = $sibling->options->first(fn (QuestionBankOption $option): bool => (bool) $option->is_correct);
         $factB = trim((string) ($sibling->answer_text ?? $siblingCorrect?->option_text ?? ''));
 
@@ -293,6 +296,17 @@ class LocalReviewQuestionGenerator
     }
 
     // ---- shared helpers -----------------------------------------------
+
+    /**
+     * What an item is about, as a short noun phrase: its TOS sub-topic's
+     * concept (TopicKeywordDictionary), else its topic's plain name. Null for
+     * "Other / Unclassified" or an untagged item, which have no concept to
+     * name.
+     */
+    private function conceptOf(QuestionBankQuestion $item, string $subject): ?string
+    {
+        return TopicKeywordDictionary::concept($subject, $item->topic?->name, $item->subtopic?->name);
+    }
 
     /**
      * @param  array<int, string>  $distractorTexts

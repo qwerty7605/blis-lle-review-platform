@@ -101,12 +101,12 @@ class ReviewBotQuestionScreeningServiceTest extends TestCase
 
     public function test_an_empty_batch_accepts_and_rejects_nothing(): void
     {
-        $this->assertSame(['accepted' => [], 'rejected' => []], $this->screening->screen([], 'Reference Services'));
+        $this->assertSame(['accepted' => [], 'rejected' => []], $this->screening->screen([], 'Reference, Bibliography and User Services'));
     }
 
     public function test_a_batch_of_prompts_with_no_words_skips_duplicate_screening(): void
     {
-        $result = $this->screening->screen([$this->item($this->choices(['A1', 'B1', 'C1', 'D1']), ['prompt' => '?'])], 'Reference Services');
+        $result = $this->screening->screen([$this->item($this->choices(['A1', 'B1', 'C1', 'D1']), ['prompt' => '?'])], 'Reference, Bibliography and User Services');
 
         $this->assertCount(1, $result['accepted']);
     }
@@ -121,7 +121,7 @@ class ReviewBotQuestionScreeningServiceTest extends TestCase
             $this->item($options, ['source_index' => 2, 'prompt' => 'Explain how a union catalog differs from a local one']),
         ];
 
-        $result = $this->screening->screen($batch, 'Reference Services');
+        $result = $this->screening->screen($batch, 'Reference, Bibliography and User Services');
 
         $this->assertSame(['duplicate_variant_of_same_item', 'duplicate_within_batch'], array_column($result['rejected'], 'reason'));
         $this->assertCount(2, $result['accepted']);
@@ -129,7 +129,7 @@ class ReviewBotQuestionScreeningServiceTest extends TestCase
 
     public function test_a_question_already_in_the_bank_is_rejected(): void
     {
-        $bank = $this->makeBank($this->makeTeacher(), 1, ['subject' => 'Reference Services']);
+        $bank = $this->makeBank($this->makeTeacher(), 1, ['subject' => 'Reference, Bibliography and User Services']);
         $existing = $bank->questions->first();
         $existing->update([
             'usage_type' => QuestionBankQuestion::USAGE_REVIEW_BOT,
@@ -144,7 +144,7 @@ class ReviewBotQuestionScreeningServiceTest extends TestCase
         $result = $this->screening->screen([
             $this->item($this->choices(['Almanac', 'Thesaurus', 'Atlas', 'Gazetteer'])),
             $this->item($this->choices(['Almanac', 'Thesaurus', 'Atlas', 'Gazetteer']), ['prompt' => 'Some other text so the weights are not all zero']),
-        ], 'Reference Services');
+        ], 'Reference, Bibliography and User Services');
 
         $this->assertContains('duplicate_of_existing_question', array_column($result['rejected'], 'reason'));
     }
