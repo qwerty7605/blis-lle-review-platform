@@ -237,9 +237,6 @@
                 <p v-if="member.student_id">Student ID: {{ member.student_id }}</p>
                 <p v-else>{{ member.email }}</p>
               </div>
-              <span v-if="selectedRoomYearSummary.is_mixed" class="rooms-tag neutral small">
-                {{ member.year_level_label || yearLevelLabel(member.year_level) }}
-              </span>
             </div>
           </div>
         </article>
@@ -966,7 +963,6 @@ const {
   isCurrentQuestionInputLocked,
   studentExamUnansweredCount,
   questionHasAnswer,
-  yearLevelLabel,
   canStudentOpenExam,
   isStudentExamInProgress,
   isStudentExamCompleted,
