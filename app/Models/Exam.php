@@ -111,10 +111,9 @@ class Exam extends Model
     public const SEMESTERS = [1, 2];
 
     /**
-     * The school year and semester an exam is filed under decide which
-     * semester its score belongs to in the board exam prediction (see
-     * LetReadinessFeatureBuilder). The teacher sets them on the exam form;
-     * an exam saved without them takes them from its date.
+     * The school year and semester an exam is filed under. The Estimated
+     * Outcome no longer reads them (it reads exam series). An exam saved
+     * without them takes them from its date.
      */
     protected static function booted(): void
     {
