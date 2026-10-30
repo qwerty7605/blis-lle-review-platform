@@ -87,8 +87,10 @@ class ShowcaseSeeder extends Seeder
      * Fourth years the demo can be walked through by name: the score each
      * centres on, and the subjects that pull it down. Review-exam scores run
      * low (the base dataset's sit around 50), and version 1 of the Estimated
-     * Outcome puts the at-risk line near 60 on a mock board, so the
-     * borderline student centres just under it.
+     * Outcome puts the at-risk line near 64 on a mock board (all subjects
+     * equal). The borderline student centres on 59 with weak subjects the
+     * model weighs lightly, which lands them close to the line, on its safe
+     * side (about 80% chance of passing).
      */
     private const FEATURED = [
         'top' => ['Angelica', 'Reyes', 'Dela Cruz', 90, []],
