@@ -10,12 +10,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class Exam extends Model
 {
     use HasFactory;
 
     public const DELIVERY_MODE_OPEN_NAVIGATION = 'open_navigation';
+
+    /**
+     * With results Visible, when a student is shown the correct answers (and
+     * when Review Bot practice from the exam opens): right after each attempt,
+     * or once they cannot sit the exam again (canBeRetakenBy()).
+     */
+    public const ANSWERS_AFTER_EACH_ATTEMPT = 'each_attempt';
+
+    public const ANSWERS_AFTER_LAST_ATTEMPT = 'last_attempt';
+
+    /** @var list<string> */
+    public const ANSWER_TIMINGS = [
+        self::ANSWERS_AFTER_EACH_ATTEMPT,
+        self::ANSWERS_AFTER_LAST_ATTEMPT,
+    ];
 
     /** Practice; the default. */
     public const TYPE_REGULAR = 'regular';
@@ -79,6 +95,7 @@ class Exam extends Model
         'one_take_only',
         'shuffle_questions',
         'results_visibility_mode',
+        'answers_shown_after',
         'school_year',
         'semester',
         'created_by',
@@ -308,17 +325,66 @@ class Exam extends Model
     /**
      * When an attempt started at $startedAt must be handed in: its full
      * duration, or the closing time if the exam ends there (ends_at_close)
-     * and that comes first.
+     * and that comes first. Extra time a teacher gave the student comes on
+     * top of either, so it also runs past the closing time.
      */
-    public function attemptDeadline(CarbonInterface $startedAt, int $durationMinutes): CarbonInterface
+    public function attemptDeadline(CarbonInterface $startedAt, int $durationMinutes, int $extraMinutes = 0): CarbonInterface
     {
         $deadline = $startedAt->copy()->addMinutes($durationMinutes);
 
         if ($this->ends_at_close && $this->schedule_end_at && $this->schedule_end_at->lt($deadline)) {
-            return $this->schedule_end_at->copy();
+            $deadline = $this->schedule_end_at->copy();
         }
 
-        return $deadline;
+        return $deadline->addMinutes(max(0, $extraMinutes));
+    }
+
+    /**
+     * Whether this student could still start another attempt: attempts left,
+     * the end time not passed, and the exam still assigned (not archived) in
+     * a room that is not archived and that they are in. The same reading as
+     * ReviewBotEligibility, which does it for many exams at once.
+     */
+    public function canBeRetakenBy(int $userId): bool
+    {
+        $submitted = $this->attempts()
+            ->where('user_id', $userId)
+            ->where('status', ExamAttempt::STATUS_SUBMITTED)
+            ->count();
+
+        if ($submitted >= ($this->one_take_only ? 1 : 2)) {
+            return false;
+        }
+
+        if ($this->schedule_end_at && now()->gt($this->schedule_end_at)) {
+            return false;
+        }
+
+        return DB::table('exam_room')
+            ->join('rooms', 'rooms.id', '=', 'exam_room.room_id')
+            ->join('room_user', function ($join) use ($userId): void {
+                $join->on('room_user.room_id', '=', 'exam_room.room_id')
+                    ->where('room_user.user_id', '=', $userId);
+            })
+            ->where('exam_room.exam_id', $this->id)
+            ->whereNull('exam_room.archived_at')
+            ->whereNull('rooms.archived_at')
+            ->exists();
+    }
+
+    /**
+     * Whether the student who sat $attempt may see its correct answers: the
+     * results are Visible, it was handed in, and either answers come after
+     * each attempt or the student cannot sit the exam again.
+     */
+    public function answersShownFor(ExamAttempt $attempt): bool
+    {
+        if (($this->results_visibility_mode ?? 'hidden') !== 'visible' || $attempt->status !== ExamAttempt::STATUS_SUBMITTED) {
+            return false;
+        }
+
+        return ($this->answers_shown_after ?? self::ANSWERS_AFTER_EACH_ATTEMPT) === self::ANSWERS_AFTER_EACH_ATTEMPT
+            || !$this->canBeRetakenBy((int) $attempt->user_id);
     }
 
     /**
@@ -333,7 +399,11 @@ class Exam extends Model
             ->whereNotNull('started_at')
             ->get()
             ->each(function (ExamAttempt $attempt): void {
-                $deadline = $this->attemptDeadline($attempt->started_at, max(1, (int) $attempt->duration_minutes));
+                $deadline = $this->attemptDeadline(
+                    $attempt->started_at,
+                    max(1, (int) $attempt->duration_minutes),
+                    (int) $attempt->extra_minutes,
+                );
 
                 if (!$attempt->expires_at || !$attempt->expires_at->eq($deadline)) {
                     $attempt->forceFill(['expires_at' => $deadline])->save();

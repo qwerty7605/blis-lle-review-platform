@@ -78,6 +78,36 @@
   min-width: 160px;
 }
 
+/* Time left and + Time, under the progress pill of a student mid-exam. */
+.live-board-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.live-board-time small {
+  font-size: 12px;
+}
+
+.ghost-btn.live-board-time-btn {
+  padding: 3px 10px;
+  min-height: 0;
+  font-size: 12px;
+}
+
+.extra-time-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.extra-time-presets .ghost-btn.is-selected {
+  border-color: var(--dk-line-lnu-navy, var(--lnu-navy));
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  color: var(--dk-fg-ffffff, #ffffff);
+}
+
 .live-board-answer-cell {
   min-width: 130px;
   max-width: 190px;

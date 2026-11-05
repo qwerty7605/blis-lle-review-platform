@@ -7,6 +7,7 @@ use App\Models\QuestionBank;
 use App\Models\QuestionBankQuestion;
 use App\Models\Subtopic;
 use App\Models\Topic;
+use App\Services\ExamAttemptService;
 use App\Services\Library\DocxQuestionParser;
 use App\Services\QuestionMappingService;
 use App\Support\LleTaxonomy;
@@ -20,6 +21,7 @@ class LibraryController extends Controller
 {
     public function __construct(
         private readonly QuestionMappingService $questionMappingService,
+        private readonly ExamAttemptService $examAttemptService,
     ) {
     }
 
@@ -697,6 +699,7 @@ class LibraryController extends Controller
             'answer_label' => ['nullable', 'string', 'max:2'],
             'answer_text' => ['nullable', 'string'],
             'options' => ['nullable', 'array', 'max:8'],
+            'options.*.id' => ['nullable', 'integer'],
             'options.*.label' => ['nullable', 'string', 'max:2'],
             'options.*.text' => ['required_with:options', 'string'],
             'options.*.is_correct' => ['nullable', 'boolean'],
@@ -725,7 +728,27 @@ class LibraryController extends Controller
             $validated['answer_text'] ?? null,
         );
 
-        DB::transaction(function () use ($question, $validated, $resolved) {
+        // Choices are edited where they are, by id: students' saved answers
+        // point at them, and deleting and re-creating them (as this once did)
+        // erased which choice every student had picked. A choice a student
+        // picked in an exam is not removed at all.
+        $saved = $question->options()->get(['id', 'option_label']);
+        $keptIds = collect($resolved['options'])->pluck('id')->filter()->map(fn ($id): int => (int) $id)->all();
+        $removed = $saved->reject(fn ($option): bool => in_array((int) $option->id, $keptIds, true));
+        $pickedLabels = $removed->isEmpty() ? collect() : $removed
+            ->whereIn('id', DB::table('exam_attempt_answers')->whereIn('question_bank_option_id', $removed->pluck('id'))->distinct()->pluck('question_bank_option_id'))
+            ->pluck('option_label');
+
+        if ($pickedLabels->isNotEmpty()) {
+            $problem = sprintf(
+                'Students picked choice %s in an exam, so it cannot be removed. Edit its words instead.',
+                $pickedLabels->implode(', '),
+            );
+
+            return response()->json(['message' => $problem, 'errors' => ['options' => [$problem]]], 422);
+        }
+
+        DB::transaction(function () use ($question, $validated, $resolved, $saved, $removed) {
             $question->forceFill([
                 'question_text' => trim((string) $validated['question_text']),
                 'question_type' => $resolved['question_type'],
@@ -733,17 +756,38 @@ class LibraryController extends Controller
                 'answer_text' => $resolved['answer_text'],
             ])->save();
 
-            $question->options()->delete();
+            $question->options()->whereIn('id', $removed->pluck('id'))->delete();
 
-            foreach ($resolved['options'] as $option) {
-                $question->options()->create([
+            $ownIds = $saved->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $rows = collect($resolved['options'])->values();
+
+            // Labels are unique per question: kept choices step aside under a
+            // placeholder first, so relettering (C becoming B) cannot collide.
+            $rows->each(function (array $option, int $index) use ($question, $ownIds): void {
+                if ($option['id'] && in_array($option['id'], $ownIds, true)) {
+                    $question->options()->whereKey($option['id'])->update(['option_label' => '#' . ($index + 1)]);
+                }
+            });
+
+            $rows->each(function (array $option) use ($question, $ownIds): void {
+                $values = [
                     'sort_order' => $option['sort_order'],
                     'option_label' => $option['label'],
                     'option_text' => $option['text'],
                     'is_correct' => $option['is_correct'],
-                ]);
-            }
+                ];
+
+                if ($option['id'] && in_array($option['id'], $ownIds, true)) {
+                    $question->options()->whereKey($option['id'])->update($values);
+                } else {
+                    $question->options()->create($values);
+                }
+            });
         });
+
+        // A changed correct answer changes how students' answers are marked:
+        // they are marked again, with each attempt's score.
+        $regraded = $this->examAttemptService->regradeQuestion($question->fresh('options'));
 
         $question = $this->questionMappingService->applyManualTags(
             $question,
@@ -776,9 +820,42 @@ class LibraryController extends Controller
             $request,
         );
 
+        if ($regraded['answers'] > 0) {
+            $this->recordAudit(
+                $user,
+                'library.question.regrade',
+                'question_bank_question',
+                $question->id,
+                sprintf(
+                    'Re-graded %d %s in %d %s after the correct answer changed',
+                    $regraded['answers'],
+                    $regraded['answers'] === 1 ? 'answer' : 'answers',
+                    $regraded['attempts'],
+                    $regraded['attempts'] === 1 ? 'exam attempt' : 'exam attempts',
+                ),
+                [
+                    'question_bank_id' => $question->question_bank_id,
+                    'answer_label' => $question->answer_label,
+                    'answers' => $regraded['answers'],
+                    'attempt_ids' => $regraded['attempt_ids'],
+                ],
+                $request,
+            );
+        }
+
         return response()->json([
-            'message' => 'Question updated.',
+            'message' => $regraded['answers'] > 0
+                ? sprintf(
+                    'Question updated. The correct answer changed, so %d %s in %d %s %s re-graded.',
+                    $regraded['answers'],
+                    $regraded['answers'] === 1 ? 'answer' : 'answers',
+                    $regraded['attempts'],
+                    $regraded['attempts'] === 1 ? 'exam attempt' : 'exam attempts',
+                    $regraded['answers'] === 1 ? 'was' : 'were',
+                )
+                : 'Question updated.',
             'question' => $question,
+            'regraded' => $regraded['answers'],
         ]);
     }
 

@@ -5,7 +5,10 @@ export const STANDARD_EXAM_DEFAULTS = Object.freeze({
   duration_minutes: 90,
   one_take_only: false,
   shuffle_questions: false,
-  results_visibility_mode: 'hidden',
+  // Answers shown once the student is done with the exam, and Review Bot
+  // practice from it opening at that moment too; Hidden keeps both closed.
+  results_visibility_mode: 'visible',
+  answers_shown_after: 'last_attempt',
 })
 
 export function examDefaultsFor(user) {
@@ -17,6 +20,11 @@ export function examDefaultsFor(user) {
     duration_minutes: number(own.duration_minutes, STANDARD_EXAM_DEFAULTS.duration_minutes),
     one_take_only: Boolean(own.one_take_only ?? STANDARD_EXAM_DEFAULTS.one_take_only),
     shuffle_questions: Boolean(own.shuffle_questions ?? STANDARD_EXAM_DEFAULTS.shuffle_questions),
-    results_visibility_mode: own.results_visibility_mode === 'visible' ? 'visible' : 'hidden',
+    results_visibility_mode: ['hidden', 'visible'].includes(own.results_visibility_mode)
+      ? own.results_visibility_mode
+      : STANDARD_EXAM_DEFAULTS.results_visibility_mode,
+    answers_shown_after: ['each_attempt', 'last_attempt'].includes(own.answers_shown_after)
+      ? own.answers_shown_after
+      : STANDARD_EXAM_DEFAULTS.answers_shown_after,
   }
 }

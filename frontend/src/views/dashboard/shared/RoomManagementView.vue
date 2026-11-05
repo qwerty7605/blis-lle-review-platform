@@ -45,10 +45,25 @@
           <input v-model="liveBoardOptions.show_results" type="checkbox" />
           <span>Show Results</span>
         </label>
+        <button
+          type="button"
+          class="ghost-btn"
+          :disabled="liveBoardTakingNow === 0"
+          :title="liveBoardTakingNow === 0 ? 'Nobody is taking this exam right now.' : undefined"
+          @click="openExtraTime(null)"
+        >
+          <Clock :size="14" />
+          + Time for everyone taking it
+        </button>
         <button type="button" class="ghost-btn" :disabled="liveBoardLoading || liveBoardRefreshing" @click="loadLiveBoard(false)">
           <RefreshCw :size="14" :class="{ 'spin-soft': liveBoardLoading || liveBoardRefreshing }" />
           Refresh
         </button>
+      </div>
+
+      <div v-if="liveBoardNotice" class="feedback success" role="status">
+        <CheckCircle2 :size="15" />
+        <span>{{ liveBoardNotice }}</span>
       </div>
 
       <div class="management-inline live-board-summary">
@@ -92,6 +107,13 @@
                 <span class="pill" :class="row.attempt?.status === 'submitted' ? 'success' : 'neutral'">
                   {{ liveBoardProgressLabel(row) }}
                 </span>
+                <span v-if="Number(row.attempt?.extra_minutes) > 0" class="pill navy">+{{ row.attempt.extra_minutes }} min</span>
+                <span v-if="isTakingNow(row)" class="live-board-time">
+                  <small class="muted">{{ liveBoardTimeLeft(row) }}</small>
+                  <button type="button" class="ghost-btn live-board-time-btn" @click="openExtraTime(row, liveBoardDisplayName(row, rowIndex))">
+                    + Time
+                  </button>
+                </span>
               </td>
               <td
                 v-for="item in row.items"
@@ -113,6 +135,72 @@
           </tfoot>
         </table>
       </div>
+
+      <!-- The extra-time dialog belongs to the board; it renders on top of the page. -->
+      <teleport to="body">
+        <div v-if="extraTimeDialog.open" class="modal-backdrop" @click.self="closeExtraTime">
+          <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="extra-time-title">
+            <header class="modal-head">
+              <h4 id="extra-time-title">{{ extraTimeDialog.row ? `Give Extra Time: ${extraTimeDialog.label}` : 'Give Everyone Taking It Extra Time' }}</h4>
+              <button type="button" class="modal-close" aria-label="Close" @click="closeExtraTime">
+                <X :size="16" />
+              </button>
+            </header>
+
+            <p class="muted">
+              <template v-if="extraTimeDialog.row">Time left now: {{ liveBoardTimeLeft(extraTimeDialog.row) || 'unknown' }}.</template>
+              <template v-else>For the {{ liveBoardTakingNow }} {{ liveBoardTakingNow === 1 ? 'student' : 'students' }} taking this exam right now. Those who already submitted are not affected.</template>
+              Only their deadline moves, past the end time if need be; nobody else's changes.
+            </p>
+
+            <div class="extra-time-presets" role="group" aria-label="Minutes to add">
+              <button
+                v-for="preset in [5, 10, 15]"
+                :key="preset"
+                type="button"
+                class="ghost-btn"
+                :class="{ 'is-selected': Number(extraTimeDialog.minutes) === preset }"
+                :aria-pressed="(Number(extraTimeDialog.minutes) === preset).toString()"
+                @click="extraTimeDialog.minutes = preset"
+              >
+                {{ preset }} min
+              </button>
+            </div>
+
+            <label class="field-stack">
+              <span class="field-label">Minutes to add</span>
+              <input
+                v-model.number="extraTimeDialog.minutes"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                max="120"
+                class="text-input"
+                v-bind="extraTimeChecks.bind('minutes')"
+              />
+              <FieldError :checks="extraTimeChecks" field="minutes" />
+            </label>
+
+            <label class="field-stack">
+              <span class="field-label">Reason <em>(optional, kept in the audit log)</em></span>
+              <input v-model.trim="extraTimeDialog.reason" type="text" maxlength="255" class="text-input" placeholder="e.g. Internet dropped" />
+            </label>
+
+            <div v-if="extraTimeDialog.error" class="feedback danger" role="alert">
+              <AlertCircle :size="15" />
+              <span>{{ extraTimeDialog.error }}</span>
+            </div>
+
+            <div class="modal-actions">
+              <button type="button" class="ghost-btn" :disabled="extraTimeDialog.saving" @click="closeExtraTime">Cancel</button>
+              <button type="button" class="primary-btn" :disabled="extraTimeDialog.saving" @click="saveExtraTime">
+                <RefreshCw v-if="extraTimeDialog.saving" :size="14" class="spin-soft" />
+                <span>{{ extraTimeDialog.saving ? 'Adding...' : `Add ${Number(extraTimeDialog.minutes) || ''} Minutes` }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </teleport>
     </article>
 
     <template v-else>
@@ -744,6 +832,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
+  Clock,
   DoorOpen,
   Download,
   FileText,
@@ -858,6 +947,15 @@ const {
   liveBoardCellText,
   liveBoardCellClass,
   liveBoardItemSummaryText,
+  extraTimeDialog,
+  extraTimeChecks,
+  liveBoardNotice,
+  liveBoardTakingNow,
+  isTakingNow,
+  liveBoardTimeLeft,
+  openExtraTime,
+  closeExtraTime,
+  saveExtraTime,
   exportRoomGrades,
 } = useRoomsModule({ mode: 'management' })
 

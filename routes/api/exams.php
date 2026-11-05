@@ -17,6 +17,11 @@ Route::post('/exams/{exam}/archive', [ExamController::class, 'archive']);
 Route::get('/exams/{exam}/item-analytics', [ExamController::class, 'itemAnalytics']);
 
 Route::get('/exams/{exam}/live-dashboard', [ExamController::class, 'liveDashboard']);
+// What students have done with an exam, for its edit form (ExamEditRules).
+Route::get('/exams/{exam}/editing', [ExamController::class, 'editing']);
+// Extra time on the Live Board: one student, or everyone taking it in a room.
+Route::post('/exams/{exam}/attempts/{attempt}/extra-time', [ExamController::class, 'giveExtraTime']);
+Route::post('/exams/{exam}/extra-time', [ExamController::class, 'giveRoomExtraTime']);
 
 // Pre-test and mock board series: the six subject exams that belong together.
 Route::get('/exam-series', [ExamSeriesController::class, 'index']);

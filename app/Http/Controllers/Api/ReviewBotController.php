@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ReviewBotAttempt;
 use App\Models\User;
+use App\Services\ReviewBotEligibility;
 use App\Services\ReviewBotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +14,7 @@ class ReviewBotController extends Controller
 {
     public function __construct(
         private readonly ReviewBotService $reviewBotService,
+        private readonly ReviewBotEligibility $reviewBotEligibility,
     ) {
     }
 
@@ -27,6 +29,8 @@ class ReviewBotController extends Controller
         return response()->json([
             'subjects' => $this->reviewBotService->catalog($user),
             'weak_area' => $this->reviewBotService->resolveWeakArea($user) ?: null,
+            // Exams handed in whose practice is not open yet, and why.
+            'held_back' => $this->reviewBotEligibility->heldBack($user),
         ]);
     }
 

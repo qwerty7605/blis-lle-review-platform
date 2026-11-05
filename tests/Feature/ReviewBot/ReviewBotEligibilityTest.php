@@ -115,6 +115,7 @@ class ReviewBotEligibilityTest extends TestCase
         $exam = $this->makeExam($this->teacher, $this->examBank, [$this->room], [
             'one_take_only' => false,
             'schedule_end_at' => now()->addDay(),
+            'answers_shown_after' => Exam::ANSWERS_AFTER_LAST_ATTEMPT,
         ]);
         $this->makeSubmittedAttempt($exam, $this->room, $this->student, [true, true, false, false]);
         $this->publishFrom($this->examBank->questions);
@@ -133,7 +134,10 @@ class ReviewBotEligibilityTest extends TestCase
 
     public function test_an_exam_with_no_end_time_counts_once_its_sittings_are_used(): void
     {
-        $exam = $this->makeExam($this->teacher, $this->examBank, [$this->room], ['one_take_only' => false]);
+        $exam = $this->makeExam($this->teacher, $this->examBank, [$this->room], [
+            'one_take_only' => false,
+            'answers_shown_after' => Exam::ANSWERS_AFTER_LAST_ATTEMPT,
+        ]);
         $this->makeSubmittedAttempt($exam, $this->room, $this->student, [true, true, false, false]);
         $this->publishFrom($this->examBank->questions);
 
@@ -143,6 +147,44 @@ class ReviewBotEligibilityTest extends TestCase
 
         $this->assertCatalogCount(4);
         $this->beginPractice(3)->assertCreated();
+    }
+
+    public function test_with_answers_after_each_attempt_practice_opens_with_the_first_sitting(): void
+    {
+        // Answers shown right after each attempt: practice opens at the same
+        // moment, the retake still to come.
+        $exam = $this->makeExam($this->teacher, $this->examBank, [$this->room], [
+            'one_take_only' => false,
+            'schedule_end_at' => now()->addDay(),
+            'answers_shown_after' => Exam::ANSWERS_AFTER_EACH_ATTEMPT,
+        ]);
+        $this->makeSubmittedAttempt($exam, $this->room, $this->student, [true, true, false, false]);
+        $this->publishFrom($this->examBank->questions);
+
+        $this->assertCatalogCount(4);
+    }
+
+    public function test_the_catalog_says_which_exams_hold_practice_back_and_why(): void
+    {
+        $hidden = $this->makeExam($this->teacher, $this->examBank, [$this->room], [
+            'title' => 'Hidden Midterm',
+            'one_take_only' => true,
+            'results_visibility_mode' => 'hidden',
+        ]);
+        $waiting = $this->makeExam($this->teacher, $this->examBank, [$this->room], [
+            'title' => 'Retake Quiz',
+            'one_take_only' => false,
+            'schedule_end_at' => now()->addDay(),
+            'answers_shown_after' => Exam::ANSWERS_AFTER_LAST_ATTEMPT,
+        ]);
+        $this->makeSubmittedAttempt($hidden, $this->room, $this->student, [true, true, true, true]);
+        $this->makeSubmittedAttempt($waiting, $this->room, $this->student, [true, false, true, true]);
+
+        $heldBack = collect($this->getJson('/api/student/review-bot/catalog')->assertOk()->json('held_back'))->keyBy('title');
+
+        $this->assertSame('hidden', $heldBack['Hidden Midterm']['reason']);
+        $this->assertSame('last_attempt', $heldBack['Retake Quiz']['reason']);
+        $this->assertNotNull($heldBack['Retake Quiz']['closes_at']);
     }
 
     public function test_another_students_sitting_does_not_make_questions_eligible(): void

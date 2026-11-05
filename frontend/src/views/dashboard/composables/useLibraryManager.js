@@ -523,6 +523,9 @@ export function useLibraryManager({
     questionEditForm.question_type = question.question_type || 'multiple_choice'
     questionEditForm.options = Array.isArray(question.options)
       ? question.options.map((option) => ({
+          // Sent back so the server edits this choice where it is: students'
+          // answers point at it (LibraryController::updateQuestion).
+          id: option.id,
           label: option.option_label,
           text: option.option_text,
           is_correct: Boolean(option.is_correct),
@@ -548,8 +551,14 @@ export function useLibraryManager({
   function addQuestionEditOption() {
     if (questionEditForm.options.length >= 8) return
 
+    // The first letter not in use: after B is removed from A to D, a new
+    // choice is B, not a second D (labels are unique per question).
+    const used = new Set(questionEditForm.options.map((option) => option.label))
+    const label = 'ABCDEFGH'.split('').find((letter) => !used.has(letter)) ?? String.fromCharCode(65 + questionEditForm.options.length)
+
     questionEditForm.options.push({
-      label: String.fromCharCode(65 + questionEditForm.options.length),
+      id: null,
+      label,
       text: '',
       is_correct: questionEditForm.options.length === 0,
     })
@@ -581,6 +590,7 @@ export function useLibraryManager({
       options: isOpenEnded
         ? []
         : questionEditForm.options.map((option) => ({
+            id: option.id ?? null,
             label: option.label,
             text: (option.text || '').trim(),
             is_correct: Boolean(option.is_correct),

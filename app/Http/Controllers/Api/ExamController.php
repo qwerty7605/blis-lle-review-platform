@@ -9,9 +9,11 @@ use App\Models\Room;
 use App\Models\User;
 use App\Services\DashboardAnalyticsService;
 use App\Services\ExamDeliveryModeService;
+use App\Services\ExamEditRules;
 use App\Services\ExamQuestionBanks;
 use App\Services\ExamSeriesRules;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
@@ -24,6 +26,7 @@ class ExamController extends Controller
         private readonly ExamDeliveryModeService $deliveryModeService,
         private readonly ExamQuestionBanks $examQuestionBanks,
         private readonly ExamSeriesRules $examSeriesRules,
+        private readonly ExamEditRules $examEditRules,
     ) {
     }
 
@@ -82,6 +85,7 @@ class ExamController extends Controller
             'one_take_only' => ['nullable', 'boolean'],
             'shuffle_questions' => ['nullable', 'boolean'],
             'results_visibility_mode' => ['nullable', Rule::in(['hidden', 'visible'])],
+            'answers_shown_after' => ['nullable', Rule::in(Exam::ANSWER_TIMINGS)],
             // Left out, a regular mock exam.
             'exam_type' => ['nullable', Rule::in(Exam::TYPES)],
             'exam_series_id' => ['nullable', 'integer', 'exists:exam_series,id'],
@@ -150,6 +154,8 @@ class ExamController extends Controller
             'one_take_only' => (bool) ($validated['one_take_only'] ?? false),
             'shuffle_questions' => (bool) ($validated['shuffle_questions'] ?? false),
             'results_visibility_mode' => $validated['results_visibility_mode'] ?? 'hidden',
+            // A new exam shows its answers once the student is done with it.
+            'answers_shown_after' => $validated['answers_shown_after'] ?? Exam::ANSWERS_AFTER_LAST_ATTEMPT,
             'school_year' => $validated['school_year'] ?? null,
             'semester' => $validated['semester'] ?? null,
             'created_by' => $user->id,
@@ -211,6 +217,7 @@ class ExamController extends Controller
                 'question_bank_ids' => $exam->question_bank_ids,
                 'one_take_only' => (bool) $exam->one_take_only,
                 'shuffle_questions' => (bool) $exam->shuffle_questions,
+                'answers_shown_after' => $exam->answers_shown_after,
                 'rooms_assigned' => $exam->rooms_count,
             ],
             $request,
@@ -251,6 +258,7 @@ class ExamController extends Controller
             'one_take_only' => ['sometimes', 'boolean'],
             'shuffle_questions' => ['sometimes', 'boolean'],
             'results_visibility_mode' => ['sometimes', Rule::in(['hidden', 'visible'])],
+            'answers_shown_after' => ['sometimes', Rule::in(Exam::ANSWER_TIMINGS)],
             'exam_type' => ['sometimes', 'required', Rule::in(Exam::TYPES)],
             'exam_series_id' => ['sometimes', 'nullable', 'integer', 'exists:exam_series,id'],
             'school_year' => ['sometimes', 'required', 'integer', 'min:2000', 'max:2100'],
@@ -309,6 +317,26 @@ class ExamController extends Controller
 
         if (is_string($typing)) {
             return response()->json(['message' => $typing, 'errors' => ['exam_series_id' => [$typing]]], 422);
+        }
+
+        // What students who have started it rule out (ExamEditRules), checked
+        // before anything is saved.
+        $problems = $this->examEditRules->problems(
+            $exam,
+            $validated,
+            array_map('intval', $resolvedQuestionBankIds),
+            array_key_exists('room_ids', $validated)
+                ? collect($validated['room_ids'] ?? [])->map(fn ($id): int => (int) $id)->unique()->values()->all()
+                : null,
+            $resolvedScheduleStart,
+            $resolvedScheduleEnd,
+        );
+
+        if ($problems !== []) {
+            return response()->json([
+                'message' => reset($problems),
+                'errors' => array_map(fn (string $problem): array => [$problem], $problems),
+            ], 422);
         }
 
         $previousType = (string) $exam->exam_type;
@@ -429,6 +457,7 @@ class ExamController extends Controller
                 'question_bank_ids' => $exam->question_bank_ids,
                 'one_take_only' => (bool) $exam->one_take_only,
                 'shuffle_questions' => (bool) $exam->shuffle_questions,
+                'answers_shown_after' => $exam->answers_shown_after,
                 'rooms_assigned' => $exam->rooms_count,
             ],
             $request,
@@ -541,6 +570,183 @@ class ExamController extends Controller
             ),
             'archived_rooms' => count($roomIds),
         ]);
+    }
+
+    /**
+     * For the exam's edit form: what students have done with it so far, so
+     * the form can lock what may no longer change and say why (ExamEditRules).
+     */
+    public function editing(Request $request, Exam $exam)
+    {
+        $user = $request->user();
+
+        if (!$this->canTeach($user) || !$this->oversees($user, $exam->created_by)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json(['editing' => $this->examEditRules->state($exam)]);
+    }
+
+    /**
+     * More time for one student taking the exam, from the Live Board. Their
+     * deadline moves later, past the closing time if need be, and nobody
+     * else's changes: the exam's own duration stays the same for everyone.
+     */
+    public function giveExtraTime(Request $request, Exam $exam, ExamAttempt $attempt)
+    {
+        $user = $request->user();
+
+        if ((int) $attempt->exam_id !== (int) $exam->id) {
+            return response()->json(['message' => 'That attempt is not of this exam.'], 404);
+        }
+
+        if (!$this->runsLiveBoard($user, $exam, Room::query()->find($attempt->room_id))) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $validated = $request->validate([
+            'minutes' => ['required', 'integer', 'min:1', 'max:120'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+        $minutes = (int) $validated['minutes'];
+
+        $given = $this->addExtraTime($exam, collect([$attempt->id]), $minutes);
+
+        if ($given->isEmpty()) {
+            return response()->json(['message' => 'This attempt has already ended, so there is no time to add to.'], 422);
+        }
+
+        $attempt = $given->first();
+        $student = User::query()->find($attempt->user_id, ['id', 'name']);
+
+        $this->recordAudit(
+            $user,
+            'exam.attempt.extra_time',
+            'exam_attempt',
+            $attempt->id,
+            sprintf('Gave %s %d more %s on "%s"', $student?->name ?? 'a student', $minutes, $minutes === 1 ? 'minute' : 'minutes', $exam->title),
+            [
+                'exam_id' => $exam->id,
+                'room_id' => $attempt->room_id,
+                'student_id' => $attempt->user_id,
+                'minutes' => $minutes,
+                'extra_minutes' => $attempt->extra_minutes,
+                'expires_at' => $attempt->expires_at,
+                'reason' => $validated['reason'] ?? null,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => sprintf('%s has %d more %s.', $student?->name ?? 'The student', $minutes, $minutes === 1 ? 'minute' : 'minutes'),
+            'attempt' => $this->extraTimeRow($attempt),
+        ]);
+    }
+
+    /**
+     * The same extra time for every student taking the exam in one room right
+     * now (the school's connection dropped). Those who already handed it in
+     * were not affected and get nothing.
+     */
+    public function giveRoomExtraTime(Request $request, Exam $exam)
+    {
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'room_id' => ['required', 'integer', 'exists:rooms,id'],
+            'minutes' => ['required', 'integer', 'min:1', 'max:120'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+        $room = Room::query()->find((int) $validated['room_id']);
+        $minutes = (int) $validated['minutes'];
+
+        if (!$this->runsLiveBoard($user, $exam, $room)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $attemptIds = $room->attemptsInProgress()->where('exam_id', $exam->id)->pluck('id');
+        $given = $attemptIds->isEmpty() ? collect() : $this->addExtraTime($exam, $attemptIds, $minutes);
+
+        if ($given->isEmpty()) {
+            return response()->json(['message' => 'Nobody in this room is taking this exam right now.'], 422);
+        }
+
+        $this->recordAudit(
+            $user,
+            'exam.attempt.extra_time',
+            'exam',
+            $exam->id,
+            sprintf('Gave %d %s in %s %d more %s on "%s"', $given->count(), $given->count() === 1 ? 'student' : 'students', $room->name, $minutes, $minutes === 1 ? 'minute' : 'minutes', $exam->title),
+            [
+                'room_id' => $room->id,
+                'minutes' => $minutes,
+                'attempt_ids' => $given->pluck('id')->all(),
+                'reason' => $validated['reason'] ?? null,
+            ],
+            $request,
+        );
+
+        return response()->json([
+            'message' => sprintf('%d %s taking it now %s %d more %s.', $given->count(), $given->count() === 1 ? 'student' : 'students', $given->count() === 1 ? 'has' : 'have', $minutes, $minutes === 1 ? 'minute' : 'minutes'),
+            'attempts' => $given->map(fn (ExamAttempt $attempt): array => $this->extraTimeRow($attempt))->values(),
+        ]);
+    }
+
+    /**
+     * Adds the minutes to each attempt still under way, row by row under a
+     * lock so it cannot cross a submit; returns the attempts it changed.
+     *
+     * @param  Collection<int, int>  $attemptIds
+     * @return Collection<int, ExamAttempt>
+     */
+    private function addExtraTime(Exam $exam, Collection $attemptIds, int $minutes): Collection
+    {
+        return DB::transaction(function () use ($exam, $attemptIds, $minutes): Collection {
+            return ExamAttempt::query()
+                ->whereIn('id', $attemptIds)
+                ->lockForUpdate()
+                ->get()
+                ->filter(fn (ExamAttempt $attempt): bool => $attempt->status === ExamAttempt::STATUS_IN_PROGRESS
+                    && $attempt->started_at !== null
+                    && ($attempt->expires_at === null || $attempt->expires_at->isFuture()))
+                ->each(function (ExamAttempt $attempt) use ($exam, $minutes): void {
+                    $extra = (int) $attempt->extra_minutes + $minutes;
+
+                    $attempt->forceFill([
+                        'extra_minutes' => $extra,
+                        'expires_at' => $exam->attemptDeadline($attempt->started_at, max(1, (int) $attempt->duration_minutes), $extra),
+                    ])->save();
+                })
+                ->values();
+        });
+    }
+
+    /** @return array<string, mixed> */
+    private function extraTimeRow(ExamAttempt $attempt): array
+    {
+        return [
+            'id' => $attempt->id,
+            'user_id' => $attempt->user_id,
+            'extra_minutes' => (int) $attempt->extra_minutes,
+            'expires_at' => $attempt->expires_at,
+            'remaining_seconds' => $attempt->expires_at ? max(0, (int) now()->diffInSeconds($attempt->expires_at, false)) : null,
+        ];
+    }
+
+    /** Who may act on the Live Board: as liveDashboard() reads it. */
+    private function runsLiveBoard(User $user, Exam $exam, ?Room $room): bool
+    {
+        if (!$room) {
+            return false;
+        }
+
+        if ($this->isAdmin($user)) {
+            return true;
+        }
+
+        return $this->canTeach($user)
+            && $this->oversees($user, $exam->created_by)
+            && $this->oversees($user, $room->created_by);
     }
 
     public function itemAnalytics(Request $request, Exam $exam)
@@ -737,6 +943,11 @@ class ExamController extends Controller
                         'score_percent' => is_null($attempt->score_percent) ? null : (float) $attempt->score_percent,
                         'started_at' => $attempt->started_at,
                         'submitted_at' => $attempt->submitted_at,
+                        'expires_at' => $attempt->expires_at,
+                        'extra_minutes' => (int) $attempt->extra_minutes,
+                        'remaining_seconds' => $attempt->status === ExamAttempt::STATUS_IN_PROGRESS && $attempt->expires_at
+                            ? max(0, (int) now()->diffInSeconds($attempt->expires_at, false))
+                            : null,
                     ]
                     : null,
                 'items' => $items,

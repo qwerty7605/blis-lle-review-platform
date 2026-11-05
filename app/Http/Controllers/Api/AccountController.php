@@ -201,6 +201,8 @@ class AccountController extends Controller
             'exam_defaults.one_take_only' => ['required_with:exam_defaults', 'boolean'],
             'exam_defaults.shuffle_questions' => ['required_with:exam_defaults', 'boolean'],
             'exam_defaults.results_visibility_mode' => ['required_with:exam_defaults', Rule::in(['hidden', 'visible'])],
+            // Defaults saved before this setting existed come without it.
+            'exam_defaults.answers_shown_after' => ['sometimes', Rule::in(Exam::ANSWER_TIMINGS)],
             'theme' => ['sometimes', Rule::in(['light', 'dark', 'system'])],
         ]);
 

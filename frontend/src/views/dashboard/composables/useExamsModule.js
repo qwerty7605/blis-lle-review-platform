@@ -169,7 +169,8 @@ export function useExamsModule() {
     ends_at_close: false,
     one_take_only: false,
     shuffle_questions: false,
-    results_visibility_mode: 'hidden',
+    results_visibility_mode: 'visible',
+    answers_shown_after: 'last_attempt',
     exam_type: 'regular',
     exam_series_id: null,
     room_ids: [],
@@ -181,6 +182,43 @@ export function useExamsModule() {
   const seriesSaving = ref(false)
   const seriesError = ref('')
   const formNeedsSeries = computed(() => SERIES_EXAM_TYPES.includes(examForm.exam_type))
+
+  // What students have done with the exam being edited (GET .../editing,
+  // ExamEditRules), so the form locks what may no longer change and says
+  // why, rather than letting a save fail. Null for a new exam.
+  const examEditing = ref(null)
+  // The exam's "one take only" as the form opened: it cannot be turned on
+  // once someone has retaken it.
+  let oneTakeOnlyAsOpened = false
+
+  const studentsStarted = computed(() => Number(examEditing.value?.students_started ?? 0))
+  const studentsTakingNow = computed(() => Number(examEditing.value?.students_taking_now ?? 0))
+  const examContentLocked = computed(() => studentsStarted.value > 0)
+  const examContentLockNote = computed(() => (examContentLocked.value
+    ? `${studentsStarted.value === 1 ? '1 student has' : `${studentsStarted.value} students have`} started this exam, so its question sets, items, minutes and shuffle stay as they are: everyone sits the same exam. To change them, archive this exam and make a new one.`
+    : ''))
+  const oneTakeOnlyLockNote = computed(() => {
+    const retaken = Number(examEditing.value?.students_retaken ?? 0)
+
+    return !oneTakeOnlyAsOpened && retaken > 0
+      ? `${retaken === 1 ? '1 student has' : `${retaken} students have`} already retaken this exam, so it cannot become one take only.`
+      : ''
+  })
+  // Rooms whose students have attempts: they stay assigned (archive the exam
+  // from the room instead).
+  const lockedRoomIds = computed(() => new Set((examEditing.value?.rooms_with_attempts ?? []).map((room) => Number(room.id))))
+
+  async function loadExamEditing(examId) {
+    examEditing.value = null
+
+    try {
+      const { data } = await services.getExamEditing(examId)
+      // The form may have closed, or moved to another exam, meanwhile.
+      if (Number(examForm.id) === Number(examId)) examEditing.value = data?.editing ?? null
+    } catch {
+      // The server still applies every rule on save.
+    }
+  }
 
   // ExamController::store / update. A new exam is not scheduled before today
   // (an edit keeps whatever dates the exam already had).
@@ -197,6 +235,13 @@ export function useExamsModule() {
     exam_series_id: () => (formNeedsSeries.value && !examForm.exam_series_id
       ? 'Choose the series this exam belongs to, or create one below.'
       : ''),
+    // Only the server says these (ExamEditRules); they are named here so its
+    // message lands under the field it is about.
+    question_bank_ids: () => '',
+    shuffle_questions: () => '',
+    one_take_only: () => '',
+    ends_at_close: () => '',
+    room_ids: () => '',
   })
   const seriesForType = computed(() => examSeries.value.filter((series) => series.type === examForm.exam_type))
 
@@ -274,6 +319,8 @@ export function useExamsModule() {
     newSeriesName.value = ''
     seriesError.value = ''
     examChecks.reset()
+    examEditing.value = null
+    oneTakeOnlyAsOpened = false
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
   }
@@ -309,6 +356,7 @@ export function useExamsModule() {
     examForm.one_take_only = Boolean(exam.one_take_only)
     examForm.shuffle_questions = Boolean(exam.shuffle_questions)
     examForm.results_visibility_mode = exam.results_visibility_mode || 'hidden'
+    examForm.answers_shown_after = exam.answers_shown_after || 'each_attempt'
     examForm.exam_type = exam.exam_type || 'regular'
     examForm.exam_series_id = exam.exam_series_id ?? null
     newSeriesName.value = ''
@@ -316,6 +364,8 @@ export function useExamsModule() {
     examStartAsOpened = examForm.schedule_start_at
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examChecks.reset()
+    oneTakeOnlyAsOpened = examForm.one_take_only
+    loadExamEditing(exam.id)
     examError.value = ''
     examMessage.value = ''
     rememberExamFormAsOpened()
@@ -546,6 +596,7 @@ export function useExamsModule() {
       one_take_only: Boolean(examForm.one_take_only),
       shuffle_questions: Boolean(examForm.shuffle_questions),
       results_visibility_mode: examForm.results_visibility_mode,
+      answers_shown_after: examForm.answers_shown_after,
       exam_type: examForm.exam_type,
       exam_series_id: formNeedsSeries.value ? examForm.exam_series_id : null,
       room_ids: [...examForm.room_ids],
@@ -648,6 +699,12 @@ export function useExamsModule() {
     examSaving,
     examError,
     examChecks,
+    examEditing,
+    studentsTakingNow,
+    examContentLocked,
+    examContentLockNote,
+    oneTakeOnlyLockNote,
+    lockedRoomIds,
     examMessage,
     showExamModal,
     showDeleteExamModal,
