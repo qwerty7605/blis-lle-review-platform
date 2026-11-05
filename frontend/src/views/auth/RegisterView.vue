@@ -37,7 +37,8 @@
                   autocomplete="given-name"
                   :aria-invalid="Boolean(fieldErrors.first_name)"
                   :aria-describedby="fieldErrors.first_name ? 'register-first_name-error' : undefined"
-                  @input="clearFieldError('first_name')"
+                  @input="recheckField('first_name')"
+                  @blur="leaveField('first_name')"
                 />
               </div>
               <p v-if="fieldErrors.first_name" :id="'register-first_name-error'" class="field-error" role="alert">
@@ -76,7 +77,8 @@
                   autocomplete="family-name"
                   :aria-invalid="Boolean(fieldErrors.last_name)"
                   :aria-describedby="fieldErrors.last_name ? 'register-last_name-error' : undefined"
-                  @input="clearFieldError('last_name')"
+                  @input="recheckField('last_name')"
+                  @blur="leaveField('last_name')"
                 />
               </div>
               <p v-if="fieldErrors.last_name" :id="'register-last_name-error'" class="field-error" role="alert">
@@ -101,7 +103,8 @@
                   inputmode="numeric"
                   pattern="[0-9]*"
                   maxlength="10"
-                  @input="clearFieldError('student_id')"
+                  @input="recheckField('student_id')"
+                  @blur="leaveField('student_id')"
                 />
               </div>
               <p v-if="fieldErrors.student_id" :id="'register-student_id-error'" class="field-error" role="alert">
@@ -121,7 +124,7 @@
                 :class="{ 'field-input-error': fieldErrors.year_level }"
                 :aria-invalid="Boolean(fieldErrors.year_level)"
                 :aria-describedby="fieldErrors.year_level ? 'register-year_level-error' : undefined"
-                @change="clearFieldError('year_level')"
+                @change="leaveField('year_level')"
               >
                 <option value="">Select year level</option>
                 <option v-for="level in yearLevelOptions" :key="level.value" :value="level.value">
@@ -148,7 +151,8 @@
                 autocomplete="email"
                 :aria-invalid="Boolean(fieldErrors.email)"
                 :aria-describedby="fieldErrors.email ? 'register-email-error' : undefined"
-                @input="clearFieldError('email')"
+                @input="recheckField('email')"
+                @blur="leaveField('email')"
               />
             </div>
             <p v-if="fieldErrors.email" id="register-email-error" class="field-error" role="alert">
@@ -171,7 +175,8 @@
                   autocomplete="new-password"
                   :aria-invalid="Boolean(fieldErrors.password)"
                   :aria-describedby="fieldErrors.password ? 'register-password-error' : undefined"
-                  @input="clearFieldError('password')"
+                  @input="recheckField('password')"
+                  @blur="leaveField('password')"
                 />
                 <button
                   type="button"
@@ -198,16 +203,13 @@
                   v-model="form.password_confirmation"
                   :type="showPasswordConfirmation ? 'text' : 'password'"
                   class="field-input field-input-with-toggle"
-                  :class="{ 'field-input-error': pwMismatch || fieldErrors.password_confirmation }"
+                  :class="{ 'field-input-error': fieldErrors.password_confirmation }"
                   placeholder="Re-enter password"
                   autocomplete="new-password"
-                  :aria-invalid="Boolean(pwMismatch || fieldErrors.password_confirmation)"
-                  :aria-describedby="
-                    pwMismatch || fieldErrors.password_confirmation
-                      ? 'register-password_confirmation-error'
-                      : undefined
-                  "
-                  @input="clearFieldError('password_confirmation')"
+                  :aria-invalid="Boolean(fieldErrors.password_confirmation)"
+                  :aria-describedby="fieldErrors.password_confirmation ? 'register-password_confirmation-error' : undefined"
+                  @input="recheckField('password_confirmation')"
+                  @blur="leaveField('password_confirmation')"
                 />
                 <button
                   type="button"
@@ -221,12 +223,12 @@
                 </button>
               </div>
               <p
-                v-if="pwMismatch || fieldErrors.password_confirmation"
+                v-if="fieldErrors.password_confirmation"
                 id="register-password_confirmation-error"
                 class="field-error"
                 role="alert"
               >
-                {{ pwMismatch ? 'Passwords do not match.' : fieldErrors.password_confirmation }}
+                {{ fieldErrors.password_confirmation }}
               </p>
             </div>
           </div>
@@ -254,7 +256,7 @@
                 :aria-invalid="Boolean(fieldErrors.agreed)"
                 aria-describedby="register-agreed-note"
                 @click="handleAgreeClick"
-                @change="clearFieldError('agreed')"
+                @change="recheckField('agreed')"
               />
               <span>
                 I agree to the
@@ -345,7 +347,15 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { settingsApi } from '@/api/settings.api'
 import { useAuthStore } from '@/store/auth.store'
-import { firstPasswordProblem, passwordChecklist, passwordStrength } from '@/utils/password'
+import { passwordChecklist, passwordStrength } from '@/utils/password'
+import {
+  confirmationProblem,
+  emailProblem,
+  passwordProblem,
+  problemMessage,
+  requiredProblem,
+  studentIdProblem,
+} from '@/utils/fieldChecks'
 import AuthLayout from './AuthLayout.vue'
 import {
   BarChart3,
@@ -420,6 +430,60 @@ function resetFieldErrors() {
   FIELD_ORDER.forEach((field) => {
     fieldErrors[field] = ''
   })
+}
+
+/*
+ * What each field needs (utils/fieldChecks.js, which mirrors
+ * AuthController::register). A problem shows when the reader leaves the
+ * field; one more typing cannot fix, such as a letter in the student ID,
+ * shows while they type.
+ */
+function fieldProblem(field) {
+  switch (field) {
+    case 'first_name':
+      return requiredProblem(form.first_name, 'Enter your first name.')
+    case 'last_name':
+      return requiredProblem(form.last_name, 'Enter your last name.')
+    case 'student_id':
+      return studentIdProblem(form.student_id, { emptyMessage: 'Enter your student ID.' })
+    case 'year_level':
+      if (!form.year_level) return 'Select your year level.'
+
+      return [1, 2, 3, 4].includes(Number(form.year_level)) ? '' : 'Select a valid year level.'
+    case 'email':
+      return emailProblem(form.email, { emptyMessage: 'Enter your email address.' })
+    case 'password':
+      return passwordProblem(form.password, { emptyMessage: 'Choose a password.' })
+    case 'password_confirmation':
+      return confirmationProblem(form.password, form.password_confirmation, { emptyMessage: 'Re-enter your password.' })
+    case 'agreed':
+      if (!policiesRead.value) return 'Read the Terms of Service and Privacy Policy, then tick the box to agree.'
+
+      return form.agreed ? '' : 'Tick the box to agree before creating your account.'
+    default:
+      return ''
+  }
+}
+
+const leftFields = reactive({})
+
+// While typing: a problem already on screen follows the typing (and clears
+// the moment it is fixed, a server message included); an early one appears.
+function recheckField(field) {
+  const problem = fieldProblem(field)
+  const showing = leftFields[field] || Boolean(fieldErrors[field])
+
+  fieldErrors[field] = showing || problem?.early ? problemMessage(problem) : ''
+
+  // A new password can make the copy below it right or wrong.
+  if (field === 'password' && (leftFields.password_confirmation || fieldErrors.password_confirmation)) {
+    recheckField('password_confirmation')
+  }
+}
+
+function leaveField(field) {
+  leftFields[field] = true
+  fieldErrors[field] = problemMessage(fieldProblem(field))
 }
 
 /*
@@ -512,9 +576,6 @@ const legalTexts = reactive({
   privacy_policy_text: defaultPrivacyPolicyText,
 })
 
-const pwMismatch = computed(() =>
-  form.password_confirmation.length > 0 && form.password !== form.password_confirmation,
-)
 const legalUpdatedLabel = computed(() => {
   if (!legalUpdatedAt.value) {
     return 'Last updated: March 5, 2026'
@@ -628,53 +689,10 @@ async function handleSubmit() {
   const yearLevel = Number(form.year_level)
   const email = form.email.trim()
 
-  if (!firstName) {
-    fieldErrors.first_name = 'Enter your first name.'
-  }
-
-  if (!lastName) {
-    fieldErrors.last_name = 'Enter your last name.'
-  }
-
-  if (!studentId) {
-    fieldErrors.student_id = 'Enter your student ID.'
-  } else if (!/^\d{7,10}$/.test(studentId)) {
-    // Says both the rule and what was actually typed, because "invalid
-    // format" leaves someone staring at a number that looks fine to them.
-    fieldErrors.student_id = `Student ID must be 7 to 10 digits -- you entered ${studentId.length}.`
-  }
-
-  if (!form.year_level) {
-    fieldErrors.year_level = 'Select your year level.'
-  } else if (![1, 2, 3, 4].includes(yearLevel)) {
-    fieldErrors.year_level = 'Select a valid year level.'
-  }
-
-  if (!email) {
-    fieldErrors.email = 'Enter your email address.'
-  }
-
-  if (!form.password) {
-    fieldErrors.password = 'Choose a password.'
-  } else {
-    const passwordProblem = firstPasswordProblem(form.password)
-
-    if (passwordProblem) {
-      fieldErrors.password = passwordProblem
-    }
-  }
-
-  if (!form.password_confirmation) {
-    fieldErrors.password_confirmation = 'Re-enter your password.'
-  } else if (pwMismatch.value) {
-    fieldErrors.password_confirmation = 'Passwords do not match.'
-  }
-
-  if (!policiesRead.value) {
-    fieldErrors.agreed = 'Read the Terms of Service and Privacy Policy, then tick the box to agree.'
-  } else if (!form.agreed) {
-    fieldErrors.agreed = 'Tick the box to agree before creating your account.'
-  }
+  FIELD_ORDER.forEach((field) => {
+    leftFields[field] = true
+    fieldErrors[field] = problemMessage(fieldProblem(field))
+  })
 
   if (hasFieldErrors.value) {
     apiError.value = 'Check the highlighted fields and try again.'

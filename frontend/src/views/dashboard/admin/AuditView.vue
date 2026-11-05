@@ -70,13 +70,14 @@
 
         <label class="audit-date">
           <span>To</span>
-          <input v-model="filters.to" type="date" class="text-input" :min="filters.from || undefined" />
+          <input v-model="filters.to" type="date" class="text-input" :min="filters.from || undefined" v-bind="dateChecks.bind('to')" />
         </label>
 
         <button v-if="activeFilterCount > 0" type="button" class="audit-clear" @click="clearFilters">
           <X :size="14" /> Clear filters
         </button>
       </div>
+      <FieldError :checks="dateChecks" field="to" class="filter-field-error" />
 
       <div v-if="filters.actor_id || filters.target_type" class="audit-chips">
         <span v-if="filters.actor_id" class="audit-chip">
@@ -212,6 +213,7 @@
 import { computed, ref } from 'vue'
 import { AlertCircle, ChevronDown, ClipboardList, Crosshair, Download, RefreshCw, Search, UserRound, X } from 'lucide-vue-next'
 import AuditDetails from './AuditDetails.vue'
+import FieldError from '@/components/FieldError.vue'
 import { actorName, actorSub, exactTime, relativeTime, shortTime, targetName } from './auditFormat'
 import { useAuditModule } from '../composables/useAuditModule'
 import { estimatePageWidth, useCompactLayout, useElementWidth } from '../composables/useViewport'
@@ -234,6 +236,7 @@ const {
   categories,
   filterNames,
   filters,
+  dateChecks,
   activeFilterCount,
   loadAuditLogs,
   loadMoreAuditLogs,

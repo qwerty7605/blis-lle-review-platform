@@ -16,12 +16,14 @@
 
       <label class="field-stack">
         <span class="field-label">Exam Year</span>
-        <input v-model="examYear" type="number" inputmode="numeric" class="text-input" min="1900" max="2999" />
+        <input v-model="examYear" type="number" inputmode="numeric" class="text-input" min="1900" max="2999" v-bind="checks.bind('exam_year')" />
+        <FieldError :checks="checks" field="exam_year" />
       </label>
 
       <label class="field-stack">
         <span class="field-label">Date Taken <em>(optional)</em></span>
-        <input v-model="takenAt" type="date" class="text-input" />
+        <input v-model="takenAt" type="date" class="text-input" v-bind="checks.bind('taken_at')" />
+        <FieldError :checks="checks" field="taken_at" />
       </label>
     </div>
 
@@ -74,6 +76,9 @@
             type="number"
             inputmode="decimal"
             class="text-input lleb-rating"
+            :class="{ 'is-invalid': Boolean(ratingProblemFor(row)) }"
+            :aria-invalid="ratingProblemFor(row) ? 'true' : undefined"
+            :data-check="ratingProblemFor(row) ? 'lle-batch.ratings' : undefined"
             step="0.01"
             min="0"
             max="100"
@@ -85,6 +90,7 @@
       </ul>
 
       <p v-if="visibleRows.length === 0" class="muted lleb-hint">No student in this batch matches "{{ search }}".</p>
+      <FieldError :checks="checks" field="ratings" />
     </template>
 
     <div v-if="saveError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ saveError }}</span></div>
@@ -106,10 +112,12 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw, Save, Search } from 'lucide-vue-next'
 import { useDashboardDataServices } from '../composables/useDashboardDataServices'
+import { decimalProblem, examDateProblem, problemMessage, useFieldChecks, yearProblem } from '@/utils/fieldChecks'
 
 const emit = defineEmits(['saved'])
 const services = useDashboardDataServices()
@@ -257,22 +265,27 @@ function resetRows() {
   }
 }
 
-const canSave = computed(() => (
-  !saving.value
-  && changedEntries.value.length > 0
-  && Number(examYear.value) >= 1900
-  && Number(examYear.value) <= 2999
-))
+const canSave = computed(() => !saving.value && changedEntries.value.length > 0)
+
+// LleResultController::storeBatch. A rating is checked only on a student
+// being given a result: the field is off for the rest.
+function ratingProblemFor(row) {
+  return row.result ? problemMessage(decimalProblem(row.rating, { label: 'General average', min: 0, max: 100 })) : ''
+}
+
+const checks = useFieldChecks('lle-batch', {
+  exam_year: () => yearProblem(examYear.value, { label: 'Exam year', required: true }),
+  taken_at: () => examDateProblem(takenAt.value, examYear.value),
+  ratings: () => {
+    const row = rows.value.find((candidate) => ratingProblemFor(candidate))
+
+    return row ? { message: `${row.name}: ${ratingProblemFor(row)}`, early: true } : ''
+  },
+})
 
 async function save() {
   if (!canSave.value) return
-
-  const badRating = changedEntries.value.find((entry) => entry.rating !== null && !(entry.rating >= 0 && entry.rating <= 100))
-
-  if (badRating) {
-    saveError.value = 'A general average has to be a number from 0 to 100.'
-    return
-  }
+  if (!checks.check()) return
 
   saving.value = true
   saveError.value = ''

@@ -1,6 +1,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { examDefaultsFor } from '@/utils/examDefaults'
+import { early, orderProblem, requiredProblem, useFieldChecks, wholeNumberProblem } from '@/utils/fieldChecks'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { normalizeExamDeliveryMode } from './useDashboardFormatters'
@@ -180,6 +181,23 @@ export function useExamsModule() {
   const seriesSaving = ref(false)
   const seriesError = ref('')
   const formNeedsSeries = computed(() => SERIES_EXAM_TYPES.includes(examForm.exam_type))
+
+  // ExamController::store / update. A new exam is not scheduled before today
+  // (an edit keeps whatever dates the exam already had).
+  const examChecks = useFieldChecks('exam-form', {
+    title: () => requiredProblem(examForm.title, 'Give the exam a title.'),
+    total_items: () => wholeNumberProblem(examForm.total_items, { label: 'Items', min: 1, max: 1000 }),
+    duration_minutes: () => wholeNumberProblem(examForm.duration_minutes, { label: 'Minutes', min: 1, max: 600 }),
+    schedule_start_at: () => (!examForm.id && examForm.schedule_start_at && examForm.schedule_start_at < currentDayStartLocalValue()
+      ? early('A new exam cannot start before today.')
+      : ''),
+    schedule_end_at: () => (!examForm.id && examForm.schedule_end_at && examForm.schedule_end_at < currentDayStartLocalValue()
+      ? early('A new exam cannot end before today.')
+      : orderProblem(examForm.schedule_start_at, examForm.schedule_end_at, 'The end cannot be before the start.')),
+    exam_series_id: () => (formNeedsSeries.value && !examForm.exam_series_id
+      ? 'Choose the series this exam belongs to, or create one below.'
+      : ''),
+  })
   const seriesForType = computed(() => examSeries.value.filter((series) => series.type === examForm.exam_type))
 
   // The semester an exam counts toward in the Estimated Outcome is not on the
@@ -255,6 +273,7 @@ export function useExamsModule() {
     examForm.exam_series_id = null
     newSeriesName.value = ''
     seriesError.value = ''
+    examChecks.reset()
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
   }
@@ -296,6 +315,7 @@ export function useExamsModule() {
     seriesError.value = ''
     examStartAsOpened = examForm.schedule_start_at
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
+    examChecks.reset()
     examError.value = ''
     examMessage.value = ''
     rememberExamFormAsOpened()
@@ -449,7 +469,7 @@ export function useExamsModule() {
   })
 
   async function handleSaveExam() {
-    if (!examForm.title.trim()) return
+    if (!examChecks.check()) return
 
     examSaving.value = true
     examError.value = ''
@@ -550,7 +570,9 @@ export function useExamsModule() {
       // which used to wipe this message before it was ever shown.
       examMessage.value = wasEditing ? 'Exam updated successfully.' : 'Exam created successfully.'
     } catch (error) {
-      examError.value = firstApiError(error, 'Unable to save exam.')
+      if (!examChecks.takeServerErrors(error)) {
+        examError.value = firstApiError(error, 'Unable to save exam.')
+      }
     } finally {
       examSaving.value = false
     }
@@ -625,6 +647,7 @@ export function useExamsModule() {
     examLoading,
     examSaving,
     examError,
+    examChecks,
     examMessage,
     showExamModal,
     showDeleteExamModal,

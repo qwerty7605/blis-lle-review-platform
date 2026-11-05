@@ -21,6 +21,7 @@ import {
 } from './studentExamAvailability'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { requiredProblem, roomCodeProblem, useFieldChecks } from '@/utils/fieldChecks'
 import {
   ROOM_LIVE_REFRESH_MS,
   firstApiError,
@@ -69,6 +70,16 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   const roomExporting = ref(false)
   const roomError = ref('')
   const roomMessage = ref('')
+  // RoomController: a name for a room; a code of letters and numbers to join one.
+  const createRoomChecks = useFieldChecks('room-create', {
+    name: () => requiredProblem(roomName.value, 'Give the room a name.'),
+  })
+  const editRoomChecks = useFieldChecks('room-edit', {
+    name: () => requiredProblem(editRoomName.value, 'Give the room a name.'),
+  })
+  const joinRoomChecks = useFieldChecks('room-join', {
+    code: () => roomCodeProblem(joinCode.value),
+  })
   // The room's Gradebook: every current student's latest score on every
   // exam the room has had. What each format is for is said under the field.
   const roomExportFormats = [
@@ -280,6 +291,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   function openCreateRoomModal() {
     if (!canCreateRooms.value) return
     roomName.value = ''
+    roomError.value = ''
+    createRoomChecks.reset()
     showCreateRoomModal.value = true
   }
 
@@ -291,6 +304,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   function openJoinRoomModal() {
     joinCode.value = ''
     joinRoomError.value = ''
+    joinRoomChecks.reset()
     showJoinRoomModal.value = true
   }
 
@@ -303,6 +317,8 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   function openEditRoomModal() {
     if (!selectedRoom.value) return
     editRoomName.value = selectedRoom.value.name ?? ''
+    roomError.value = ''
+    editRoomChecks.reset()
     showEditRoomModal.value = true
   }
 
@@ -612,7 +628,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
 
   async function handleCreateRoom() {
     if (!canCreateRooms.value) return
-    if (!roomName.value.trim()) return
+    if (!createRoomChecks.check()) return
 
     roomLoading.value = true
     roomError.value = ''
@@ -625,14 +641,15 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       roomMessage.value = 'Room created. Share the room code with students.'
       await fetchRooms(data?.room?.id ?? null)
     } catch (error) {
-      roomError.value = firstApiError(error, 'Unable to create room.')
+      if (!createRoomChecks.takeServerErrors(error)) roomError.value = firstApiError(error, 'Unable to create room.')
     } finally {
       roomLoading.value = false
     }
   }
 
   async function handleUpdateRoom() {
-    if (!selectedRoomId.value || !editRoomName.value.trim()) return
+    if (!selectedRoomId.value) return
+    if (!editRoomChecks.check()) return
 
     roomLoading.value = true
     roomError.value = ''
@@ -644,7 +661,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
       roomMessage.value = 'Room updated successfully.'
       await fetchRooms(selectedRoomId.value)
     } catch (error) {
-      roomError.value = firstApiError(error, 'Unable to update room.')
+      if (!editRoomChecks.takeServerErrors(error)) roomError.value = firstApiError(error, 'Unable to update room.')
     } finally {
       roomLoading.value = false
     }
@@ -672,7 +689,7 @@ export function useRoomsModule({ mode = 'student' } = {}) {
   }
 
   async function handleJoinRoom() {
-    if (!joinCode.value.trim()) return
+    if (!joinRoomChecks.check()) return
 
     roomLoading.value = true
     roomError.value = ''
@@ -830,6 +847,9 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     roomName,
     joinCode,
     joinRoomError,
+    createRoomChecks,
+    editRoomChecks,
+    joinRoomChecks,
     roomSearchQuery,
     filteredRooms,
     rooms,

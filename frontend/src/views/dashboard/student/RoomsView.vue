@@ -286,8 +286,11 @@
               class="text-input code"
               maxlength="12"
               placeholder="Enter room code"
+              autocomplete="off"
+              v-bind="joinRoomChecks.bind('code')"
               @input="joinCode = joinCode.toUpperCase(); joinRoomError = ''"
             />
+            <FieldError :checks="joinRoomChecks" field="code" />
           </label>
 
           <div v-if="joinRoomError" class="feedback danger" role="alert">
@@ -297,7 +300,7 @@
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeJoinRoomModal">Cancel</button>
-            <button type="button" class="primary-btn" :disabled="roomLoading || !joinCode.trim()" @click="handleJoinRoom">
+            <button type="button" class="primary-btn" :disabled="roomLoading" @click="handleJoinRoom">
               <DoorOpen :size="16" />
               Join
             </button>
@@ -899,6 +902,7 @@ import { examScheduleEnd, isStudentExamEnded, studentAttemptFinishBy } from '../
 import { useRoomsModule } from '../composables/useRoomsModule'
 import { useCompactLayout } from '../composables/useViewport'
 import BottomSheet from '@/components/BottomSheet.vue'
+import FieldError from '@/components/FieldError.vue'
 
 // Inside the exam: copying or selecting the questions is refused, except in a
 // field the student types into (a written answer).
@@ -922,6 +926,7 @@ const showArchivedExams = ref(false)
 const {
   joinCode,
   joinRoomError,
+  joinRoomChecks,
   roomSearchQuery,
   filteredRooms,
   rooms,

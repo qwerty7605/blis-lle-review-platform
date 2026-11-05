@@ -1,6 +1,7 @@
 import { computed, onUnmounted, reactive, ref } from 'vue'
 import { questionsApi } from '@/api/questions.api'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { requiredProblem, useFieldChecks } from '@/utils/fieldChecks'
 import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 
 // AI item mapping runs in a background queue worker, so a bank's
@@ -387,12 +388,36 @@ export function useLibraryManager({
     selectedLibraryBank.value = null
   }
 
+  // LibraryController::update and ::updateQuestion. Every choice has words,
+  // and a multiple-choice question needs two of them and a correct one to be
+  // scored at all.
+  const bankEditChecks = useFieldChecks('bank-edit', {
+    title: () => requiredProblem(libraryBankEditForm.title, 'Give the question set a name.'),
+  })
+  const questionEditChecks = useFieldChecks('question-edit', {
+    question_text: () => requiredProblem(questionEditForm.question_text, 'Write the question.'),
+    options: () => {
+      if (questionEditForm.question_type === 'open_ended') return ''
+
+      const options = questionEditForm.options
+      const empty = options.find((option) => !String(option.text ?? '').trim())
+
+      if (options.length < 2) return 'A multiple-choice question needs at least two choices.'
+      if (empty) return `Choice ${empty.label} is empty. Write it or remove it.`
+      if (!options.some((option) => option.is_correct)) return 'Mark the correct choice with the circle beside it.'
+
+      return ''
+    },
+  })
+
   function openEditLibraryBankModal(bank) {
     if (!bank?.id) return
 
     editingLibraryBank.value = bank
     libraryBankEditForm.title = bank.title || ''
     libraryBankEditForm.subject = bank.subject || ''
+    libraryError.value = ''
+    bankEditChecks.reset()
     showEditLibraryBankModal.value = true
   }
 
@@ -404,7 +429,7 @@ export function useLibraryManager({
   // Resolves to whether the set was saved.
   async function handleUpdateLibraryBank() {
     if (!editingLibraryBank.value?.id || libraryBankEditSaving.value) return false
-    if (!libraryBankEditForm.title.trim()) return false
+    if (!bankEditChecks.check()) return false
 
     libraryBankEditSaving.value = true
     libraryError.value = ''
@@ -420,7 +445,10 @@ export function useLibraryManager({
       await Promise.all([loadLibraryBanks(), notifyBanksChanged()])
       return true
     } catch (error) {
-      libraryError.value = resolveApiError(error, 'Unable to update this question bank.')
+      if (!bankEditChecks.takeServerErrors(error)) {
+        libraryError.value = resolveApiError(error, 'Unable to update this question bank.')
+      }
+
       return false
     } finally {
       libraryBankEditSaving.value = false
@@ -490,6 +518,7 @@ export function useLibraryManager({
     if (!question?.id) return
 
     editingQuestionId.value = question.id
+    questionEditChecks.reset()
     questionEditForm.question_text = question.question_text || ''
     questionEditForm.question_type = question.question_type || 'multiple_choice'
     questionEditForm.options = Array.isArray(question.options)
@@ -538,6 +567,7 @@ export function useLibraryManager({
 
   async function saveEditingQuestion() {
     if (!editingQuestionId.value || questionEditSaving.value) return
+    if (!questionEditChecks.check()) return
 
     questionEditSaving.value = true
     libraryError.value = ''
@@ -567,7 +597,9 @@ export function useLibraryManager({
       cancelEditingQuestion()
       await loadLibraryBankQuestions(selectedLibraryQuestionBank.value)
     } catch (error) {
-      libraryError.value = resolveApiError(error, 'Unable to update this question.')
+      if (!questionEditChecks.takeServerErrors(error)) {
+        libraryError.value = resolveApiError(error, 'Unable to update this question.')
+      }
     } finally {
       questionEditSaving.value = false
     }
@@ -829,6 +861,8 @@ export function useLibraryManager({
     librarySubjectNote,
     markLibrarySubjectChosen,
     libraryBankEditForm,
+    bankEditChecks,
+    questionEditChecks,
     librarySubjectCategories,
     libraryDifficultyOptions,
     libraryCognitiveLevelOptions,

@@ -8,14 +8,14 @@
       <div class="account-grid two">
         <label class="field-stack">
           <span class="field-label">Number of Items</span>
-          <input v-model.number="form.total_items" type="number" inputmode="numeric" min="1" max="1000" class="text-input" />
-          <span v-if="errors.total_items" class="account-field-error" role="alert">{{ errors.total_items }}</span>
+          <input v-model.number="form.total_items" type="number" inputmode="numeric" min="1" max="1000" class="text-input" v-bind="checks.bind('total_items')" />
+          <FieldError :checks="checks" field="total_items" />
         </label>
 
         <label class="field-stack">
           <span class="field-label">Time Limit (minutes)</span>
-          <input v-model.number="form.duration_minutes" type="number" inputmode="numeric" min="1" max="600" class="text-input" />
-          <span v-if="errors.duration_minutes" class="account-field-error" role="alert">{{ errors.duration_minutes }}</span>
+          <input v-model.number="form.duration_minutes" type="number" inputmode="numeric" min="1" max="600" class="text-input" v-bind="checks.bind('duration_minutes')" />
+          <FieldError :checks="checks" field="duration_minutes" />
         </label>
       </div>
 
@@ -58,17 +58,23 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'
 import { useAuthStore } from '@/store/auth.store'
 import { STANDARD_EXAM_DEFAULTS, examDefaultsFor } from '@/utils/examDefaults'
+import { useFieldChecks, wholeNumberProblem } from '@/utils/fieldChecks'
 
 const auth = useAuthStore()
 
 const form = reactive({ ...STANDARD_EXAM_DEFAULTS })
-const errors = ref({})
+// The exam form's own limits (ExamController::store).
+const checks = useFieldChecks('exam-defaults', {
+  total_items: () => wholeNumberProblem(form.total_items, { label: 'Number of items', min: 1, max: 1000 }),
+  duration_minutes: () => wholeNumberProblem(form.duration_minutes, { label: 'Time limit', min: 1, max: 600 }),
+})
 const error = ref('')
 const message = ref('')
 const saving = ref(false)
@@ -84,28 +90,14 @@ const isStandard = computed(() => same(form, STANDARD_EXAM_DEFAULTS))
 function useStandard() {
   Object.assign(form, STANDARD_EXAM_DEFAULTS)
   message.value = ''
+  checks.reset()
 }
 
 async function save() {
-  errors.value = {}
   error.value = ''
   message.value = ''
 
-  const problems = {}
-  const whole = (value) => Number.isInteger(value)
-
-  if (!whole(form.total_items) || form.total_items < 1 || form.total_items > 1000) {
-    problems.total_items = 'Enter a whole number from 1 to 1000.'
-  }
-
-  if (!whole(form.duration_minutes) || form.duration_minutes < 1 || form.duration_minutes > 600) {
-    problems.duration_minutes = 'Enter a whole number of minutes from 1 to 600.'
-  }
-
-  if (Object.keys(problems).length > 0) {
-    errors.value = problems
-    return
-  }
+  if (!checks.check()) return
 
   saving.value = true
 
@@ -115,13 +107,19 @@ async function save() {
     auth.user = { ...auth.user, ...data.user }
     Object.assign(form, saved.value)
     message.value = 'Saved. Your next new exam starts with these.'
+    checks.reset()
   } catch (failure) {
+    // The server names the fields exam_defaults.total_items and so on.
     const sent = failure?.response?.data?.errors ?? {}
+    const placed = checks.takeServerErrors({
+      response: {
+        data: {
+          errors: Object.fromEntries(Object.entries(sent).map(([field, messages]) => [field.replace('exam_defaults.', ''), messages])),
+        },
+      },
+    })
 
-    errors.value = Object.fromEntries(
-      Object.entries(sent).map(([field, messages]) => [field.replace('exam_defaults.', ''), String(messages?.[0] ?? '')]),
-    )
-    error.value = Object.keys(sent).length > 0 ? '' : (failure?.response?.data?.message ?? 'Unable to save your defaults.')
+    error.value = placed ? '' : (Object.values(sent).flat()[0] ?? failure?.response?.data?.message ?? 'Unable to save your defaults.')
   } finally {
     saving.value = false
   }

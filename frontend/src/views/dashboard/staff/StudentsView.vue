@@ -83,6 +83,7 @@
             max="2999"
             placeholder="Batch year"
             aria-label="Batch year"
+            v-bind="studentFilterChecks.bind('admission_year')"
           />
           <select v-model="studentFilters.archive_state" class="text-input narrow" aria-label="Records">
             <option v-for="option in archiveStateOptions" :key="option.value" :value="option.value">
@@ -91,6 +92,7 @@
           </select>
         </template>
       </div>
+      <FieldError v-if="!useRows" :checks="studentFilterChecks" field="admission_year" class="filter-field-error" />
 
       <div v-if="useRows && activeStudentFilters.length > 0" v-scroll-hint class="filter-chip-row">
         <button
@@ -420,7 +422,9 @@
           min="1900"
           max="2999"
           placeholder="Any batch"
+          v-bind="studentFilterChecks.bind('admission_year')"
         />
+        <FieldError :checks="studentFilterChecks" field="admission_year" />
       </label>
       <label class="field-stack">
         <span class="field-label">Records</span>
@@ -452,6 +456,7 @@
 import { computed, ref, watch } from 'vue'
 import { AlertCircle, ArrowRight, ChevronDown, RefreshCw, SlidersHorizontal, UserRound, X } from 'lucide-vue-next'
 import BottomSheet from '@/components/BottomSheet.vue'
+import FieldError from '@/components/FieldError.vue'
 import { formatCompactDate } from '../composables/useDashboardFormatters'
 import { useStudentsModule } from '../composables/useStudentsModule'
 import { vScrollHint } from '@/utils/scrollHint'
@@ -496,6 +501,7 @@ const {
   directoryLoading,
   directoryError,
   studentFilters,
+  studentFilterChecks,
   yearLevelOptions,
   studentStatusOptions,
   studentStatusLabel,

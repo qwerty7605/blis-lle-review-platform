@@ -476,12 +476,19 @@
               class="text-input"
               maxlength="255"
               placeholder="e.g. LIS 4A - Mock Exam"
+              v-bind="createRoomChecks.bind('name')"
             />
+            <FieldError :checks="createRoomChecks" field="name" />
           </label>
+
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeCreateRoomModal">Cancel</button>
-            <button type="button" class="primary-btn" :disabled="roomLoading || !roomName.trim()" @click="handleCreateRoom">
+            <button type="button" class="primary-btn" :disabled="roomLoading" @click="handleCreateRoom">
               <Plus :size="16" />
               Create Room
             </button>
@@ -510,12 +517,19 @@
               class="text-input"
               maxlength="255"
               placeholder="Enter updated room name"
+              v-bind="editRoomChecks.bind('name')"
             />
+            <FieldError :checks="editRoomChecks" field="name" />
           </label>
+
+          <div v-if="roomError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ roomError }}</span>
+          </div>
 
           <div class="modal-actions">
             <button type="button" class="ghost-btn" :disabled="roomLoading" @click="closeEditRoomModal">Cancel</button>
-            <button type="button" class="primary-btn" :disabled="roomLoading || !editRoomName.trim()" @click="handleUpdateRoom">
+            <button type="button" class="primary-btn" :disabled="roomLoading" @click="handleUpdateRoom">
               <Pencil :size="16" />
               Save Changes
             </button>
@@ -746,6 +760,7 @@ import {
 } from 'lucide-vue-next'
 import { examDeliveryModeLabel, formatExamSchedule } from '../composables/useDashboardFormatters'
 import { useRoomsModule } from '../composables/useRoomsModule'
+import FieldError from '@/components/FieldError.vue'
 import { useCompactLayout } from '../composables/useViewport'
 
 // Local, not composable state -- mirrors the same "reveal archived exams
@@ -769,6 +784,8 @@ const {
   canCreateRooms,
   canViewExamResults,
   roomName,
+  createRoomChecks,
+  editRoomChecks,
   roomSearchQuery,
   filteredRooms,
   rooms,

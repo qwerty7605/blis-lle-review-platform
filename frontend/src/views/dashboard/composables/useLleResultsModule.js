@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { decimalProblem, examDateProblem, isFullYear, lengthProblem, useFieldChecks, yearProblem } from '@/utils/fieldChecks'
 
 const SEARCH_DEBOUNCE_MS = 300
 const PAGE_SIZE = 30
@@ -73,7 +74,7 @@ export function useLleResultsModule() {
     try {
       const { data } = await services.getLleResults({
         search: filters.search.trim() || undefined,
-        exam_year: filters.exam_year || undefined,
+        exam_year: isFullYear(filters.exam_year) ? filters.exam_year : undefined,
         result: filters.result || undefined,
         page: page.value,
         per_page: PAGE_SIZE,
@@ -214,10 +215,20 @@ export function useLleResultsModule() {
     form.remarks = ''
   }
 
-  const canSubmit = computed(() => Boolean(form.user_id) && Boolean(form.exam_year) && !saving.value)
+  const canSubmit = computed(() => !saving.value)
+
+  // LleResultController::store.
+  const resultChecks = useFieldChecks('lle-result', {
+    user_id: () => (form.user_id ? '' : 'Search for the student and choose them from the list.'),
+    exam_year: () => yearProblem(form.exam_year, { label: 'Exam year', required: true }),
+    taken_at: () => examDateProblem(form.taken_at, form.exam_year),
+    rating: () => decimalProblem(form.rating, { label: 'General average', min: 0, max: 100 }),
+    remarks: () => lengthProblem(form.remarks, { label: 'Remarks', max: 1000 }),
+  })
 
   async function submitResult() {
     if (!canSubmit.value) return
+    if (!resultChecks.check()) return
 
     saving.value = true
     saveError.value = ''
@@ -237,10 +248,11 @@ export function useLleResultsModule() {
       const name = data?.result?.student?.name ?? 'Student'
       saveNotice.value = `Recorded ${form.result.toUpperCase()} for ${name} (${form.exam_year}).`
       resetForm()
+      resultChecks.reset()
       page.value = 1
       await Promise.all([loadResults(), loadModelStatus({ silent: true })])
     } catch (error) {
-      saveError.value = firstApiError(error, 'Unable to record that result.')
+      if (!resultChecks.takeServerErrors(error)) saveError.value = firstApiError(error, 'Unable to record that result.')
     } finally {
       saving.value = false
     }
@@ -282,7 +294,13 @@ export function useLleResultsModule() {
     listTimer = setTimeout(() => loadResults(), SEARCH_DEBOUNCE_MS)
   })
 
-  watch(() => [filters.exam_year, filters.result], () => {
+  // A year is used once it is four digits; until then it is said under the
+  // field (the server refuses "20" with a 422).
+  const filterChecks = useFieldChecks('lle-filter', {
+    exam_year: () => yearProblem(filters.exam_year, { label: 'Exam year' }),
+  })
+
+  watch(() => [isFullYear(filters.exam_year) ? filters.exam_year : '', filters.result], () => {
     page.value = 1
     loadResults()
   })
@@ -316,6 +334,8 @@ export function useLleResultsModule() {
     goToPage,
     loadResults,
     form,
+    resultChecks,
+    filterChecks,
     selectedStudent,
     studentQuery,
     studentMatches,
