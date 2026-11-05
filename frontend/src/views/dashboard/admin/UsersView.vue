@@ -357,45 +357,25 @@
             </button>
           </header>
 
+          <div v-if="userDialogError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ userDialogError }}</span>
+          </div>
+
           <label class="field-stack">
             <span class="field-label">Full Name</span>
-            <input v-model.trim="userForm.name" type="text" class="text-input" maxlength="255" />
+            <input v-model.trim="userForm.name" type="text" class="text-input" maxlength="255" v-bind="userChecks.bind('name')" />
+            <FieldError :checks="userChecks" field="name" />
           </label>
 
           <label class="field-stack">
             <span class="field-label">Email</span>
-            <input v-model.trim="userForm.email" type="email" class="text-input" maxlength="255" />
+            <input v-model.trim="userForm.email" type="email" class="text-input" maxlength="255" v-bind="userChecks.bind('email')" />
+            <FieldError :checks="userChecks" field="email" />
           </label>
 
-          <label class="field-stack">
-            <span class="field-label">Student ID</span>
-            <input
-              v-model.trim="userForm.student_id"
-              type="text"
-              class="text-input"
-              maxlength="10"
-              inputmode="numeric"
-              placeholder="e.g. 2300001"
-            />
-            <small class="muted">Required for student accounts. Leave blank for staff/admin.</small>
-          </label>
-
-          <label v-if="userForm.role === 'student'" class="field-stack">
-            <span class="field-label">
-              Year Level
-              <InfoTip text="Required while enrolled. Levels past 4th exist for irregular students; leave it blank once they have graduated or left." />
-            </span>
-            <select v-model="userForm.year_level" class="text-input">
-              <option value="">Not applicable</option>
-              <option v-for="option in yearLevelOptions" :key="option.value" :value="option.value">
-                {{ option.label }}
-              </option>
-              <option v-for="level in [5, 6, 7, 8]" :key="level" :value="String(level)">
-                {{ level }}th Year (irregular)
-              </option>
-            </select>
-          </label>
-
+          <!-- The role comes before the fields it decides: only a student has
+               a student ID, year level, status or admission year. -->
           <div class="inline-form">
             <label class="field-stack grow">
               <span class="field-label">Role</span>
@@ -419,38 +399,82 @@
             </label>
           </div>
 
-          <div v-if="userForm.role === 'student'" class="inline-form">
-            <label class="field-stack grow">
-              <span class="field-label">
-                Status
-                <InfoTip text="Anything other than Enrolled takes the student off class lists. Graduated and Dropped out are kept apart on purpose: a student who left never sat the board exam, so they are not a failure." />
-              </span>
-              <select v-model="userForm.student_status" class="text-input">
-                <option v-for="option in studentStatusOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
+          <div v-if="studentDetailsWillBeRemoved" class="feedback info" role="status">
+            <AlertCircle :size="15" />
+            <span>
+              Saving makes this a staff account and removes its student details:
+              <template v-if="editedUserBefore.student_id">student ID {{ editedUserBefore.student_id }}, </template>year level and student status.
+            </span>
+          </div>
+
+          <template v-if="userForm.role === 'student'">
+            <label class="field-stack">
+              <span class="field-label">Student ID</span>
+              <input
+                v-model.trim="userForm.student_id"
+                type="text"
+                class="text-input"
+                maxlength="10"
+                inputmode="numeric"
+                placeholder="e.g. 2300001"
+                v-bind="userChecks.bind('student_id')"
+              />
+              <FieldError :checks="userChecks" field="student_id" />
             </label>
 
-            <label class="field-stack grow">
+            <label class="field-stack">
               <span class="field-label">
-                Admission Year
-                <InfoTip text="The batch they entered with. Fixed for life, unlike year level." />
+                Year Level
+                <InfoTip text="Required while enrolled. Levels past 4th exist for irregular students; leave it blank once they have graduated or left." />
               </span>
-              <input
-                v-model="userForm.admission_year"
-                type="number"
-                class="text-input"
-                min="1900"
-                max="2999"
-                placeholder="e.g. 2026"
-              />
+              <select v-model="userForm.year_level" class="text-input" v-bind="userChecks.bind('year_level')">
+                <option value="">Not applicable</option>
+                <option v-for="option in yearLevelOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+                <option v-for="level in [5, 6, 7, 8]" :key="level" :value="String(level)">
+                  {{ level }}th Year (irregular)
+                </option>
+              </select>
+              <FieldError :checks="userChecks" field="year_level" />
             </label>
-          </div>
+
+            <div class="inline-form">
+              <label class="field-stack grow">
+                <span class="field-label">
+                  Status
+                  <InfoTip text="Anything other than Enrolled takes the student off class lists. Graduated and Dropped out are kept apart on purpose: a student who left never sat the board exam, so they are not a failure." />
+                </span>
+                <select v-model="userForm.student_status" class="text-input">
+                  <option v-for="option in studentStatusOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+
+              <label class="field-stack grow">
+                <span class="field-label">
+                  Admission Year
+                  <InfoTip text="The batch they entered with. Fixed for life, unlike year level." />
+                </span>
+                <input
+                  v-model="userForm.admission_year"
+                  type="number"
+                  class="text-input"
+                  min="1900"
+                  max="2999"
+                  placeholder="e.g. 2026"
+                  v-bind="userChecks.bind('admission_year')"
+                />
+                <FieldError :checks="userChecks" field="admission_year" />
+              </label>
+            </div>
+          </template>
 
           <label class="field-stack">
             <span class="field-label">{{ userForm.id ? 'New Password (optional)' : 'Password' }}</span>
-            <input v-model="userForm.password" type="password" class="text-input" minlength="8" />
+            <input v-model="userForm.password" type="password" class="text-input" autocomplete="new-password" v-bind="userChecks.bind('password')" />
+            <FieldError :checks="userChecks" field="password" />
           </label>
 
           <div class="modal-actions">
@@ -458,7 +482,7 @@
             <button
               type="button"
               class="primary-btn"
-              :disabled="usersSaving || !userForm.name.trim() || !userForm.email.trim() || (userForm.role === 'student' && (!userForm.student_id.trim() || (userForm.student_status === 'enrolled' && !userForm.year_level))) || (!userForm.id && !passwordIsValid(userForm.password))"
+              :disabled="usersSaving"
               @click="handleSaveUser"
             >
               <RefreshCw v-if="usersSaving" :size="14" class="spin-soft" />
@@ -485,6 +509,11 @@
             This keeps historical exam data under the same account.
           </p>
 
+          <div v-if="recoverDialogError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ recoverDialogError }}</span>
+          </div>
+
           <label class="field-stack">
             <span class="field-label">Verify Student ID</span>
             <input
@@ -494,7 +523,9 @@
               maxlength="10"
               inputmode="numeric"
               placeholder="Enter student ID on file"
+              v-bind="recoverChecks.bind('student_id')"
             />
+            <FieldError :checks="recoverChecks" field="student_id" />
           </label>
 
           <label class="field-stack">
@@ -505,7 +536,9 @@
               class="text-input"
               maxlength="255"
               placeholder="new-email@example.com"
+              v-bind="recoverChecks.bind('email')"
             />
+            <FieldError :checks="recoverChecks" field="email" />
           </label>
 
           <label class="field-stack">
@@ -514,9 +547,11 @@
               v-model="recoverForm.password"
               type="password"
               class="text-input"
-              minlength="8"
+              autocomplete="new-password"
               placeholder="At least 8 characters"
+              v-bind="recoverChecks.bind('password')"
             />
+            <FieldError :checks="recoverChecks" field="password" />
             <small class="muted">All active sessions will be revoked after recovery.</small>
           </label>
 
@@ -525,7 +560,7 @@
             <button
               type="button"
               class="primary-btn"
-              :disabled="usersRecovering || !recoverForm.student_id.trim() || !recoverForm.email.trim() || !passwordIsValid(recoverForm.password)"
+              :disabled="usersRecovering"
               @click="handleRecoverUserAccount"
             >
               <RefreshCw v-if="usersRecovering" :size="14" class="spin-soft" />
@@ -638,9 +673,9 @@ import {
   X,
 } from 'lucide-vue-next'
 import BottomSheet from '@/components/BottomSheet.vue'
+import FieldError from '@/components/FieldError.vue'
 import { useUsersModule } from '../composables/useUsersModule'
 import { estimatePageWidth, useCompactLayout, useElementWidth, useMediaQuery } from '../composables/useViewport'
-import { passwordIsValid } from '@/utils/password'
 import { vScrollHint } from '@/utils/scrollHint'
 
 const isCompact = useCompactLayout()
@@ -752,6 +787,12 @@ const {
   usersPagination,
   recoverForm,
   userForm,
+  userChecks,
+  recoverChecks,
+  userDialogError,
+  recoverDialogError,
+  studentDetailsWillBeRemoved,
+  editedUserBefore,
   canGoToPreviousUsersPage,
   canGoToNextUsersPage,
   usersRangeLabel,

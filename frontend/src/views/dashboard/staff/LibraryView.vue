@@ -346,6 +346,7 @@
                         v-model.trim="question.topic_name"
                         type="text"
                         class="text-input"
+                        maxlength="255"
                         placeholder="e.g. Dewey Decimal Classification"
                       />
                     </label>
@@ -483,7 +484,8 @@
                 <div v-else class="library-question-edit-form">
                   <label class="field-stack">
                     <span class="field-label">Question Text</span>
-                    <textarea v-model.trim="questionEditForm.question_text" class="text-input" rows="3"></textarea>
+                    <textarea v-model.trim="questionEditForm.question_text" class="text-input" rows="3" v-bind="questionEditChecks.bind('question_text')"></textarea>
+                    <FieldError :checks="questionEditChecks" field="question_text" />
                   </label>
 
                   <div class="room-form-grid">
@@ -552,7 +554,14 @@
                         @change="setQuestionEditCorrectOption(optionIndex)"
                       />
                       <span class="library-bank-option-label">{{ option.label }}.</span>
-                      <input v-model.trim="option.text" type="text" class="text-input" />
+                      <input
+                        v-model.trim="option.text"
+                        type="text"
+                        class="text-input"
+                        :class="{ 'is-invalid': questionEditChecks.error('options') && !option.text?.trim() }"
+                        :data-check="option.text?.trim() ? undefined : 'question-edit.options'"
+                        :aria-label="`Choice ${option.label}`"
+                      />
                       <button
                         type="button"
                         class="ghost-btn icon-only"
@@ -571,6 +580,12 @@
                       <Plus :size="14" />
                       Add Choice
                     </button>
+                    <FieldError :checks="questionEditChecks" field="options" />
+                  </div>
+
+                  <div v-if="libraryError" class="feedback danger" role="alert">
+                    <AlertCircle :size="15" />
+                    <span>{{ libraryError }}</span>
                   </div>
 
                   <div class="modal-actions">
@@ -617,7 +632,8 @@
           <div class="room-form-grid">
             <label class="field-stack">
               <span class="field-label">Question Name</span>
-              <input v-model.trim="libraryBankEditForm.title" type="text" class="text-input" maxlength="255" />
+              <input v-model.trim="libraryBankEditForm.title" type="text" class="text-input" maxlength="255" v-bind="bankEditChecks.bind('title')" />
+              <FieldError :checks="bankEditChecks" field="title" />
             </label>
 
             <label class="field-stack">
@@ -645,12 +661,18 @@
             <button
               type="button"
               class="ghost-btn"
-              :disabled="libraryBankEditSaving || !libraryBankEditForm.title.trim()"
+              :disabled="libraryBankEditSaving"
               @click="editLibraryBankQuestions"
             >
               <Pencil :size="14" />
               {{ libraryBankEditDirty ? 'Save and Edit Questions' : 'Edit Questions' }}
             </button>
+          </div>
+
+          <!-- The page's banner is behind this dialog. -->
+          <div v-if="libraryError" class="feedback danger" role="alert">
+            <AlertCircle :size="15" />
+            <span>{{ libraryError }}</span>
           </div>
 
           <div class="modal-actions">
@@ -660,7 +682,7 @@
             <button
               type="button"
               class="primary-btn"
-              :disabled="libraryBankEditSaving || !libraryBankEditForm.title.trim()"
+              :disabled="libraryBankEditSaving"
               @click="handleUpdateLibraryBank"
             >
               <RefreshCw v-if="libraryBankEditSaving" :size="14" class="spin-soft" />
@@ -712,6 +734,7 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
@@ -777,6 +800,8 @@ const {
   librarySubjectNote,
   markLibrarySubjectChosen,
   libraryBankEditForm,
+  bankEditChecks,
+  questionEditChecks,
   librarySubjectCategories,
   libraryDifficultyOptions,
   libraryCognitiveLevelOptions,

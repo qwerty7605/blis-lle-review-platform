@@ -34,12 +34,14 @@
         <div class="settings-grid">
           <label class="field-stack">
             <span class="field-label">Platform Name</span>
-            <input v-model.trim="settingsForm.platform_name" type="text" class="text-input" :disabled="!settingsCanEdit" />
+            <input v-model.trim="settingsForm.platform_name" type="text" class="text-input" maxlength="255" :disabled="!settingsCanEdit" v-bind="settingsChecks.bind('platform_name')" />
+            <FieldError :checks="settingsChecks" field="platform_name" />
           </label>
 
           <label class="field-stack">
             <span class="field-label">Academic Term</span>
-            <input v-model.trim="settingsForm.academic_term" type="text" class="text-input" :disabled="!settingsCanEdit" />
+            <input v-model.trim="settingsForm.academic_term" type="text" class="text-input" maxlength="255" :disabled="!settingsCanEdit" v-bind="settingsChecks.bind('academic_term')" />
+            <FieldError :checks="settingsChecks" field="academic_term" />
           </label>
 
           <label class="check-item">
@@ -54,7 +56,9 @@
                 v-model.trim="settingsForm.announcement_banner"
                 rows="3"
                 class="text-input textarea-input"
+                v-bind="settingsChecks.bind('announcement_banner')"
               />
+              <FieldError :checks="settingsChecks" field="announcement_banner" />
             </label>
 
             <label class="field-stack">
@@ -63,7 +67,9 @@
                 v-model.trim="settingsForm.terms_of_use_text"
                 rows="10"
                 class="text-input textarea-input settings-long-text"
+                v-bind="settingsChecks.bind('terms_of_use_text')"
               />
+              <FieldError :checks="settingsChecks" field="terms_of_use_text" />
             </label>
 
             <label class="field-stack">
@@ -72,7 +78,9 @@
                 v-model.trim="settingsForm.privacy_policy_text"
                 rows="10"
                 class="text-input textarea-input settings-long-text"
+                v-bind="settingsChecks.bind('privacy_policy_text')"
               />
+              <FieldError :checks="settingsChecks" field="privacy_policy_text" />
             </label>
           </template>
 
@@ -113,6 +121,7 @@ import { computed } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 import { useAuthStore } from '@/store/auth.store'
 import { useSettingsModule } from '../composables/useSettingsModule'
+import FieldError from '@/components/FieldError.vue'
 import AccountSessions from './AccountSessions.vue'
 import AccountSettings from './AccountSettings.vue'
 import ExamDefaultsCard from './ExamDefaultsCard.vue'
@@ -130,6 +139,7 @@ const {
   settingsMessage,
   settingsCanEdit,
   settingsForm,
+  settingsChecks,
   loadSystemSettings,
   saveSystemSettings,
 } = useSettingsModule({ enabled: () => isAdmin.value })

@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { isFullYear, useFieldChecks, yearProblem } from '@/utils/fieldChecks'
 import { useAuthStore } from '@/store/auth.store'
 import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
@@ -121,6 +122,12 @@ export function useStudentsModule() {
     archive_state: 'current',
   })
 
+  // A batch year is used once it is four digits; until then it is said under
+  // the field instead of sent (the server refuses "20" with a 422).
+  const studentFilterChecks = useFieldChecks('students-filter', {
+    admission_year: () => yearProblem(studentFilters.admission_year, { label: 'Batch year' }),
+  })
+
   const studentStatusOptions = [
     { value: 'enrolled', label: 'Enrolled' },
     { value: 'graduated', label: 'Graduated' },
@@ -174,7 +181,7 @@ export function useStudentsModule() {
         search: studentFilters.search.trim() || undefined,
         year_level: studentFilters.year_level || undefined,
         student_status: studentFilters.student_status || undefined,
-        admission_year: studentFilters.admission_year || undefined,
+        admission_year: isFullYear(studentFilters.admission_year) ? studentFilters.admission_year : undefined,
         archive_state: studentFilters.archive_state || undefined,
         sort: studentSort.key,
         direction: studentSort.direction,
@@ -268,7 +275,7 @@ export function useStudentsModule() {
   watch(() => [
     studentFilters.year_level,
     studentFilters.student_status,
-    studentFilters.admission_year,
+    isFullYear(studentFilters.admission_year) ? studentFilters.admission_year : '',
     studentFilters.archive_state,
   ], () => {
     studentsPage.value = 1
@@ -352,6 +359,7 @@ export function useStudentsModule() {
     directoryLoading,
     directoryError,
     studentFilters,
+    studentFilterChecks,
     yearLevelOptions,
     studentStatusOptions,
     studentStatusLabel,

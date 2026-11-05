@@ -18,8 +18,12 @@
             class="field-input"
             placeholder="you@lnu.edu.ph"
             autocomplete="email"
+            v-bind="checks.bind('email')"
           />
         </div>
+        <span v-if="checks.error('email')" :id="checks.errorId('email')" class="field-error" role="alert">
+          {{ checks.error('email') }}
+        </span>
       </label>
 
       <button type="submit" class="submit-btn" :disabled="isLoading">
@@ -44,6 +48,7 @@
 import { ref } from 'vue'
 import { ArrowLeft, Clock, Mail, MailCheck, ShieldCheck } from 'lucide-vue-next'
 import { useAuthStore } from '@/store/auth.store'
+import { emailProblem, useFieldChecks } from '@/utils/fieldChecks'
 import AuthLayout from './AuthLayout.vue'
 
 const auth = useAuthStore()
@@ -52,6 +57,10 @@ const email = ref('')
 const message = ref('')
 const errorMsg = ref('')
 const isLoading = ref(false)
+
+const checks = useFieldChecks('forgot', {
+  email: () => emailProblem(email.value, { emptyMessage: 'Enter your email address first.' }),
+})
 
 const highlights = [
   { icon: MailCheck, text: 'Reset link sent to your account email' },
@@ -63,10 +72,7 @@ async function handleSubmit() {
   message.value = ''
   errorMsg.value = ''
 
-  if (!email.value.trim()) {
-    errorMsg.value = 'Please enter your email address first.'
-    return
-  }
+  if (!checks.check()) return
 
   isLoading.value = true
 

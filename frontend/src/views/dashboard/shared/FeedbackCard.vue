@@ -58,11 +58,12 @@
           rows="5"
           maxlength="5000"
           :placeholder="placeholder"
+          v-bind="checks.bind('message')"
         />
         <span class="feedback-count" :class="{ short: tooShort }">
           {{ tooShort ? `At least 10 characters (${form.message.trim().length} so far)` : `${form.message.length} / 5000` }}
         </span>
-        <span v-if="errors.message" class="account-field-error" role="alert">{{ errors.message }}</span>
+        <FieldError :checks="checks" field="message" />
       </label>
 
       <label class="check-item feedback-contact">
@@ -118,12 +119,14 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { AlertCircle, CheckCircle2, Info, RefreshCw, Send } from 'lucide-vue-next'
 import { feedbackApi } from '@/api/feedback.api'
 import { useAuthStore } from '@/store/auth.store'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { lengthProblem, requiredProblem, useFieldChecks } from '@/utils/fieldChecks'
 import {
   feedbackStatusLabel,
   feedbackStatusTone,
@@ -136,7 +139,11 @@ import { formatDateTime } from '../composables/useDashboardFormatters'
 const auth = useAuthStore()
 
 const form = reactive({ type: 'problem', rating: null, message: '', may_contact: false })
-const errors = ref({})
+// FeedbackController::store: 10 to 5,000 characters.
+const checks = useFieldChecks('feedback', {
+  message: () => requiredProblem(form.message, 'Write your feedback first.')
+    || lengthProblem(form.message, { label: 'Your feedback', min: 10, max: 5000 }),
+})
 const error = ref('')
 const message = ref('')
 const sending = ref(false)
@@ -180,14 +187,10 @@ async function loadHistory() {
 }
 
 async function sendFeedback() {
-  errors.value = {}
   error.value = ''
   message.value = ''
 
-  if (form.message.trim().length < 10) {
-    errors.value = { message: form.message.trim() ? 'Tell us a little more: at least 10 characters.' : 'Write your feedback first.' }
-    return
-  }
+  if (!checks.check()) return
 
   sending.value = true
 
@@ -208,15 +211,16 @@ async function sendFeedback() {
     form.rating = null
     form.message = ''
     form.may_contact = false
+    checks.reset()
     if (data?.feedback) history.value = [data.feedback, ...history.value]
   } catch (requestError) {
     const status = requestError?.response?.status
-    errors.value = Object.fromEntries(
-      Object.entries(requestError?.response?.data?.errors ?? {}).map(([field, messages]) => [field, String(messages?.[0] ?? '')]),
-    )
+    const placed = status !== 429 && checks.takeServerErrors(requestError)
+
     error.value = status === 429
       ? 'You have sent a lot of feedback in the last hour. Try again later.'
-      : (Object.keys(errors.value).length > 0 ? '' : requestError?.response?.data?.message ?? 'Unable to send your feedback.')
+      : (placed ? '' : (Object.values(requestError?.response?.data?.errors ?? {}).flat()[0]
+        ?? requestError?.response?.data?.message ?? 'Unable to send your feedback.'))
   } finally {
     sending.value = false
   }

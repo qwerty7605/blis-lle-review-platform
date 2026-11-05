@@ -112,6 +112,38 @@ a.ghost-btn {
   box-shadow: var(--focus-ring);
 }
 
+/* A field the form will not accept (utils/fieldChecks.js): a red edge, and
+   the reason under it (components/FieldError.vue). The doubled class outranks
+   a page's own scoped border rule. */
+.text-input.is-invalid.is-invalid {
+  border-color: var(--dk-line-lnu-danger, var(--lnu-danger));
+}
+
+.text-input.is-invalid.is-invalid:focus {
+  box-shadow: 0 0 0 3px var(--dk-line-c62828-a18, rgba(198, 40, 40, 0.18));
+}
+
+/* Fields side by side start level, so a message under one does not push
+   its neighbour down. */
+.inline-form > .field-stack {
+  align-self: flex-start;
+}
+
+/* Under a row of filters rather than inside it. */
+.field-error-text.filter-field-error {
+  margin: 0 0 12px;
+}
+
+.field-error-text {
+  display: block;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
+  overflow-wrap: anywhere;
+}
+
 /* Four forms use this wrapper and nothing defined it, so each field's label
    sat directly under the field above it. */
 .room-form-grid {

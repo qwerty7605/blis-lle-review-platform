@@ -1,7 +1,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
-import { firstPasswordProblem, passwordIsValid } from '@/utils/password'
+import {
+  emailProblem,
+  passwordProblem,
+  requiredProblem,
+  studentIdProblem,
+  useFieldChecks,
+  yearProblem,
+} from '@/utils/fieldChecks'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 
 const USERS_DEFAULT_PAGE_SIZE = 200
@@ -148,6 +155,38 @@ export function useUsersModule(options = {}) {
     email_verified: true,
     archived: false,
     password: '',
+  })
+
+  // The account as it was when Edit opened: a student turned into staff loses
+  // their student details on save (UserController::update), so the dialog
+  // says so first.
+  const editedUserBefore = reactive({ role: '', student_id: '' })
+  const studentDetailsWillBeRemoved = computed(() =>
+    Boolean(userForm.id) && editedUserBefore.role === 'student' && userForm.role !== 'student')
+
+  // Errors from saving are shown in the dialog that caused them: the page's
+  // own message sits behind the dialog, where nobody saw it.
+  const userDialogError = ref('')
+  const recoverDialogError = ref('')
+
+  // UserController::store / update. Only an enrolled student needs a year
+  // level; levels 5 to 8 are irregular students, and a graduate has none.
+  const userChecks = useFieldChecks('user-form', {
+    name: () => requiredProblem(userForm.name, 'Enter the full name.'),
+    email: () => emailProblem(userForm.email),
+    student_id: () => (userForm.role === 'student' ? studentIdProblem(userForm.student_id) : ''),
+    year_level: () => (userForm.role === 'student' && userForm.student_status === 'enrolled' && userForm.year_level === ''
+      ? 'Choose a year level. An enrolled student needs one.'
+      : ''),
+    admission_year: () => (userForm.role === 'student' ? yearProblem(userForm.admission_year, { label: 'Admission year' }) : ''),
+    // A blank password on edit means "leave it alone".
+    password: () => passwordProblem(userForm.password, { required: !userForm.id }),
+  })
+
+  const recoverChecks = useFieldChecks('recover-form', {
+    student_id: () => studentIdProblem(recoverForm.student_id),
+    email: () => emailProblem(recoverForm.email),
+    password: () => passwordProblem(recoverForm.password),
   })
 
   const yearLevelOptions = [
@@ -414,6 +453,10 @@ export function useUsersModule(options = {}) {
     userForm.email_verified = true
     userForm.archived = false
     userForm.password = ''
+    editedUserBefore.role = ''
+    editedUserBefore.student_id = ''
+    userDialogError.value = ''
+    userChecks.reset()
   }
 
   function openCreateUserModal() {
@@ -436,6 +479,10 @@ export function useUsersModule(options = {}) {
     userForm.email_verified = Boolean(user.email_verified_at)
     userForm.archived = Boolean(user.archived_at)
     userForm.password = ''
+    editedUserBefore.role = userForm.role
+    editedUserBefore.student_id = userForm.student_id
+    userDialogError.value = ''
+    userChecks.reset()
     usersError.value = ''
     usersMessage.value = ''
     showUserModal.value = true
@@ -450,6 +497,8 @@ export function useUsersModule(options = {}) {
     recoverForm.student_id = ''
     recoverForm.email = ''
     recoverForm.password = ''
+    recoverDialogError.value = ''
+    recoverChecks.reset()
   }
 
   function openRecoverUserModal(user) {
@@ -582,19 +631,10 @@ export function useUsersModule(options = {}) {
 
   async function handleSaveUser() {
     if (!isAdminRole.value) return
-    if (!userForm.name.trim() || !userForm.email.trim()) return
-
-    if (userForm.role === 'student' && !/^\d{7,10}$/.test(userForm.student_id.trim())) {
-      usersError.value = 'Student ID must be 7 to 10 digits for student accounts.'
-      return
-    }
-
-    if (userForm.role === 'student' && !['1', '2', '3', '4'].includes(String(userForm.year_level))) {
-      usersError.value = 'Select a valid year level for student accounts.'
-      return
-    }
+    if (!userChecks.check()) return
 
     usersSaving.value = true
+    userDialogError.value = ''
     usersError.value = ''
     usersMessage.value = ''
 
@@ -626,16 +666,6 @@ export function useUsersModule(options = {}) {
 
     try {
       if (userForm.id) {
-        // A blank password on edit means "leave it alone"; only a typed one
-        // has to satisfy the policy.
-        const changeProblem = payload.password ? firstPasswordProblem(payload.password) : ''
-
-        if (changeProblem) {
-          usersError.value = changeProblem
-          usersSaving.value = false
-          return
-        }
-
         const editedOwnAccount = Number(userForm.id) === Number(auth.user?.id)
 
         // Only on an edit: an account the admin creates is verified by being
@@ -649,14 +679,6 @@ export function useUsersModule(options = {}) {
         // admin who renamed themselves saw the old name there until a reload.
         if (editedOwnAccount) await auth.fetchMe({ silent: true })
       } else {
-        const passwordProblem = firstPasswordProblem(payload.password ?? '')
-
-        if (passwordProblem) {
-          usersError.value = passwordProblem
-          usersSaving.value = false
-          return
-        }
-
         await services.createUser(payload)
         usersMessage.value = 'User created successfully.'
       }
@@ -664,7 +686,9 @@ export function useUsersModule(options = {}) {
       closeUserModal()
       await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
     } catch (error) {
-      usersError.value = firstApiError(error, 'Unable to save user.')
+      if (!userChecks.takeServerErrors(error)) {
+        userDialogError.value = firstApiError(error, 'Unable to save user.')
+      }
     } finally {
       usersSaving.value = false
     }
@@ -676,14 +700,10 @@ export function useUsersModule(options = {}) {
     const targetUserId = Number(recoverTargetUser.value?.id ?? 0)
     if (!Number.isFinite(targetUserId) || targetUserId < 1) return
 
-    if (!/^\d{7,10}$/.test(recoverForm.student_id.trim())) {
-      usersError.value = 'Student ID must be 7 to 10 digits.'
-      return
-    }
-
-    if (!recoverForm.email.trim() || !passwordIsValid(recoverForm.password)) return
+    if (!recoverChecks.check()) return
 
     usersRecovering.value = true
+    recoverDialogError.value = ''
     usersError.value = ''
     usersMessage.value = ''
 
@@ -698,7 +718,9 @@ export function useUsersModule(options = {}) {
       closeRecoverUserModal()
       await loadAdminUsers({ page: usersPagination.current_page, keepMessage: true })
     } catch (error) {
-      usersError.value = firstApiError(error, 'Unable to recover the student account.')
+      if (!recoverChecks.takeServerErrors(error)) {
+        recoverDialogError.value = firstApiError(error, 'Unable to recover the student account.')
+      }
     } finally {
       usersRecovering.value = false
     }
@@ -832,6 +854,12 @@ export function useUsersModule(options = {}) {
     usersPagination,
     recoverForm,
     userForm,
+    userChecks,
+    recoverChecks,
+    userDialogError,
+    recoverDialogError,
+    studentDetailsWillBeRemoved,
+    editedUserBefore,
     canGoToPreviousUsersPage,
     canGoToNextUsersPage,
     usersRangeLabel,

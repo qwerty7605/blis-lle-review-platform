@@ -32,8 +32,12 @@
             class="field-input"
             placeholder="e.g. you@lnu.edu.ph or 1234567"
             autocomplete="username"
+            v-bind="checks.bind('identifier')"
           />
         </div>
+        <span v-if="checks.error('identifier')" :id="checks.errorId('identifier')" class="field-error" role="alert">
+          {{ checks.error('identifier') }}
+        </span>
       </label>
 
       <label class="field-group">
@@ -46,6 +50,7 @@
             class="field-input field-input-with-toggle"
             placeholder="Enter your password"
             autocomplete="current-password"
+            v-bind="checks.bind('password')"
           />
           <button
             type="button"
@@ -58,6 +63,9 @@
             <Eye v-else :size="16" />
           </button>
         </div>
+        <span v-if="checks.error('password')" :id="checks.errorId('password')" class="field-error" role="alert">
+          {{ checks.error('password') }}
+        </span>
       </label>
 
       <div class="form-row">
@@ -85,6 +93,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth.store'
+import { requiredProblem, signInIdentifierProblem, useFieldChecks } from '@/utils/fieldChecks'
 import AuthLayout from './AuthLayout.vue'
 import {
   BarChart3,
@@ -97,6 +106,11 @@ import {
 } from 'lucide-vue-next'
 
 const form = reactive({ identifier: '', password: '', remember: false })
+
+const checks = useFieldChecks('sign-in', {
+  identifier: () => signInIdentifierProblem(form.identifier),
+  password: () => requiredProblem(form.password, 'Enter your password.'),
+})
 const showPw = ref(false)
 const isLoading = ref(false)
 const apiError = ref('')
@@ -274,10 +288,7 @@ const highlights = [
 async function handleSubmit() {
   apiError.value = ''
 
-  if (!form.identifier || !form.password) {
-    apiError.value = 'Email or Student ID and password are required.'
-    return
-  }
+  if (!checks.check()) return
 
   isLoading.value = true
   try {

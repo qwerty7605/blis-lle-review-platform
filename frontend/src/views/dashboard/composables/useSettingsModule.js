@@ -1,5 +1,6 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useDashboardDataServices } from './useDashboardDataServices'
+import { lengthProblem, requiredProblem, useFieldChecks } from '@/utils/fieldChecks'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -27,6 +28,17 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     announcement_banner: '',
     terms_of_use_text: '',
     privacy_policy_text: '',
+  })
+
+  // SettingsController::updateSystem.
+  const settingsChecks = useFieldChecks('settings', {
+    platform_name: () => requiredProblem(settingsForm.platform_name, 'Enter the platform name.'),
+    academic_term: () => requiredProblem(settingsForm.academic_term, 'Enter the academic term, like 2026-2027 1st Semester.'),
+    announcement_banner: () => lengthProblem(settingsForm.announcement_banner, { label: 'The announcement', max: 500 }),
+    terms_of_use_text: () => requiredProblem(settingsForm.terms_of_use_text, 'The Terms of Use cannot be empty: students agree to them when they sign up.')
+      || lengthProblem(settingsForm.terms_of_use_text, { label: 'The Terms of Use', max: 20000 }),
+    privacy_policy_text: () => requiredProblem(settingsForm.privacy_policy_text, 'The Privacy Policy cannot be empty: students agree to it when they sign up.')
+      || lengthProblem(settingsForm.privacy_policy_text, { label: 'The Privacy Policy', max: 20000 }),
   })
 
   async function loadSystemSettings() {
@@ -60,10 +72,7 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     settingsError.value = ''
     settingsMessage.value = ''
 
-    if (!termsOfUse || !privacyPolicy) {
-      settingsError.value = 'Terms of Use and Privacy Policy are required.'
-      return
-    }
+    if (!settingsChecks.check()) return
 
     settingsSaving.value = true
 
@@ -82,7 +91,7 @@ export function useSettingsModule({ enabled = () => true } = {}) {
       // they just wrote without reloading.
       window.dispatchEvent(new Event(ANNOUNCEMENT_CHANGED_EVENT))
     } catch (error) {
-      settingsError.value = firstApiError(error, 'Unable to save settings.')
+      if (!settingsChecks.takeServerErrors(error)) settingsError.value = firstApiError(error, 'Unable to save settings.')
     } finally {
       settingsSaving.value = false
     }
@@ -99,6 +108,7 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     settingsMessage,
     settingsCanEdit,
     settingsForm,
+    settingsChecks,
     loadSystemSettings,
     saveSystemSettings,
   }

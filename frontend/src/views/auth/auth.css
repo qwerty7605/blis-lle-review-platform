@@ -300,11 +300,13 @@
   color: var(--lnu-text);
 }
 
-.auth-shell .field-input-error {
+.auth-shell .field-input-error,
+.auth-shell .field-input.is-invalid {
   border-color: var(--dk-line-lnu-danger, var(--lnu-danger));
 }
 
-.auth-shell .field-input-error:focus {
+.auth-shell .field-input-error:focus,
+.auth-shell .field-input.is-invalid:focus {
   border-color: var(--dk-line-lnu-danger, var(--lnu-danger));
   box-shadow: 0 0 0 3px var(--dk-line-c62828-a18, rgba(198, 40, 40, 0.18));
 }

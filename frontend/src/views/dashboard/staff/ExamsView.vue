@@ -358,7 +358,8 @@
                   <div class="exam-panel-grid single">
                     <label class="field-stack">
                       <span class="field-label">Title</span>
-                      <input v-model.trim="examForm.title" type="text" class="text-input" maxlength="255" />
+                      <input v-model.trim="examForm.title" type="text" class="text-input" maxlength="255" v-bind="examChecks.bind('title')" />
+                      <FieldError :checks="examChecks" field="title" />
                     </label>
 
                     <label class="field-stack">
@@ -376,12 +377,13 @@
                     <div v-if="formNeedsSeries" class="field-stack exam-series-field">
                       <label class="field-stack">
                         <span class="field-label">Series</span>
-                        <select v-model="examForm.exam_series_id" class="text-input">
+                        <select v-model="examForm.exam_series_id" class="text-input" v-bind="examChecks.bind('exam_series_id')">
                           <option :value="null" disabled>Choose the {{ examTypeLabel(examForm.exam_type).toLowerCase() }} this exam is one subject of</option>
                           <option v-for="series in seriesForType" :key="series.id" :value="series.id">
                             {{ series.name }}{{ series.missing_subjects.length ? ` (needs ${series.missing_subjects.length} more)` : ' (all six subjects)' }}
                           </option>
                         </select>
+                        <FieldError :checks="examChecks" field="exam_series_id" />
                       </label>
                       <div class="inline-form exam-series-new">
                         <input
@@ -403,11 +405,13 @@
                     <div class="inline-form exam-meta-row">
                       <label class="field-stack narrow">
                         <span class="field-label">Items</span>
-                        <input v-model.number="examForm.total_items" type="number" min="1" max="1000" class="text-input" />
+                        <input v-model.number="examForm.total_items" type="number" min="1" max="1000" class="text-input" v-bind="examChecks.bind('total_items')" />
+                        <FieldError :checks="examChecks" field="total_items" />
                       </label>
                       <label class="field-stack narrow">
                         <span class="field-label">Minutes</span>
-                        <input v-model.number="examForm.duration_minutes" type="number" min="1" max="600" class="text-input" />
+                        <input v-model.number="examForm.duration_minutes" type="number" min="1" max="600" class="text-input" v-bind="examChecks.bind('duration_minutes')" />
+                        <FieldError :checks="examChecks" field="duration_minutes" />
                       </label>
                     </div>
 
@@ -518,7 +522,9 @@
                             type="datetime-local"
                             class="text-input"
                             :min="createExamScheduleMin || undefined"
+                            v-bind="examChecks.bind('schedule_start_at')"
                           />
+                          <FieldError :checks="examChecks" field="schedule_start_at" />
                         </label>
                         <label class="field-stack">
                           <span class="field-label">End</span>
@@ -527,7 +533,9 @@
                             type="datetime-local"
                             class="text-input"
                             :min="createExamScheduleEndMin || undefined"
+                            v-bind="examChecks.bind('schedule_end_at')"
                           />
+                          <FieldError :checks="examChecks" field="schedule_end_at" />
                         </label>
                       </div>
                       <small class="muted">Leave both blank for always-available exams.</small>
@@ -753,7 +761,7 @@
               <button
                 type="button"
                 class="primary-btn"
-                :disabled="examSaving || !examForm.title.trim() || examForm.total_items < 1 || examForm.duration_minutes < 1 || needsMoreQuestions"
+                :disabled="examSaving || needsMoreQuestions"
                 @click="handleSaveExam"
               >
                 <RefreshCw v-if="examSaving" :size="15" class="spin-soft" />
@@ -830,6 +838,7 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -987,6 +996,7 @@ const {
   examLoading,
   examSaving,
   examError,
+  examChecks,
   examMessage,
   showExamModal,
   showDeleteExamModal,

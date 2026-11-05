@@ -17,8 +17,8 @@
         <div class="account-grid three">
           <label class="field-stack">
             <span class="field-label">First Name</span>
-            <input v-model="profile.first_name" type="text" class="text-input" autocomplete="given-name" maxlength="255" />
-            <span v-if="profileErrors.first_name" class="account-field-error" role="alert">{{ profileErrors.first_name }}</span>
+            <input v-model="profile.first_name" type="text" class="text-input" autocomplete="given-name" maxlength="255" v-bind="profileChecks.bind('first_name')" />
+            <FieldError :checks="profileChecks" field="first_name" />
           </label>
 
           <label class="field-stack">
@@ -28,8 +28,8 @@
 
           <label class="field-stack">
             <span class="field-label">Last Name</span>
-            <input v-model="profile.last_name" type="text" class="text-input" autocomplete="family-name" maxlength="255" />
-            <span v-if="profileErrors.last_name" class="account-field-error" role="alert">{{ profileErrors.last_name }}</span>
+            <input v-model="profile.last_name" type="text" class="text-input" autocomplete="family-name" maxlength="255" v-bind="profileChecks.bind('last_name')" />
+            <FieldError :checks="profileChecks" field="last_name" />
           </label>
         </div>
 
@@ -73,14 +73,14 @@
         <div class="account-grid two">
           <label class="field-stack">
             <span class="field-label">New Email Address</span>
-            <input v-model.trim="email.email" type="email" class="text-input" autocomplete="email" maxlength="255" />
-            <span v-if="emailErrors.email" class="account-field-error" role="alert">{{ emailErrors.email }}</span>
+            <input v-model.trim="email.email" type="email" class="text-input" autocomplete="email" maxlength="255" v-bind="emailChecks.bind('email')" />
+            <FieldError :checks="emailChecks" field="email" />
           </label>
 
           <label class="field-stack">
             <span class="field-label">Current Password</span>
-            <input v-model="email.current_password" type="password" class="text-input" autocomplete="current-password" />
-            <span v-if="emailErrors.current_password" class="account-field-error" role="alert">{{ emailErrors.current_password }}</span>
+            <input v-model="email.current_password" type="password" class="text-input" autocomplete="current-password" v-bind="emailChecks.bind('current_password')" />
+            <FieldError :checks="emailChecks" field="current_password" />
           </label>
         </div>
 
@@ -88,7 +88,7 @@
         <div v-if="emailError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ emailError }}</span></div>
 
         <div class="account-actions">
-          <button type="submit" class="primary-btn" :disabled="emailSaving || !email.email || !email.current_password">
+          <button type="submit" class="primary-btn" :disabled="emailSaving">
             <RefreshCw v-if="emailSaving" :size="14" class="spin-soft" />
             <span>{{ emailSaving ? 'Sending...' : 'Send Confirmation Link' }}</span>
           </button>
@@ -107,20 +107,20 @@
         <div class="account-grid three">
           <label class="field-stack">
             <span class="field-label">Current Password</span>
-            <input v-model="password.current_password" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="current-password" />
-            <span v-if="passwordErrors.current_password" class="account-field-error" role="alert">{{ passwordErrors.current_password }}</span>
+            <input v-model="password.current_password" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="current-password" v-bind="passwordChecks.bind('current_password')" />
+            <FieldError :checks="passwordChecks" field="current_password" />
           </label>
 
           <label class="field-stack">
             <span class="field-label">New Password</span>
-            <input v-model="password.password" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="new-password" />
-            <span v-if="passwordErrors.password" class="account-field-error" role="alert">{{ passwordErrors.password }}</span>
+            <input v-model="password.password" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="new-password" v-bind="passwordChecks.bind('password')" />
+            <FieldError :checks="passwordChecks" field="password" />
           </label>
 
           <label class="field-stack">
             <span class="field-label">Confirm New Password</span>
-            <input v-model="password.password_confirmation" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="new-password" />
-            <span v-if="passwordErrors.password_confirmation" class="account-field-error" role="alert">{{ passwordErrors.password_confirmation }}</span>
+            <input v-model="password.password_confirmation" :type="showPasswords ? 'text' : 'password'" class="text-input" autocomplete="new-password" v-bind="passwordChecks.bind('password_confirmation')" />
+            <FieldError :checks="passwordChecks" field="password_confirmation" />
           </label>
         </div>
 
@@ -144,7 +144,7 @@
           <button
             type="submit"
             class="primary-btn"
-            :disabled="passwordSaving || !password.current_password || !password.password || !password.password_confirmation"
+            :disabled="passwordSaving"
           >
             <RefreshCw v-if="passwordSaving" :size="14" class="spin-soft" />
             <span>{{ passwordSaving ? 'Saving...' : 'Change Password' }}</span>
@@ -172,12 +172,21 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { AlertCircle, CheckCircle2, Circle, Monitor, Moon, RefreshCw, Sun } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'
 import { useAuthStore } from '@/store/auth.store'
-import { firstPasswordProblem, passwordChecklist } from '@/utils/password'
+import { passwordChecklist } from '@/utils/password'
+import {
+  confirmationProblem,
+  emailProblem,
+  passwordProblem,
+  problemMessage,
+  requiredProblem,
+  useFieldChecks,
+} from '@/utils/fieldChecks'
 import { setThemeChoice, themeChoice } from '@/utils/theme'
 
 const auth = useAuthStore()
@@ -193,22 +202,17 @@ const yearLevelLabel = computed(() => {
   return `${level}${['th', 'st', 'nd', 'rd'][level] ?? 'th'} Year`
 })
 
-// The server's own sentence for a field, when it sent one.
-function fieldErrors(error) {
-  return Object.fromEntries(
-    Object.entries(error?.response?.data?.errors ?? {}).map(([field, messages]) => [field, String(messages?.[0] ?? '')]),
-  )
-}
-
-function generalError(error, fallback) {
-  if (Object.keys(error?.response?.data?.errors ?? {}).length > 0) return ''
+// A refusal the form could not see coming: under its field when the server
+// named one (checks.takeServerErrors), otherwise above the button.
+function generalError(error, fallback, checks = null) {
+  if (checks?.takeServerErrors(error)) return ''
+  if (Object.keys(error?.response?.data?.errors ?? {}).length > 0) return Object.values(error.response.data.errors).flat()[0] ?? fallback
 
   return error?.response?.data?.message ?? fallback
 }
 
 // ---------------------------------------------------------------- name
 const profile = reactive({ first_name: '', middle_name: '', last_name: '' })
-const profileErrors = ref({})
 const profileError = ref('')
 const profileMessage = ref('')
 const profileSaving = ref(false)
@@ -222,6 +226,12 @@ function fillProfile(user) {
 
 watch(() => auth.user?.id, () => fillProfile(auth.user), { immediate: true })
 
+// AccountController::updateProfile: an administrator may go by one name.
+const profileChecks = useFieldChecks('account-name', {
+  first_name: () => requiredProblem(profile.first_name, 'Enter your first name.'),
+  last_name: () => (isAdmin.value ? '' : requiredProblem(profile.last_name, 'Enter your last name.')),
+})
+
 const profileChanged = computed(() => (
   profile.first_name.trim() !== (auth.user?.first_name ?? auth.user?.name ?? '')
   || profile.middle_name.trim() !== (auth.user?.middle_name ?? '')
@@ -229,18 +239,10 @@ const profileChanged = computed(() => (
 ))
 
 async function saveProfile() {
-  profileErrors.value = {}
   profileError.value = ''
   profileMessage.value = ''
 
-  const problems = {}
-  if (!profile.first_name.trim()) problems.first_name = 'Enter your first name.'
-  if (!profile.last_name.trim() && !isAdmin.value) problems.last_name = 'Enter your last name.'
-
-  if (Object.keys(problems).length > 0) {
-    profileErrors.value = problems
-    return
-  }
+  if (!profileChecks.check()) return
 
   profileSaving.value = true
 
@@ -254,10 +256,10 @@ async function saveProfile() {
     // The sidebar and every page read the name from here.
     auth.user = { ...auth.user, ...data.user }
     fillProfile(auth.user)
+    profileChecks.reset()
     profileMessage.value = 'Your name has been updated.'
   } catch (error) {
-    profileErrors.value = fieldErrors(error)
-    profileError.value = generalError(error, 'Unable to save your name.')
+    profileError.value = generalError(error, 'Unable to save your name.', profileChecks)
   } finally {
     profileSaving.value = false
   }
@@ -265,15 +267,29 @@ async function saveProfile() {
 
 // --------------------------------------------------------------- email
 const email = reactive({ email: '', current_password: '' })
-const emailErrors = ref({})
 const emailError = ref('')
 const emailMessage = ref('')
 const emailSaving = ref(false)
 
+const emailChecks = useFieldChecks('account-email', {
+  email: () => {
+    const problem = emailProblem(email.email, { emptyMessage: 'Enter the new email address.' })
+
+    if (problemMessage(problem)) return problem
+
+    return email.email.trim().toLowerCase() === String(auth.user?.email ?? '').toLowerCase()
+      ? 'That is already your sign-in email.'
+      : ''
+  },
+  current_password: () => requiredProblem(email.current_password, 'Enter your current password.'),
+})
+
 async function requestEmailChange() {
-  emailErrors.value = {}
   emailError.value = ''
   emailMessage.value = ''
+
+  if (!emailChecks.check()) return
+
   emailSaving.value = true
 
   try {
@@ -282,11 +298,11 @@ async function requestEmailChange() {
     emailMessage.value = data?.message ?? 'Check the new address for a confirmation link.'
     email.email = ''
     email.current_password = ''
+    emailChecks.reset()
   } catch (error) {
-    emailErrors.value = fieldErrors(error)
     emailError.value = error?.response?.status === 429
       ? 'Too many requests for now. Try again in an hour.'
-      : generalError(error, 'Unable to send the confirmation link.')
+      : generalError(error, 'Unable to send the confirmation link.', emailChecks)
   } finally {
     emailSaving.value = false
   }
@@ -294,7 +310,6 @@ async function requestEmailChange() {
 
 // ------------------------------------------------------------ password
 const password = reactive({ current_password: '', password: '', password_confirmation: '' })
-const passwordErrors = ref({})
 const passwordError = ref('')
 const passwordMessage = ref('')
 const passwordSaving = ref(false)
@@ -302,28 +317,23 @@ const showPasswords = ref(false)
 
 const passwordRules = computed(() => passwordChecklist(password.password))
 
+const passwordChecks = useFieldChecks('account-password', {
+  current_password: () => requiredProblem(password.current_password, 'Enter your current password.'),
+  password: () => {
+    const problem = passwordProblem(password.password, { emptyMessage: 'Choose a new password.' })
+
+    if (problemMessage(problem)) return problem
+
+    return password.password === password.current_password ? 'Choose a password that is not your current one.' : ''
+  },
+  password_confirmation: () => confirmationProblem(password.password, password.password_confirmation),
+})
+
 async function changePassword() {
-  passwordErrors.value = {}
   passwordError.value = ''
   passwordMessage.value = ''
 
-  const problems = {}
-  const policyProblem = firstPasswordProblem(password.password)
-
-  if (policyProblem) {
-    problems.password = policyProblem
-  } else if (password.password === password.current_password) {
-    problems.password = 'Choose a password that is not your current one.'
-  }
-
-  if (password.password !== password.password_confirmation) {
-    problems.password_confirmation = 'Passwords do not match.'
-  }
-
-  if (Object.keys(problems).length > 0) {
-    passwordErrors.value = problems
-    return
-  }
+  if (!passwordChecks.check()) return
 
   passwordSaving.value = true
 
@@ -335,9 +345,9 @@ async function changePassword() {
     password.password = ''
     password.password_confirmation = ''
     showPasswords.value = false
+    passwordChecks.reset()
   } catch (error) {
-    passwordErrors.value = fieldErrors(error)
-    passwordError.value = generalError(error, 'Unable to change your password.')
+    passwordError.value = generalError(error, 'Unable to change your password.', passwordChecks)
   } finally {
     passwordSaving.value = false
   }

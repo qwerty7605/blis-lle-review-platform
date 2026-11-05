@@ -276,7 +276,16 @@
             <template v-if="editing[question.id]">
               <label class="field-stack">
                 <span class="field-label">Question</span>
-                <textarea v-model="editing[question.id].questionText" class="text-input" rows="2"></textarea>
+                <textarea
+                  v-model="editing[question.id].questionText"
+                  class="text-input"
+                  :class="{ 'is-invalid': editingProblem(question.id, 'questionText') }"
+                  :aria-invalid="editingProblem(question.id, 'questionText') ? 'true' : undefined"
+                  rows="2"
+                ></textarea>
+                <span v-if="editingProblem(question.id, 'questionText')" class="field-error-text" role="alert">
+                  {{ editingProblem(question.id, 'questionText') }}
+                </span>
               </label>
 
               <div class="rbg-edit-options">
@@ -287,8 +296,16 @@
                     :checked="option.isCorrect"
                     @change="setEditingCorrectOption(question.id, option.id)"
                   />
-                  <input v-model="option.text" class="text-input" />
+                  <input
+                    v-model="option.text"
+                    class="text-input"
+                    :class="{ 'is-invalid': editingProblem(question.id, 'options') && !option.text?.trim() }"
+                    :aria-invalid="editingProblem(question.id, 'options') && !option.text?.trim() ? 'true' : undefined"
+                  />
                 </label>
+                <span v-if="editingProblem(question.id, 'options')" class="field-error-text" role="alert">
+                  {{ editingProblem(question.id, 'options') }}
+                </span>
               </div>
 
               <label class="field-stack">
@@ -416,6 +433,7 @@ const {
   cancelEditing,
   setEditingCorrectOption,
   saveEditing,
+  editingProblem,
   publishSelected,
   rejectSelected,
   coverage,

@@ -24,6 +24,13 @@ function studentIdsIn(text) {
   return (String(text ?? '').match(/\d+/g) ?? []).filter((run) => run.length >= 7 && run.length <= 10)
 }
 
+// The runs of digits a list holds that are too short or too long to be a
+// student ID: a typo, or a number that is not an ID (a year, a phone number).
+// Said under the list, as they would otherwise be skipped without a word.
+function notStudentIdsIn(text) {
+  return [...new Set((String(text ?? '').match(/\d+/g) ?? []).filter((run) => run.length >= 5 && (run.length < 7 || run.length > 10)))]
+}
+
 export function useYearEndModule() {
   const loading = ref(false)
   const loadError = ref('')
@@ -36,6 +43,7 @@ export function useYearEndModule() {
   const search = ref('')
 
   const registrarListText = ref('')
+  const registrarListSkipped = computed(() => notStudentIdsIn(registrarListText.value))
   const registrarListReport = ref(null)
 
   const confirmOpen = ref(false)
@@ -285,6 +293,7 @@ export function useYearEndModule() {
     changeCount,
     registrarListText,
     registrarListReport,
+    registrarListSkipped,
     confirmOpen,
     applying,
     applyError,

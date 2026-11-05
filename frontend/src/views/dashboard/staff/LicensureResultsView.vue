@@ -51,7 +51,9 @@
               class="text-input"
               placeholder="Search by name, student ID, or email"
               autocomplete="off"
+              v-bind="resultChecks.bind('user_id')"
             />
+            <FieldError :checks="resultChecks" field="user_id" />
             <p v-if="studentLookupLoading" class="muted lle-hint">Searching…</p>
             <ul v-else-if="studentMatches.length > 0" class="lle-matches">
               <li v-for="student in studentMatches" :key="student.id">
@@ -70,12 +72,14 @@
 
         <div class="lle-field">
           <label for="lle-year">Exam year</label>
-          <input id="lle-year" v-model="form.exam_year" type="number" class="text-input" min="1900" max="2999" />
+          <input id="lle-year" v-model="form.exam_year" type="number" inputmode="numeric" class="text-input" min="1900" max="2999" v-bind="resultChecks.bind('exam_year')" />
+          <FieldError :checks="resultChecks" field="exam_year" />
         </div>
 
         <div class="lle-field">
           <label for="lle-date">Date taken</label>
-          <input id="lle-date" v-model="form.taken_at" type="date" class="text-input" />
+          <input id="lle-date" v-model="form.taken_at" type="date" class="text-input" v-bind="resultChecks.bind('taken_at')" />
+          <FieldError :checks="resultChecks" field="taken_at" />
         </div>
 
         <div class="lle-field">
@@ -97,12 +101,15 @@
             min="0"
             max="100"
             placeholder="Optional"
+            v-bind="resultChecks.bind('rating')"
           />
+          <FieldError :checks="resultChecks" field="rating" />
         </div>
 
         <div class="lle-field lle-field-wide">
           <label for="lle-remarks">Remarks</label>
-          <input id="lle-remarks" v-model="form.remarks" type="text" class="text-input" placeholder="Optional" />
+          <input id="lle-remarks" v-model="form.remarks" type="text" class="text-input" maxlength="1000" placeholder="Optional" v-bind="resultChecks.bind('remarks')" />
+          <FieldError :checks="resultChecks" field="remarks" />
         </div>
       </div>
 
@@ -307,6 +314,7 @@
             class="text-input narrow"
             placeholder="Year"
             aria-label="Exam year"
+            v-bind="filterChecks.bind('exam_year')"
           />
           <select v-model="filters.result" class="text-input narrow" aria-label="Outcome">
             <option value="">All outcomes</option>
@@ -315,6 +323,7 @@
           </select>
         </div>
       </div>
+      <FieldError :checks="filterChecks" field="exam_year" class="filter-field-error" />
 
       <div v-if="resultsLoading && results.length === 0" class="room-empty-state">
         <RefreshCw :size="18" class="spin-soft" />
@@ -439,6 +448,7 @@
 </template>
 
 <script setup>
+import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
@@ -501,6 +511,8 @@ const {
   goToPage,
   loadResults,
   form,
+  resultChecks,
+  filterChecks,
   selectedStudent,
   studentQuery,
   studentMatches,

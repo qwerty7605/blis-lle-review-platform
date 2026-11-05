@@ -28,6 +28,7 @@
             class="field-input field-input-with-toggle"
             autocomplete="new-password"
             placeholder="At least 8 characters"
+            v-bind="checks.bind('password')"
           />
           <button
             type="button"
@@ -39,6 +40,10 @@
             <component :is="showPw ? EyeOff : Eye" :size="16" />
           </button>
         </div>
+
+        <span v-if="checks.error('password')" :id="checks.errorId('password')" class="field-error" role="alert">
+          {{ checks.error('password') }}
+        </span>
 
         <ul class="pw-rules">
           <li v-for="rule in pwChecklist" :key="rule.key" :class="{ met: rule.met }">
@@ -59,8 +64,17 @@
             class="field-input"
             autocomplete="new-password"
             placeholder="Type it again"
+            v-bind="checks.bind('password_confirmation')"
           />
         </div>
+        <span
+          v-if="checks.error('password_confirmation')"
+          :id="checks.errorId('password_confirmation')"
+          class="field-error"
+          role="alert"
+        >
+          {{ checks.error('password_confirmation') }}
+        </span>
       </div>
 
       <button type="submit" class="submit-btn" :disabled="isLoading">
@@ -99,7 +113,8 @@ import {
   X,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/store/auth.store'
-import { firstPasswordProblem, passwordChecklist } from '@/utils/password'
+import { passwordChecklist } from '@/utils/password'
+import { confirmationProblem, passwordProblem, useFieldChecks } from '@/utils/fieldChecks'
 import AuthLayout from './AuthLayout.vue'
 
 const route = useRoute()
@@ -126,20 +141,15 @@ const highlights = [
 const linkIsUsable = computed(() => token !== '' && email !== '')
 const pwChecklist = computed(() => passwordChecklist(password.value))
 
+const checks = useFieldChecks('reset', {
+  password: () => passwordProblem(password.value, { emptyMessage: 'Choose a new password.' }),
+  password_confirmation: () => confirmationProblem(password.value, passwordConfirmation.value),
+})
+
 async function handleSubmit() {
   errorMsg.value = ''
 
-  const passwordProblem = firstPasswordProblem(password.value)
-
-  if (passwordProblem) {
-    errorMsg.value = passwordProblem
-    return
-  }
-
-  if (password.value !== passwordConfirmation.value) {
-    errorMsg.value = 'The two passwords do not match.'
-    return
-  }
+  if (!checks.check()) return
 
   isLoading.value = true
 

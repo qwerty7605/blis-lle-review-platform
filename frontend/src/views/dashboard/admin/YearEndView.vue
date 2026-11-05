@@ -137,7 +137,13 @@
               rows="4"
               placeholder="e.g. 2300001, 2301291, 2301305"
               aria-label="Student IDs of graduating students"
+              :class="{ 'is-invalid': registrarListSkipped.length > 0 }"
+              :aria-describedby="registrarListSkipped.length > 0 ? 'registrar-list-skipped' : undefined"
             />
+            <span v-if="registrarListSkipped.length > 0" id="registrar-list-skipped" class="field-error-text" role="alert">
+              {{ registrarListSkipped.length === 1 ? 'This is' : 'These are' }} not a student ID (7 to 10 digits) and will be skipped:
+              {{ registrarListSkipped.slice(0, 8).join(', ') }}{{ registrarListSkipped.length > 8 ? ` and ${registrarListSkipped.length - 8} more` : '' }}.
+            </span>
             <div class="year-end-tool-actions">
               <button type="button" class="primary-btn" :disabled="!registrarListText.trim()" @click="applyRegistrarList">
                 Apply list
@@ -335,6 +341,7 @@ const {
   changeCount,
   registrarListText,
   registrarListReport,
+  registrarListSkipped,
   confirmOpen,
   applying,
   applyError,

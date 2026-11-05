@@ -1,4 +1,5 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { orderProblem, useFieldChecks } from '@/utils/fieldChecks'
 import { auditApi } from '@/api/audit.api'
 import { useAuthStore } from '@/store/auth.store'
 import { useLiveRefresh } from '@/utils/liveRefresh'
@@ -91,6 +92,12 @@ export function useAuditModule() {
     const total = auditMeta.value.total
     if (!total) return ''
     return `Showing ${auditLogs.value.length.toLocaleString()} of ${total.toLocaleString()} ${total === 1 ? 'entry' : 'entries'}`
+  })
+
+  // A range that ends before it starts matches nothing; it is said under the
+  // dates instead (the date pickers' own min and max do not stop typing).
+  const dateChecks = useFieldChecks('audit-dates', {
+    to: () => orderProblem(filters.from, filters.to, 'The To date is before the From date, so no entry can match.'),
   })
 
   function requestParams(page) {
@@ -241,6 +248,7 @@ export function useAuditModule() {
   onMounted(loadAuditLogs)
 
   return {
+    dateChecks,
     auditLogs,
     auditMeta,
     auditLoading,

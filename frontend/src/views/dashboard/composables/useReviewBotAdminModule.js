@@ -463,9 +463,33 @@ export function useReviewBotAdminModule() {
     draft.options = draft.options.map((option) => ({ ...option, isCorrect: option.id === optionId }))
   }
 
+  // ReviewBotAdminController::updateQuestion: every choice keeps its words.
+  // A draft shows what it lacks once Save is pressed, then until it is fixed.
+  function draftProblems(draft) {
+    const emptyOption = (draft?.options ?? []).some((option) => !String(option.text ?? '').trim())
+
+    return {
+      questionText: String(draft?.questionText ?? '').trim() ? '' : 'Write the question.',
+      options: emptyOption ? 'Every choice needs its words. Fill in the empty one.' : '',
+    }
+  }
+
+  function editingProblem(questionId, field) {
+    const draft = editing[questionId]
+
+    return draft?.checked ? (draftProblems(draft)[field] ?? '') : ''
+  }
+
   async function saveEditing(questionId) {
     const draft = editing[questionId]
     if (!draft) return
+
+    const problems = draftProblems(draft)
+
+    if (problems.questionText || problems.options) {
+      draft.checked = true
+      return
+    }
 
     savingQuestionId.value = questionId
     questionsError.value = ''
@@ -674,6 +698,7 @@ export function useReviewBotAdminModule() {
     cancelEditing,
     setEditingCorrectOption,
     saveEditing,
+    editingProblem,
     publishSelected,
     rejectSelected,
     coverage,
