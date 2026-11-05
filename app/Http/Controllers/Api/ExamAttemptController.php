@@ -13,7 +13,6 @@ use App\Models\User;
 use App\Services\ExamAttemptService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class ExamAttemptController extends Controller
 {
@@ -398,17 +397,7 @@ class ExamAttemptController extends Controller
                     ->where('question_bank_question_id', $questionId)
                     ->delete();
             } else {
-                $normalizedSubmitted = $this->normalizeAnswerText($answerText);
-                $normalizedExpected = $this->normalizeAnswerText($question->answer_text);
-                $normalizedAnswerLabel = $this->normalizeAnswerText($question->answer_label);
-
-                $isCorrect = false;
-
-                if ($normalizedExpected !== '' && $normalizedSubmitted === $normalizedExpected) {
-                    $isCorrect = true;
-                } elseif ($normalizedAnswerLabel !== '' && $normalizedSubmitted === $normalizedAnswerLabel) {
-                    $isCorrect = true;
-                }
+                $isCorrect = $this->examAttemptService->isCorrectOpenAnswer($question, $answerText);
 
                 ExamAttemptAnswer::updateOrCreate(
                     [
@@ -557,12 +546,5 @@ class ExamAttemptController extends Controller
             'message' => 'Attempt submitted successfully.',
             ...$this->examAttemptService->buildAttemptPayload($attempt),
         ]);
-    }
-
-    private function normalizeAnswerText(?string $value): string
-    {
-        $normalized = preg_replace('/\s+/', ' ', trim((string) $value));
-
-        return Str::lower((string) $normalized);
     }
 }

@@ -382,6 +382,8 @@ class QuestionMappingService
                 $defaultLabel = chr(ord('A') + min($optionIndex, 25));
 
                 return [
+                    // The saved choice this row edits, when it is one.
+                    'id' => isset($option['id']) ? (int) $option['id'] : null,
                     'sort_order' => $optionIndex + 1,
                     'label' => Str::upper(trim((string) ($option['label'] ?? $defaultLabel))),
                     'text' => trim((string) ($option['text'] ?? '')),

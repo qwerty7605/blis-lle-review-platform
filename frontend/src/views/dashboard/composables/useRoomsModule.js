@@ -190,6 +190,15 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     liveBoardCellText,
     liveBoardCellClass,
     liveBoardItemSummaryText,
+    extraTimeDialog,
+    extraTimeChecks,
+    liveBoardNotice,
+    liveBoardTakingNow,
+    isTakingNow,
+    liveBoardTimeLeft,
+    openExtraTime,
+    closeExtraTime,
+    saveExtraTime,
   } = useRoomLiveBoard({ canViewExamResults, roomError, rooms, selectedRoom, selectedRoomId, services })
 
   const {
@@ -990,6 +999,15 @@ export function useRoomsModule({ mode = 'student' } = {}) {
     liveBoardCellText,
     liveBoardCellClass,
     liveBoardItemSummaryText,
+    extraTimeDialog,
+    extraTimeChecks,
+    liveBoardNotice,
+    liveBoardTakingNow,
+    isTakingNow,
+    liveBoardTimeLeft,
+    openExtraTime,
+    closeExtraTime,
+    saveExtraTime,
     exportRoomGrades,
   }
 }

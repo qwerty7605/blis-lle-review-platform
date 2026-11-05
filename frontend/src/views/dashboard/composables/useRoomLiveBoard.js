@@ -8,6 +8,7 @@ import { formatClockTime, normalizeExamDeliveryMode } from './useDashboardFormat
 import {
   firstApiError,
 } from './roomsHelpers'
+import { useFieldChecks, wholeNumberProblem } from '@/utils/fieldChecks'
 
 /**
  * The live exam board a teacher opens from a room: who has started, how far
@@ -37,6 +38,73 @@ export function useRoomLiveBoard({ canViewExamResults, roomError, rooms, selecte
 
   let liveBoardRefreshInterval
 
+  // Extra time (ExamController::giveExtraTime / giveRoomExtraTime): for one
+  // student whose attempt is under way (row), or for everyone taking the
+  // exam in this room (row null). Only their deadlines move.
+  const extraTimeDialog = reactive({ open: false, row: null, label: '', minutes: 10, reason: '', saving: false, error: '' })
+  const extraTimeChecks = useFieldChecks('extra-time', {
+    minutes: () => wholeNumberProblem(extraTimeDialog.minutes, { label: 'Minutes', min: 1, max: 120 }),
+  })
+  const liveBoardNotice = ref('')
+
+  function isTakingNow(row) {
+    return row?.attempt?.status === 'in_progress' && Number(row.attempt.remaining_seconds ?? 1) > 0
+  }
+
+  const liveBoardTakingNow = computed(() => liveBoardRows.value.filter(isTakingNow).length)
+
+  function liveBoardTimeLeft(row) {
+    const seconds = Number(row?.attempt?.remaining_seconds)
+    if (!Number.isFinite(seconds)) return ''
+    if (seconds < 60) return 'under a minute left'
+
+    const minutes = Math.ceil(seconds / 60)
+    if (minutes < 60) return `${minutes} min left`
+    if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ${minutes % 60} min left`
+
+    const days = Math.floor(minutes / (24 * 60))
+    return `${days} ${days === 1 ? 'day' : 'days'} left`
+  }
+
+  function openExtraTime(row = null, label = '') {
+    extraTimeDialog.open = true
+    extraTimeDialog.row = row
+    extraTimeDialog.label = label
+    extraTimeDialog.minutes = 10
+    extraTimeDialog.reason = ''
+    extraTimeDialog.error = ''
+    extraTimeChecks.reset()
+  }
+
+  function closeExtraTime() {
+    extraTimeDialog.open = false
+    extraTimeDialog.row = null
+  }
+
+  async function saveExtraTime() {
+    if (extraTimeDialog.saving || !liveBoardExam.value?.id) return
+    if (!extraTimeChecks.check()) return
+
+    extraTimeDialog.saving = true
+    extraTimeDialog.error = ''
+
+    const payload = { minutes: Number(extraTimeDialog.minutes), reason: extraTimeDialog.reason.trim() || null }
+
+    try {
+      const { data } = extraTimeDialog.row
+        ? await services.giveExtraTime(liveBoardExam.value.id, extraTimeDialog.row.attempt.id, payload)
+        : await services.giveRoomExtraTime(liveBoardExam.value.id, { ...payload, room_id: liveBoardRoomId.value })
+
+      liveBoardNotice.value = data?.message ?? 'Time added.'
+      closeExtraTime()
+      await loadLiveBoard(true)
+    } catch (error) {
+      if (!extraTimeChecks.takeServerErrors(error)) extraTimeDialog.error = firstApiError(error, 'Unable to add time.')
+    } finally {
+      extraTimeDialog.saving = false
+    }
+  }
+
   const liveBoardRoom = computed(() => {
     const roomId = Number(liveBoardRoomId.value)
     if (!Number.isFinite(roomId) || roomId < 1) return null
@@ -61,6 +129,7 @@ export function useRoomLiveBoard({ canViewExamResults, roomError, rooms, selecte
       attempts_submitted: 0,
     }
     liveBoardError.value = ''
+    liveBoardNotice.value = ''
     liveBoardUpdatedAt.value = null
   }
 
@@ -238,5 +307,14 @@ export function useRoomLiveBoard({ canViewExamResults, roomError, rooms, selecte
     liveBoardCellText,
     liveBoardCellClass,
     liveBoardItemSummaryText,
+    extraTimeDialog,
+    extraTimeChecks,
+    liveBoardNotice,
+    liveBoardTakingNow,
+    isTakingNow,
+    liveBoardTimeLeft,
+    openExtraTime,
+    closeExtraTime,
+    saveExtraTime,
   }
 }

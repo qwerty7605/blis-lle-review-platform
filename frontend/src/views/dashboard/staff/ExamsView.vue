@@ -349,6 +349,20 @@
           <div class="exam-modal-body">
             <div class="exam-modal-layout">
               <div class="exam-modal-main">
+                <!-- Students who have started rule some changes out
+                     (ExamEditRules); the form says so before a save fails. -->
+                <div v-if="studentsTakingNow > 0" class="feedback info" role="status">
+                  <AlertCircle :size="15" />
+                  <span>
+                    {{ studentsTakingNow === 1 ? '1 student is' : `${studentsTakingNow} students are` }} taking this exam right now.
+                    To give someone more time, use + Time on the room's Live Board.
+                  </span>
+                </div>
+                <div v-if="examContentLocked" class="feedback info" role="status">
+                  <AlertCircle :size="15" />
+                  <span>{{ examContentLockNote }}</span>
+                </div>
+
                 <section class="exam-modal-panel">
                   <div class="exam-panel-head">
                     <span class="exam-panel-kicker">Section 1</span>
@@ -405,12 +419,12 @@
                     <div class="inline-form exam-meta-row">
                       <label class="field-stack narrow">
                         <span class="field-label">Items</span>
-                        <input v-model.number="examForm.total_items" type="number" min="1" max="1000" class="text-input" v-bind="examChecks.bind('total_items')" />
+                        <input v-model.number="examForm.total_items" type="number" min="1" max="1000" class="text-input" :disabled="examContentLocked" v-bind="examChecks.bind('total_items')" />
                         <FieldError :checks="examChecks" field="total_items" />
                       </label>
                       <label class="field-stack narrow">
                         <span class="field-label">Minutes</span>
-                        <input v-model.number="examForm.duration_minutes" type="number" min="1" max="600" class="text-input" v-bind="examChecks.bind('duration_minutes')" />
+                        <input v-model.number="examForm.duration_minutes" type="number" min="1" max="600" class="text-input" :disabled="examContentLocked" v-bind="examChecks.bind('duration_minutes')" />
                         <FieldError :checks="examChecks" field="duration_minutes" />
                       </label>
                     </div>
@@ -446,6 +460,8 @@
                       class="exam-bank-trigger"
                       :class="{ 'is-open': questionSetDropdownOpen }"
                       :aria-expanded="questionSetDropdownOpen ? 'true' : 'false'"
+                      :disabled="examContentLocked"
+                      :title="examContentLocked ? examContentLockNote : undefined"
                       @click="toggleQuestionSetDropdown"
                     >
                       <span class="exam-bank-trigger-copy">
@@ -503,6 +519,7 @@
                       </div>
                     </div>
                   </div>
+                  <FieldError :checks="examChecks" field="question_bank_ids" />
                 </section>
 
                 <section class="exam-modal-panel">
@@ -546,19 +563,21 @@
                       <span class="field-label">Exam Attempt Options</span>
                       <div class="exam-policy-list">
                         <label class="check-item exam-policy-item">
-                          <input v-model="examForm.one_take_only" type="checkbox" />
+                          <input v-model="examForm.one_take_only" type="checkbox" :disabled="Boolean(oneTakeOnlyLockNote)" />
                           <span>
                             <strong>One take only</strong>
-                            <small>Students cannot retake after submitting.</small>
+                            <small>{{ oneTakeOnlyLockNote || 'Students cannot retake after submitting.' }}</small>
                           </span>
                         </label>
                         <label class="check-item exam-policy-item">
-                          <input v-model="examForm.shuffle_questions" type="checkbox" />
+                          <input v-model="examForm.shuffle_questions" type="checkbox" :disabled="examContentLocked" />
                           <span>
                             <strong>Shuffle questions <InfoTip text="Each attempt gets a randomized order when possible." /></strong>
                           </span>
                         </label>
                       </div>
+                      <FieldError :checks="examChecks" field="one_take_only" />
+                      <FieldError :checks="examChecks" field="shuffle_questions" />
                     </div>
 
                     <div class="field-stack" style="margin-top: 16px;">
@@ -576,6 +595,32 @@
                           <span>
                             <strong>Visible</strong>
                             <small>Students can review the exam and see right/wrong answers.</small>
+                          </span>
+                        </label>
+                      </div>
+                      <p v-if="examForm.results_visibility_mode === 'hidden'" class="muted exam-policy-note">
+                        Review Bot practice from this exam stays closed while its results are hidden.
+                      </p>
+                    </div>
+                    <!-- With a retake allowed, the answers can wait for it: a
+                         student who sees them first would sit the retake
+                         knowing them. Review Bot practice opens at the same
+                         moment (ReviewBotEligibility). -->
+                    <div v-if="examForm.results_visibility_mode === 'visible' && !examForm.one_take_only" class="field-stack" style="margin-top: 16px;">
+                      <span class="field-label">Show Correct Answers</span>
+                      <div class="exam-policy-list">
+                        <label class="check-item exam-policy-item">
+                          <input v-model="examForm.answers_shown_after" type="radio" value="last_attempt" />
+                          <span>
+                            <strong>After the last attempt</strong>
+                            <small>Once a student has used their retake or the exam has closed. Review Bot practice from it opens then too.</small>
+                          </span>
+                        </label>
+                        <label class="check-item exam-policy-item">
+                          <input v-model="examForm.answers_shown_after" type="radio" value="each_attempt" />
+                          <span>
+                            <strong>After each attempt</strong>
+                            <small>Right after a student submits, even with their retake still to come.</small>
                           </span>
                         </label>
                       </div>
@@ -602,6 +647,7 @@
                       <small v-if="!examForm.schedule_end_at" class="muted">
                         Set an End time in the Schedule Window to choose this. With no end time, everyone gets the full duration.
                       </small>
+                      <FieldError :checks="examChecks" field="ends_at_close" />
                     </div>
                   </div>
                 </section>
@@ -629,20 +675,27 @@
                         type="button"
                         class="exam-room-tool"
                         :disabled="examForm.room_ids.length === 0"
-                        @click="examForm.room_ids = []"
+                        @click="examForm.room_ids = examForm.room_ids.filter((roomId) => lockedRoomIds.has(Number(roomId)))"
                       >
                         Clear
                       </button>
                     </div>
                     <div class="check-grid exam-room-grid">
                       <label v-for="room in manageableRooms" :key="room.id" class="check-item exam-room-choice">
-                        <input v-model="examForm.room_ids" type="checkbox" :value="room.id" />
+                        <input
+                          v-model="examForm.room_ids"
+                          type="checkbox"
+                          :value="room.id"
+                          :disabled="lockedRoomIds.has(Number(room.id)) && examForm.room_ids.includes(room.id)"
+                        />
                         <span class="exam-room-copy">
                           <strong>{{ room.name }}</strong>
                           <small>{{ room.code }}<template v-if="seesEveryTeacher && room.ownerName"> &middot; By {{ room.ownerName }}</template></small>
+                          <small v-if="lockedRoomIds.has(Number(room.id))">Has attempts, so it stays assigned. Archive the exam from the room instead.</small>
                         </span>
                       </label>
                     </div>
+                    <FieldError :checks="examChecks" field="room_ids" />
                   </template>
                 </section>
               </div>
@@ -997,6 +1050,11 @@ const {
   examSaving,
   examError,
   examChecks,
+  studentsTakingNow,
+  examContentLocked,
+  examContentLockNote,
+  oneTakeOnlyLockNote,
+  lockedRoomIds,
   examMessage,
   showExamModal,
   showDeleteExamModal,

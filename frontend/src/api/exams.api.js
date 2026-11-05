@@ -26,6 +26,21 @@ class ExamsApi {
     return http.get(`/exams/${examId}/live-dashboard`, { params: { room_id: roomId } })
   }
 
+  /** What students have done with an exam, for its edit form (ExamEditRules). */
+  editing(examId) {
+    return http.get(`/exams/${examId}/editing`)
+  }
+
+  /** Extra time from the Live Board for one student's attempt. */
+  giveExtraTime(examId, attemptId, payload) {
+    return http.post(`/exams/${examId}/attempts/${attemptId}/extra-time`, payload)
+  }
+
+  /** The same extra time for everyone taking the exam in a room right now. */
+  giveRoomExtraTime(examId, payload) {
+    return http.post(`/exams/${examId}/extra-time`, payload)
+  }
+
   itemAnalytics(examId) {
     return http.get(`/exams/${examId}/item-analytics`)
   }

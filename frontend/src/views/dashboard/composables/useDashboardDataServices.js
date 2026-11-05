@@ -46,6 +46,9 @@ export function useDashboardDataServices() {
     getExamSeries: () => examsApi.listSeries(),
     createExamSeries: (payload) => examsApi.createSeries(payload),
     getLiveBoard: (examId, roomId) => examsApi.liveBoard(examId, roomId),
+    getExamEditing: (examId) => examsApi.editing(examId),
+    giveExtraTime: (examId, attemptId, payload) => examsApi.giveExtraTime(examId, attemptId, payload),
+    giveRoomExtraTime: (examId, payload) => examsApi.giveRoomExtraTime(examId, payload),
     getItemAnalytics: (examId) => examsApi.itemAnalytics(examId),
 
     getReportsOverview: (teacherId) => reportsApi.overview(teacherId),

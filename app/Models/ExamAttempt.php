@@ -38,6 +38,7 @@ class ExamAttempt extends Model
         'score_percent',
         'started_at',
         'expires_at',
+        'extra_minutes',
         'submitted_at',
     ];
 
@@ -51,6 +52,7 @@ class ExamAttempt extends Model
         'expires_at' => 'datetime',
         'submitted_at' => 'datetime',
         'score_percent' => 'decimal:2',
+        'extra_minutes' => 'integer',
     ];
 
     /**

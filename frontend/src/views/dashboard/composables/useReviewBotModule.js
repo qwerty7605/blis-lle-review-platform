@@ -73,6 +73,9 @@ export function useReviewBotModule() {
   const catalogLoading = ref(false)
   const catalogError = ref('')
   const subjects = ref([])
+  // Exams the student handed in whose practice is not open yet, and why
+  // (ReviewBotEligibility::heldBack): said on the page, not left a mystery.
+  const heldBack = ref([])
   const weakArea = ref(null)
 
   const mode = ref('manual') // 'manual' | 'weak_area'
@@ -185,6 +188,7 @@ export function useReviewBotModule() {
     try {
       const { data } = await reviewBotApi.catalog()
       subjects.value = asList(data?.subjects).map(normalizeSubjectEntry).filter(Boolean)
+      heldBack.value = asList(data?.held_back)
       weakArea.value = normalizeWeakArea(data?.weak_area)
     } catch (error) {
       if (!silent) catalogError.value = firstApiError(error, 'Unable to load the Review Bot catalog.')
@@ -332,6 +336,7 @@ export function useReviewBotModule() {
     catalogLoading,
     catalogError,
     subjects,
+    heldBack,
     readySubjects,
     weakArea,
     weakAreaLabel,

@@ -4,7 +4,11 @@ namespace App\Services;
 
 use App\Models\Exam;
 use App\Models\ExamAttempt;
+use App\Models\ExamAttemptAnswer;
 use App\Models\ExamAttemptQuestion;
+use App\Models\QuestionBankQuestion;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ExamAttemptService
 {
@@ -44,6 +48,79 @@ class ExamAttemptService
         return $attempt->refresh();
     }
 
+    /**
+     * Whether a typed answer to an open-ended question is right: it matches
+     * the expected answer, or its label, ignoring case and spacing.
+     */
+    public function isCorrectOpenAnswer(QuestionBankQuestion $question, ?string $answerText): bool
+    {
+        $normalize = fn (?string $value): string => Str::lower((string) preg_replace('/\s+/', ' ', trim((string) $value)));
+        $submitted = $normalize($answerText);
+
+        if ($submitted === '') {
+            return false;
+        }
+
+        return ($normalize($question->answer_text) !== '' && $submitted === $normalize($question->answer_text))
+            || ($normalize($question->answer_label) !== '' && $submitted === $normalize($question->answer_label));
+    }
+
+    /**
+     * Marks every exam answer to $question again, as the answer key now
+     * stands, and works out the score of each attempt whose marks changed
+     * (handed-in ones included: the score in the reports follows the key).
+     *
+     * @return array{answers: int, attempts: int, attempt_ids: list<int>}
+     */
+    public function regradeQuestion(QuestionBankQuestion $question): array
+    {
+        $question->loadMissing('options:id,question_bank_question_id,is_correct');
+        $correctOptionIds = $question->options->where('is_correct', true)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+        $openEnded = $question->question_type === QuestionBankQuestion::TYPE_OPEN_ENDED;
+
+        $changed = ExamAttemptAnswer::query()
+            ->where('question_bank_question_id', $question->id)
+            ->get(['id', 'exam_attempt_id', 'question_bank_option_id', 'answer_text', 'is_correct'])
+            ->filter(function (ExamAttemptAnswer $answer) use ($correctOptionIds, $openEnded, $question): bool {
+                $right = $openEnded
+                    ? $this->isCorrectOpenAnswer($question, $answer->answer_text)
+                    : in_array((int) $answer->question_bank_option_id, $correctOptionIds, true);
+
+                if ((bool) $answer->is_correct === $right) {
+                    return false;
+                }
+
+                $answer->is_correct = $right;
+
+                return true;
+            });
+
+        if ($changed->isEmpty()) {
+            return ['answers' => 0, 'attempts' => 0, 'attempt_ids' => []];
+        }
+
+        $attemptIds = $changed->pluck('exam_attempt_id')->map(fn ($id): int => (int) $id)->unique()->values()->all();
+
+        DB::transaction(function () use ($changed, $attemptIds): void {
+            $changed->each(fn (ExamAttemptAnswer $answer) => $answer->save());
+
+            ExamAttempt::query()->whereIn('id', $attemptIds)->get()->each(function (ExamAttempt $attempt): void {
+                $correct = $attempt->answers()->where('is_correct', true)->count();
+                $attempt->correct_answers = $correct;
+
+                if ($attempt->status === ExamAttempt::STATUS_SUBMITTED) {
+                    $attempt->score_percent = $attempt->total_items > 0
+                        ? round(($correct / $attempt->total_items) * 100, 2)
+                        : 0.0;
+                }
+
+                $attempt->save();
+            });
+        });
+
+        return ['answers' => $changed->count(), 'attempts' => count($attemptIds), 'attempt_ids' => $attemptIds];
+    }
+
     public function autoSubmitExpiredAttempt(ExamAttempt $attempt): ExamAttempt
     {
         if (
@@ -67,7 +144,7 @@ class ExamAttemptService
     public function buildAttemptPayload(ExamAttempt $attempt): array
     {
         $attempt->loadMissing([
-            'exam:id,title,subject,question_bank_id,total_items,duration_minutes,scheduled_at,schedule_start_at,schedule_end_at,ends_at_close,delivery_mode,one_take_only,shuffle_questions,results_visibility_mode',
+            'exam:id,title,subject,question_bank_id,total_items,duration_minutes,scheduled_at,schedule_start_at,schedule_end_at,ends_at_close,delivery_mode,one_take_only,shuffle_questions,results_visibility_mode,answers_shown_after',
             'exam.questionBanks:id,title,subject,total_items',
             'room:id,name,code',
             'attemptQuestions.question.options:id,question_bank_question_id,option_label,option_text,is_correct',
@@ -83,7 +160,9 @@ class ExamAttemptService
         $deliveryMode = $this->deliveryModeService->normalize($attempt->exam?->delivery_mode);
         $isSubmitted = $attempt->status === ExamAttempt::STATUS_SUBMITTED;
         $visibilityMode = $attempt->exam?->results_visibility_mode ?? 'hidden';
-        $showPerQuestionFeedback = $isSubmitted && $visibilityMode === 'visible';
+        $showPerQuestionFeedback = $isSubmitted && (bool) $attempt->exam?->answersShownFor($attempt);
+        // Visible results whose answers wait for the student's last attempt.
+        $answersHeldBack = $isSubmitted && $visibilityMode === 'visible' && !$showPerQuestionFeedback;
         $answersByQuestionId = $attempt->answers->keyBy('question_bank_question_id');
         $feedback = $isSubmitted
             ? $this->examResultFeedbackService->buildForAttempt($attempt)
@@ -172,6 +251,8 @@ class ExamAttemptService
                 'expires_at' => $attempt->expires_at,
                 'submitted_at' => $attempt->submitted_at,
                 'remaining_seconds' => $remainingSeconds,
+                'extra_minutes' => (int) $attempt->extra_minutes,
+                'answers_held_back' => $answersHeldBack,
             ],
             'exam' => [
                 'id' => $attempt->exam?->id ?? $attempt->exam_id,
@@ -198,6 +279,7 @@ class ExamAttemptService
                 'one_take_only' => (bool) ($attempt->exam?->one_take_only ?? false),
                 'shuffle_questions' => (bool) ($attempt->exam?->shuffle_questions ?? false),
                 'results_visibility_mode' => $attempt->exam?->results_visibility_mode ?? 'hidden',
+                'answers_shown_after' => $attempt->exam?->answers_shown_after ?? Exam::ANSWERS_AFTER_EACH_ATTEMPT,
             ],
             'room' => [
                 'id' => $attempt->room?->id ?? $attempt->room_id,

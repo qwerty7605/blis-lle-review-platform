@@ -770,12 +770,16 @@ class ReportExportService
         ], 'pdf');
     }
 
-    /** The exam's results setting: "visible" shows a student the correct answers. */
+    /**
+     * Whether the student may see this attempt's correct answers: the exam's
+     * results are Visible, and, when answers come after the last attempt,
+     * the student cannot sit it again (Exam::answersShownFor()).
+     */
     public function answersShownToStudent(ExamAttempt $attempt): bool
     {
-        $attempt->loadMissing('exam:id,results_visibility_mode');
-
-        return ($attempt->exam?->results_visibility_mode ?? 'hidden') === 'visible';
+        // Read afresh: the report data loads the exam with only the columns it
+        // prints, and the settings this needs are not among them.
+        return (bool) $attempt->exam()->first()?->answersShownFor($attempt);
     }
 
     public function buildAttemptReportData(ExamAttempt $attempt): array

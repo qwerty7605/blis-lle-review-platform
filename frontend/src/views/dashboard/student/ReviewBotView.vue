@@ -71,7 +71,15 @@
 
               <div v-else-if="readySubjects.length === 0" class="review-inline-empty">
                 <BookOpen :size="18" />
-                <p>Practice questions for this topic appear after you take an exam that covers it.</p>
+                <p v-if="heldBack.length === 0">Practice questions for this topic appear after you take an exam that covers it.</p>
+                <template v-else>
+                  <p>You have taken {{ heldBack.length === 1 ? 'an exam' : 'exams' }}, but {{ heldBack.length === 1 ? 'its' : 'their' }} practice is not open yet:</p>
+                  <ul class="review-held-list">
+                    <li v-for="exam in heldBack" :key="exam.exam_id">
+                      <strong>{{ exam.title }}</strong>: {{ heldBackReason(exam) }}
+                    </li>
+                  </ul>
+                </template>
               </div>
 
               <div v-else class="review-subject-grid">
@@ -344,9 +352,23 @@ import { SUBJECT_SHORT_NAMES } from '@/constants/librarySubjects'
 // the two panels sit one above the other and the page scrolls.
 const STACKED_QUERY = '(max-width: 1000px)'
 
+// Why an exam's practice is not open yet (ReviewBotEligibility::heldBack).
+function heldBackReason(exam) {
+  if (exam.reason === 'hidden') return 'your teacher keeps its answers hidden, so its practice stays closed.'
+
+  const closes = exam.closes_at
+    ? new Date(exam.closes_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : ''
+
+  return closes
+    ? `opens after your last attempt, or when the exam closes on ${closes}.`
+    : 'opens after your last attempt, or once the exam is closed.'
+}
+
 const {
   catalogLoading,
   catalogError,
+  heldBack,
   readySubjects,
   weakArea,
   weakAreaLabel,
@@ -798,6 +820,17 @@ function recommendationHeading(action) {
   margin: 0;
   font-size: 11.5px;
   line-height: 1.5;
+}
+
+.review-held-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
 }
 
 /* ---- Setup footer ---- */

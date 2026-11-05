@@ -240,6 +240,10 @@
         </p>
       </section>
 
+      <p v-if="answersHeldBack" class="muted exam-result-held-note" role="status">
+        The correct answers appear after your last attempt, or when the exam closes. Review Bot practice from this exam opens then too.
+      </p>
+
       <div class="exam-result-actions">
         <button type="button" class="ghost-btn" @click="reviewAnswers">
           {{ reviewActionLabel }}
@@ -305,8 +309,12 @@ const summary = computed(() => buildExamResultSummary({
 
 const subjectPerformancePanels = computed(() => buildSubjectPerformancePanels(summary.value))
 
+// Visible results whose correct answers wait until the student cannot sit
+// the exam again (Exam::answersShownFor()).
+const answersHeldBack = computed(() => Boolean(attempt.value?.answers_held_back))
+
 const reviewActionLabel = computed(() => (
-  String(exam.value?.results_visibility_mode ?? 'hidden') === 'visible'
+  String(exam.value?.results_visibility_mode ?? 'hidden') === 'visible' && !answersHeldBack.value
     ? 'Review Answers'
     : 'Review Responses'
 ))
@@ -381,6 +389,13 @@ watch(() => route.params.attemptId, (next, previous) => {
 </script>
 
 <style scoped>
+/* "The correct answers appear after your last attempt..." */
+.exam-result-held-note {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .exam-result-view {
   display: grid;
   gap: 16px;

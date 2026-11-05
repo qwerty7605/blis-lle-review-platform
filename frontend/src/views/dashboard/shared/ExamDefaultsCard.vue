@@ -43,6 +43,18 @@
         </label>
       </fieldset>
 
+      <fieldset v-if="form.results_visibility_mode === 'visible' && !form.one_take_only" class="account-radio-group">
+        <legend>Show Correct Answers</legend>
+        <label class="check-item">
+          <input v-model="form.answers_shown_after" type="radio" value="last_attempt" />
+          <span>After the last attempt: once the retake is used or the exam closes (Review Bot practice opens then too)</span>
+        </label>
+        <label class="check-item">
+          <input v-model="form.answers_shown_after" type="radio" value="each_attempt" />
+          <span>After each attempt, even with the retake still to come</span>
+        </label>
+      </fieldset>
+
       <div v-if="message" class="feedback success" role="status"><CheckCircle2 :size="15" /><span>{{ message }}</span></div>
       <div v-if="error" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ error }}</span></div>
 
