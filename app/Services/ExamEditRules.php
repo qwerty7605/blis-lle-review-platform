@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
  * What may still change about an exam once students have started it.
  *
  * Every student who sits an exam sits the same one: once anyone has started,
- * its question sets, item count, shuffle and duration stay as they are (a
+ * its question sets, item count, items per set, shuffle and duration stay as they are (a
  * student short of time gets extra time on the Live Board instead). Nobody
  * taking it is locked out or has time taken away: the start time does not
  * move past now, a room with a student in it stays, and "End for everyone"
@@ -57,9 +57,10 @@ class ExamEditRules
      * @param  array<string, mixed>  $validated
      * @param  list<int>  $bankIds  the question sets the update resolves to, in order
      * @param  list<int>|null  $roomIds  the rooms it assigns, or null when it does not touch them
+     * @param  array<int, int>|null  $itemSplit  the items each set will give (ExamQuestionBanks::resolveSplit())
      * @return array<string, string>
      */
-    public function problems(Exam $exam, array $validated, array $bankIds, ?array $roomIds, mixed $start, mixed $end): array
+    public function problems(Exam $exam, array $validated, array $bankIds, ?array $roomIds, mixed $start, mixed $end, ?array $itemSplit = null): array
     {
         $attempts = $this->attempts($exam);
 
@@ -82,6 +83,12 @@ class ExamEditRules
 
         if (array_key_exists('total_items', $validated) && (int) $validated['total_items'] !== (int) $exam->total_items) {
             $problems['total_items'] = $fixed;
+        }
+
+        $currentSplit = $exam->itemSplit();
+
+        if ($currentSplit !== null && $itemSplit !== null && $itemSplit !== $currentSplit) {
+            $problems['question_bank_items'] = $fixed;
         }
 
         if (array_key_exists('shuffle_questions', $validated) && (bool) $validated['shuffle_questions'] !== (bool) $exam->shuffle_questions) {

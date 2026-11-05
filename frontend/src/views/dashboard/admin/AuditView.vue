@@ -13,17 +13,30 @@
         </div>
         <Teleport to="#layout-topbar-actions" defer :disabled="!isCompact">
           <div class="audit-head-actions">
+            <!-- Excel opens readable (columns sized; a CSV carries no widths, so
+                 Excel showed its times as ########); CSV is for other tools. -->
+            <button
+              type="button"
+              :class="isCompact ? 'appbar-icon-action' : 'ghost-btn'"
+              :aria-label="isCompact ? 'Export as Excel' : undefined"
+              :disabled="auditExporting || auditMeta.total === 0"
+              :title="auditMeta.total ? `Download the ${Math.min(auditMeta.total, 5000).toLocaleString()} newest matching entries as an Excel file` : ''"
+              @click="exportAuditLogs('xlsx')"
+            >
+              <RefreshCw v-if="auditExporting" :size="isCompact ? 20 : 14" class="spin-soft" />
+              <FileSpreadsheet v-else :size="isCompact ? 20 : 14" />
+              <template v-if="!isCompact">{{ auditExporting ? 'Exporting…' : 'Export Excel' }}</template>
+            </button>
             <button
               type="button"
               :class="isCompact ? 'appbar-icon-action' : 'ghost-btn'"
               :aria-label="isCompact ? 'Export as CSV' : undefined"
               :disabled="auditExporting || auditMeta.total === 0"
-              :title="auditMeta.total ? `Download the ${auditMeta.total.toLocaleString()} entries that match as a CSV file` : ''"
-              @click="exportAuditLogs"
+              :title="auditMeta.total ? `Download the ${Math.min(auditMeta.total, 50000).toLocaleString()} matching entries as a CSV file, for other tools` : ''"
+              @click="exportAuditLogs('csv')"
             >
-              <RefreshCw v-if="auditExporting" :size="isCompact ? 20 : 14" class="spin-soft" />
-              <Download v-else :size="isCompact ? 20 : 14" />
-              <template v-if="!isCompact">{{ auditExporting ? 'Exporting…' : 'Export CSV' }}</template>
+              <Download :size="isCompact ? 20 : 14" />
+              <template v-if="!isCompact">CSV</template>
             </button>
             <button
               type="button"
@@ -211,7 +224,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { AlertCircle, ChevronDown, ClipboardList, Crosshair, Download, RefreshCw, Search, UserRound, X } from 'lucide-vue-next'
+import { AlertCircle, ChevronDown, ClipboardList, Crosshair, Download, FileSpreadsheet, RefreshCw, Search, UserRound, X } from 'lucide-vue-next'
 import AuditDetails from './AuditDetails.vue'
 import FieldError from '@/components/FieldError.vue'
 import { actorName, actorSub, exactTime, relativeTime, shortTime, targetName } from './auditFormat'

@@ -4,7 +4,9 @@ export const STANDARD_EXAM_DEFAULTS = Object.freeze({
   total_items: 60,
   duration_minutes: 90,
   one_take_only: false,
-  shuffle_questions: false,
+  // Each student gets their own order, and their own pick within each set
+  // when the sets hold more questions than the exam asks for.
+  shuffle_questions: true,
   // Answers shown once the student is done with the exam, and Review Bot
   // practice from it opening at that moment too; Hidden keeps both closed.
   results_visibility_mode: 'visible',

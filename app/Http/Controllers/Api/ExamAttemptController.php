@@ -117,6 +117,8 @@ class ExamAttemptController extends Controller
 
         $maxAllowedAttempts = (bool) $exam->one_take_only ? 1 : 2;
         $durationMinutes = max(1, (int) $exam->duration_minutes);
+        // Items per set (Exam::itemSplit()); null deals from all sets as one pool.
+        $itemSplit = $exam->itemSplit();
 
         // Looking for an attempt and creating one have to be a single step per
         // student. They used to be two, with nothing in between: requests arriving
@@ -124,7 +126,7 @@ class ExamAttemptController extends Controller
         // no attempt and each created one, which also stepped past the one-take
         // and retake limits. Holding the student's own row makes the second
         // request wait for the first, and then find the attempt it made.
-        [$outcome, $attempt] = DB::transaction(function () use ($exam, $roomId, $user, $questionBankIds, $targetItems, $maxAllowedAttempts, $durationMinutes, $assignmentArchived, $scheduleEndAt): array {
+        [$outcome, $attempt] = DB::transaction(function () use ($exam, $roomId, $user, $questionBankIds, $targetItems, $maxAllowedAttempts, $durationMinutes, $assignmentArchived, $scheduleEndAt, $itemSplit): array {
             User::query()->whereKey($user->id)->lockForUpdate()->first();
 
             // Every room, not only this one. The limits below count attempts on
@@ -183,28 +185,53 @@ class ExamAttemptController extends Controller
                 return ['limit_reached', null];
             }
 
-            $questionQuery = DB::table('question_bank_questions')
-                ->whereIn('question_bank_id', $questionBankIds);
+            if ($itemSplit !== null) {
+                // The same mix for every student: so many items from each set,
+                // random within the set when the exam shuffles, else its first
+                // ones in order; then the whole exam in a random order too.
+                $questionIds = collect($itemSplit)
+                    ->flatMap(function (int $count, int $bankId) use ($exam): array {
+                        if ($count < 1) {
+                            return [];
+                        }
 
-            if ((bool) $exam->shuffle_questions) {
-                $questionQuery->inRandomOrder();
+                        $fromSet = DB::table('question_bank_questions')->where('question_bank_id', $bankId);
+
+                        if ((bool) $exam->shuffle_questions) {
+                            $fromSet->inRandomOrder();
+                        } else {
+                            $fromSet->orderBy('item_number')->orderBy('id');
+                        }
+
+                        return $fromSet->limit($count)->pluck('id')->all();
+                    })
+                    ->values();
+
+                $questionIds = ((bool) $exam->shuffle_questions ? $questionIds->shuffle() : $questionIds)->values()->all();
             } else {
-                $bankOrderSql = collect($questionBankIds)
+                $questionQuery = DB::table('question_bank_questions')
+                    ->whereIn('question_bank_id', $questionBankIds);
+
+                if ((bool) $exam->shuffle_questions) {
+                    $questionQuery->inRandomOrder();
+                } else {
+                    $bankOrderSql = collect($questionBankIds)
+                        ->values()
+                        ->map(fn ($bankId, $index) => 'WHEN ' . (int) $bankId . ' THEN ' . $index)
+                        ->implode(' ');
+
+                    $questionQuery
+                        ->orderByRaw('CASE question_bank_id ' . $bankOrderSql . ' ELSE ' . count($questionBankIds) . ' END')
+                        ->orderBy('item_number')
+                        ->orderBy('id');
+                }
+
+                $questionIds = $questionQuery
+                    ->limit($targetItems)
+                    ->pluck('id')
                     ->values()
-                    ->map(fn ($bankId, $index) => 'WHEN ' . (int) $bankId . ' THEN ' . $index)
-                    ->implode(' ');
-
-                $questionQuery
-                    ->orderByRaw('CASE question_bank_id ' . $bankOrderSql . ' ELSE ' . count($questionBankIds) . ' END')
-                    ->orderBy('item_number')
-                    ->orderBy('id');
+                    ->all();
             }
-
-            $questionIds = $questionQuery
-                ->limit($targetItems)
-                ->pluck('id')
-                ->values()
-                ->all();
             $actualTotalItems = count($questionIds);
 
             if ($actualTotalItems < 1) {

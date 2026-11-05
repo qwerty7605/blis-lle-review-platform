@@ -520,6 +520,40 @@
                     </div>
                   </div>
                   <FieldError :checks="examChecks" field="question_bank_ids" />
+
+                  <!-- The same mix for every student: so many items from each
+                       set (ExamQuestionBanks::resolveSplit()). -->
+                  <div v-if="selectedQuestionBanks.length > 1 && examDealsFromOnePool && examContentLocked" class="feedback info exam-split-note" role="status">
+                    <AlertCircle :size="15" />
+                    <span>This exam was made before items could be set per set, so it draws from all its sets together. It stays that way now that students have started it.</span>
+                  </div>
+                  <div v-else-if="selectedQuestionBanks.length > 1" class="field-stack exam-split">
+                    <span class="field-label">
+                      Items From Each Set
+                      <InfoTip text="Every student gets this many items from each set, so everyone has the same mix. With Shuffle on, they are picked at random within each set." />
+                    </span>
+                    <div class="exam-split-rows">
+                      <label v-for="bank in selectedQuestionBanks" :key="bank.id" class="exam-split-row">
+                        <span class="exam-split-title">{{ bank.title }}</span>
+                        <input
+                          v-model.number="examItemSplit[bank.id]"
+                          type="number"
+                          inputmode="numeric"
+                          min="0"
+                          :max="bank.total_items"
+                          class="text-input"
+                          :disabled="examContentLocked"
+                          :aria-label="`Items from ${bank.title}`"
+                          v-bind="examChecks.bind('question_bank_items')"
+                        />
+                        <small class="muted">of {{ bank.total_items }}</small>
+                      </label>
+                    </div>
+                    <small class="muted" :class="{ 'exam-split-off': itemSplitTotal !== Number(examForm.total_items) }">
+                      Total {{ itemSplitTotal }} of {{ examForm.total_items }} items
+                    </small>
+                    <FieldError :checks="examChecks" field="question_bank_items" />
+                  </div>
                 </section>
 
                 <section class="exam-modal-panel">
@@ -598,9 +632,10 @@
                           </span>
                         </label>
                       </div>
-                      <p v-if="examForm.results_visibility_mode === 'hidden'" class="muted exam-policy-note">
-                        Review Bot practice from this exam stays closed while its results are hidden.
-                      </p>
+                      <div v-if="examForm.results_visibility_mode === 'hidden'" class="feedback info exam-policy-note" role="status">
+                        <AlertCircle :size="15" />
+                        <span>Students won't get Review Bot practice from this exam while its results are Hidden. Choose Visible to open it once they have seen the answers.</span>
+                      </div>
                     </div>
                     <!-- With a retake allowed, the answers can wait for it: a
                          student who sees them first would sit the retake
@@ -1050,6 +1085,9 @@ const {
   examSaving,
   examError,
   examChecks,
+  examItemSplit,
+  itemSplitTotal,
+  examDealsFromOnePool,
   studentsTakingNow,
   examContentLocked,
   examContentLockNote,

@@ -53,6 +53,7 @@ class ExamController extends Controller
         $exams = $query->get()->map(function (Exam $exam) {
             $exam->delivery_mode = $this->deliveryModeService->normalize($exam->delivery_mode);
             $exam->question_bank_ids = $exam->resolvedQuestionBankIds();
+            $exam->question_bank_items = $this->itemCounts($exam);
 
             return $exam;
         })->values();
@@ -76,6 +77,10 @@ class ExamController extends Controller
             'question_bank_ids' => ['nullable', 'array'],
             'question_bank_ids.*' => ['integer', 'exists:question_banks,id'],
             'question_bank_id' => ['nullable', 'integer', 'exists:question_banks,id'],
+            // Items each set gives a student, one per set in the order above;
+            // left out, they follow the sets' sizes.
+            'question_bank_items' => ['nullable', 'array'],
+            'question_bank_items.*' => ['integer', 'min:0', 'max:1000'],
             'total_items' => ['required', 'integer', 'min:1', 'max:1000'],
             'duration_minutes' => ['required', 'integer', 'min:1', 'max:600'],
             'scheduled_at' => ['nullable', 'date'],
@@ -127,6 +132,12 @@ class ExamController extends Controller
             ], 422);
         }
 
+        $itemSplit = $this->examQuestionBanks->resolveSplit($validated, $selectedQuestionBanks, (int) $validated['total_items']);
+
+        if (is_string($itemSplit)) {
+            return response()->json(['message' => $itemSplit, 'errors' => ['question_bank_items' => [$itemSplit]]], 422);
+        }
+
         $examSubject = Exam::summarizeQuestionBankSubject($selectedQuestionBanks);
         $typing = $this->examSeriesRules->resolve(
             $validated['exam_type'] ?? Exam::TYPE_REGULAR,
@@ -161,7 +172,7 @@ class ExamController extends Controller
             'created_by' => $user->id,
         ]);
 
-        $exam->syncQuestionBanks($selectedQuestionBankIds);
+        $exam->syncQuestionBanks($selectedQuestionBankIds, $itemSplit);
 
         $roomIds = collect($validated['room_ids'] ?? [])->unique()->values();
 
@@ -197,6 +208,7 @@ class ExamController extends Controller
             'series:id,name,type',
         ])->loadCount('rooms');
         $exam->question_bank_ids = $exam->resolvedQuestionBankIds();
+        $exam->question_bank_items = $this->itemCounts($exam);
 
         $this->recordAudit(
             $user,
@@ -249,6 +261,8 @@ class ExamController extends Controller
             'question_bank_ids' => ['sometimes', 'array'],
             'question_bank_ids.*' => ['integer', 'exists:question_banks,id'],
             'question_bank_id' => ['sometimes', 'nullable', 'integer', 'exists:question_banks,id'],
+            'question_bank_items' => ['sometimes', 'nullable', 'array'],
+            'question_bank_items.*' => ['integer', 'min:0', 'max:1000'],
             'total_items' => ['sometimes', 'required', 'integer', 'min:1', 'max:1000'],
             'duration_minutes' => ['sometimes', 'required', 'integer', 'min:1', 'max:600'],
             'scheduled_at' => ['sometimes', 'nullable', 'date'],
@@ -305,6 +319,18 @@ class ExamController extends Controller
             ], 422);
         }
 
+        // An exam made before per-set counts that students have started keeps
+        // dealing from one pool, as it did for them.
+        $itemSplit = null;
+
+        if ($exam->itemSplit() !== null || !$exam->attempts()->exists()) {
+            $itemSplit = $this->examQuestionBanks->resolveSplit($validated, $resolvedQuestionBanks, $resolvedTotalItems, $exam);
+
+            if (is_string($itemSplit)) {
+                return response()->json(['message' => $itemSplit, 'errors' => ['question_bank_items' => [$itemSplit]]], 422);
+            }
+        }
+
         $examSubject = Exam::summarizeQuestionBankSubject($resolvedQuestionBanks);
         $typing = $this->examSeriesRules->resolve(
             $validated['exam_type'] ?? (string) $exam->exam_type,
@@ -330,6 +356,7 @@ class ExamController extends Controller
                 : null,
             $resolvedScheduleStart,
             $resolvedScheduleEnd,
+            $itemSplit,
         );
 
         if ($problems !== []) {
@@ -359,7 +386,7 @@ class ExamController extends Controller
         $exam->delivery_mode = Exam::DELIVERY_MODE_OPEN_NAVIGATION;
 
         $exam->save();
-        $exam->syncQuestionBanks($resolvedQuestionBankIds);
+        $exam->syncQuestionBanks($resolvedQuestionBankIds, $itemSplit);
 
         // A new closing time, or a change of what it means, reaches the students
         // already taking the exam: their deadlines are worked out again.
@@ -410,6 +437,7 @@ class ExamController extends Controller
             'series:id,name,type',
         ])->loadCount('rooms');
         $exam->question_bank_ids = $exam->resolvedQuestionBankIds();
+        $exam->question_bank_items = $this->itemCounts($exam);
 
         // A type (or series) is what puts an exam into students' Estimated
         // Outcome. Changing it once there are results changes their outcomes,
@@ -731,6 +759,20 @@ class ExamController extends Controller
             'expires_at' => $attempt->expires_at,
             'remaining_seconds' => $attempt->expires_at ? max(0, (int) now()->diffInSeconds($attempt->expires_at, false)) : null,
         ];
+    }
+
+    /**
+     * The items each set gives a student, one per set in the order of
+     * question_bank_ids; null for an exam that deals from all its sets as one
+     * pool (saved before per-set counts).
+     *
+     * @return list<int>|null
+     */
+    private function itemCounts(Exam $exam): ?array
+    {
+        $split = $exam->itemSplit();
+
+        return $split === null ? null : array_values($split);
     }
 
     /** Who may act on the Live Board: as liveDashboard() reads it. */

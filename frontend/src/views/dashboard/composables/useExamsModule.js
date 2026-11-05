@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/store/auth.store'
 import { examDefaultsFor } from '@/utils/examDefaults'
 import { early, orderProblem, requiredProblem, useFieldChecks, wholeNumberProblem } from '@/utils/fieldChecks'
@@ -114,6 +114,60 @@ function summarizeQuestionBankSubject(questionBanks) {
   if (subjects.length === 0) return null
   if (subjects.length === 1) return subjects[0]
   return 'Multiple Subjects'
+}
+
+/**
+ * The items each set gives a student, in the sets' order: the exam's item
+ * count shared out by the sets' sizes (largest remainders), never more than a
+ * set holds; a set left with none takes one from the largest share. The same
+ * default as ExamQuestionBanks::proportionalSplit() on the server: two sets of
+ * 100 and 30 items give 15 and 15; 100 and 20 give 25 and 5.
+ */
+function proportionalSplit(banks, total) {
+  const sizes = banks.map((bank) => Math.max(0, Number(bank.total_items ?? 0)))
+  const sizeTotal = sizes.reduce((sum, size) => sum + size, 0)
+  const split = sizes.map(() => 0)
+
+  if (sizeTotal < 1 || total < 1) return split
+
+  const remainders = sizes
+    .map((size, index) => {
+      const exact = (total * size) / sizeTotal
+      split[index] = Math.min(size, Math.floor(exact))
+      return { index, rest: exact - Math.floor(exact) }
+    })
+    .sort((a, b) => b.rest - a.rest)
+
+  let left = Math.min(total, sizeTotal) - split.reduce((sum, count) => sum + count, 0)
+
+  while (left > 0) {
+    let placed = false
+
+    for (const { index } of remainders) {
+      if (left > 0 && split[index] < sizes[index]) {
+        split[index] += 1
+        left -= 1
+        placed = true
+      }
+    }
+
+    if (!placed) break
+  }
+
+  if (total >= sizes.length) {
+    sizes.forEach((size, index) => {
+      if (split[index] === 0 && size > 0) {
+        const donor = split.indexOf(Math.max(...split))
+
+        if (split[donor] > 1) {
+          split[donor] -= 1
+          split[index] = 1
+        }
+      }
+    })
+  }
+
+  return split
 }
 
 function questionBanksForExam(exam) {
@@ -235,6 +289,23 @@ export function useExamsModule() {
     exam_series_id: () => (formNeedsSeries.value && !examForm.exam_series_id
       ? 'Choose the series this exam belongs to, or create one below.'
       : ''),
+    question_bank_items: () => {
+      const banks = selectedQuestionBanks.value
+
+      if (banks.length < 2 || (examDealsFromOnePool.value && examContentLocked.value)) return ''
+
+      const counts = banks.map((bank) => Number(examItemSplit[bank.id]))
+
+      if (counts.some((count) => !Number.isInteger(count) || count < 0)) return early('Use whole numbers, 0 or more, for each set.')
+
+      const over = banks.find((bank) => Number(examItemSplit[bank.id]) > Number(bank.total_items ?? 0))
+
+      if (over) return early(`"${over.title}" has only ${over.total_items} questions.`)
+
+      return itemSplitTotal.value === Number(examForm.total_items)
+        ? ''
+        : `The sets' item counts add up to ${itemSplitTotal.value}, but the exam has ${examForm.total_items} items.`
+    },
     // Only the server says these (ExamEditRules); they are named here so its
     // message lands under the field it is about.
     question_bank_ids: () => '',
@@ -279,6 +350,42 @@ export function useExamsModule() {
       .filter(Boolean)
   })
 
+  // Items each chosen set gives a student, by set id: the same mix for every
+  // student (ExamController, question_bank_items). Shared out by the sets'
+  // sizes until the teacher changes it.
+  const examItemSplit = reactive({})
+  // An exam saved before per-set counts deals from all its sets as one pool;
+  // once students have started it, it goes on doing so.
+  const examDealsFromOnePool = ref(false)
+
+  const itemSplitTotal = computed(() => selectedQuestionBanks.value
+    .reduce((total, bank) => total + (Number(examItemSplit[bank.id]) || 0), 0))
+
+  function resetItemSplit() {
+    const banks = selectedQuestionBanks.value
+    const split = proportionalSplit(banks, Number(examForm.total_items) || 0)
+
+    Object.keys(examItemSplit).forEach((key) => delete examItemSplit[key])
+    banks.forEach((bank, index) => {
+      examItemSplit[bank.id] = split[index]
+    })
+  }
+
+  // A set added or removed, or a new item count, shares the items out again;
+  // a split that still fits (an exam's own, opened for editing) is kept.
+  watch(
+    () => [selectedQuestionBanks.value.map((bank) => bank.id).join(','), Number(examForm.total_items)],
+    () => {
+      const banks = selectedQuestionBanks.value
+      const fits = banks.length > 0
+        && Object.keys(examItemSplit).length === banks.length
+        && banks.every((bank) => examItemSplit[bank.id] !== undefined)
+        && itemSplitTotal.value === Number(examForm.total_items)
+
+      if (!fits) resetItemSplit()
+    },
+  )
+
   const selectedQuestionBankSubject = computed(() => (
     summarizeQuestionBankSubject(selectedQuestionBanks.value)
   ))
@@ -321,6 +428,8 @@ export function useExamsModule() {
     examChecks.reset()
     examEditing.value = null
     oneTakeOnlyAsOpened = false
+    examDealsFromOnePool.value = false
+    Object.keys(examItemSplit).forEach((key) => delete examItemSplit[key])
     // The teacher's own starting values from Settings, or the standard ones.
     Object.assign(examForm, examDefaultsFor(useAuthStore().user))
   }
@@ -349,6 +458,15 @@ export function useExamsModule() {
     examForm.description = exam.description ?? ''
     examForm.question_bank_ids = linkedBanks.map((bank) => bank.id)
     examForm.total_items = Number(exam.total_items ?? 1)
+    // The exam's own split, aligned with the ids the server sent; none for an
+    // exam that deals from one pool (the watcher then shares items out).
+    examDealsFromOnePool.value = !Array.isArray(exam.question_bank_items)
+    Object.keys(examItemSplit).forEach((key) => delete examItemSplit[key])
+    if (Array.isArray(exam.question_bank_items)) {
+      (exam.question_bank_ids ?? []).forEach((bankId, index) => {
+        examItemSplit[Number(bankId)] = Number(exam.question_bank_items[index] ?? 0)
+      })
+    }
     examForm.duration_minutes = Number(exam.duration_minutes ?? 1)
     examForm.schedule_start_at = toDateTimeLocalValue(exam.schedule_start_at ?? exam.scheduled_at)
     examForm.schedule_end_at = toDateTimeLocalValue(exam.schedule_end_at)
@@ -587,6 +705,7 @@ export function useExamsModule() {
       description: examForm.description.trim() || null,
       question_bank_id: selectedBankIds[0] ?? null,
       question_bank_ids: selectedBankIds,
+      question_bank_items: selectedBankIds.map((bankId) => Number(examItemSplit[bankId]) || 0),
       total_items: Number(examForm.total_items),
       duration_minutes: Number(examForm.duration_minutes),
       scheduled_at: scheduleStartAt,
@@ -699,6 +818,9 @@ export function useExamsModule() {
     examSaving,
     examError,
     examChecks,
+    examItemSplit,
+    itemSplitTotal,
+    examDealsFromOnePool,
     examEditing,
     studentsTakingNow,
     examContentLocked,

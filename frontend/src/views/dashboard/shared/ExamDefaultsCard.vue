@@ -43,6 +43,10 @@
         </label>
       </fieldset>
 
+      <p v-if="form.results_visibility_mode === 'hidden'" class="account-field-note">
+        With Hidden results, students get no Review Bot practice from your exams.
+      </p>
+
       <fieldset v-if="form.results_visibility_mode === 'visible' && !form.one_take_only" class="account-radio-group">
         <legend>Show Correct Answers</legend>
         <label class="check-item">
