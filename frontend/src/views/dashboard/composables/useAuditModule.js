@@ -195,7 +195,9 @@ export function useAuditModule() {
     }
   }
 
-  async function exportAuditLogs() {
+  // format: 'xlsx' opens readable in Excel (the newest 5,000 entries); 'csv'
+  // takes up to 50,000, for other tools.
+  async function exportAuditLogs(format = 'xlsx') {
     if (!isAdminRole.value || auditExporting.value) return
 
     auditExporting.value = true
@@ -206,12 +208,13 @@ export function useAuditModule() {
       delete params.page
       delete params.per_page
       params.tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      params.format = format === 'csv' ? 'csv' : 'xlsx'
 
       const response = await auditApi.exportCsv(params)
       const url = window.URL.createObjectURL(response.data instanceof Blob ? response.data : new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.download = downloadFilename(response, 'blis-audit-log.csv')
+      link.download = downloadFilename(response, `blis-audit-log.${params.format}`)
       document.body.appendChild(link)
       link.click()
       link.remove()

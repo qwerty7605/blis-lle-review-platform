@@ -4,7 +4,7 @@
       <p class="rbg-kicker">Review Bot Question Generator</p>
       <h3>
         Turn your Library files into Review Bot questions
-        <InfoTip text="Pick a file. The Review Bot reads it (the subject, and each question's own topic and subtopic) and generates a fresh, original review set on its own. Students see the questions only after you review and publish them." />
+        <InfoTip text="Pick a file. The Review Bot reads it (the subject, and each question's own topic and subtopic) and generates a fresh, original review set on its own. A student sees a question once you have published it and they have finished an exam that uses this file and can see its answers." />
       </h3>
     </article>
 
@@ -70,6 +70,24 @@
 
         <div v-if="generateError" class="feedback danger"><AlertCircle :size="15" /><span>{{ generateError }}</span></div>
         <div v-if="generateMessage" class="feedback success"><CheckCircle2 :size="15" /><span>{{ generateMessage }}</span></div>
+
+        <!-- Who will actually get these: publishing alone is not enough. -->
+        <div v-if="reach && reach.hidden.length > 0" class="feedback danger rbg-reach" role="status">
+          <AlertCircle :size="15" />
+          <span>
+            {{ reach.hidden.length === reach.exams ? (reach.exams === 1 ? 'The exam' : `All ${reach.exams} exams`) : `${reach.hidden.length} of the ${reach.exams} exams` }}
+            using this file {{ reach.hidden.length === 1 ? 'has' : 'have' }} Hidden results, so {{ reach.hidden.length === 1 ? 'its' : 'their' }} students won't get these questions:
+            <strong>{{ reach.hidden.slice(0, 3).join(', ') }}</strong>{{ reach.hidden.length > 3 ? ` and ${reach.hidden.length - 3} more` : '' }}.
+            To open practice, set Results Visibility to Visible in {{ reach.hidden.length === 1 ? "that exam's" : "each exam's" }} form.
+          </span>
+        </div>
+        <p v-else-if="reach && reach.exams === 0" class="feedback info rbg-reach" role="status">
+          <BookOpen :size="15" />
+          <span>No exam uses this file yet. Students get these questions after they finish an exam that uses it and see its answers.</span>
+        </p>
+        <p v-else-if="reach" class="muted rbg-reach-note">
+          Students get these after they finish one of the {{ reach.exams }} {{ reach.exams === 1 ? 'exam' : 'exams' }} using this file and see its answers.
+        </p>
       </article>
 
       <!-- Preview — the original exam items, read-only, kept clearly separate -->
@@ -413,6 +431,7 @@ const {
   selectedIds,
   allFilteredSelected,
   statusCounts,
+  reach,
   actionMessage,
   publishableIds,
   unpublishableIds,
@@ -695,6 +714,16 @@ const emptyListMessage = computed(() => ({
 .rbg-file-chevron {
   flex-shrink: 0;
   color: var(--lnu-text-muted);
+}
+
+/* Who gets the published questions: under the selected file. */
+.rbg-reach {
+  margin-top: 12px;
+}
+
+.rbg-reach-note {
+  margin: 12px 0 0;
+  font-size: 12.5px;
 }
 
 .rbg-selected-file {

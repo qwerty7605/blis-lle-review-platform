@@ -121,6 +121,35 @@ class AuditLogPageTest extends TestCase
         $this->assertSame(1, AuditLog::where('action', 'audit.export')->where('actor_id', $admin->id)->count());
     }
 
+    public function test_the_excel_export_opens_readable(): void
+    {
+        $admin = $this->makeAdmin(['name' => 'Head of BLIS']);
+        $this->log($this->makeStudent(['name' => '=HYPERLINK("http://x")']), 'room.join', ['description' => 'Joined BLIS 4A']);
+
+        Sanctum::actingAs($admin);
+        $response = $this->get('/api/admin/audit-logs/export?tz=Asia/Manila&format=xlsx')->assertOk();
+
+        $this->assertStringContainsString('.xlsx', (string) $response->headers->get('Content-Disposition'));
+
+        $book = \PhpOffice\PhpSpreadsheet\IOFactory::load($response->baseResponse->getFile()->getPathname());
+        $sheet = $book->getActiveSheet();
+
+        $this->assertSame('Entry ID', $sheet->getCell('A1')->getValue());
+        $this->assertSame('Time (Asia/Manila)', $sheet->getCell('B1')->getValue());
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', (string) $sheet->getCell('B2')->getValue());
+        // Wide enough for the time, which Excel shows as ######## when it is not.
+        $this->assertGreaterThanOrEqual(20, $sheet->getColumnDimension('B')->getWidth());
+        // A name that looks like a formula stays text. (The newest row is the
+        // export's own entry, logged before the file is made.)
+        $row = collect(range(2, $sheet->getHighestRow()))
+            ->first(fn (int $line): bool => $sheet->getCell("C{$line}")->getValue() === '=HYPERLINK("http://x")');
+        $this->assertNotNull($row);
+        $this->assertSame(\PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING, $sheet->getCell("C{$row}")->getDataType());
+        $this->assertSame('xlsx', AuditLog::where('action', 'audit.export')->latest('id')->first()->metadata['format']);
+
+        $this->getJson('/api/admin/audit-logs/export?format=pdf')->assertStatus(422);
+    }
+
     public function test_only_an_administrator_reads_or_exports_the_log(): void
     {
         Sanctum::actingAs($this->makeTeacher());

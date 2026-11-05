@@ -10,6 +10,7 @@ use App\Support\AuditEvents;
 use App\Support\AuditTargets;
 use App\Support\Search;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Route;
 
 class AuditLogController extends Controller
@@ -70,7 +71,7 @@ class AuditLogController extends Controller
     }
 
     /**
-     * The same filtered log as a CSV file, for keeping or handing on. The
+     * The same filtered log as a CSV or Excel file, for keeping or handing on. The
      * export is itself an audit entry: who took a copy, and of what.
      */
     public function export(Request $request, AuditLogBrowser $browser)
@@ -82,17 +83,27 @@ class AuditLogController extends Controller
         $validated = $request->validate([
             ...AuditLogBrowser::filterRules(),
             'tz' => ['nullable', 'timezone:all'],
+            // csv (the default) streams up to 50,000 rows; xlsx opens readable in
+            // Excel, with the newest 5,000.
+            'format' => ['nullable', Rule::in(['csv', 'xlsx'])],
         ]);
 
-        $filters = collect($validated)->except('tz')->filter(fn ($value) => $value !== null && $value !== '')->all();
-        $count = min($browser->query($filters)->count(), AuditLogBrowser::EXPORT_LIMIT);
+        $format = $validated['format'] ?? 'csv';
+        $filters = collect($validated)->except(['tz', 'format'])->filter(fn ($value) => $value !== null && $value !== '')->all();
+        $limit = $format === 'xlsx' ? AuditLogBrowser::XLSX_LIMIT : AuditLogBrowser::EXPORT_LIMIT;
+        $count = min($browser->query($filters)->count(), $limit);
 
         $this->recordAudit($request->user(), 'audit.export', null, null, "Exported {$count} audit log entries", [
             'rows' => $count,
+            'format' => $format,
             'filters' => $filters,
         ], $request);
 
-        return $browser->exportCsv($filters, $validated['tz'] ?? config('app.timezone'));
+        $timezone = $validated['tz'] ?? config('app.timezone');
+
+        return $format === 'xlsx'
+            ? $browser->exportXlsx($filters, $timezone)
+            : $browser->exportCsv($filters, $timezone);
 
     }
 }

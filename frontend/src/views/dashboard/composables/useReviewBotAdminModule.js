@@ -122,6 +122,10 @@ export function useReviewBotAdminModule() {
   const selectedIds = ref([])
   // How many questions this file has in each status, for the tab counts.
   const statusCounts = ref({ draft: 0, published: 0, rejected: 0 })
+  // Which exams use the selected file, and which keep practice closed
+  // (ReviewBotAdminController::reach): published questions reach a student
+  // only once that exam's answers are shown to them.
+  const reach = ref(null)
   // What the last bulk action did, e.g. "12 questions published."
   const actionMessage = ref('')
 
@@ -244,6 +248,7 @@ export function useReviewBotAdminModule() {
 
       questions.value = asList(data?.questions).map(normalizeQuestion)
       if (data?.counts) statusCounts.value = { ...statusCounts.value, ...data.counts }
+      reach.value = data?.reach ?? null
       selectedIds.value = selectedIds.value.filter((id) => questions.value.some((question) => question.id === id))
 
       noteGenerationState(Boolean(data?.generating), sentAt)
@@ -356,6 +361,7 @@ export function useReviewBotAdminModule() {
     actionMessage.value = ''
     selectedIds.value = []
     statusCounts.value = { draft: 0, published: 0, rejected: 0 }
+    reach.value = null
 
     // If a run for this file is still going, loadQuestions() hears so from
     // the server and picks the wait back up.
@@ -367,6 +373,7 @@ export function useReviewBotAdminModule() {
     generationPending.value = false
     draftsBeforeRun = null
     selectedBankId.value = null
+    reach.value = null
     sourceQuestions.value = []
     questions.value = []
     selectedIds.value = []
@@ -678,6 +685,7 @@ export function useReviewBotAdminModule() {
     selectedIds,
     allFilteredSelected,
     statusCounts,
+    reach,
     actionMessage,
     publishableIds,
     unpublishableIds,

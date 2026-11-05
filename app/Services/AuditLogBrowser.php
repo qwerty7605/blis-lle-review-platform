@@ -7,11 +7,15 @@ use App\Models\User;
 use App\Support\AuditEvents;
 use App\Support\AuditTargets;
 use App\Support\DeviceLabel;
+use App\Support\Reports\SheetStyle;
 use App\Support\Search;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -24,6 +28,19 @@ class AuditLogBrowser
 {
     /** Rows one export may hold; narrow the filters for more. */
     public const EXPORT_LIMIT = 50000;
+
+    /**
+     * The Excel copy is built in memory (PhpSpreadsheet), so it takes the
+     * newest 5,000 entries; the CSV streams, and takes up to EXPORT_LIMIT.
+     */
+    public const XLSX_LIMIT = 5000;
+
+    /** The columns of both exports, in order; the time's heading names its zone. */
+    private const EXPORT_HEADINGS = [
+        'Entry ID', 'Time', 'Actor', 'Actor email', 'Actor role', 'Event', 'Category',
+        'Outcome', 'Action code', 'Target type', 'Target', 'Target ID', 'Description', 'IP address',
+        'Device', 'User agent', 'Details',
+    ];
 
     /** @return array<string, array<int, mixed>> */
     public static function filterRules(): array
@@ -144,53 +161,106 @@ class AuditLogBrowser
 
     public function exportCsv(array $filters, string $timezone): StreamedResponse
     {
-        $query = $this->query($filters);
         $filename = 'blis-audit-log-'.now($timezone)->format('Y-m-d-His').'.csv';
 
-        return response()->streamDownload(function () use ($query, $timezone) {
+        return response()->streamDownload(function () use ($filters, $timezone) {
             $out = fopen('php://output', 'w');
             // Excel opens a UTF-8 CSV correctly only with this mark.
             fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, [
-                'Entry ID', "Time ({$timezone})", 'Actor', 'Actor email', 'Actor role', 'Event', 'Category',
-                'Outcome', 'Action code', 'Target type', 'Target', 'Target ID', 'Description', 'IP address',
-                'Device', 'User agent', 'Details',
-            ]);
+            fputcsv($out, $this->headings($timezone));
 
-            // Pages of the same ordered query: chunk() would drop the newest-first
-            // order and the row limit.
-            for ($page = 1; ($page - 1) * 1000 < self::EXPORT_LIMIT; $page++) {
-                $logs = (clone $query)->forPage($page, 1000)->get();
-
-                foreach ($this->present($logs) as $row) {
-                    fputcsv($out, array_map([self::class, 'safeCell'], [
-                        $row['id'],
-                        $row['created_at'] ? CarbonImmutable::parse($row['created_at'])->setTimezone($timezone)->format('Y-m-d H:i:s') : '',
-                        $row['actor']['name'] ?? ($row['actor_hint'] ? "({$row['actor_hint']})" : 'System'),
-                        $row['actor']['email'] ?? '',
-                        self::roleLabel($row['actor']['role'] ?? null),
-                        $row['event'],
-                        $row['category_label'] ?? '',
-                        $row['outcome'],
-                        $row['action'],
-                        $row['target']['type_label'] ?? '',
-                        $row['target']['name'] ?? '',
-                        $row['target']['id'] ?? '',
-                        $row['description'] ?? '',
-                        $row['ip_address'] ?? '',
-                        $row['device'] ?? '',
-                        $row['user_agent'] ?? '',
-                        $row['metadata'] ? json_encode($row['metadata'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '',
-                    ]));
-                }
-
-                if ($logs->count() < 1000) {
-                    break;
-                }
+            foreach ($this->exportRows($filters, $timezone, self::EXPORT_LIMIT) as $row) {
+                fputcsv($out, array_map([self::class, 'safeCell'], $row));
             }
 
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * The same rows as an Excel file that opens readable: columns sized to
+     * what they hold (a CSV carries no widths, so Excel showed the times as
+     * ########), the heading row frozen and filterable.
+     */
+    public function exportXlsx(array $filters, string $timezone): BinaryFileResponse
+    {
+        $rows = iterator_to_array($this->exportRows($filters, $timezone, self::XLSX_LIMIT), false);
+
+        $book = new Spreadsheet();
+        $sheet = $book->getActiveSheet();
+        $sheet->setTitle('Audit log');
+
+        SheetStyle::table(
+            $sheet,
+            $this->headings($timezone),
+            $rows,
+            [3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17],
+            [1 => 9, 2 => 21, 3 => 24, 4 => 30, 5 => 14, 6 => 34, 7 => 18, 8 => 11, 9 => 26, 10 => 16, 11 => 28, 12 => 10, 13 => 50, 14 => 16, 15 => 22, 16 => 40, 17 => 60],
+            2,
+        );
+
+        $tempFile = tempnam(sys_get_temp_dir(), 'blis_audit_xlsx_');
+        (new Xlsx($book))->save($tempFile);
+        $book->disconnectWorksheets();
+
+        return response()
+            ->download($tempFile, 'blis-audit-log-'.now($timezone)->format('Y-m-d-His').'.xlsx')
+            ->deleteFileAfterSend(true);
+    }
+
+    /** @return list<string> */
+    private function headings(string $timezone): array
+    {
+        $headings = self::EXPORT_HEADINGS;
+        $headings[1] = "Time ({$timezone})";
+
+        return $headings;
+    }
+
+    /**
+     * The export's rows, newest first, as plain values.
+     *
+     * @return \Generator<int, list<mixed>>
+     */
+    private function exportRows(array $filters, string $timezone, int $limit): \Generator
+    {
+        $query = $this->query($filters);
+
+        // Pages of the same ordered query: chunk() would drop the newest-first
+        // order and the row limit.
+        for ($page = 1; ($page - 1) * 1000 < $limit; $page++) {
+            $logs = (clone $query)->forPage($page, 1000)->get();
+
+            foreach ($this->present($logs) as $index => $row) {
+                if (($page - 1) * 1000 + $index >= $limit) {
+                    return;
+                }
+
+                yield [
+                    $row['id'],
+                    $row['created_at'] ? CarbonImmutable::parse($row['created_at'])->setTimezone($timezone)->format('Y-m-d H:i:s') : '',
+                    $row['actor']['name'] ?? ($row['actor_hint'] ? "({$row['actor_hint']})" : 'System'),
+                    $row['actor']['email'] ?? '',
+                    self::roleLabel($row['actor']['role'] ?? null),
+                    $row['event'],
+                    $row['category_label'] ?? '',
+                    $row['outcome'],
+                    $row['action'],
+                    $row['target']['type_label'] ?? '',
+                    $row['target']['name'] ?? '',
+                    $row['target']['id'] ?? '',
+                    $row['description'] ?? '',
+                    $row['ip_address'] ?? '',
+                    $row['device'] ?? '',
+                    $row['user_agent'] ?? '',
+                    $row['metadata'] ? json_encode($row['metadata'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : '',
+                ];
+            }
+
+            if ($logs->count() < 1000) {
+                return;
+            }
+        }
     }
 
     private static function roleLabel(?string $role): string

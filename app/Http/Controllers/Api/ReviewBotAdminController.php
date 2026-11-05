@@ -81,7 +81,29 @@ class ReviewBotAdminController extends Controller
             'counts' => filled($validated['source_bank_id'] ?? null)
                 ? $this->reviewBotAdminService->statusCounts((int) $validated['source_bank_id'])
                 : null,
+            // Which exams use this file and which of them keep practice closed:
+            // a student gets these questions only once that exam's answers are
+            // shown to them (ReviewBotEligibility), never from Hidden results.
+            'reach' => filled($validated['source_bank_id'] ?? null)
+                ? $this->reach((int) $validated['source_bank_id'])
+                : null,
         ]);
+    }
+
+    /** @return array{exams: int, hidden: list<string>} */
+    private function reach(int $bankId): array
+    {
+        $exams = Exam::query()
+            ->where(fn ($query) => $query
+                ->whereHas('questionBanks', fn ($banks) => $banks->where('question_banks.id', $bankId))
+                ->orWhere('question_bank_id', $bankId))
+            ->orderBy('title')
+            ->get(['id', 'title', 'results_visibility_mode']);
+
+        return [
+            'exams' => $exams->count(),
+            'hidden' => $exams->where('results_visibility_mode', '!=', 'visible')->pluck('title')->values()->all(),
+        ];
     }
 
     public function updateQuestion(

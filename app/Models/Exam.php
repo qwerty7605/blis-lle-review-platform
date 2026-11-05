@@ -212,7 +212,7 @@ class Exam extends Model
     public function questionBanks(): BelongsToMany
     {
         return $this->belongsToMany(QuestionBank::class, 'exam_question_bank')
-            ->withPivot(['position'])
+            ->withPivot(['position', 'items'])
             ->withTimestamps()
             ->orderBy('exam_question_bank.position')
             ->orderBy('question_banks.id');
@@ -411,6 +411,24 @@ class Exam extends Model
             });
     }
 
+    /**
+     * How many items each question set gives a student, by set id in the
+     * exam's order (ExamQuestionBanks::resolveSplit()); null for an exam
+     * saved before per-set counts, which deals from all its sets as one pool.
+     *
+     * @return array<int, int>|null
+     */
+    public function itemSplit(): ?array
+    {
+        $banks = $this->relationLoaded('questionBanks') ? $this->questionBanks : $this->questionBanks()->get();
+
+        if ($banks->isEmpty() || $banks->contains(fn ($bank): bool => $bank->pivot?->items === null)) {
+            return null;
+        }
+
+        return $banks->mapWithKeys(fn ($bank): array => [(int) $bank->id => (int) $bank->pivot->items])->all();
+    }
+
     public function hasQuestionSet(): bool
     {
         return $this->resolvedQuestionBankIds() !== [];
@@ -438,7 +456,7 @@ class Exam extends Model
      *
      * @param  list<int>  $questionBankIds
      */
-    public function syncQuestionBanks(array $questionBankIds): void
+    public function syncQuestionBanks(array $questionBankIds, ?array $itemSplit = null): void
     {
         $normalizedIds = collect($questionBankIds)
             ->map(fn ($id) => (int) $id)
@@ -450,6 +468,7 @@ class Exam extends Model
         $syncPayload = $normalizedIds
             ->mapWithKeys(fn ($bankId, $index) => [$bankId => [
                 'position' => $index + 1,
+                'items' => $itemSplit === null ? null : ($itemSplit[$bankId] ?? null),
                 'created_at' => $now,
                 'updated_at' => $now,
             ]])

@@ -954,8 +954,48 @@
   font-weight: 600;
 }
 
-/* "Review Bot practice stays closed while results are hidden." */
+/* "Students won't get Review Bot practice ... while its results are Hidden." */
 .exam-policy-note {
-  margin: 8px 0 0;
+  margin: 10px 0 0;
   font-size: 12.5px;
+}
+
+/* Items From Each Set: one row per chosen set, its count and its size. */
+.exam-split {
+  margin-top: 14px;
+}
+
+.exam-split-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.exam-split-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 56px;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The shared field rule makes inputs fill their parent and keeps a minimum
+   width; here the box is its column, no wider. */
+.exam-split-row .text-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.exam-split-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.exam-split-off {
+  color: var(--dk-fg-lnu-danger, var(--lnu-danger));
+}
+
+.exam-split-note {
+  margin-top: 14px;
 }
