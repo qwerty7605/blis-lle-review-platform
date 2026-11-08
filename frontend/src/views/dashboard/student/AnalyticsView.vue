@@ -292,7 +292,7 @@
         <article class="analytics-card analytics-prediction-card" aria-labelledby="analytics-let-heading">
           <header class="analytics-card-head is-stacked">
             <h2 id="analytics-let-heading" class="analytics-card-title">Estimated Outcome</h2>
-            <p class="analytics-card-sub">From your latest complete semester</p>
+            <p class="analytics-card-sub">From your latest completed pre-test or mock board series</p>
           </header>
 
           <EstimatedOutcome
