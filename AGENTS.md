@@ -20,7 +20,7 @@ This file is for coding agents. Keep it short, execution-focused, and updated wh
 - Settings model: `app/Models/SystemSetting.php`
 - DB schema: `database/migrations/*`
 - Seeder accounts: `database/seeders/DatabaseSeeder.php`
-- Frontend auth store: `frontend/src/stores/auth.js`
+- Frontend auth store: `frontend/src/store/auth.store.js`
 - Frontend router guard: `frontend/src/router/index.js`
 - Role-based sidebar/nav: `frontend/src/views/Dashboard.vue`
 - Staff student directory view: `frontend/src/views/dashboard/staff/StudentsView.vue`

@@ -833,19 +833,6 @@ class ShowcaseSeeder extends Seeder
             'owner' => $this->yearLevelTeacher(4),
         ], $this->sections[4]);
 
-        // The open exam is being paced live in one section.
-        $open = $this->exams['mock:' . self::SUBJECTS[4]];
-        DB::table('exam_room_pacing_states')->insert([
-            'exam_id' => $open['id'],
-            'room_id' => $this->sections[4][0],
-            'is_active' => true,
-            'current_item_number' => 6,
-            'started_at' => $this->now->subMinutes(70),
-            'updated_by' => $open['owner'],
-            'created_at' => $this->now->subMinutes(70),
-            'updated_at' => $this->now->subMinutes(4),
-        ]);
-
         foreach (self::LOWER_YEAR_EXAMS as $yearLevel => $exams) {
             foreach ($exams as $n => [$subject, $kind]) {
                 $start = $this->termStart->addWeeks(2 + $n * 3 + $yearLevel)->setTime(9, 0);
