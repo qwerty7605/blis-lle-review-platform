@@ -138,7 +138,7 @@
                 <Gauge :size="17" />
                 <h3>Estimated Outcome</h3>
               </div>
-              <p class="home-block-subtitle">From your latest complete semester</p>
+              <p class="home-block-subtitle">From your latest completed pre-test or mock board series</p>
             </div>
           </div>
 
