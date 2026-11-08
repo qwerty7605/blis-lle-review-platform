@@ -86,9 +86,6 @@ Mean confusion matrix (actual FAILED / PASSED by predicted FAILED / PASSED):
   running app; only by the tools above.
 - `tools/org/bounce/net/DefaultAuthenticator.java` — a stand-in for a class
   WEKA wants at start-up that is not inside `weka-stable.jar`.
-- History, no longer used by the app: `models/New_Model_LLE.model` (the J48
-  tree the app used before, `-C 0.25 -M 2`) and `data/lle_clean.arff` (the 156
-  rows it was trained on).
 
 ## Where the app uses this
 

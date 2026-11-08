@@ -77,8 +77,6 @@ class ReviewBotQuestionScreeningService
 
         foreach ($generated as $index => $item) {
             $generated[$index]['validation_flags'] = $this->mechanicalFlags($item);
-            $generated[$index]['verification_status'] = QuestionBankQuestion::VERIFICATION_UNCHECKED;
-            $generated[$index]['verifier_answer_label'] = null;
             $generated[$index]['embedding'] = null;
         }
 

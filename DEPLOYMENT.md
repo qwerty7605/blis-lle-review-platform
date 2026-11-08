@@ -32,7 +32,7 @@ or a free `*.duckdns.org` subdomain, which gets a genuine trusted certificate.
 
 ## 1. Launch the instance
 
-- **AMI**: Ubuntu 24.04 LTS
+- **AMI**: Ubuntu 26.04 LTS
 - **Type**: `t3.micro` (1 GB RAM — see the sizing note in `docker/php/www.conf`)
 - **Storage**: 30 GB gp3
 - **Key pair**: create one and download it. It is offered exactly once.
