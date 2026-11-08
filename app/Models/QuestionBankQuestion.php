@@ -36,15 +36,6 @@ class QuestionBankQuestion extends Model
      */
     public const STATUS_REJECTED = 'rejected';
 
-    /** Answer key not independently checked (no API key, or the check failed). */
-    public const VERIFICATION_UNCHECKED = 'unchecked';
-
-    /** An independent model, shown no answer key, picked the same option. */
-    public const VERIFICATION_AGREED = 'agreed';
-
-    /** Independent model disagreed -- likely a miskeyed item, review first. */
-    public const VERIFICATION_DISAGREED = 'disagreed';
-
     public const STATUSES = [
         self::STATUS_DRAFT,
         self::STATUS_PUBLISHED,
@@ -102,8 +93,6 @@ class QuestionBankQuestion extends Model
         'tag_source',
         'explanation',
         'status',
-        'verification_status',
-        'verifier_answer_label',
         'validation_flags',
         'embedding',
         'source_reference',

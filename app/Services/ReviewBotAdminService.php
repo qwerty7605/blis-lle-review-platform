@@ -343,8 +343,6 @@ class ReviewBotAdminService
                     'tag_source' => QuestionBankQuestion::TAG_SOURCE_RULE_BASED,
                     'explanation' => $item['explanation'],
                     'status' => QuestionBankQuestion::STATUS_DRAFT,
-                    'verification_status' => $item['verification_status'] ?? QuestionBankQuestion::VERIFICATION_UNCHECKED,
-                    'verifier_answer_label' => $item['verifier_answer_label'] ?? null,
                     'validation_flags' => ($item['validation_flags'] ?? []) !== [] ? $item['validation_flags'] : null,
                     'embedding' => $item['embedding'] ?? null,
                     'source_reference' => $source->questionBank?->title !== null
