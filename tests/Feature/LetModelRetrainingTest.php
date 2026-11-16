@@ -246,7 +246,9 @@ class LetModelRetrainingTest extends TestCase
         }
         // A retake after the LLE is not what the result was earned on.
         $this->makeSubmittedAttempt($this->preTest['it'], $this->room, $two, [true, true], Carbon::create(2026, 5, 1))->forceFill(['score_percent' => 99])->save();
-        // Battery exams never count.
+        // Battery exams give rows only from the 3rd year on, which needs an
+        // admission year; this graduate has none on file (battery rows have
+        // their own tests, BatteryTrainingRowsTest).
         foreach ($battery as $exam) {
             $this->makeSubmittedAttempt($exam, $this->room, $two, [true, true], Carbon::create(2025, 12, 1));
         }
@@ -262,7 +264,8 @@ class LetModelRetrainingTest extends TestCase
         $this->assertCount(64, $set['base']);
         $this->assertCount(2, $rows);
         $this->assertSame(1, $set['skipped']);
-        $this->assertSame([['key' => 'student:' . $two->id, 'label' => LetPredictionService::RESULT_PASS, 'rows' => 2]], $set['results']);
+        $this->assertSame([['key' => 'student:' . $two->id, 'label' => LetPredictionService::RESULT_PASS, 'rows' => 2, 'battery_rows' => 0]], $set['results']);
+        $this->assertSame(['rows' => 0, 'graduates' => 0, 'failed_graduates' => 0], $set['battery']);
 
         $preTestRow = $rows->first(fn (array $row): bool => $row['features']['exam_type'] === 'pre_test');
         $mockRow = $rows->first(fn (array $row): bool => $row['features']['exam_type'] === 'mock_board');

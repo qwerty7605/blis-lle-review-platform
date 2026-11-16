@@ -9,6 +9,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -42,7 +43,10 @@ class RetrainLetModelJob implements ShouldQueue
             $result = $trainer->run($by);
             $model = $result['model'];
 
-            $audit->recordAction($by, 'prediction.let.retrain', 'let_model', $model?->id, $result['message'], ['outcome' => $result['outcome']] + ($model ? [
+            // The description column holds 255 characters and a run's message
+            // (its failed checks, its battery rows) can be longer: the entry
+            // keeps the whole message in its metadata and a cut one up front.
+            $audit->recordAction($by, 'prediction.let.retrain', 'let_model', $model?->id, Str::limit($result['message'], 250), ['outcome' => $result['outcome'], 'message' => $result['message']] + ($model ? [
                 'version' => $model->version,
                 'rows' => $model->training_count,
                 'ridge' => $model->ridge,

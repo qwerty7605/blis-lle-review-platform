@@ -10,6 +10,7 @@ import weka.classifiers.Classifier;
 import weka.classifiers.evaluation.Evaluation;
 import weka.classifiers.evaluation.NominalPrediction;
 import weka.classifiers.evaluation.Prediction;
+import weka.classifiers.evaluation.ThresholdCurve;
 import weka.classifiers.functions.Logistic;
 import weka.classifiers.meta.CVParameterSelection;
 import weka.classifiers.rules.ZeroR;
@@ -36,7 +37,11 @@ import weka.filters.unsupervised.attribute.ReplaceMissingValues;
  *   vectors <model> <out-csv>     P(PASSED) for a spread of made-up students,
  *                                 to check the app's arithmetic against
  *   compare <arff>...             the same as train, for the trainer checks,
- *                                 written next to each file as .weka.json
+ *                                 written next to each file as .weka.json; for
+ *                                 a file whose Exam_Type has a "battery" value,
+ *                                 also the figures over the review rows and the
+ *                                 battery rows apart, and the final model's
+ *                                 P(PASSED) for rows of every type
  */
 public class LleLogistic {
 
@@ -104,6 +109,7 @@ public class LleLogistic {
         json.append("  \"ridge\": ").append(num(ridge)).append(",\n");
         json.append("  \"candidates\": ").append(candidates(data)).append(",\n");
         json.append("  \"model\": ").append(parameters(data, logistic)).append(",\n");
+        json.append("  \"predictions\": ").append(predictions(data, model)).append(",\n");
         json.append("  \"evaluation\": ").append(evaluation(data, failed)).append("\n");
         json.append("}\n");
 
@@ -189,8 +195,10 @@ public class LleLogistic {
             }
             Attribute attribute = coded.attribute(k);
             // NominalToBinary names a two-value nominal "Exam_Type=mockboard"
-            // (1 for mockboard, 0 for pretest); a missing one was filled with
-            // the training mode before that.
+            // (1 for mockboard, 0 for pretest), and gives a three-value one
+            // an input per value ("Exam_Type=pretest", ...=mockboard,
+            // ...=battery); a missing one was filled with the training mode
+            // (exported as its position) before that.
             String[] nameAndValue = attribute.name().split("=", 2);
             Attribute source = data.attribute(nameAndValue[0]);
             int original = source == null ? -1 : source.index();
@@ -283,7 +291,154 @@ public class LleLogistic {
             + ",\n    \"model\": " + figures(model, 0)
             + ",\n    \"zero_r\": " + figures(zeroR, 0)
             + ",\n    \"per_repeat\": " + perRepeat.append("]")
+            + byKind(data, failed)
             + "\n  }";
+    }
+
+    /**
+     * For a file with battery rows: the same cross-validation, the folds dealt
+     * as crossValidateModel deals them (shuffle with Random(seed), stratify,
+     * each fold's training rows reshuffled with that same Random), with each
+     * held-out row's prediction kept apart by kind of row: review (pre-test or
+     * mock board) or battery. Each repeat's all-row figures are checked
+     * against crossValidateModel's own first, so the dealing is known to be
+     * the same.
+     */
+    static String byKind(Instances data, int failed) throws Exception {
+        int battery = data.attribute(0).indexOfValue("battery");
+        if (battery < 0) {
+            return "";
+        }
+
+        double[][] model = new double[2][11];
+        double[][] zeroR = new double[2][11];
+
+        for (int seed = 1; seed <= REPEATS; seed++) {
+            double[][] m = repeatByKind(data, failed, newModel(), seed, battery);
+            double[][] z = repeatByKind(data, failed, new ZeroR(), seed, battery);
+            for (int kind = 0; kind < 2; kind++) {
+                for (int i = 0; i < 11; i++) {
+                    model[kind][i] += m[kind][i] / REPEATS;
+                    zeroR[kind][i] += z[kind][i] / REPEATS;
+                }
+            }
+        }
+
+        return ",\n    \"by_type\": {\"review\": {\"model\": " + figures(model[0], 0) + ", \"zero_r\": " + figures(zeroR[0], 0)
+            + "}, \"battery\": {\"model\": " + figures(model[1], 0) + ", \"zero_r\": " + figures(zeroR[1], 0) + "}}";
+    }
+
+    static double[][] repeatByKind(Instances data, int failed, Classifier classifier, int seed, int battery) throws Exception {
+        Instances copy = new Instances(data);
+        Random random = new Random(seed);
+        copy.randomize(random);
+        copy.stratify(FOLDS);
+
+        ArrayList<Prediction> all = new ArrayList<>();
+        ArrayList<Prediction> review = new ArrayList<>();
+        ArrayList<Prediction> batteryRows = new ArrayList<>();
+
+        for (int fold = 0; fold < FOLDS; fold++) {
+            Instances train = copy.trainCV(FOLDS, fold, random);
+            Classifier copied = AbstractClassifier.makeCopy(classifier);
+            copied.buildClassifier(train);
+            Instances test = copy.testCV(FOLDS, fold);
+
+            for (int k = 0; k < test.numInstances(); k++) {
+                Instance instance = test.instance(k);
+                Prediction prediction = new NominalPrediction(instance.classValue(), copied.distributionForInstance(instance), instance.weight());
+                all.add(prediction);
+                boolean isBattery = !instance.isMissing(0) && (int) instance.value(0) == battery;
+                (isBattery ? batteryRows : review).add(prediction);
+            }
+        }
+
+        double[] mine = figuresOf(all, failed);
+        double[] weka = repeat(data, failed, AbstractClassifier.makeCopy(classifier), seed);
+        for (int i = 0; i < mine.length; i++) {
+            if (Math.abs(mine[i] - weka[i]) > 1e-12) {
+                throw new IllegalStateException("The folds are not dealt as crossValidateModel deals them (seed " + seed + ", figure " + i + ")");
+            }
+        }
+
+        return new double[][] {figuresOf(review, failed), figuresOf(batteryRows, failed)};
+    }
+
+    /** roc, recall, false alarm, precision, F, accuracy, kappa, TP, FN, FP, TN of some predictions */
+    static double[] figuresOf(ArrayList<Prediction> predictions, int failed) {
+        double tp = 0, fn = 0, fp = 0, tn = 0;
+        for (Prediction prediction : predictions) {
+            double[] distribution = ((NominalPrediction) prediction).distribution();
+            boolean atRisk = distribution[failed] >= AT_RISK;
+            boolean isFailed = (int) prediction.actual() == failed;
+            if (isFailed && atRisk) tp++;
+            else if (isFailed) fn++;
+            else if (atRisk) fp++;
+            else tn++;
+        }
+
+        double n = tp + fn + fp + tn;
+        double recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+        double falseAlarm = fp + tn > 0 ? fp / (fp + tn) : 0;
+        double precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+        double f = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
+        double observed = (tp + tn) / n;
+        double chance = ((tp + fn) * (tp + fp) + (fp + tn) * (fn + tn)) / (n * n);
+        double kappa = chance < 1 ? (observed - chance) / (1 - chance) : 0;
+        double roc = ThresholdCurve.getROCArea(new ThresholdCurve().getCurve(predictions, failed));
+
+        return new double[] {roc, recall, falseAlarm, precision, f, observed, kappa, tp, fn, fp, tn};
+    }
+
+    /**
+     * The final model's P(PASSED): for the file's own rows (up to 60), then
+     * for every exam type (and a missing one) with the scores 55..80 and with
+     * every score missing, so the app's arithmetic can be checked on a model
+     * of this shape, filled values included.
+     */
+    static String predictions(Instances data, Classifier model) throws Exception {
+        int passed = data.classAttribute().indexOfValue("PASSED");
+        Attribute type = data.attribute(0);
+        ArrayList<Instance> cases = new ArrayList<>();
+
+        for (int i = 0; i < Math.min(60, data.numInstances()); i++) {
+            cases.add(data.instance(i));
+        }
+        for (int t = -1; t < type.numValues(); t++) {
+            for (int variant = 0; variant < 2; variant++) {
+                Instance instance = new DenseInstance(data.numAttributes());
+                instance.setDataset(data);
+                if (t < 0) {
+                    instance.setMissing(0);
+                } else {
+                    instance.setValue(0, t);
+                }
+                for (int k = 1; k <= 6; k++) {
+                    if (variant == 0) {
+                        instance.setValue(k, 50 + 5 * k);
+                    } else {
+                        instance.setMissing(k);
+                    }
+                }
+                instance.setClassMissing();
+                cases.add(instance);
+            }
+        }
+
+        StringBuilder out = new StringBuilder("[");
+        boolean first = true;
+        for (Instance instance : cases) {
+            out.append(first ? "\n    " : ",\n    ").append("{\"exam_type\": ")
+                .append(instance.isMissing(0) ? "null" : "\"" + type.value((int) instance.value(0)) + "\"")
+                .append(", \"scores\": [");
+            for (int k = 1; k <= 6; k++) {
+                out.append(k > 1 ? ", " : "").append(instance.isMissing(k) ? "null" : num(instance.value(k)));
+            }
+            out.append("], \"p_passed\": ").append(num(model.distributionForInstance(instance)[passed])).append("}");
+            first = false;
+        }
+
+        return out.append("\n  ]").toString();
     }
 
     /** roc, recall, false alarm, precision, F, accuracy, kappa, TP, FN, FP, TN */

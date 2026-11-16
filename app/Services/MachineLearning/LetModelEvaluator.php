@@ -20,6 +20,13 @@ namespace App\Services\MachineLearning;
  *     accuracy, Kappa and the confusion matrix;
  *   - the same for ZeroR (always the training majority, PASSED) on the same
  *     folds, the baseline the model has to beat.
+ *
+ * The same figures are also worked out for each kind of row on its own
+ * (`by_type`): the review rows (pre-tests and mock boards) and the battery
+ * semesters. Each comes from the same pooled predictions, only counted over
+ * that kind of row, so with no battery rows the review figures are the
+ * figures. A version is judged on its review rows, and battery estimates on
+ * its battery rows (LetModelTrainer).
  */
 class LetModelEvaluator
 {
@@ -33,44 +40,84 @@ class LetModelEvaluator
     ) {
     }
 
+    /** The kinds of row figures are also given for, apart (`by_type`). */
+    public const ROW_KINDS = ['review', 'battery'];
+
     /**
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
-     * @return array{rows: int, failed_rows: int, cutoff_p_failed: float, folds: int, repeats: int, model: array<string, mixed>, zero_r: array<string, mixed>, per_repeat: list<array<string, mixed>>}
+     * @param  list<string>|null  $examTypes  how the exam type is coded (LogisticModel::examTypesFor() of $rows if left out)
+     * @return array{rows: int, failed_rows: int, cutoff_p_failed: float, folds: int, repeats: int, exam_types: list<string>, model: array<string, mixed>, zero_r: array<string, mixed>, per_repeat: list<array<string, mixed>>, by_type: array{review: ?array<string, mixed>, battery: ?array<string, mixed>}}
      */
-    public function evaluate(array $rows): array
+    public function evaluate(array $rows, ?array $examTypes = null): array
     {
         $rows = array_values($rows);
+        $examTypes ??= LogisticModel::examTypesFor($rows);
         $model = [];
         $zeroR = [];
         $perRepeat = [];
+        $byKind = array_fill_keys(self::ROW_KINDS, ['model' => [], 'zero_r' => []]);
 
         for ($seed = 1; $seed <= self::REPEATS; $seed++) {
-            [$modelFigures, $zeroRFigures] = $this->repeat($rows, $seed);
+            [$modelPredictions, $zeroRPredictions] = $this->repeat($rows, $seed, $examTypes);
+            $modelFigures = self::figures($modelPredictions);
             $perRepeat[] = ['seed' => $seed] + $modelFigures;
             $model[] = $modelFigures;
-            $zeroR[] = $zeroRFigures;
+            $zeroR[] = self::figures($zeroRPredictions);
+
+            foreach (self::ROW_KINDS as $kind) {
+                $mine = static fn (array $prediction): bool => $prediction[2] === $kind;
+                $kindModel = array_values(array_filter($modelPredictions, $mine));
+
+                if ($kindModel !== []) {
+                    $byKind[$kind]['model'][] = self::figures($kindModel);
+                    $byKind[$kind]['zero_r'][] = self::figures(array_values(array_filter($zeroRPredictions, $mine)));
+                }
+            }
+        }
+
+        $failed = static fn (array $row): bool => $row['label'] === LetPredictionService::RESULT_FAIL;
+        $byType = [];
+        foreach (self::ROW_KINDS as $kind) {
+            $kindRows = array_filter($rows, static fn (array $row): bool => self::kindOf($row) === $kind);
+            $byType[$kind] = $byKind[$kind]['model'] === [] ? null : [
+                'rows' => count($kindRows),
+                'failed_rows' => count(array_filter($kindRows, $failed)),
+                'model' => $this->mean($byKind[$kind]['model']),
+                'zero_r' => $this->mean($byKind[$kind]['zero_r']),
+            ];
         }
 
         return [
             'rows' => count($rows),
-            'failed_rows' => count(array_filter($rows, static fn (array $row): bool => $row['label'] === LetPredictionService::RESULT_FAIL)),
+            'failed_rows' => count(array_filter($rows, $failed)),
             'cutoff_p_failed' => LogisticModel::AT_RISK_CUTOFF,
             'folds' => self::FOLDS,
             'repeats' => self::REPEATS,
+            'exam_types' => $examTypes,
             'model' => $this->mean($model),
             'zero_r' => $this->mean($zeroR),
             'per_repeat' => $perRepeat,
+            'by_type' => $byType,
         ];
+    }
+
+    /** A battery semester's row, or a review exam's (pre-test or mock board). */
+    public static function kindOf(array $row): string
+    {
+        return LogisticModel::normalizeExamType($row['features']['exam_type'] ?? null) === LogisticModel::BATTERY_TYPE
+            ? 'battery'
+            : 'review';
     }
 
     /**
      * One repeat: each held-out row's P(FAILED) from the model and from
-     * ZeroR, pooled across the ten folds.
+     * ZeroR, pooled across the ten folds, each with its kind of row.
      *
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
-     * @return array{0: array<string, mixed>, 1: array<string, mixed>}
+     * @param  list<string>  $examTypes
+     * @return array{0: list<array{0: float, 1: bool, 2: string}>, 1: list<array{0: float, 1: bool, 2: string}>}
      */
-    private function repeat(array $rows, int $seed): array
+    private function repeat(array $rows, int $seed, array $examTypes): array
     {
         $random = new JavaRandom($seed);
         $rows = WekaFolds::stratify(WekaFolds::randomize($rows, $random), self::FOLDS);
@@ -81,7 +128,7 @@ class LetModelEvaluator
             $train = WekaFolds::randomize(WekaFolds::train($rows, self::FOLDS, $fold), $random);
             $test = WekaFolds::test($rows, self::FOLDS, $fold);
 
-            $fitted = $this->trainer->fit($train, $this->selector->select($train)['ridge']);
+            $fitted = $this->trainer->fit($train, $this->selector->select($train, $examTypes)['ridge'], $examTypes);
 
             // ZeroR: the class counts of the training rows, each started at 1.
             $failed = count(array_filter($train, static fn (array $row): bool => $row['label'] === LetPredictionService::RESULT_FAIL));
@@ -89,16 +136,17 @@ class LetModelEvaluator
 
             foreach ($test as $row) {
                 $isFailed = $row['label'] === LetPredictionService::RESULT_FAIL;
-                $model[] = [$fitted->probabilityOfFailing($row['features']), $isFailed];
-                $zeroR[] = [$priorFailed, $isFailed];
+                $kind = self::kindOf($row);
+                $model[] = [$fitted->probabilityOfFailing($row['features']), $isFailed, $kind];
+                $zeroR[] = [$priorFailed, $isFailed, $kind];
             }
         }
 
-        return [self::figures($model), self::figures($zeroR)];
+        return [$model, $zeroR];
     }
 
     /**
-     * @param  list<array{0: float, 1: bool}>  $predictions  P(FAILED) and whether the row FAILED
+     * @param  list<array{0: float, 1: bool}>  $predictions  P(FAILED) and whether the row FAILED (anything after those two is ignored)
      * @return array{roc_area: float, failed_recall: float, false_alarm_rate: float, failed_precision: float, failed_f_measure: float, accuracy: float, kappa: float, confusion: array{failed_at_risk: float, failed_not_at_risk: float, passed_at_risk: float, passed_not_at_risk: float}}
      */
     public static function figures(array $predictions): array
