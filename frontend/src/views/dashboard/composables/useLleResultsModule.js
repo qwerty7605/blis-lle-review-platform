@@ -3,9 +3,19 @@ import { useAuthStore } from '@/store/auth.store'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import { decimalProblem, examDateProblem, isFullYear, lengthProblem, useFieldChecks, yearProblem } from '@/utils/fieldChecks'
+import {
+  belowPassingProblem,
+  currentYear,
+  examYearProblem,
+  replacedReason,
+  sittingOrderProblem,
+  unusualReasons,
+} from '@/utils/lleResultChecks'
 
 const SEARCH_DEBOUNCE_MS = 300
 const PAGE_SIZE = 30
+// Every result one student has: a handful at most (one per sitting).
+const STUDENT_RESULTS_LIMIT = 100
 
 // Candidates are usually graduates, so the picker has to look past the enrolled
 // default the directory applies.
@@ -19,7 +29,7 @@ function firstApiError(error, fallbackMessage) {
 }
 
 function currentExamYear() {
-  return new Date().getFullYear()
+  return currentYear()
 }
 
 export function useLleResultsModule() {
@@ -50,17 +60,26 @@ export function useLleResultsModule() {
   })
 
   const selectedStudent = ref(null)
+  // Everything on record for the chosen student, every year: a new result
+  // has to agree with it (nothing after a pass), and one for a year already
+  // on record replaces it.
+  const selectedStudentResults = ref([])
   const studentQuery = ref('')
   const studentMatches = ref([])
   const studentLookupLoading = ref(false)
   const saving = ref(false)
   const saveError = ref('')
   const saveNotice = ref('')
+  // LleResultRules::PASSING_AVERAGES, from the server with the results.
+  const passingAverages = ref({})
+  // The "Check before saving" dialog (LicensureSaveCheck.vue).
+  const confirmOpen = ref(false)
 
   let listToken = 0
   let listTimer = null
   let lookupToken = 0
   let lookupTimer = null
+  let studentResultsToken = 0
 
   // silent: the quiet refresh behind useLiveRefresh (below).
   async function loadResults({ silent = false } = {}) {
@@ -84,6 +103,7 @@ export function useLleResultsModule() {
 
       results.value = Array.isArray(data?.results) ? data.results : []
       meta.value = data?.meta ?? meta.value
+      if (data?.passing_averages) passingAverages.value = data.passing_averages
     } catch (error) {
       if (token !== listToken || silent) return
       resultsError.value = firstApiError(error, 'Unable to load recorded licensure results.')
@@ -162,9 +182,35 @@ export function useLleResultsModule() {
   })
   onUnmounted(() => clearInterval(trainingTimer))
 
-  useLiveRefresh(() => Promise.all([loadResults({ silent: true }), loadModelStatus({ silent: true })]), {
-    when: () => !resultsLoading.value && !saving.value && !modelBusy.value,
+  useLiveRefresh(() => Promise.all([
+    loadResults({ silent: true }),
+    loadModelStatus({ silent: true }),
+    selectedStudent.value ? loadSelectedStudentResults(selectedStudent.value.id) : null,
+  ]), {
+    when: () => !resultsLoading.value && !saving.value && !modelBusy.value && !confirmOpen.value,
   })
+
+  // The checks below read these; until they arrive the server still
+  // refuses what they would have, the page just says it later.
+  async function loadSelectedStudentResults(userId) {
+    const token = ++studentResultsToken
+
+    if (!userId) {
+      selectedStudentResults.value = []
+      return
+    }
+
+    try {
+      const { data } = await services.getLleResults({ user_id: userId, per_page: STUDENT_RESULTS_LIMIT })
+
+      if (token !== studentResultsToken) return
+
+      selectedStudentResults.value = Array.isArray(data?.results) ? data.results : []
+      if (data?.passing_averages) passingAverages.value = data.passing_averages
+    } catch {
+      if (token === studentResultsToken) selectedStudentResults.value = []
+    }
+  }
 
   async function lookupStudents() {
     const term = studentQuery.value.trim()
@@ -199,11 +245,15 @@ export function useLleResultsModule() {
     form.user_id = student?.id ?? null
     studentMatches.value = []
     studentQuery.value = ''
+    selectedStudentResults.value = []
+    loadSelectedStudentResults(student?.id ?? null)
   }
 
   function clearSelectedStudent() {
     selectedStudent.value = null
     form.user_id = null
+    studentResultsToken++
+    selectedStudentResults.value = []
   }
 
   function resetForm() {
@@ -217,25 +267,85 @@ export function useLleResultsModule() {
 
   const canSubmit = computed(() => !saving.value)
 
-  // LleResultController::store.
+  // LleResultController::store and LleResultRules (lleResultChecks.js).
   const resultChecks = useFieldChecks('lle-result', {
     user_id: () => (form.user_id ? '' : 'Search for the student and choose them from the list.'),
-    exam_year: () => yearProblem(form.exam_year, { label: 'Exam year', required: true }),
+    exam_year: () => yearProblem(form.exam_year, { label: 'Exam year', required: true }) || examYearProblem(form.exam_year),
     taken_at: () => examDateProblem(form.taken_at, form.exam_year),
-    rating: () => decimalProblem(form.rating, { label: 'General average', min: 0, max: 100 }),
+    result: () => (selectedStudent.value
+      ? sittingOrderProblem({
+        name: selectedStudent.value.name,
+        examYear: form.exam_year,
+        result: form.result,
+        otherResults: selectedStudentResults.value,
+      })
+      : ''),
+    rating: () => decimalProblem(form.rating, { label: 'General average', min: 0, max: 100 })
+      || belowPassingProblem({ result: form.result, rating: form.rating, examYear: form.exam_year, passingAverages: passingAverages.value }),
     remarks: () => lengthProblem(form.remarks, { label: 'Remarks', max: 1000 }),
   })
+
+  // What can be right but is usually a slip: shown under the form as it is
+  // filled in, and asked about once more when Record is pressed.
+  const flagReasons = computed(() => {
+    if (!selectedStudent.value) return []
+
+    const onRecord = selectedStudentResults.value.find((result) => Number(result.exam_year) === Number(form.exam_year))
+    const replaced = onRecord
+      ? replacedReason({
+        examYear: form.exam_year,
+        recordedResult: onRecord.result,
+        recordedRating: onRecord.rating,
+        result: form.result,
+        rating: form.rating,
+        whole: true,
+      })
+      : ''
+
+    return [
+      ...(replaced ? [replaced] : []),
+      ...unusualReasons({
+        result: form.result,
+        rating: form.rating,
+        examYear: form.exam_year,
+        passingAverages: passingAverages.value,
+        studentStatus: selectedStudent.value.student_status,
+      }),
+    ]
+  })
+
+  const confirmItems = computed(() => (selectedStudent.value
+    ? [{ id: selectedStudent.value.id, name: selectedStudent.value.name, reasons: flagReasons.value }]
+    : []))
 
   async function submitResult() {
     if (!canSubmit.value) return
     if (!resultChecks.check()) return
 
+    if (flagReasons.value.length > 0) {
+      confirmOpen.value = true
+      return
+    }
+
+    await saveResult()
+  }
+
+  function cancelConfirm() {
+    confirmOpen.value = false
+  }
+
+  async function confirmSave() {
+    confirmOpen.value = false
+    await saveResult()
+  }
+
+  async function saveResult() {
     saving.value = true
     saveError.value = ''
     saveNotice.value = ''
 
     try {
-      const { data } = await services.recordLleResult({
+      const { data, status } = await services.recordLleResult({
         user_id: form.user_id,
         exam_year: Number(form.exam_year),
         taken_at: form.taken_at || null,
@@ -246,7 +356,10 @@ export function useLleResultsModule() {
       })
 
       const name = data?.result?.student?.name ?? 'Student'
-      saveNotice.value = `Recorded ${form.result.toUpperCase()} for ${name} (${form.exam_year}).`
+      // 200 rather than 201: the year was already on record and is replaced.
+      saveNotice.value = status === 200
+        ? `Replaced the ${form.exam_year} result for ${name} with ${form.result.toUpperCase()}.`
+        : `Recorded ${form.result.toUpperCase()} for ${name} (${form.exam_year}).`
       resetForm()
       resultChecks.reset()
       page.value = 1
@@ -265,7 +378,12 @@ export function useLleResultsModule() {
 
     try {
       await services.removeLleResult(result.id)
-      await Promise.all([loadResults(), loadModelStatus({ silent: true })])
+      await Promise.all([
+        loadResults(),
+        loadModelStatus({ silent: true }),
+        // It may be what the One Student form is checking against.
+        selectedStudent.value ? loadSelectedStudentResults(selectedStudent.value.id) : null,
+      ])
     } catch (error) {
       resultsError.value = firstApiError(error, 'Unable to remove that result.')
     }
@@ -347,6 +465,11 @@ export function useLleResultsModule() {
     saveError,
     saveNotice,
     submitResult,
+    flagReasons,
+    confirmOpen,
+    confirmItems,
+    cancelConfirm,
+    confirmSave,
     removeResult,
     loadModelStatus,
     modelStatus,

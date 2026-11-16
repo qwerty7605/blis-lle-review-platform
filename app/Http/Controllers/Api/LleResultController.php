@@ -6,12 +6,24 @@ use App\Http\Controllers\Controller;
 use App\Models\Exam;
 use App\Models\LleResult;
 use App\Models\User;
+use App\Services\LleResultRules;
 use App\Support\Search;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
+/**
+ * What a result may say (a pass needs the passing average, nothing comes
+ * after a pass, no sitting in the future) is LleResultRules; both ways of
+ * recording go through it before anything is saved.
+ */
 class LleResultController extends Controller
 {
+    public function __construct(
+        private readonly LleResultRules $rules,
+    ) {
+    }
+
     public function index(Request $request)
     {
         if (!$this->canManageRooms($request->user())) {
@@ -20,6 +32,9 @@ class LleResultController extends Controller
 
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
+            // One student's results: the One Student form checks a new
+            // result against the others.
+            'user_id' => ['nullable', 'integer'],
             'exam_year' => ['nullable', 'integer', 'min:1900', 'max:2999'],
             'result' => ['nullable', Rule::in(LleResult::RESULTS)],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -28,6 +43,10 @@ class LleResultController extends Controller
 
         $results = LleResult::query()
             ->with(['student:id,name,student_id,email,year_level', 'recorder:id,name'])
+            ->when(
+                filled($validated['user_id'] ?? null),
+                fn ($query) => $query->where('user_id', (int) $validated['user_id']),
+            )
             ->when(
                 filled($validated['exam_year'] ?? null),
                 fn ($query) => $query->where('exam_year', (int) $validated['exam_year']),
@@ -63,6 +82,8 @@ class LleResultController extends Controller
                 'from' => $results->firstItem() ?? 0,
                 'to' => $results->lastItem() ?? 0,
             ],
+            // So the page checks against the same mark the server does.
+            'passing_averages' => LleResultRules::PASSING_AVERAGES,
         ]);
 
     }
@@ -93,6 +114,20 @@ class LleResultController extends Controller
             return response()->json([
                 'message' => 'Licensure results can only be recorded against student accounts.',
             ], 422);
+        }
+
+        $examYear = (int) $validated['exam_year'];
+        $problems = $this->rules->sittingProblems($examYear, $validated['taken_at'] ?? null)
+            + $this->rules->resultProblems(
+                (string) $student->name,
+                $examYear,
+                $validated['result'],
+                $validated['rating'] ?? null,
+                $this->rules->otherSittings([(int) $student->id], $examYear)->get($student->id, collect()),
+            );
+
+        if ($problems !== []) {
+            return $this->refused($problems);
         }
 
         // Re-recording the same sitting corrects it rather than duplicating --
@@ -165,7 +200,11 @@ class LleResultController extends Controller
             ]);
 
         if (!filled($validated['admission_year'] ?? null)) {
-            return response()->json(['batches' => $batches, 'students' => []]);
+            return response()->json([
+                'batches' => $batches,
+                'students' => [],
+                'passing_averages' => LleResultRules::PASSING_AVERAGES,
+            ]);
         }
 
         $students = User::query()
@@ -175,12 +214,21 @@ class LleResultController extends Controller
             ->get(['id', 'name', 'student_id', 'year_level', 'student_status', 'archived_at']);
 
         // What is already on record for that sitting, to show and to correct.
-        $recorded = filled($validated['exam_year'] ?? null)
+        $examYear = filled($validated['exam_year'] ?? null) ? (int) $validated['exam_year'] : null;
+        $recorded = $examYear !== null
             ? LleResult::query()
                 ->whereIn('user_id', $students->pluck('id'))
-                ->where('exam_year', (int) $validated['exam_year'])
+                ->where('exam_year', $examYear)
                 ->get(['user_id', 'result', 'rating'])
                 ->keyBy('user_id')
+            : collect();
+
+        // And their other sittings, which this one must agree with: a batch
+        // opened for a later year still shows who passed the year before,
+        // instead of listing them blank (and "Mark the Rest as Failed"
+        // failing them again).
+        $others = $examYear !== null
+            ? $this->rules->otherSittings($students->pluck('id')->map(fn ($id): int => (int) $id)->all(), $examYear)
             : collect();
 
         return response()->json([
@@ -194,7 +242,14 @@ class LleResultController extends Controller
                 'archived_at' => $student->archived_at,
                 'result' => $recorded->get($student->id)?->result,
                 'rating' => $recorded->get($student->id)?->rating,
+                'other_results' => $others->get($student->id, collect())
+                    ->map(fn (LleResult $sitting): array => [
+                        'exam_year' => (int) $sitting->exam_year,
+                        'result' => $sitting->result,
+                    ])
+                    ->values(),
             ]),
+            'passing_averages' => LleResultRules::PASSING_AVERAGES,
         ]);
 
     }
@@ -229,6 +284,34 @@ class LleResultController extends Controller
             return response()->json([
                 'message' => 'Licensure results can only be recorded against student accounts.',
             ], 422);
+        }
+
+        // Checked before anything is saved: one entry that cannot be right
+        // stops the whole list, as any other problem does.
+        $examYear = (int) $validated['exam_year'];
+        $problems = $this->rules->sittingProblems($examYear, $validated['taken_at'] ?? null);
+        $names = User::query()->whereIn('id', $studentIds)->pluck('name', 'id');
+        $others = $this->rules->otherSittings($studentIds->map(fn ($id): int => (int) $id)->all(), $examYear);
+
+        foreach ($entries as $index => $entry) {
+            $userId = (int) $entry['user_id'];
+            $name = (string) $names->get($userId, 'A student');
+            $entryProblems = $this->rules->resultProblems(
+                $name,
+                $examYear,
+                $entry['result'],
+                $entry['rating'] ?? null,
+                $others->get($userId, collect()),
+            );
+
+            foreach ($entryProblems as $field => $problem) {
+                // The page names the student before a rating problem too.
+                $problems["entries.{$index}.{$field}"] = $field === 'rating' ? "{$name}: {$problem}" : $problem;
+            }
+        }
+
+        if ($problems !== []) {
+            return $this->refused($problems);
         }
 
         // All of the list or none of it: half a batch saved would leave
@@ -304,5 +387,19 @@ class LleResultController extends Controller
 
         return response()->json(['message' => 'Result removed.']);
 
+    }
+
+    /**
+     * A 422 shaped like Laravel's own, so the page puts each reason under
+     * the field it names.
+     *
+     * @param  array<string, string>  $problems  field => reason
+     */
+    private function refused(array $problems): JsonResponse
+    {
+        return response()->json([
+            'message' => reset($problems),
+            'errors' => array_map(fn (string $problem): array => [$problem], $problems),
+        ], 422);
     }
 }
