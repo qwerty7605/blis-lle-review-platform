@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\LleTaxonomy;
+use App\Support\SchoolCalendar;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -146,17 +147,16 @@ class Exam extends Model
     }
 
     /**
-     * The term a date falls in: August to December is the first semester of
-     * the school year starting that August, January to July the second
-     * semester of the one that started the August before.
+     * The term a date falls in, by the school calendar an administrator sets
+     * in System Settings (SchoolCalendar; LNU: August to December the 1st
+     * semester of the school year starting that August, January to July the
+     * 2nd semester of the one that started the August before).
      *
      * @return array{school_year: int, semester: int}
      */
     public static function termForDate(CarbonInterface $date): array
     {
-        return $date->month >= 8
-            ? ['school_year' => $date->year, 'semester' => 1]
-            : ['school_year' => $date->year - 1, 'semester' => 2];
+        return app(SchoolCalendar::class)->termFor($date);
     }
 
     /** "1st Semester, AY 2026-2027": a school year is named by the year it starts in. */

@@ -46,19 +46,6 @@ function toExamSchedulePayload(value) {
   return date.toISOString()
 }
 
-// The school year and semester a date falls in: August to December is the
-// first semester of the school year starting that August, January to July the
-// second semester of the one before. The server files an exam the same way
-// (Exam::termForDate).
-function termForDate(value) {
-  const date = value ? new Date(value) : new Date()
-  const at = Number.isNaN(date.getTime()) ? new Date() : date
-
-  return at.getMonth() >= 7
-    ? { school_year: at.getFullYear(), semester: 1 }
-    : { school_year: at.getFullYear() - 1, semester: 2 }
-}
-
 function currentDateTimeLocalValue() {
   const now = new Date()
   now.setSeconds(0, 0)
@@ -316,10 +303,9 @@ export function useExamsModule() {
   })
   const seriesForType = computed(() => examSeries.value.filter((series) => series.type === examForm.exam_type))
 
-  // The semester an exam counts toward in the Estimated Outcome is not on the
-  // form: a new exam is filed by the server from its start date, and an
-  // edited one keeps its own unless its start date moves.
-  let examStartAsOpened = ''
+  // The term an exam is filed under is not on the form: the server files it
+  // from its start date by the school calendar in System Settings, on
+  // creation and whenever an edit moves the start date.
 
   const groupedExamQuestionBanks = computed(() => {
     const groups = new Map()
@@ -479,7 +465,6 @@ export function useExamsModule() {
     examForm.exam_series_id = exam.exam_series_id ?? null
     newSeriesName.value = ''
     seriesError.value = ''
-    examStartAsOpened = examForm.schedule_start_at
     examForm.room_ids = (exam.rooms ?? []).map((room) => room.id)
     examChecks.reset()
     oneTakeOnlyAsOpened = examForm.one_take_only
@@ -719,10 +704,6 @@ export function useExamsModule() {
       exam_type: examForm.exam_type,
       exam_series_id: formNeedsSeries.value ? examForm.exam_series_id : null,
       room_ids: [...examForm.room_ids],
-    }
-
-    if (examForm.id && scheduleStartAt && examForm.schedule_start_at !== examStartAsOpened) {
-      Object.assign(payload, termForDate(scheduleStartAt))
     }
 
     try {

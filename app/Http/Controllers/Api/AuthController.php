@@ -7,6 +7,7 @@ use App\Models\SystemSetting;
 use App\Models\User;
 use App\Rules\InstitutionalEmail;
 use App\Services\AuthTokenCookieService;
+use App\Support\SchoolCalendar;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -92,9 +93,10 @@ class AuthController extends Controller
             'student_id' => trim((string) $validated['student_id']),
             'year_level' => $yearLevel,
             // The cohort anchor. Nobody is asked for it at registration, so it is
-            // derived the same way the lifecycle migration backfilled existing
-            // rows: a second year signing up this year was admitted last year.
-            'admission_year' => (int) now()->year - ($yearLevel - 1),
+            // worked out from the school year (SchoolCalendar), not the calendar
+            // year: a second year signing up in January 2027 is in school year
+            // 2026, so was admitted in 2025.
+            'admission_year' => app(SchoolCalendar::class)->schoolYearFor(now()) - ($yearLevel - 1),
             'email' => $validated['email'],
             'role' => User::ROLE_STUDENT,
             'is_active' => true,

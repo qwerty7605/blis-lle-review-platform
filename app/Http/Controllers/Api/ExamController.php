@@ -13,6 +13,7 @@ use App\Services\ExamEditRules;
 use App\Services\ExamQuestionBanks;
 use App\Services\ExamSeriesRules;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -384,6 +385,21 @@ class ExamController extends Controller
         $exam->schedule_start_at = $resolvedScheduleStart;
         $exam->schedule_end_at = $resolvedScheduleEnd;
         $exam->delivery_mode = Exam::DELIVERY_MODE_OPEN_NAVIGATION;
+
+        // A start date that moves files the exam under the term of its new
+        // date, by the school calendar, unless the request names the term
+        // itself. (The form used to work the term out in the browser, with
+        // the calendar written into it.)
+        if (
+            !array_key_exists('school_year', $validated)
+            && !array_key_exists('semester', $validated)
+            && $resolvedScheduleStart !== null
+            && ($currentScheduleStart === null || !Carbon::parse($resolvedScheduleStart)->equalTo($currentScheduleStart))
+        ) {
+            $term = Exam::termForDate(Carbon::parse($resolvedScheduleStart));
+            $exam->school_year = $term['school_year'];
+            $exam->semester = $term['semester'];
+        }
 
         $exam->save();
         $exam->syncQuestionBanks($resolvedQuestionBankIds, $itemSplit);
