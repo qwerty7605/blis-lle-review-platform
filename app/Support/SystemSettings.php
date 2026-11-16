@@ -22,7 +22,10 @@ class SystemSettings
      */
     public const DEFAULTS = [
         'platform_name' => 'LNU LLE Platform',
-        'academic_term' => 'AY 2025-2026',
+        // The school calendar (SchoolCalendar): the month each semester
+        // starts in. They replaced a typed "Academic Term" that nothing read.
+        'first_semester_start_month' => SchoolCalendar::DEFAULT_FIRST_SEMESTER_MONTH,
+        'second_semester_start_month' => SchoolCalendar::DEFAULT_SECOND_SEMESTER_MONTH,
         'allow_public_registration' => true,
         'announcement_banner' => '',
         'terms_of_use_text' => self::DEFAULT_TERMS_OF_USE,
@@ -32,6 +35,19 @@ class SystemSettings
     /** Settings stored as '1' / '0' and answered as true / false. */
     public const BOOLEAN_KEYS = [
         'allow_public_registration',
+    ];
+
+    /** Settings stored as digits and answered as integers. */
+    public const INTEGER_KEYS = [
+        'first_semester_start_month',
+        'second_semester_start_month',
+    ];
+
+    /** What raw() reads, in one query. */
+    private const MEMOISED_KEYS = [
+        'announcement_banner',
+        'first_semester_start_month',
+        'second_semester_start_month',
     ];
 
     public const DEFAULT_TERMS_OF_USE = <<<'TEXT'
@@ -85,17 +101,37 @@ class SystemSettings
         return trim($this->raw('announcement_banner', ''));
     }
 
+    /**
+     * The month each semester starts in. A stored pair that is not a
+     * calendar (out of range, or both the same month) reads as the default,
+     * so a bad row can never stop exams being filed.
+     *
+     * @return array{first: int, second: int}
+     */
+    public function semesterStartMonths(): array
+    {
+        $first = $this->raw('first_semester_start_month', (string) SchoolCalendar::DEFAULT_FIRST_SEMESTER_MONTH);
+        $second = $this->raw('second_semester_start_month', (string) SchoolCalendar::DEFAULT_SECOND_SEMESTER_MONTH);
+
+        if (!SchoolCalendar::validMonths($first, $second)) {
+            return ['first' => SchoolCalendar::DEFAULT_FIRST_SEMESTER_MONTH, 'second' => SchoolCalendar::DEFAULT_SECOND_SEMESTER_MONTH];
+        }
+
+        return ['first' => (int) $first, 'second' => (int) $second];
+    }
+
     private function raw(string $key, string $default): string
     {
         if ($this->cache === null) {
             try {
                 $this->cache = SystemSetting::query()
-                    ->whereIn('key', ['announcement_banner'])
+                    ->whereIn('key', self::MEMOISED_KEYS)
                     ->pluck('value', 'key')
                     ->all();
             } catch (Throwable) {
                 // Before the table exists (a fresh install mid-migration) the
-                // safe answer is "no banner", not an error on every page.
+                // safe answer is the defaults (no banner, the usual calendar),
+                // not an error on every page.
                 $this->cache = [];
             }
         }

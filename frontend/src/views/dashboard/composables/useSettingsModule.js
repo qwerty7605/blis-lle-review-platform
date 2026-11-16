@@ -1,6 +1,12 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useDashboardDataServices } from './useDashboardDataServices'
-import { lengthProblem, requiredProblem, useFieldChecks } from '@/utils/fieldChecks'
+import { early, lengthProblem, requiredProblem, useFieldChecks } from '@/utils/fieldChecks'
+
+// The months a semester can start in, for the School Calendar pickers.
+export const MONTH_OPTIONS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+].map((label, index) => ({ value: index + 1, label }))
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -21,9 +27,13 @@ export function useSettingsModule({ enabled = () => true } = {}) {
   const settingsError = ref('')
   const settingsMessage = ref('')
   const settingsCanEdit = ref(false)
+  // Today's term by the saved calendar ("1st Semester, AY 2026-2027"), as
+  // the server works it out.
+  const currentTerm = ref('')
   const settingsForm = reactive({
     platform_name: '',
-    academic_term: '',
+    first_semester_start_month: 8,
+    second_semester_start_month: 1,
     allow_public_registration: true,
     announcement_banner: '',
     terms_of_use_text: '',
@@ -33,7 +43,10 @@ export function useSettingsModule({ enabled = () => true } = {}) {
   // SettingsController::updateSystem.
   const settingsChecks = useFieldChecks('settings', {
     platform_name: () => requiredProblem(settingsForm.platform_name, 'Enter the platform name.'),
-    academic_term: () => requiredProblem(settingsForm.academic_term, 'Enter the academic term, like 2026-2027 1st Semester.'),
+    // Shown as soon as the two match: another pick is the only fix.
+    second_semester_start_month: () => (Number(settingsForm.first_semester_start_month) === Number(settingsForm.second_semester_start_month)
+      ? early('The 2nd semester cannot start in the same month as the 1st.')
+      : ''),
     announcement_banner: () => lengthProblem(settingsForm.announcement_banner, { label: 'The announcement', max: 500 }),
     terms_of_use_text: () => requiredProblem(settingsForm.terms_of_use_text, 'The Terms of Use cannot be empty: students agree to them when they sign up.')
       || lengthProblem(settingsForm.terms_of_use_text, { label: 'The Terms of Use', max: 20000 }),
@@ -51,7 +64,9 @@ export function useSettingsModule({ enabled = () => true } = {}) {
       const settings = data.settings ?? {}
       settingsCanEdit.value = Boolean(data.can_edit)
       settingsForm.platform_name = settings.platform_name ?? ''
-      settingsForm.academic_term = settings.academic_term ?? ''
+      settingsForm.first_semester_start_month = Number(settings.first_semester_start_month) || 8
+      settingsForm.second_semester_start_month = Number(settings.second_semester_start_month) || 1
+      currentTerm.value = data.current_term?.label ?? ''
       settingsForm.allow_public_registration = Boolean(settings.allow_public_registration)
       settingsForm.announcement_banner = settings.announcement_banner ?? ''
       settingsForm.terms_of_use_text = settings.terms_of_use_text ?? ''
@@ -77,15 +92,17 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     settingsSaving.value = true
 
     try {
-      await services.saveSystemSettings({
+      const { data } = await services.saveSystemSettings({
         platform_name: settingsForm.platform_name.trim(),
-        academic_term: settingsForm.academic_term.trim(),
+        first_semester_start_month: Number(settingsForm.first_semester_start_month),
+        second_semester_start_month: Number(settingsForm.second_semester_start_month),
         allow_public_registration: settingsForm.allow_public_registration,
         announcement_banner: settingsForm.announcement_banner.trim(),
         terms_of_use_text: termsOfUse,
         privacy_policy_text: privacyPolicy,
       })
       settingsMessage.value = 'System settings updated.'
+      if (data?.current_term?.label) currentTerm.value = data.current_term.label
       // The banner above every page is read by the layout, which does not
       // know these were saved: tell it, so the admin sees the announcement
       // they just wrote without reloading.
@@ -108,6 +125,7 @@ export function useSettingsModule({ enabled = () => true } = {}) {
     settingsMessage,
     settingsCanEdit,
     settingsForm,
+    currentTerm,
     settingsChecks,
     loadSystemSettings,
     saveSystemSettings,

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\Sanctum;
@@ -80,10 +81,11 @@ class RegistrationEmailVerificationTest extends TestCase
     {
         // A null student_status reads as "--" in the staff directory and
         // matches no student_status filter, so the students who just signed up
-        // would be the ones staff cannot find. admission_year is derived the
-        // way the lifecycle migration backfilled it: a second year signing up
-        // this year was admitted last year.
+        // would be the ones staff cannot find. admission_year comes from the
+        // school year (SchoolCalendar): a second year signing up in school
+        // year 2026 was admitted in 2025.
         Notification::fake();
+        $this->travelTo(Carbon::parse('2026-10-20 09:00', 'Asia/Manila'));
 
         $this->postJson('/api/auth/register', $this->payload(['year_level' => 2]))
             ->assertStatus(201);
@@ -92,7 +94,7 @@ class RegistrationEmailVerificationTest extends TestCase
 
         $this->assertSame(User::STUDENT_STATUS_ENROLLED, $user->student_status);
         $this->assertNull($user->archived_at, 'an enrolled student is not archived');
-        $this->assertSame(now()->year - 1, $user->admission_year);
+        $this->assertSame(2025, $user->admission_year);
     }
 
     public function test_a_self_registered_student_is_visible_under_the_enrolled_filter(): void

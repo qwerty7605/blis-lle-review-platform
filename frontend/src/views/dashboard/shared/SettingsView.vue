@@ -38,11 +38,48 @@
             <FieldError :checks="settingsChecks" field="platform_name" />
           </label>
 
-          <label class="field-stack">
-            <span class="field-label">Academic Term</span>
-            <input v-model.trim="settingsForm.academic_term" type="text" class="text-input" maxlength="255" :disabled="!settingsCanEdit" v-bind="settingsChecks.bind('academic_term')" />
-            <FieldError :checks="settingsChecks" field="academic_term" />
-          </label>
+          <fieldset class="settings-calendar">
+            <legend class="field-label">
+              School Calendar
+              <InfoTip
+                label="How the school calendar works"
+                text="Each semester runs until the other one starts, so with no midyear term June and July belong to the 2nd semester. A school year is named by the year its 1st semester starts in: January 2027 is the 2nd semester of AY 2026-2027."
+              />
+            </legend>
+
+            <div class="settings-calendar-months">
+              <label class="field-stack">
+                <span class="settings-calendar-label">1st Semester Starts</span>
+                <select
+                  v-model.number="settingsForm.first_semester_start_month"
+                  class="text-input"
+                  :disabled="!settingsCanEdit"
+                  v-bind="settingsChecks.bind('first_semester_start_month')"
+                >
+                  <option v-for="month in MONTH_OPTIONS" :key="month.value" :value="month.value">{{ month.label }}</option>
+                </select>
+                <FieldError :checks="settingsChecks" field="first_semester_start_month" />
+              </label>
+
+              <label class="field-stack">
+                <span class="settings-calendar-label">2nd Semester Starts</span>
+                <select
+                  v-model.number="settingsForm.second_semester_start_month"
+                  class="text-input"
+                  :disabled="!settingsCanEdit"
+                  v-bind="settingsChecks.bind('second_semester_start_month')"
+                >
+                  <option v-for="month in MONTH_OPTIONS" :key="month.value" :value="month.value">{{ month.label }}</option>
+                </select>
+                <FieldError :checks="settingsChecks" field="second_semester_start_month" />
+              </label>
+            </div>
+
+            <p v-if="currentTerm" class="settings-calendar-now">Today is in the <strong>{{ currentTerm }}</strong>.</p>
+            <p class="settings-calendar-note">
+              Exams created from now on are filed under the term of their start date by these months, and a student who signs up gets the admission year of the current school year. Exams already saved keep their term.
+            </p>
+          </fieldset>
 
           <label class="check-item">
             <input v-model="settingsForm.allow_public_registration" type="checkbox" :disabled="!settingsCanEdit" />
@@ -120,8 +157,9 @@
 import { computed } from 'vue'
 import { AlertCircle, CheckCircle2, RefreshCw } from 'lucide-vue-next'
 import { useAuthStore } from '@/store/auth.store'
-import { useSettingsModule } from '../composables/useSettingsModule'
+import { MONTH_OPTIONS, useSettingsModule } from '../composables/useSettingsModule'
 import FieldError from '@/components/FieldError.vue'
+import InfoTip from '@/components/InfoTip.vue'
 import AccountSessions from './AccountSessions.vue'
 import AccountSettings from './AccountSettings.vue'
 import ExamDefaultsCard from './ExamDefaultsCard.vue'
@@ -139,6 +177,7 @@ const {
   settingsMessage,
   settingsCanEdit,
   settingsForm,
+  currentTerm,
   settingsChecks,
   loadSystemSettings,
   saveSystemSettings,
@@ -175,5 +214,57 @@ const readOnlyDocuments = computed(() => [
 
 .settings-read-text.is-empty {
   color: var(--ink-muted);
+}
+
+.settings-calendar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.settings-calendar legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  padding: 0;
+}
+
+.settings-calendar-months {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start; /* a message under one picker must not push the other down */
+  gap: 12px;
+}
+
+.settings-calendar-label {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.settings-calendar-now,
+.settings-calendar-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-calendar-now {
+  color: var(--ink);
+}
+
+.settings-calendar-note {
+  color: var(--ink-muted);
+}
+
+@media (max-width: 480px) {
+  .settings-calendar-months {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>
