@@ -54,21 +54,53 @@
       <p class="lleb-count" role="status">
         <strong>{{ counts.pass }}</strong> passed &middot; <strong>{{ counts.fail }}</strong> failed &middot;
         <strong>{{ counts.blank }}</strong> left blank
+        <template v-if="counts.locked > 0"> &middot; <strong>{{ counts.locked }}</strong> passed in an earlier year</template>
       </p>
 
       <ul class="lleb-list">
-        <li v-for="row in visibleRows" :key="row.id" class="lleb-row" :class="{ 'is-changed': isChanged(row) }">
+        <li
+          v-for="row in visibleRows"
+          :key="row.id"
+          class="lleb-row"
+          :class="{ 'is-changed': isChanged(row), 'is-flagged': rowFlags(row).length > 0, 'is-locked': isLocked(row) }"
+        >
           <span class="lleb-row-copy">
             <strong>{{ row.name }}</strong>
             <span>
               {{ row.student_id || 'No student ID' }}
               <template v-if="row.recorded"> &middot; on record as {{ row.recorded === 'pass' ? 'Passed' : 'Failed' }}</template>
             </span>
+            <!-- Nothing comes after a pass (LleResultRules), so these are
+                 locked rather than listed blank for "Mark the Rest". -->
+            <span v-if="isLocked(row)" class="lleb-row-note">
+              Passed in {{ lockedBy(row).exam_year }}. Nothing can be recorded after a pass.
+            </span>
+            <span v-else-if="laterFor(row)" class="lleb-row-note">
+              Has a result for {{ laterFor(row).exam_year }}, so {{ examYear }} can only be Failed.
+            </span>
+            <span v-for="reason in rowFlags(row)" :key="reason" class="lleb-row-flag">
+              <AlertTriangle :size="13" aria-hidden="true" />
+              {{ reason }}
+            </span>
           </span>
 
           <span class="lleb-choice" role="group" :aria-label="`Result for ${row.name}`">
-            <button type="button" class="lleb-choice-btn is-pass" :class="{ active: row.result === 'pass' }" :aria-pressed="row.result === 'pass'" @click="setResult(row, 'pass')">Passed</button>
-            <button type="button" class="lleb-choice-btn is-fail" :class="{ active: row.result === 'fail' }" :aria-pressed="row.result === 'fail'" @click="setResult(row, 'fail')">Failed</button>
+            <button
+              type="button"
+              class="lleb-choice-btn is-pass"
+              :class="{ active: row.result === 'pass' }"
+              :aria-pressed="row.result === 'pass'"
+              :disabled="isLocked(row) || Boolean(laterFor(row))"
+              @click="setResult(row, 'pass')"
+            >Passed</button>
+            <button
+              type="button"
+              class="lleb-choice-btn is-fail"
+              :class="{ active: row.result === 'fail' }"
+              :aria-pressed="row.result === 'fail'"
+              :disabled="isLocked(row)"
+              @click="setResult(row, 'fail')"
+            >Failed</button>
           </span>
 
           <input
@@ -84,7 +116,8 @@
             max="100"
             placeholder="Average"
             :aria-label="`General average for ${row.name}, optional`"
-            :disabled="!row.result"
+            :disabled="!row.result || isLocked(row)"
+            @blur="row.ratingLeft = true"
           />
         </li>
       </ul>
@@ -108,6 +141,8 @@
         </button>
       </div>
     </div>
+
+    <LicensureSaveCheck :open="confirmOpen" :items="flaggedItems" @back="confirmOpen = false" @confirm="confirmSave" />
   </div>
 </template>
 
@@ -115,9 +150,19 @@
 import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, onMounted, ref, watch } from 'vue'
-import { AlertCircle, CheckCircle2, RefreshCw, Save, Search } from 'lucide-vue-next'
+import { AlertCircle, AlertTriangle, CheckCircle2, RefreshCw, Save, Search } from 'lucide-vue-next'
 import { useDashboardDataServices } from '../composables/useDashboardDataServices'
 import { decimalProblem, examDateProblem, problemMessage, useFieldChecks, yearProblem } from '@/utils/fieldChecks'
+import {
+  belowPassingProblem,
+  currentYear,
+  earlierPass,
+  examYearProblem,
+  laterSitting,
+  replacedReason,
+  unusualReasons,
+} from '@/utils/lleResultChecks'
+import LicensureSaveCheck from './LicensureSaveCheck.vue'
 
 const emit = defineEmits(['saved'])
 const services = useDashboardDataServices()
@@ -125,7 +170,7 @@ const services = useDashboardDataServices()
 const batches = ref([])
 const batchesLoading = ref(false)
 const admissionYear = ref('')
-const examYear = ref(new Date().getFullYear())
+const examYear = ref(currentYear())
 const takenAt = ref('')
 
 const rows = ref([])
@@ -135,6 +180,13 @@ const search = ref('')
 const saving = ref(false)
 const saveError = ref('')
 const saveNotice = ref('')
+// LleResultRules::PASSING_AVERAGES, sent with the roster.
+const passingAverages = ref({})
+// Save was pressed: every average's problem shows, not only those whose
+// field was left.
+const saveTried = ref(false)
+// The "Check before saving" dialog (LicensureSaveCheck.vue).
+const confirmOpen = ref(false)
 
 function firstApiError(error, fallback) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -146,15 +198,20 @@ const ratingText = (value) => (value === null || value === undefined || value ==
 
 // One row per student: what is on record for this exam year (`recorded`,
 // `recordedRating`), and what the page now says (`result`, `rating`).
+// `others` is their results for other years, which this one must agree
+// with; `status` whether they are marked graduated.
 function toRow(student) {
   return {
     id: student.id,
     name: student.name,
     student_id: student.student_id,
+    status: student.student_status ?? null,
+    others: Array.isArray(student.other_results) ? student.other_results : [],
     recorded: student.result ?? null,
     recordedRating: ratingText(student.rating),
     result: student.result ?? null,
     rating: ratingText(student.rating),
+    ratingLeft: false,
   }
 }
 
@@ -164,6 +221,7 @@ async function loadRoster() {
   const token = ++rosterToken
   loadError.value = ''
   saveNotice.value = ''
+  saveTried.value = false
 
   if (!admissionYear.value) {
     rows.value = []
@@ -183,6 +241,7 @@ async function loadRoster() {
 
     batches.value = data?.batches ?? batches.value
     rows.value = (data?.students ?? []).map(toRow)
+    if (data?.passing_averages) passingAverages.value = data.passing_averages
   } catch (error) {
     if (token === rosterToken) loadError.value = firstApiError(error, 'Unable to load that batch.')
   } finally {
@@ -196,6 +255,7 @@ async function loadBatches() {
   try {
     const { data } = await services.getLleBatch()
     batches.value = data?.batches ?? []
+    if (data?.passing_averages) passingAverages.value = data.passing_averages
   } catch (error) {
     loadError.value = firstApiError(error, 'Unable to load the batches.')
   } finally {
@@ -219,16 +279,26 @@ const visibleRows = computed(() => {
   return rows.value.filter((row) => [row.name, row.student_id].some((value) => String(value ?? '').toLowerCase().includes(needle)))
 })
 
+// Nothing comes after a pass (LleResultRules): a student who passed in an
+// earlier year is locked, and one with a result in a later year cannot pass
+// this one.
+const lockedBy = (row) => earlierPass(row.others, examYear.value)
+const laterFor = (row) => laterSitting(row.others, examYear.value)
+const isLocked = (row) => Boolean(lockedBy(row))
+
 const counts = computed(() => ({
   pass: rows.value.filter((row) => row.result === 'pass').length,
   fail: rows.value.filter((row) => row.result === 'fail').length,
-  blank: rows.value.filter((row) => !row.result).length,
+  blank: rows.value.filter((row) => !row.result && !isLocked(row)).length,
+  locked: rows.value.filter((row) => !row.result && isLocked(row)).length,
 }))
 
 // Pressing the chosen result again clears it: back to "did not take it".
 // A result already on record cannot be cleared here, only corrected; removing
 // one is done from the list of recorded results below.
 function setResult(row, result) {
+  if (isLocked(row) || (result === 'pass' && laterFor(row))) return
+
   if (row.result === result && !row.recorded) {
     row.result = null
     row.rating = ''
@@ -252,9 +322,12 @@ const changedEntries = computed(() => rows.value.filter(isChanged).map((row) => 
 
 const hasChanges = computed(() => rows.value.some((row) => row.result !== row.recorded || ratingText(row.rating) !== row.recordedRating))
 
+// Skips the rows that result cannot be given to, as their buttons do.
 function markBlank(result) {
   for (const row of rows.value) {
-    if (!row.result) row.result = result
+    if (row.result || isLocked(row) || (result === 'pass' && laterFor(row))) continue
+
+    row.result = result
   }
 }
 
@@ -267,26 +340,94 @@ function resetRows() {
 
 const canSave = computed(() => !saving.value && changedEntries.value.length > 0)
 
-// LleResultController::storeBatch. A rating is checked only on a student
-// being given a result: the field is off for the rest.
-function ratingProblemFor(row) {
-  return row.result ? problemMessage(decimalProblem(row.rating, { label: 'General average', min: 0, max: 100 })) : ''
+// LleResultController::storeBatch and LleResultRules. A rating is checked
+// only on a student being given a result: the field is off for the rest.
+// A number that is not an average shows at once; a pass under the passing
+// average once its field is left (7 on the way to 78 is not one) or Save
+// is pressed.
+function ratingProblem(row) {
+  if (!row.result) return { message: '', early: false }
+
+  const format = problemMessage(decimalProblem(row.rating, { label: 'General average', min: 0, max: 100 }))
+  if (format) return { message: format, early: true }
+
+  return {
+    message: belowPassingProblem({ result: row.result, rating: row.rating, examYear: examYear.value, passingAverages: passingAverages.value }),
+    early: false,
+  }
 }
 
+function ratingProblemFor(row) {
+  const { message, early } = ratingProblem(row)
+
+  return message && (early || row.ratingLeft || saveTried.value) ? message : ''
+}
+
+// Can be right, but usually a slip: marked on the row as it is filled in,
+// and listed in one dialog when Save is pressed. Only rows that will be sent.
+function rowFlags(row) {
+  if (!isChanged(row)) return []
+
+  const replaced = replacedReason({
+    examYear: examYear.value,
+    recordedResult: row.recorded,
+    recordedRating: row.recordedRating,
+    result: row.result,
+    rating: row.rating,
+  })
+
+  return [
+    ...(replaced ? [replaced] : []),
+    ...unusualReasons({
+      result: row.result,
+      rating: row.rating,
+      examYear: examYear.value,
+      passingAverages: passingAverages.value,
+      studentStatus: row.status,
+    }),
+  ]
+}
+
+const flaggedItems = computed(() => rows.value
+  .map((row) => ({ id: row.id, name: row.name, reasons: rowFlags(row) }))
+  .filter((item) => item.reasons.length > 0))
+
 const checks = useFieldChecks('lle-batch', {
-  exam_year: () => yearProblem(examYear.value, { label: 'Exam year', required: true }),
+  exam_year: () => yearProblem(examYear.value, { label: 'Exam year', required: true }) || examYearProblem(examYear.value),
   taken_at: () => examDateProblem(takenAt.value, examYear.value),
   ratings: () => {
-    const row = rows.value.find((candidate) => ratingProblemFor(candidate))
+    const withProblem = rows.value.filter((row) => ratingProblem(row).message)
+    if (withProblem.length === 0) return ''
 
-    return row ? { message: `${row.name}: ${ratingProblemFor(row)}`, early: true } : ''
+    // The first one already showing on its row, so the line under the list
+    // never names a student whose field does not show it yet.
+    const showing = withProblem.find((row) => ratingProblemFor(row))
+    const row = showing ?? withProblem[0]
+
+    return { message: `${row.name}: ${ratingProblem(row).message}`, early: Boolean(showing) }
   },
 })
 
 async function save() {
   if (!canSave.value) return
+
+  saveTried.value = true
   if (!checks.check()) return
 
+  if (flaggedItems.value.length > 0) {
+    confirmOpen.value = true
+    return
+  }
+
+  await record()
+}
+
+async function confirmSave() {
+  confirmOpen.value = false
+  await record()
+}
+
+async function record() {
   saving.value = true
   saveError.value = ''
   saveNotice.value = ''
@@ -437,6 +578,36 @@ async function save() {
   overflow-wrap: anywhere;
 }
 
+/* To be checked before saving (the dialog lists the same). After
+   .is-changed, which a flagged row always is too. */
+.lleb-row.is-flagged {
+  border-left-color: var(--dk-line-c98a1e-a55, rgba(201, 138, 30, 0.55));
+  background: var(--dk-bg-c98a1e-a07, rgba(201, 138, 30, 0.07));
+}
+
+.lleb-row-copy .lleb-row-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.lleb-row-flag svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--dk-fg-9a6a0c, #9a6a0c);
+}
+
+.lleb-row-copy .lleb-row-note {
+  line-height: 1.4;
+}
+
+.lleb-choice-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .lleb-choice {
   flex: none;
   display: inline-flex;
@@ -472,9 +643,12 @@ async function save() {
   color: #ffffff;
 }
 
+/* min-width: the shared .text-input holds every field to 180px, which on a
+   phone squeezed the Passed/Failed pair until "Failed" was cut off. */
 .lleb-rating {
   flex: none;
   width: 104px;
+  min-width: 0;
 }
 
 @media (min-width: 720px) {

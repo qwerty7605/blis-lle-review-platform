@@ -9,6 +9,8 @@ use App\Models\LleResult;
 use App\Models\QuestionBank;
 use App\Models\Room;
 use App\Models\User;
+use App\Services\LleResultRules;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -78,17 +80,189 @@ class LleResultTest extends TestCase
 
         $this->postJson('/api/lle-results', [
             'user_id' => $student->id,
-            'exam_year' => 2026,
+            'exam_year' => 2025,
             'result' => LleResult::RESULT_FAIL,
         ])->assertCreated();
 
         $this->postJson('/api/lle-results', [
             'user_id' => $student->id,
-            'exam_year' => 2027,
+            'exam_year' => 2026,
             'result' => LleResult::RESULT_PASS,
         ])->assertCreated();
 
         $this->assertSame(2, LleResult::where('user_id', $student->id)->count());
+    }
+
+    public function test_a_pass_needs_the_passing_average_but_a_fail_may_have_more(): void
+    {
+        $staff = $this->makeUser('lle-staff-mark@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $low = $this->makeUser('lle-low@example.com', User::ROLE_STUDENT, '2301910', 4);
+        $exact = $this->makeUser('lle-exact@example.com', User::ROLE_STUDENT, '2301911', 4);
+        $failedHigh = $this->makeUser('lle-failed-high@example.com', User::ROLE_STUDENT, '2301912', 4);
+        $noAverage = $this->makeUser('lle-no-average@example.com', User::ROLE_STUDENT, '2301913', 4);
+
+        Sanctum::actingAs($staff);
+
+        // R.A. 9246, Sec. 17: under 75 cannot pass.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $low->id,
+            'exam_year' => 2026,
+            'result' => LleResult::RESULT_PASS,
+            'rating' => 74.99,
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['rating'])
+            ->assertJsonPath('errors.rating.0', 'A general average under 75 is a failing grade (R.A. 9246, Sec. 17). Check the result or the average.');
+
+        $this->postJson('/api/lle-results', [
+            'user_id' => $exact->id,
+            'exam_year' => 2026,
+            'result' => LleResult::RESULT_PASS,
+            'rating' => 75,
+        ])->assertCreated();
+
+        // 75 or more and still failed: a subject under 50%. Real, so kept.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $failedHigh->id,
+            'exam_year' => 2026,
+            'result' => LleResult::RESULT_FAIL,
+            'rating' => 80.5,
+        ])->assertCreated();
+
+        // The average is often not known; then there is nothing to check.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $noAverage->id,
+            'exam_year' => 2026,
+            'result' => LleResult::RESULT_PASS,
+        ])->assertCreated();
+
+        $this->assertDatabaseMissing('lle_results', ['user_id' => $low->id]);
+    }
+
+    public function test_the_passing_average_belongs_to_the_year_of_the_sitting(): void
+    {
+        $this->assertSame(75.0, LleResultRules::passingAverageFor(2004));
+        $this->assertSame(75.0, LleResultRules::passingAverageFor(2026));
+        // Before R.A. 9246 there is no mark here to check against.
+        $this->assertNull(LleResultRules::passingAverageFor(2003));
+    }
+
+    public function test_nothing_can_be_recorded_after_a_pass(): void
+    {
+        $staff = $this->makeUser('lle-staff-after@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-licensed@example.com', User::ROLE_STUDENT, '2301914', 4);
+
+        LleResult::create(['user_id' => $student->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_PASS]);
+
+        Sanctum::actingAs($staff);
+
+        foreach ([LleResult::RESULT_FAIL, LleResult::RESULT_PASS] as $result) {
+            $this->postJson('/api/lle-results', [
+                'user_id' => $student->id,
+                'exam_year' => 2026,
+                'result' => $result,
+            ])
+                ->assertStatus(422)
+                ->assertJsonPath('errors.result.0', 'Lle-licensed User passed the LLE in 2025, so no result can be recorded for a later year.');
+        }
+
+        // Correcting the pass itself is still allowed.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $student->id,
+            'exam_year' => 2025,
+            'result' => LleResult::RESULT_PASS,
+            'rating' => 81.2,
+        ])->assertOk();
+
+        $this->assertSame(1, LleResult::where('user_id', $student->id)->count());
+    }
+
+    public function test_a_pass_cannot_come_before_another_sitting(): void
+    {
+        $staff = $this->makeUser('lle-staff-before@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-retaker@example.com', User::ROLE_STUDENT, '2301915', 4);
+
+        LleResult::create(['user_id' => $student->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_FAIL]);
+
+        Sanctum::actingAs($staff);
+
+        $this->postJson('/api/lle-results', [
+            'user_id' => $student->id,
+            'exam_year' => 2025,
+            'result' => LleResult::RESULT_PASS,
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.result.0', 'Lle-retaker User already has a result for 2026, and nothing can come after a pass. Record 2025 as Failed, or check the year.');
+
+        // Failing twice is a real history.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $student->id,
+            'exam_year' => 2025,
+            'result' => LleResult::RESULT_FAIL,
+        ])->assertCreated();
+    }
+
+    public function test_the_sitting_cannot_be_in_the_future_or_outside_its_year(): void
+    {
+        // 10 a.m. in Manila on 16 November 2026.
+        $this->travelTo(CarbonImmutable::parse('2026-11-16 10:00', 'Asia/Manila'));
+
+        $staff = $this->makeUser('lle-staff-dates@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-dates@example.com', User::ROLE_STUDENT, '2301916', 4);
+
+        Sanctum::actingAs($staff);
+
+        $payload = ['user_id' => $student->id, 'result' => LleResult::RESULT_FAIL];
+
+        $this->postJson('/api/lle-results', $payload + ['exam_year' => 2027])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.exam_year.0', 'The exam year cannot be later than this year (2026).');
+
+        $this->postJson('/api/lle-results', $payload + ['exam_year' => 2026, 'taken_at' => '2026-11-17'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.taken_at.0', 'Date taken cannot be later than today.');
+
+        $this->postJson('/api/lle-results', $payload + ['exam_year' => 2026, 'taken_at' => '2025-09-27'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.taken_at.0', 'This date is in 2025, but the exam year is 2026.');
+
+        $this->assertDatabaseCount('lle_results', 0);
+    }
+
+    public function test_today_is_the_school_s_day_not_the_server_s(): void
+    {
+        // 7 a.m. on 27 September in Manila is still the 26th in UTC.
+        $this->travelTo(CarbonImmutable::parse('2026-09-27 07:00', 'Asia/Manila'));
+
+        $staff = $this->makeUser('lle-staff-tz@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-tz@example.com', User::ROLE_STUDENT, '2301917', 4);
+
+        Sanctum::actingAs($staff);
+
+        $this->postJson('/api/lle-results', [
+            'user_id' => $student->id,
+            'exam_year' => 2026,
+            'taken_at' => '2026-09-27',
+            'result' => LleResult::RESULT_PASS,
+        ])->assertCreated();
+    }
+
+    public function test_one_student_s_results_can_be_listed_with_the_passing_average(): void
+    {
+        $staff = $this->makeUser('lle-staff-one@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-one@example.com', User::ROLE_STUDENT, '2301918', 4);
+        $other = $this->makeUser('lle-other@example.com', User::ROLE_STUDENT, '2301919', 4);
+
+        LleResult::create(['user_id' => $student->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_FAIL]);
+        LleResult::create(['user_id' => $student->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_PASS]);
+        LleResult::create(['user_id' => $other->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_PASS]);
+
+        Sanctum::actingAs($staff);
+
+        $this->getJson("/api/lle-results?user_id={$student->id}&per_page=100")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2)
+            ->assertJsonPath('passing_averages.2004', 75);
     }
 
     public function test_results_cannot_be_recorded_against_non_student_accounts(): void

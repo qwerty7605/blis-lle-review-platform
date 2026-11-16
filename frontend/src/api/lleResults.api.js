@@ -2,7 +2,8 @@ import http from './http'
 
 class LleResultsApi {
   /**
-   * @param {object} [params] search, exam_year, result, page, per_page
+   * @param {object} [params] search, user_id, exam_year, result, page, per_page
+   * The reply also carries passing_averages (LleResultRules::PASSING_AVERAGES).
    */
   list(params = {}) {
     return http.get('/lle-results', { params })
@@ -13,7 +14,10 @@ class LleResultsApi {
     return http.post('/lle-results', payload)
   }
 
-  /** The batches there are, and one batch's students with what is recorded for exam_year. */
+  /**
+   * The batches there are, and one batch's students with what is recorded
+   * for exam_year and their other_results (other years), plus passing_averages.
+   */
   batch(params = {}) {
     return http.get('/lle-results/batch', { params })
   }

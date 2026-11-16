@@ -84,10 +84,11 @@
 
         <div class="lle-field">
           <label for="lle-result">Result</label>
-          <select id="lle-result" v-model="form.result" class="text-input">
+          <select id="lle-result" v-model="form.result" class="text-input" v-bind="resultChecks.bind('result')">
             <option value="pass">Passed</option>
             <option value="fail">Failed</option>
           </select>
+          <FieldError :checks="resultChecks" field="result" />
         </div>
 
         <div class="lle-field">
@@ -113,6 +114,15 @@
         </div>
       </div>
 
+      <!-- Can be right, but usually a slip: said here as the form is filled
+           in, and asked once more when Record is pressed. -->
+      <ul v-if="flagReasons.length > 0" class="lle-flags" aria-live="polite">
+        <li v-for="reason in flagReasons" :key="reason">
+          <AlertTriangle :size="14" aria-hidden="true" />
+          <span>{{ reason }}</span>
+        </li>
+      </ul>
+
       <div v-if="saveError" class="feedback danger">
         <AlertCircle :size="15" />
         <span>{{ saveError }}</span>
@@ -131,6 +141,8 @@
           </button>
         </div>
       </div>
+
+      <LicensureSaveCheck :open="confirmOpen" :items="confirmItems" @back="cancelConfirm" @confirm="confirmSave" />
       </template>
     </article>
 
@@ -453,6 +465,7 @@ import InfoTip from '@/components/InfoTip.vue'
 import { computed, ref } from 'vue'
 import {
   AlertCircle,
+  AlertTriangle,
   Award,
   BrainCircuit,
   CheckCircle2,
@@ -467,6 +480,7 @@ import {
 } from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
 import LicensureBatchEntry from './LicensureBatchEntry.vue'
+import LicensureSaveCheck from './LicensureSaveCheck.vue'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
 const isPhone = usePhoneLayout()
@@ -524,6 +538,11 @@ const {
   saveError,
   saveNotice,
   submitResult,
+  flagReasons,
+  confirmOpen,
+  confirmItems,
+  cancelConfirm,
+  confirmSave,
   removeResult,
   modelStatus,
   modelLoading,
@@ -649,6 +668,34 @@ function fixed(value, places = 3) {
 .lle-hint {
   margin: 0;
   font-size: 12px;
+}
+
+/* Amber, as the batch rows mark the same things: "look again", not an error. */
+.lle-flags {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  margin: 0 18px 14px;
+  padding: 10px 12px;
+  list-style: none;
+  border-left: 3px solid var(--dk-line-c98a1e-a55, rgba(201, 138, 30, 0.55));
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--dk-bg-c98a1e-a07, rgba(201, 138, 30, 0.07));
+}
+
+.lle-flags li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.lle-flags svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--dk-fg-9a6a0c, #9a6a0c);
 }
 
 .lle-selected {

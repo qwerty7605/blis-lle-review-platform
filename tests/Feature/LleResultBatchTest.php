@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\LleResult;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -109,6 +110,91 @@ class LleResultBatchTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors(['entries.0.result', 'entries.0.user_id']);
 
         $this->postJson('/api/lle-results/batch', ['exam_year' => 2026, 'entries' => []])->assertStatus(422);
+
+        $this->assertDatabaseCount('lle_results', 0);
+    }
+
+    public function test_the_roster_shows_each_student_s_other_sittings(): void
+    {
+        $ana = $this->student('Ana Cruz', 2022);
+        $ben = $this->student('Ben Dizon', 2022);
+
+        // Ana passed the year before; Ben failed it and is back.
+        LleResult::create(['user_id' => $ana->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_PASS]);
+        LleResult::create(['user_id' => $ben->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_FAIL]);
+        LleResult::create(['user_id' => $ben->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_PASS]);
+
+        Sanctum::actingAs($this->staff());
+
+        $this->getJson('/api/lle-results/batch?admission_year=2022&exam_year=2026')
+            ->assertOk()
+            ->assertJsonPath('students.0.result', null)
+            ->assertJsonPath('students.0.other_results', [['exam_year' => 2025, 'result' => LleResult::RESULT_PASS]])
+            ->assertJsonPath('students.1.result', LleResult::RESULT_PASS)
+            ->assertJsonPath('students.1.other_results', [['exam_year' => 2025, 'result' => LleResult::RESULT_FAIL]])
+            ->assertJsonPath('passing_averages.2004', 75);
+    }
+
+    public function test_a_list_that_breaks_a_rule_records_nothing_and_says_who(): void
+    {
+        $ana = $this->student('Ana Cruz', 2022);
+        $ben = $this->student('Ben Dizon', 2022);
+        $cara = $this->student('Cara Lim', 2022);
+
+        LleResult::create(['user_id' => $ana->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_PASS]);
+
+        Sanctum::actingAs($this->staff());
+
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2026,
+            'entries' => [
+                // "Mark the Rest as Failed" on someone who passed in 2025.
+                ['user_id' => $ana->id, 'result' => LleResult::RESULT_FAIL],
+                // A pass under the passing average.
+                ['user_id' => $ben->id, 'result' => LleResult::RESULT_PASS, 'rating' => 70],
+                // Failed at 80: a subject under 50%. Fine on its own.
+                ['user_id' => $cara->id, 'result' => LleResult::RESULT_FAIL, 'rating' => 80],
+            ],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors', [
+                'entries.0.result' => ['Ana Cruz passed the LLE in 2025, so no result can be recorded for a later year.'],
+                'entries.1.rating' => ['Ben Dizon: A general average under 75 is a failing grade (R.A. 9246, Sec. 17). Check the result or the average.'],
+            ]);
+
+        $this->assertDatabaseMissing('lle_results', ['exam_year' => 2026]);
+
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2026,
+            'entries' => [
+                ['user_id' => $ben->id, 'result' => LleResult::RESULT_PASS, 'rating' => 75],
+                ['user_id' => $cara->id, 'result' => LleResult::RESULT_FAIL, 'rating' => 80],
+            ],
+        ])->assertOk()->assertJsonPath('recorded', 2);
+    }
+
+    public function test_a_list_cannot_be_for_a_sitting_still_to_come(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-16 10:00', 'Asia/Manila'));
+
+        $ana = $this->student('Ana Cruz', 2022);
+
+        Sanctum::actingAs($this->staff());
+
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2027,
+            'entries' => [['user_id' => $ana->id, 'result' => LleResult::RESULT_FAIL]],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.exam_year.0', 'The exam year cannot be later than this year (2026).');
+
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2026,
+            'taken_at' => '2025-09-27',
+            'entries' => [['user_id' => $ana->id, 'result' => LleResult::RESULT_FAIL]],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.taken_at.0', 'This date is in 2025, but the exam year is 2026.');
 
         $this->assertDatabaseCount('lle_results', 0);
     }
