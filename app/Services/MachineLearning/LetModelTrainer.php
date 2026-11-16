@@ -19,16 +19,25 @@ use Illuminate\Support\Facades\Storage;
  *
  * The steps, each as version 1 was made in WEKA:
  *  1. the rows: every row of the base dataset plus each graduate's completed
- *     pre-tests and mock boards (LetTrainingSetBuilder);
+ *     pre-tests and mock boards and complete semesters of 3rd-year-on
+ *     battery exams (LetTrainingSetBuilder); with any battery row the exam
+ *     type has three values, else the two it always had;
  *  2. the ridge chosen by CVParameterSelection's rule and a Logistic model
  *     fitted on every row (RidgeSelector, LogisticRegressionTrainer);
  *  3. stratified 10-fold cross-validation repeated with seeds 1 to 10, the
  *     ridge chosen again inside every training fold, ZeroR on the same folds
- *     (LetModelEvaluator);
- *  4. taken up only if it meets both targets (ROC area >= 0.70, FAILED recall
- *     >= 0.60 at the 25% cutoff), beats ZeroR on Kappa (above 0), and its ROC
- *     area is at least the live version's. Otherwise it is kept as an
- *     inactive version, with the test it failed.
+ *     (LetModelEvaluator), the figures also worked out over the review rows
+ *     and over the battery rows apart;
+ *  4. taken up only if, on its review rows (pre-tests and mock boards: what
+ *     the Estimated Outcome reads), it meets both targets (ROC area >= 0.70,
+ *     FAILED recall >= 0.60 at the 25% cutoff), beats ZeroR on Kappa (above
+ *     0), and its ROC area is at least the live version's. Otherwise it is
+ *     kept as an inactive version, with the test it failed. Battery rows can
+ *     therefore never make the Estimated Outcome worse than it is;
+ *  5. battery_ready only if its battery rows on their own meet both targets
+ *     and beat ZeroR on Kappa, and at least BATTERY_MIN_FAILED_GRADUATES
+ *     graduates who sat battery exams failed the LLE. This decides nothing
+ *     about step 4: a version can be in use with battery estimates still off.
  *
  * Every version is kept in let_models with its figures and a file under
  * storage/app/private/let-models/.
@@ -126,31 +135,48 @@ class LetModelTrainer
         }
 
         $rows = [...$set['base'], ...$set['graduates']];
-        $fit = $this->selector->fit($rows);
-        $evaluation = $this->evaluator->evaluate($rows);
-        $figures = $evaluation['model'];
+        $examTypes = LogisticModel::examTypesFor($rows);
+        $fit = $this->selector->fit($rows, $examTypes);
+        $evaluation = $this->evaluator->evaluate($rows, $examTypes);
+
+        // Judged on what the Estimated Outcome reads: the review rows. With no
+        // battery rows these are every row, as they always were.
+        $review = $evaluation['by_type']['review'] ?? ['model' => $evaluation['model'], 'zero_r' => $evaluation['zero_r']];
+        $figures = $review['model'];
+        $zeroR = $review['zero_r'];
+        $batteryFigures = $evaluation['by_type']['battery'] ?? null;
+        $onReviewRows = $batteryFigures !== null ? ' on pre-test and mock board rows' : '';
         $live = LetModel::query()->active()->latest('id')->first();
 
         $checks = [
             'roc_area_target' => [
                 'passed' => $figures['roc_area'] >= LetModel::TARGET_ROC_AREA,
-                'text' => sprintf('ROC area %.3f against the target of %.2f', $figures['roc_area'], LetModel::TARGET_ROC_AREA),
+                'text' => sprintf('ROC area %.3f%s against the target of %.2f', $figures['roc_area'], $onReviewRows, LetModel::TARGET_ROC_AREA),
             ],
             'failed_recall_target' => [
                 'passed' => $figures['failed_recall'] >= LetModel::TARGET_FAILED_RECALL,
-                'text' => sprintf('FAILED recall %.3f at the 25%% cutoff against the target of %.2f', $figures['failed_recall'], LetModel::TARGET_FAILED_RECALL),
+                'text' => sprintf('FAILED recall %.3f%s at the 25%% cutoff against the target of %.2f', $figures['failed_recall'], $onReviewRows, LetModel::TARGET_FAILED_RECALL),
             ],
             'beats_zero_r' => [
-                'passed' => $figures['kappa'] > $evaluation['zero_r']['kappa'],
-                'text' => sprintf('Kappa %.3f against ZeroR\'s %.3f', $figures['kappa'], $evaluation['zero_r']['kappa']),
+                'passed' => $figures['kappa'] > $zeroR['kappa'],
+                'text' => sprintf('Kappa %.3f%s against ZeroR\'s %.3f', $figures['kappa'], $onReviewRows, $zeroR['kappa']),
             ],
             'roc_area_vs_live' => [
                 'passed' => $live === null || $figures['roc_area'] >= $live->roc_area,
                 'text' => $live === null
                     ? 'No version is in use to compare with'
-                    : sprintf('ROC area %.3f against version %d\'s %.3f (measured on its own training rows)', $figures['roc_area'], $live->version, $live->roc_area),
+                    : sprintf(
+                        'ROC area %.3f against version %d\'s %.3f (%s)',
+                        $figures['roc_area'],
+                        $live->version,
+                        $live->roc_area,
+                        $batteryFigures !== null ? 'each measured on its own pre-test and mock board rows' : 'measured on its own training rows',
+                    ),
             ],
         ];
+
+        $batteryChecks = $this->batteryChecks($set['battery'], $batteryFigures);
+        $batteryReady = $batteryChecks !== [] && !in_array(false, array_column($batteryChecks, 'passed'), true);
 
         $promoted = !in_array(false, array_column($checks, 'passed'), true);
         $failedChecks = array_values(array_map(
@@ -169,9 +195,11 @@ class LetModelTrainer
             'selection' => $fit['selection'],
             'evaluation' => $evaluation,
             'checks' => $checks,
+            'battery_checks' => $batteryChecks,
+            'battery_ready' => $batteryReady,
         ], JSON_PRETTY_PRINT));
 
-        $model = DB::transaction(function () use ($promoted, $version, $fit, $evaluation, $figures, $set, $checks, $path, $by): LetModel {
+        $model = DB::transaction(function () use ($promoted, $version, $fit, $evaluation, $figures, $zeroR, $batteryFigures, $batteryChecks, $batteryReady, $set, $checks, $path, $by): LetModel {
             if ($promoted) {
                 LetModel::query()->active()->update(['status' => LetModel::STATUS_RETIRED]);
             }
@@ -188,6 +216,9 @@ class LetModelTrainer
                 'failed_count' => $evaluation['failed_rows'],
                 'imported_count' => count($set['base']),
                 'graduate_count' => count($set['results']),
+                'battery_row_count' => $set['battery']['rows'],
+                'battery_graduate_count' => $set['battery']['graduates'],
+                'battery_failed_graduate_count' => $set['battery']['failed_graduates'],
                 'roc_area' => $figures['roc_area'],
                 'failed_recall' => $figures['failed_recall'],
                 'false_alarm_rate' => $figures['false_alarm_rate'],
@@ -195,12 +226,18 @@ class LetModelTrainer
                 'failed_f_measure' => $figures['failed_f_measure'],
                 'accuracy' => $figures['accuracy'],
                 'kappa' => $figures['kappa'],
-                'zero_r_accuracy' => $evaluation['zero_r']['accuracy'],
-                'zero_r_kappa' => $evaluation['zero_r']['kappa'],
+                'zero_r_accuracy' => $zeroR['accuracy'],
+                'zero_r_kappa' => $zeroR['kappa'],
+                'battery_roc_area' => $batteryFigures['model']['roc_area'] ?? null,
+                'battery_failed_recall' => $batteryFigures['model']['failed_recall'] ?? null,
+                'battery_kappa' => $batteryFigures['model']['kappa'] ?? null,
+                'battery_zero_r_kappa' => $batteryFigures['zero_r']['kappa'] ?? null,
                 'meets_targets' => LetModel::meetsTargets($figures['roc_area'], $figures['failed_recall']),
+                'battery_ready' => $batteryReady,
                 'evaluation' => $evaluation,
                 'selection' => $fit['selection'],
                 'checks' => $checks,
+                'battery_checks' => $batteryChecks === [] ? null : $batteryChecks,
                 'training_keys' => array_map($this->fingerprint(...), $set['results']),
                 'file_path' => $path,
                 'trigger' => LetModel::TRIGGER_MANUAL,
@@ -217,20 +254,82 @@ class LetModelTrainer
             $figures['kappa'],
         );
 
-        return $promoted
-            ? $this->outcome(self::OUTCOME_PROMOTED, sprintf(
-                'Version %d was trained on %d rows and is now in use (%s).',
-                $version,
-                $evaluation['rows'],
-                $summary,
-            ), $model)
-            : $this->outcome(self::OUTCOME_KEPT_CURRENT, sprintf(
-                'Version %d was trained on %d rows (%s) but was not taken up: %s.',
-                $version,
-                $evaluation['rows'],
-                $summary,
-                implode('; ', $failedChecks),
-            ), $model);
+        $message = $promoted
+            ? sprintf('Version %d was trained on %d rows and is now in use (%s).', $version, $evaluation['rows'], $summary)
+            : sprintf('Version %d was trained on %d rows (%s) but was not taken up: %s.', $version, $evaluation['rows'], $summary, implode('; ', $failedChecks));
+
+        return $this->outcome(
+            $promoted ? self::OUTCOME_PROMOTED : self::OUTCOME_KEPT_CURRENT,
+            trim($message . ' ' . $this->batterySentence($set['battery'], $batteryChecks, $batteryReady)),
+            $model,
+        );
+    }
+
+    /**
+     * Whether a version's battery rows can be trusted for early estimates:
+     * enough graduates who sat battery exams and then failed the LLE, and the
+     * targets and ZeroR met on the battery rows alone. None when the version
+     * has no battery rows.
+     *
+     * @param  array{rows: int, graduates: int, failed_graduates: int}  $battery
+     * @param  array{model: array<string, mixed>, zero_r: array<string, mixed>}|null  $figures
+     * @return array<string, array{passed: bool, text: string}>
+     */
+    private function batteryChecks(array $battery, ?array $figures): array
+    {
+        if ($figures === null) {
+            return [];
+        }
+
+        return [
+            'battery_failed_graduates' => [
+                'passed' => $battery['failed_graduates'] >= LetModel::BATTERY_MIN_FAILED_GRADUATES,
+                'text' => sprintf(
+                    '%d graduate(s) who sat battery exams failed the LLE, against the %d needed',
+                    $battery['failed_graduates'],
+                    LetModel::BATTERY_MIN_FAILED_GRADUATES,
+                ),
+            ],
+            'battery_roc_area_target' => [
+                'passed' => $figures['model']['roc_area'] >= LetModel::TARGET_ROC_AREA,
+                'text' => sprintf('ROC area %.3f on battery rows against the target of %.2f', $figures['model']['roc_area'], LetModel::TARGET_ROC_AREA),
+            ],
+            'battery_failed_recall_target' => [
+                'passed' => $figures['model']['failed_recall'] >= LetModel::TARGET_FAILED_RECALL,
+                'text' => sprintf('FAILED recall %.3f on battery rows at the 25%% cutoff against the target of %.2f', $figures['model']['failed_recall'], LetModel::TARGET_FAILED_RECALL),
+            ],
+            'battery_beats_zero_r' => [
+                'passed' => $figures['model']['kappa'] > $figures['zero_r']['kappa'],
+                'text' => sprintf('Kappa %.3f on battery rows against ZeroR\'s %.3f', $figures['model']['kappa'], $figures['zero_r']['kappa']),
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{rows: int, graduates: int, failed_graduates: int}  $battery
+     * @param  array<string, array{passed: bool, text: string}>  $checks
+     */
+    private function batterySentence(array $battery, array $checks, bool $ready): string
+    {
+        if ($checks === []) {
+            return '';
+        }
+
+        if ($ready) {
+            return sprintf('Its %d battery rows, from %d graduates, are good enough for early estimates from battery exams.', $battery['rows'], $battery['graduates']);
+        }
+
+        $failed = array_map(
+            static fn (array $check): string => $check['text'],
+            array_filter($checks, static fn (array $check): bool => !$check['passed']),
+        );
+
+        return sprintf(
+            'It learnt from %d battery rows (%d graduates); they are not yet good enough for early estimates: %s.',
+            $battery['rows'],
+            $battery['graduates'],
+            implode('; ', $failed),
+        );
     }
 
     /**
@@ -287,12 +386,28 @@ class LetModelTrainer
                 'kappa' => $model->kappa,
                 'zero_r_accuracy' => $model->zero_r_accuracy,
                 'zero_r_kappa' => $model->zero_r_kappa,
-                'confusion' => $model->evaluation['model']['confusion'] ?? null,
+                // Over the rows the figures beside it are: the review rows.
+                'confusion' => $model->evaluation['by_type']['review']['model']['confusion'] ?? $model->evaluation['model']['confusion'] ?? null,
                 'meets_targets' => $model->meets_targets,
                 'failed_checks' => array_values(array_map(
                     static fn (array $check): string => $check['text'],
                     array_filter($model->checks ?? [], static fn (array $check): bool => !$check['passed']),
                 )),
+                // Only for a version that learnt from battery exams.
+                'battery' => $model->battery_row_count > 0 ? [
+                    'rows' => (int) $model->battery_row_count,
+                    'graduates' => (int) $model->battery_graduate_count,
+                    'failed_graduates' => (int) $model->battery_failed_graduate_count,
+                    'roc_area' => $model->battery_roc_area,
+                    'failed_recall' => $model->battery_failed_recall,
+                    'kappa' => $model->battery_kappa,
+                    'zero_r_kappa' => $model->battery_zero_r_kappa,
+                    'ready' => (bool) $model->battery_ready,
+                    'failed_checks' => array_values(array_map(
+                        static fn (array $check): string => $check['text'],
+                        array_filter($model->battery_checks ?? [], static fn (array $check): bool => !$check['passed']),
+                    )),
+                ] : null,
                 'file_path' => $model->file_path,
                 'active' => $model->status === LetModel::STATUS_ACTIVE,
                 'status' => $model->status,
@@ -308,11 +423,13 @@ class LetModelTrainer
                 'trained_at' => $live->created_at?->toIso8601String(),
                 'source' => $live->source,
                 'ridge' => $live->ridge,
+                'battery_ready' => (bool) $live->battery_ready,
             ],
             'targets' => [
                 'roc_area' => LetModel::TARGET_ROC_AREA,
                 'failed_recall' => LetModel::TARGET_FAILED_RECALL,
                 'at_risk_cutoff' => LogisticModel::AT_RISK_CUTOFF,
+                'battery_min_failed_graduates' => LetModel::BATTERY_MIN_FAILED_GRADUATES,
             ],
             'base_dataset' => [
                 'present' => $this->base->exists(),
@@ -326,6 +443,10 @@ class LetModelTrainer
                 'skipped_graduates' => $set['skipped'],
                 'new_since_last_training' => count($this->newSinceLastTraining($set['results'])),
                 'minimum_new_results' => self::MIN_NEW_RESULTS,
+                // Battery exams in what the next training would learn from.
+                'battery_rows' => $set['battery']['rows'],
+                'battery_graduates' => $set['battery']['graduates'],
+                'battery_failed_graduates' => $set['battery']['failed_graduates'],
             ],
             'training' => $this->isRunning(),
             'can_retrain' => $blocked === null && !$this->isRunning(),

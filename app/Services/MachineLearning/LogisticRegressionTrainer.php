@@ -9,10 +9,13 @@ use RuntimeException;
  * PHP (the server has no Java):
  *
  *   1. ReplaceMissingValues: a missing score becomes the mean of the scores
- *      present; a missing exam type the more common type (pre-test on a tie);
+ *      present; a missing exam type the most common type (the first declared
+ *      on a tie: pre-test);
  *   2. RemoveUseless: an input with fewer than two distinct values is
  *      dropped (and the exam type if it varies too much, >99% distinct);
- *   3. NominalToBinary: the exam type is 1 for a mock board, 0 for a pre-test;
+ *   3. NominalToBinary: with the two review types the exam type is one input,
+ *      1 for a mock board and 0 for a pre-test; with three (battery rows in
+ *      the set) one 0/1 input per type, in the declared order;
  *   4. each input standardized with its mean and sample standard deviation
  *      (n - 1), computed after step 1;
  *   5. the coefficients that minimise the negative log-likelihood plus
@@ -32,11 +35,17 @@ class LogisticRegressionTrainer
     private const TOLERANCE = 1e-12;
 
     /**
+     * $examTypes are the types the whole training set is coded with
+     * (LogisticModel::examTypesFor() of every row): a cross-validation fold
+     * is coded as its dataset is, as WEKA's folds share their file's header.
+     * Left out, they are read from $rows.
+     *
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
+     * @param  list<string>|null  $examTypes
      */
-    public function fit(array $rows, float $ridge): LogisticModel
+    public function fit(array $rows, float $ridge, ?array $examTypes = null): LogisticModel
     {
-        return $this->fitFrom($rows, $ridge)['model'];
+        return $this->fitFrom($rows, $ridge, null, $examTypes)['model'];
     }
 
     /**
@@ -46,11 +55,14 @@ class LogisticRegressionTrainer
      *
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
      * @param  list<float>|null  $start
+     * @param  list<string>|null  $examTypes
      * @return array{model: LogisticModel, beta: list<float>}
      */
-    public function fitFrom(array $rows, float $ridge, ?array $start = null): array
+    public function fitFrom(array $rows, float $ridge, ?array $start = null, ?array $examTypes = null): array
     {
         $count = count($rows);
+        $examTypes ??= LogisticModel::examTypesFor($rows);
+        $oneInputPerType = count($examTypes) > 2;
 
         if ($count < 2) {
             throw new RuntimeException('A logistic model needs at least two training rows.');
@@ -65,6 +77,16 @@ class LogisticRegressionTrainer
         $columns = [];
         $fill = [];
         foreach (LogisticModel::INPUTS as $key) {
+            if ($key === 'exam_type' && $oneInputPerType) {
+                // Filled, judged by RemoveUseless and split into one input per
+                // type, all three steps on the type itself.
+                [$typeColumns, $typeFill] = $this->examTypeColumns($rows, $examTypes);
+                $columns += $typeColumns;
+                $fill += $typeFill;
+
+                continue;
+            }
+
             $values = [];
             foreach ($rows as $row) {
                 $values[] = $key === 'exam_type'
@@ -78,6 +100,10 @@ class LogisticRegressionTrainer
 
         // 2. Drop what cannot inform the model.
         foreach ($columns as $key => $column) {
+            if (str_starts_with($key, LogisticModel::TYPE_INPUT_PREFIX)) {
+                continue; // judged on the type as a whole, in examTypeColumns()
+            }
+
             $distinct = count(array_unique(array_map(static fn (float $value): string => (string) $value, $column)));
             $tooVaried = $key === 'exam_type' && ($distinct / $count) * 100.0 > 99.0;
 
@@ -286,6 +312,59 @@ class LogisticRegressionTrainer
         }
 
         return $solution;
+    }
+
+    /**
+     * The exam type of a set with battery rows, as WEKA codes a nominal with
+     * three values: a missing or unknown type becomes the most common type
+     * (the first declared on a tie, as Utils.maxIndex picks it);
+     * RemoveUseless drops the type if fewer than two types are present or
+     * nearly every row is a type of its own; NominalToBinary then gives every
+     * declared type its own 0/1 input, a type no row has included (its input
+     * is all 0, so it is not standardized and keeps a zero coefficient).
+     *
+     * @param  list<array{features: array<string, mixed>}>  $rows
+     * @param  list<string>  $examTypes
+     * @return array{0: array<string, list<float>>, 1: array<string, float>}
+     */
+    private function examTypeColumns(array $rows, array $examTypes): array
+    {
+        $values = [];
+        $counts = array_fill_keys($examTypes, 0);
+
+        foreach ($rows as $row) {
+            $type = LogisticModel::normalizeExamType($row['features']['exam_type'] ?? null);
+            $type = in_array($type, $examTypes, true) ? $type : null;
+            $values[] = $type;
+
+            if ($type !== null) {
+                $counts[$type]++;
+            }
+        }
+
+        $mode = $examTypes[0];
+        foreach ($examTypes as $type) {
+            if ($counts[$type] > $counts[$mode]) {
+                $mode = $type;
+            }
+        }
+
+        $values = array_map(static fn (?string $type): string => $type ?? $mode, $values);
+        $present = count(array_unique($values));
+
+        if ($present < 2 || ($present / count($values)) * 100.0 > 99.0) {
+            return [[], []];
+        }
+
+        $columns = [];
+        $fill = [];
+        foreach ($examTypes as $type) {
+            $key = LogisticModel::typeInputKey($type);
+            $columns[$key] = array_map(static fn (string $value): float => $value === $type ? 1.0 : 0.0, $values);
+            $fill[$key] = $mode === $type ? 1.0 : 0.0;
+        }
+
+        return [$columns, $fill];
     }
 
     /** @param  list<?float>  $values */

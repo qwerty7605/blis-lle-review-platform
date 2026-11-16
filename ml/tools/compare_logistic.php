@@ -9,8 +9,13 @@
  *   php ml/tools/compare_logistic.php base      the app's trainer and evaluator on the base
  *                                               dataset against models/logistic-v1.json
  *   php ml/tools/compare_logistic.php generate  made-up datasets in tools/compare/logistic_*.arff
+ *                                               (two of them with battery rows: a three-value
+ *                                               exam type)
  *   php ml/tools/compare_logistic.php check     the trainer and evaluator on those, against the
- *                                               .weka.json files LleLogistic.java compare writes
+ *                                               .weka.json files LleLogistic.java compare writes:
+ *                                               ridge, coefficients, figures (and, with battery
+ *                                               rows, the figures over each kind of row), and
+ *                                               the app's P(PASSED) from WEKA's own model
  *
  * Each prints its differences and ends "ALL MATCH" or "MISMATCH".
  */
@@ -84,15 +89,47 @@ function compareTraining(array $rows, array $weka): array
         $problems[] = 'coefficients';
     }
 
+    // The app's arithmetic on WEKA's own model: what WEKA answers for the
+    // same rows, missing values and every exam type included.
+    if (isset($weka['predictions'])) {
+        $arithmetic = 0.0;
+        foreach ($weka['predictions'] as $case) {
+            $features = ['exam_type' => $case['exam_type'] === null ? null : LogisticModel::normalizeExamType($case['exam_type'])];
+            foreach (LogisticModel::SUBJECTS as $position => $subject) {
+                $features[$subject] = $case['scores'][$position];
+            }
+            $arithmetic = max($arithmetic, abs($wekaModel->probabilityOfPassing($features) - (float) $case['p_passed']));
+        }
+        say(sprintf('  P(PASSED) from WEKA\'s model, %d cases: largest difference %.2e', count($weka['predictions']), $arithmetic));
+        if (!($arithmetic <= 1e-9)) {
+            $problems[] = 'arithmetic';
+        }
+    }
+
     $started = microtime(true);
     $evaluation = app(LetModelEvaluator::class)->evaluate($rows);
     say(sprintf('  evaluation, 10 x 10 folds: %.1fs', microtime(true) - $started));
 
-    return [
+    $problems = [
         ...$problems,
         ...compareFigures('model', $evaluation['model'], $weka['evaluation']['model']),
         ...compareFigures('zero_r', $evaluation['zero_r'], $weka['evaluation']['zero_r']),
     ];
+
+    foreach ($weka['evaluation']['by_type'] ?? [] as $kind => $figures) {
+        $php = $evaluation['by_type'][$kind] ?? null;
+        if ($php === null) {
+            $problems[] = "no {$kind} figures";
+            continue;
+        }
+        $problems = [
+            ...$problems,
+            ...compareFigures("{$kind}", $php['model'], $figures['model']),
+            ...compareFigures("{$kind} 0R", $php['zero_r'], $figures['zero_r']),
+        ];
+    }
+
+    return $problems;
 }
 
 /** @return list<array{key: string, features: array<string, mixed>, label: string, source: string}> */
@@ -139,12 +176,25 @@ switch ($command) {
     case 'generate':
         // Made-up review exams: a pass depends on the scores and the exam
         // type, plus noise; a fifth of the scores are missing in some sets.
-        $sets = [['n40_s11', 40, 11, 0.0], ['n90_s7', 90, 7, 0.1], ['n156_s23', 156, 23, 0.2], ['n300_s37', 300, 37, 0.15]];
+        // The last two also have battery semesters (a share of the rows,
+        // scored lower, as earlier exams are), so the exam type has three
+        // values there.
+        $sets = [
+            ['n40_s11', 40, 11, 0.0, 0.0],
+            ['n90_s7', 90, 7, 0.1, 0.0],
+            ['n156_s23', 156, 23, 0.2, 0.0],
+            ['n300_s37', 300, 37, 0.15, 0.0],
+            ['n120_s5_battery', 120, 5, 0.1, 0.35],
+            ['n210_s29_battery', 210, 29, 0.15, 0.2],
+            // Also the fixture of tests/Unit/MachineLearning/BatteryTrainingTest.php.
+            ['n60_s3_battery', 60, 3, 0.1, 0.4],
+        ];
         @mkdir("{$ml}/tools/compare", 0777, true);
 
-        foreach ($sets as [$name, $size, $seed, $missing]) {
+        foreach ($sets as [$name, $size, $seed, $missing, $batteryShare]) {
             mt_srand($seed);
-            $lines = ["@relation {$name}", '', '@attribute Exam_Type {pretest,mockboard}'];
+            $types = $batteryShare > 0 ? '{pretest,mockboard,battery}' : '{pretest,mockboard}';
+            $lines = ["@relation {$name}", '', "@attribute Exam_Type {$types}"];
             foreach (['Library_Organization_and_Management', 'Reference_Bibliography_and_User_Services', 'Indexing_and_Abstracting', 'Selection_and_Acquisition', 'Cataloging_and_Classification', 'Information_Technology'] as $attribute) {
                 $lines[] = "@attribute {$attribute} numeric";
             }
@@ -153,14 +203,16 @@ switch ($command) {
             $lines[] = '@data';
 
             for ($i = 0; $i < $size; $i++) {
-                $mock = mt_rand(0, 2) === 0;
+                $battery = $batteryShare > 0 && mt_rand(0, 1000) / 1000 < $batteryShare;
+                $mock = !$battery && mt_rand(0, 2) === 0;
                 $ability = mt_rand(0, 1000) / 1000;
                 $scores = [];
                 for ($k = 0; $k < 6; $k++) {
-                    $scores[] = mt_rand(0, 1000) / 1000 < $missing ? '?' : (string) max(10, min(100, round(30 + 50 * $ability + mt_rand(-150, 150) / 10 + ($mock ? 10 : 0))));
+                    $scores[] = mt_rand(0, 1000) / 1000 < $missing ? '?' : (string) max(10, min(100, round(30 + 50 * $ability + mt_rand(-150, 150) / 10 + ($mock ? 10 : 0) - ($battery ? 12 : 0))));
                 }
                 $passes = $ability + mt_rand(-300, 300) / 1000 > 0.35;
-                $lines[] = ($mock ? 'mockboard' : 'pretest') . ',' . implode(',', $scores) . ',' . ($passes ? 'PASSED' : 'FAILED');
+                $type = $battery ? 'battery' : ($mock ? 'mockboard' : 'pretest');
+                $lines[] = $type . ',' . implode(',', $scores) . ',' . ($passes ? 'PASSED' : 'FAILED');
             }
 
             file_put_contents("{$ml}/tools/compare/logistic_{$name}.arff", implode("\n", $lines) . "\n");

@@ -152,7 +152,7 @@
           <BrainCircuit :size="18" />
           <h3>
             Estimated Outcome model
-            <InfoTip text="Logistic regression with a ridge penalty, read from a completed pre-test or mock board. It is retrained only when an administrator asks, on the original review-exam records plus every graduate's completed pre-tests and mock boards. A new version is used only if it meets both targets, beats ZeroR on Kappa, and its ROC area is at least the version in use's." />
+            <InfoTip text="Logistic regression with a ridge penalty, read from a completed pre-test or mock board. It is retrained only when an administrator asks, on the original review-exam records plus every graduate's completed pre-tests and mock boards and each complete semester of their battery exams from 3rd year on. A new version is used only if, on its pre-test and mock board rows, it meets both targets, beats ZeroR on Kappa, and its ROC area is at least the version in use's. Its battery rows are judged on their own, so battery exams can never make the Estimated Outcome worse." />
           </h3>
         </div>
         <button
@@ -192,7 +192,23 @@
               {{ modelStatus.data.confirmed_graduates }}
               <small class="muted">{{ modelStatus.data.graduate_rows }} completed {{ modelStatus.data.graduate_rows === 1 ? 'series' : 'series' }}</small>
               <small v-if="modelStatus.data.skipped_graduates > 0" class="muted">
-                {{ modelStatus.data.skipped_graduates }} more left out: no pre-test or mock board completed before their LLE
+                {{ modelStatus.data.skipped_graduates }} more left out: no pre-test, mock board or full semester of battery exams completed before their LLE
+              </small>
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Graduates with battery exams
+              <InfoTip
+                label="What battery exams add"
+                text="A row for each semester of battery exams a graduate sat from 3rd year on, before their LLE, with all six subjects. Early estimates from battery exams need a version whose battery rows meet both targets and beat ZeroR on their own, from enough graduates who failed the LLE after battery exams."
+              />
+            </dt>
+            <dd>
+              {{ modelStatus.data.battery_graduates ?? 0 }}
+              <small class="muted">{{ modelStatus.data.battery_rows ?? 0 }} {{ modelStatus.data.battery_rows === 1 ? 'semester' : 'semesters' }} of battery exams</small>
+              <small class="muted">
+                {{ modelStatus.data.battery_failed_graduates ?? 0 }} of the {{ modelStatus.targets.battery_min_failed_graduates }} who failed the LLE needed for early estimates
               </small>
             </dd>
           </div>
@@ -215,7 +231,7 @@
         <p class="muted lle-intro">
           Targets: ROC area at least {{ modelStatus.targets.roc_area.toFixed(2) }} and FAILED recall at least
           {{ modelStatus.targets.failed_recall.toFixed(2) }}, with "at risk" meaning a chance of failing of
-          {{ Math.round(modelStatus.targets.at_risk_cutoff * 100) }}% or more. Each version's figures come from its own training rows.
+          {{ Math.round(modelStatus.targets.at_risk_cutoff * 100) }}% or more. Each version's figures come from its own pre-test and mock board rows; a version that learnt from battery exams shows its battery rows' figures under its name.
         </p>
 
         <div class="directory-table-wrap lle-versions-wrap">
@@ -253,6 +269,10 @@
                     At risk: {{ fixed(version.confusion.failed_at_risk, 1) }} of {{ fixed(version.confusion.failed_at_risk + version.confusion.failed_not_at_risk, 0) }} who failed,
                     {{ fixed(version.confusion.passed_at_risk, 1) }} of {{ fixed(version.confusion.passed_at_risk + version.confusion.passed_not_at_risk, 0) }} who passed
                   </small>
+                  <small v-if="version.battery" class="muted lle-version-label">
+                    Battery rows: {{ version.battery.rows }} from {{ version.battery.graduates }} {{ version.battery.graduates === 1 ? 'graduate' : 'graduates' }} ({{ version.battery.failed_graduates }} failed);
+                    ROC {{ fixed(version.battery.roc_area) }}, recall {{ fixed(version.battery.failed_recall) }}, Kappa {{ fixed(version.battery.kappa) }}
+                  </small>
                   <code v-if="version.file_path" class="lle-version-file">{{ version.file_path }}</code>
                 </td>
                 <td class="numeric">{{ version.rows }}<small class="muted lle-version-label">{{ version.failed }} failed</small></td>
@@ -277,6 +297,13 @@
                   <span v-else class="pill neutral">{{ version.status === 'rejected' ? 'Not taken up' : 'Not in use' }}</span>
                   <small v-if="!version.meets_targets" class="muted lle-version-note">Does not meet both targets.</small>
                   <small v-for="check in version.failed_checks" :key="check" class="muted lle-version-note">Failed: {{ check }}</small>
+                  <template v-if="version.battery">
+                    <small v-if="version.battery.ready" class="lle-version-note lle-battery-ready">Battery exams: good enough for early estimates.</small>
+                    <template v-else>
+                      <small class="muted lle-version-note">Battery exams: not yet used for early estimates.</small>
+                      <small v-for="check in version.battery.failed_checks" :key="check" class="muted lle-version-note">Not met: {{ check }}</small>
+                    </template>
+                  </template>
                 </td>
               </tr>
             </tbody>
@@ -814,6 +841,11 @@ function fixed(value, places = 3) {
   margin-top: 4px;
   max-width: 34ch;
   white-space: normal;
+}
+
+.lle-battery-ready {
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .lle-version-file {

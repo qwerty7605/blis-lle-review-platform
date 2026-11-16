@@ -13,6 +13,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * judged on. Version 1 is the model trained in WEKA, loaded by a migration
  * from ml/models/logistic-v1.json; retrained versions count on from 2. At
  * most one row is active, and its model is what predictions use.
+ *
+ * `roc_area` ... `zero_r_kappa` are measured on the version's review rows
+ * (pre-tests and mock boards: every row of a version trained without battery
+ * exams), so versions compare like with like. A version trained with battery
+ * rows also has `battery_*`: the same figures over its battery rows alone,
+ * and `battery_ready`, whether estimates from battery exams can be trusted
+ * from it (LetModelTrainer).
  */
 class LetModel extends Model
 {
@@ -37,6 +44,14 @@ class LetModel extends Model
     public const TARGET_FAILED_RECALL = 0.60;
 
     /**
+     * Early estimates from battery exams need this many graduates who sat
+     * battery exams and then failed the LLE in the version's training set, as
+     * well as the targets met on its battery rows alone: below it, a battery
+     * figure rests on too few failures to trust.
+     */
+    public const BATTERY_MIN_FAILED_GRADUATES = 10;
+
+    /**
      * @var list<string>
      */
     protected $fillable = [
@@ -51,6 +66,9 @@ class LetModel extends Model
         'failed_count',
         'imported_count',
         'graduate_count',
+        'battery_row_count',
+        'battery_graduate_count',
+        'battery_failed_graduate_count',
         'roc_area',
         'failed_recall',
         'false_alarm_rate',
@@ -60,10 +78,16 @@ class LetModel extends Model
         'kappa',
         'zero_r_accuracy',
         'zero_r_kappa',
+        'battery_roc_area',
+        'battery_failed_recall',
+        'battery_kappa',
+        'battery_zero_r_kappa',
         'meets_targets',
+        'battery_ready',
         'evaluation',
         'selection',
         'checks',
+        'battery_checks',
         'training_keys',
         'file_path',
         'trigger',
@@ -82,6 +106,7 @@ class LetModel extends Model
             'evaluation' => 'array',
             'selection' => 'array',
             'checks' => 'array',
+            'battery_checks' => 'array',
             'training_keys' => 'array',
             'ridge' => 'float',
             'at_risk_cutoff' => 'float',
@@ -89,6 +114,9 @@ class LetModel extends Model
             'failed_count' => 'integer',
             'imported_count' => 'integer',
             'graduate_count' => 'integer',
+            'battery_row_count' => 'integer',
+            'battery_graduate_count' => 'integer',
+            'battery_failed_graduate_count' => 'integer',
             'roc_area' => 'float',
             'failed_recall' => 'float',
             'false_alarm_rate' => 'float',
@@ -98,7 +126,12 @@ class LetModel extends Model
             'kappa' => 'float',
             'zero_r_accuracy' => 'float',
             'zero_r_kappa' => 'float',
+            'battery_roc_area' => 'float',
+            'battery_failed_recall' => 'float',
+            'battery_kappa' => 'float',
+            'battery_zero_r_kappa' => 'float',
             'meets_targets' => 'boolean',
+            'battery_ready' => 'boolean',
             'activated_at' => 'datetime',
         ];
     }

@@ -90,12 +90,10 @@ class LetBaseDataset
                 continue; // an examinee with no result teaches nothing
             }
 
+            // The base dataset itself has only pre-tests and mock boards; a
+            // battery row is read too, for the WEKA checks' made-up sets.
             $features = [
-                'exam_type' => match (strtolower($values['exam_type'])) {
-                    'mockboard', 'mock_board' => 'mock_board',
-                    'pretest', 'pre_test' => 'pre_test',
-                    default => null,
-                },
+                'exam_type' => LogisticModel::normalizeExamType(strtolower($values['exam_type'])),
             ];
             foreach (LogisticModel::SUBJECTS as $subject) {
                 $features[$subject] = is_numeric($values[$subject]) ? (float) $values[$subject] : null;

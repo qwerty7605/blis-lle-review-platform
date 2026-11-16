@@ -1,0 +1,72 @@
+@relation n60_s3_battery
+
+@attribute Exam_Type {pretest,mockboard,battery}
+@attribute Library_Organization_and_Management numeric
+@attribute Reference_Bibliography_and_User_Services numeric
+@attribute Indexing_and_Abstracting numeric
+@attribute Selection_and_Acquisition numeric
+@attribute Cataloging_and_Classification numeric
+@attribute Information_Technology numeric
+@attribute LLE_Result {FAILED,PASSED}
+
+@data
+pretest,34,35,33,32,35,44,FAILED
+battery,39,38,43,19,28,19,FAILED
+battery,52,49,47,54,30,49,PASSED
+pretest,82,69,78,74,56,61,PASSED
+mockboard,46,61,34,?,58,52,PASSED
+battery,20,29,37,?,26,36,FAILED
+pretest,47,58,69,44,67,56,FAILED
+pretest,?,58,64,75,59,74,PASSED
+battery,47,55,40,39,54,60,FAILED
+mockboard,77,84,76,70,83,90,PASSED
+pretest,47,67,70,71,67,68,PASSED
+battery,27,38,43,?,?,?,PASSED
+battery,39,40,37,45,32,24,FAILED
+battery,52,54,26,34,35,34,FAILED
+pretest,?,63,67,69,?,74,PASSED
+mockboard,68,77,64,68,91,71,PASSED
+pretest,53,62,46,37,47,55,PASSED
+pretest,55,38,25,32,26,50,FAILED
+pretest,75,75,?,65,74,69,PASSED
+battery,48,24,28,31,33,26,PASSED
+battery,16,31,21,29,35,24,FAILED
+mockboard,84,83,69,68,?,66,PASSED
+pretest,41,44,49,59,34,32,FAILED
+mockboard,68,85,68,75,59,64,PASSED
+battery,?,51,50,25,37,29,FAILED
+mockboard,54,49,59,45,58,50,FAILED
+mockboard,75,60,57,?,73,59,PASSED
+battery,33,50,52,32,35,53,FAILED
+battery,55,53,53,47,69,62,PASSED
+mockboard,75,83,84,76,84,?,PASSED
+battery,65,63,45,?,55,42,PASSED
+mockboard,69,75,81,71,81,63,PASSED
+battery,44,25,39,24,42,26,PASSED
+pretest,40,35,40,18,?,?,FAILED
+pretest,59,65,78,53,67,67,PASSED
+pretest,37,?,34,34,55,46,FAILED
+battery,68,55,62,71,44,59,PASSED
+pretest,25,26,?,38,45,38,FAILED
+pretest,80,?,82,82,75,66,PASSED
+pretest,76,60,81,63,76,57,PASSED
+pretest,39,?,46,?,?,35,FAILED
+battery,61,71,64,61,62,43,PASSED
+mockboard,37,42,35,48,36,46,FAILED
+pretest,78,76,?,76,79,77,PASSED
+battery,60,70,54,64,45,50,PASSED
+pretest,69,56,?,45,59,72,FAILED
+battery,19,23,40,?,34,?,FAILED
+pretest,62,70,63,75,?,52,PASSED
+mockboard,54,53,?,?,65,?,PASSED
+pretest,68,59,65,48,60,74,PASSED
+battery,74,72,48,50,70,72,PASSED
+pretest,40,?,43,50,38,34,FAILED
+battery,?,47,56,45,50,?,PASSED
+pretest,32,43,46,42,34,34,FAILED
+battery,52,35,51,47,50,47,FAILED
+battery,31,22,17,47,33,33,FAILED
+battery,35,41,45,23,22,45,FAILED
+pretest,71,90,88,85,84,76,PASSED
+battery,?,47,57,48,47,44,PASSED
+pretest,36,37,35,35,48,?,FAILED

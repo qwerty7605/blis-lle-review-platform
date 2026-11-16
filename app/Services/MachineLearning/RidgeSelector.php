@@ -56,11 +56,16 @@ class RidgeSelector
     }
 
     /**
+     * $examTypes: how the whole training set codes the exam type
+     * (LogisticModel::examTypesFor()); every fold is coded the same way.
+     *
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
+     * @param  list<string>|null  $examTypes
      * @return array{ridge: float, candidates: list<array{ridge: float, error_rate: float}>}
      */
-    public function select(array $rows): array
+    public function select(array $rows, ?array $examTypes = null): array
     {
+        $examTypes ??= LogisticModel::examTypesFor($rows);
         $rows = WekaFolds::stratify(WekaFolds::randomize($rows, new JavaRandom(self::SEED)), self::FOLDS);
         $count = count($rows);
         $folds = [];
@@ -83,7 +88,7 @@ class RidgeSelector
             foreach ($folds as $fold => [$train, $test]) {
                 // The previous candidate's answer on this fold is a good
                 // place to start looking; the minimum found is the same.
-                $fit = $this->trainer->fitFrom($train, $ridge, $starts[$fold] ?? null);
+                $fit = $this->trainer->fitFrom($train, $ridge, $starts[$fold] ?? null, $examTypes);
                 $starts[$fold] = $fit['beta'];
 
                 foreach ($test as $row) {
@@ -111,12 +116,14 @@ class RidgeSelector
      * fitted on every row, in their original order.
      *
      * @param  list<array{features: array<string, mixed>, label: string}>  $rows
+     * @param  list<string>|null  $examTypes
      * @return array{model: LogisticModel, selection: array{ridge: float, candidates: list<array{ridge: float, error_rate: float}>}}
      */
-    public function fit(array $rows): array
+    public function fit(array $rows, ?array $examTypes = null): array
     {
-        $selection = $this->select($rows);
+        $examTypes ??= LogisticModel::examTypesFor($rows);
+        $selection = $this->select($rows, $examTypes);
 
-        return ['model' => $this->trainer->fit(array_values($rows), $selection['ridge']), 'selection' => $selection];
+        return ['model' => $this->trainer->fit(array_values($rows), $selection['ridge'], $examTypes), 'selection' => $selection];
     }
 }
