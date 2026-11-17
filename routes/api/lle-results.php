@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\LlePassingRateController;
 use App\Http\Controllers\Api\LleResultController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,4 +22,12 @@ Route::middleware([])->group(function () {
     Route::post('/lle-results/batch', [LleResultController::class, 'storeBatch']);
 
     Route::delete('/lle-results/{lleResult}', [LleResultController::class, 'destroy']);
+
+    // The passing-rate trend: LNU against the national rate, by exam year,
+    // and the figures typed in for it.
+    Route::get('/lle-results/passing-rates', [LlePassingRateController::class, 'index']);
+
+    Route::post('/lle-results/passing-rates', [LlePassingRateController::class, 'store']);
+
+    Route::delete('/lle-results/passing-rates/{lleRate}', [LlePassingRateController::class, 'destroy']);
 });

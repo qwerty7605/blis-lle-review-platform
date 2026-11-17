@@ -31,6 +31,27 @@ class LleResultsApi {
     return http.delete(`/lle-results/${id}`)
   }
 
+  /**
+   * LNU's and the national passing rate by exam year (`years`), and the
+   * school's `this_year`.
+   */
+  passingRates() {
+    return http.get('/lle-results/passing-rates')
+  }
+
+  /**
+   * scope ('national', administrators only, or 'school'), exam_year,
+   * passers, takers, passing_rate, source. The same scope and year again
+   * replaces its figures. Answers with the trend as GET does.
+   */
+  recordPassingRate(payload) {
+    return http.post('/lle-results/passing-rates', payload)
+  }
+
+  removePassingRate(id) {
+    return http.delete(`/lle-results/passing-rates/${id}`)
+  }
+
   /** Which version of the Exam Outcome model is in use, and every version with its figures. */
   modelStatus() {
     return http.get('/predictions/let/model')

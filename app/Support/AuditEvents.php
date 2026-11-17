@@ -108,6 +108,8 @@ final class AuditEvents
         'lle-result.record' => 'Recorded a licensure result',
         'lle-result.record-batch' => 'Recorded licensure results for a batch',
         'lle-result.delete' => 'Deleted a licensure result',
+        'lle-result.rate.record' => 'Entered an LLE passing rate',
+        'lle-result.rate.delete' => 'Removed an LLE passing rate',
         'prediction.let.run' => 'Worked out an Estimated Outcome',
         'prediction.let.retrain.request' => 'Asked for the Estimated Outcome model to be retrained',
         'prediction.let.retrain' => 'Retrained the Estimated Outcome model',

@@ -22,8 +22,15 @@ import {
 
 /*
  * A thin wrapper around Chart.js for the bar and line charts on the teacher
- * dashboard. It owns the look every chart shares (font, grid, tooltip, the
- * pass-mark line, value labels) so a page only supplies labels and numbers.
+ * dashboard and the Licensure page. It owns the look every chart shares
+ * (font, grid, tooltip, the pass-mark line, value labels) so a page only
+ * supplies labels and numbers.
+ *
+ * A line chart with two or more datasets compares them: no area fill (the
+ * washes would pile up), straight segments (a curve between two years
+ * suggests values nobody measured), filled markers with a ring of the
+ * surface, and a line key per series in the tooltip. Its legend is the
+ * page's, in HTML.
  *
  * Only the pieces these charts use are registered, which keeps the rest of
  * Chart.js out of the bundle.
@@ -44,7 +51,10 @@ const props = defineProps({
   // 'bar' | 'line'
   type: { type: String, required: true },
   labels: { type: Array, default: () => [] },
-  // [{ label, data: number[], colors?: string[] | string }]
+  // [{ label, data: number[], colors?: string[] | string, dashed?: boolean, details?: string[] }]
+  // `dashed` draws a line dashed, a second way besides colour to tell
+  // series apart; `details` is a phrase per point for the tooltip, after
+  // the value ("8 of 12 passed"). A null in `data` is a gap.
   datasets: { type: Array, default: () => [] },
   // Bars run left to right instead of bottom to top.
   horizontal: { type: Boolean, default: false },
@@ -55,6 +65,8 @@ const props = defineProps({
   max: { type: Number, default: null },
   // Appended to tick and tooltip values, e.g. '%'.
   unit: { type: String, default: '' },
+  // How the tooltip writes a value (the axis keeps value + unit).
+  formatValue: { type: Function, default: null },
   // Prints each bar's value at its end.
   valueLabels: { type: Boolean, default: false },
   // Longer text per point for the tooltip title, when labels are short codes.
@@ -240,6 +252,7 @@ const valueLabelPlugin = {
 
 function buildConfig() {
   const isLine = props.type === 'line'
+  const comparing = isLine && props.datasets.length > 1
   const indexAxis = props.horizontal ? 'y' : 'x'
   const valueAxis = props.horizontal ? 'x' : 'y'
   const family = fontFamily()
@@ -252,14 +265,20 @@ function buildConfig() {
           data: dataset.data,
           borderColor: seriesColor(dataset.colors ?? colors.navy),
           borderWidth: 2,
-          tension: 0.3,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          pointBackgroundColor: colors.surface,
-          pointBorderColor: seriesColor(dataset.colors ?? colors.navy),
+          borderDash: dataset.dashed ? [6, 4] : [],
+          borderCapStyle: 'round',
+          borderJoinStyle: 'round',
+          tension: comparing ? 0 : 0.3,
+          pointRadius: comparing ? 5 : 4,
+          pointHoverRadius: comparing ? 7 : 6,
+          pointBackgroundColor: comparing ? seriesColor(dataset.colors ?? colors.navy) : colors.surface,
+          pointBorderColor: comparing ? colors.surface : seriesColor(dataset.colors ?? colors.navy),
           pointBorderWidth: 2,
-          fill: true,
+          fill: !comparing,
           backgroundColor: colors.area,
+          spanGaps: false,
+          details: dataset.details ?? [],
+          dashed: Boolean(dataset.dashed),
         }
       : {
           label: dataset.label,
@@ -338,7 +357,16 @@ function buildConfig() {
           bodyFont: { family, size: 12.5 },
           padding: 10,
           cornerRadius: 10,
-          displayColors: false,
+          // A short line in the series' colour beside each value, where
+          // there is more than one series to tell apart.
+          displayColors: comparing,
+          usePointStyle: comparing,
+          boxPadding: 6,
+          // A year one series has no figure for lists only the other.
+          filter: (item) => {
+            const value = props.horizontal ? item.parsed.x : item.parsed.y
+            return value !== null && value !== undefined && !Number.isNaN(value)
+          },
           callbacks: {
             title: (items) => {
               const index = items[0]?.dataIndex ?? 0
@@ -346,8 +374,16 @@ function buildConfig() {
             },
             label: (item) => {
               const value = props.horizontal ? item.parsed.x : item.parsed.y
-              return `${item.dataset.label}: ${value}${props.unit}`
+              const shown = props.formatValue ? props.formatValue(value) : `${value}${props.unit}`
+              const detail = item.dataset.details?.[item.dataIndex]
+              return `${item.dataset.label}: ${shown}${detail ? ` (${detail})` : ''}`
             },
+            labelPointStyle: () => ({ pointStyle: 'line', rotation: 0 }),
+            labelColor: (item) => ({
+              borderColor: item.dataset.borderColor,
+              backgroundColor: item.dataset.borderColor,
+              borderWidth: 2,
+            }),
           },
         },
       },

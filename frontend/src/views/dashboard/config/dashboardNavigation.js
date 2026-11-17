@@ -107,7 +107,7 @@ export const dashboardModules = {
     routeName: 'dashboard-licensure',
     label: 'Licensure',
     title: 'Licensure Results',
-    sub: 'Record board exam outcomes for graduates',
+    sub: 'Record board exam results and compare passing rates',
     icon: Award,
   },
   exams: {

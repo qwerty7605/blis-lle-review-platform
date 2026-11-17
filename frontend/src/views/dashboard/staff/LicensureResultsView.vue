@@ -148,6 +148,8 @@
       </template>
     </article>
 
+    <LicensurePassingTrend ref="trendRef" />
+
     <article class="surface-card room-shell-card is-flush">
       <header class="room-page-head is-inline">
         <div class="room-page-title">
@@ -511,6 +513,7 @@ import {
 import { useLleResultsModule } from '../composables/useLleResultsModule'
 import { DID_NOT_TAKE, RESULT_LABELS } from '@/utils/lleResultChecks'
 import LicensureBatchEntry from './LicensureBatchEntry.vue'
+import LicensurePassingTrend from './LicensurePassingTrend.vue'
 import LicensureSaveCheck from './LicensureSaveCheck.vue'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
 
@@ -522,6 +525,7 @@ const isPhone = usePhoneLayout()
 const LLE_TABLE_MIN_WIDTH = 940
 
 const pageRef = ref(null)
+const trendRef = ref(null)
 const pageWidth = useElementWidth(pageRef, estimatePageWidth())
 const useRows = computed(() => (
   pageWidth.value > 0 ? pageWidth.value < LLE_TABLE_MIN_WIDTH : isPhone.value
@@ -587,7 +591,10 @@ const {
   retrainModel,
   activateModelVersion,
   loadModelStatus,
-} = useLleResultsModule()
+} = useLleResultsModule({
+  // LNU's rate for a year is counted from these results.
+  onResultsChanged: () => trendRef.value?.reload(),
+})
 
 // A batch is how results arrive, so that is the way the page opens.
 const recordMode = ref('batch')
@@ -595,11 +602,12 @@ const recordMode = ref('batch')
 // No date or average for someone who did not sit (the module empties them).
 const notTaken = computed(() => form.result === DID_NOT_TAKE)
 
-// The list of recorded results and the model's count of what it can learn
-// from both changed.
+// The list of recorded results, the model's count of what it can learn from
+// and LNU's passing rate all changed.
 function refreshAfterBatch() {
   loadResults()
   loadModelStatus({ silent: true })
+  trendRef.value?.reload()
 }
 
 const modelInUse = computed(() => {
