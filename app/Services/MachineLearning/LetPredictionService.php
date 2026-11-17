@@ -25,14 +25,14 @@ class LetPredictionService
 
     public const RESULT_FAIL = 'FAIL';
 
-    /** @var array{id: int, version: int, trained_on: int, trained_at: ?string, source: string, cutoff: float, model: LogisticModel}|false|null */
+    /** @var array{id: int, version: int, trained_on: int, trained_at: ?string, source: string, cutoff: float, battery_ready: bool, model: LogisticModel}|false|null */
     private array|false|null $live = null;
 
     /**
      * The version predictions are made with, or null when none is active
      * (or the table cannot be read yet).
      *
-     * @return array{id: int, version: int, trained_on: int, trained_at: ?string, source: string, cutoff: float, model: LogisticModel}|null
+     * @return array{id: int, version: int, trained_on: int, trained_at: ?string, source: string, cutoff: float, battery_ready: bool, model: LogisticModel}|null
      */
     public function liveModel(): ?array
     {
@@ -50,6 +50,9 @@ class LetPredictionService
                 'trained_at' => $row->created_at?->toIso8601String(),
                 'source' => (string) $row->source,
                 'cutoff' => (float) $row->at_risk_cutoff,
+                // Whether its battery rows passed their own checks, so the
+                // early estimate from battery exams may be shown from it.
+                'battery_ready' => (bool) $row->battery_ready,
                 'model' => $row->model(),
             ];
         }
@@ -58,7 +61,7 @@ class LetPredictionService
     }
 
     /**
-     * @param  array<string, mixed>  $features  exam_type ('pre_test' | 'mock_board') and the six subject scores, keyed by subject key; a missing score is null
+     * @param  array<string, mixed>  $features  exam_type ('pre_test' | 'mock_board', or 'battery' for a version that learnt it) and the six subject scores, keyed by subject key; a missing score is null
      * @return array{probability_passing: float, probability_failing: float, percent_passing: int, at_risk: bool, version: int}|null  null when no model is in use
      */
     public function predict(array $features, ?LogisticModel $model = null, ?float $cutoff = null): ?array

@@ -13,7 +13,7 @@
       <p v-if="readiness.seriesText" class="outcome-progress">{{ readiness.seriesText }}</p>
 
       <div v-if="readiness.scores.length" class="outcome-list">
-        <p class="outcome-list-title"><Target :size="14" aria-hidden="true" />Subject scores in that series</p>
+        <p class="outcome-list-title"><Target :size="14" aria-hidden="true" />{{ readiness.scoresTitle ?? 'Subject scores in that series' }}</p>
         <ul class="outcome-scores">
           <li v-for="row in readiness.scores" :key="row.key">
             <span>{{ row.subject }}</span>
@@ -23,6 +23,8 @@
       </div>
 
       <p class="outcome-detail">{{ readiness.detail }}</p>
+      <!-- An early estimate still says what the Estimated Outcome needs. -->
+      <p v-if="readiness.lockedDetail" class="outcome-detail">{{ readiness.lockedDetail }}</p>
 
       <ul v-if="readiness.inProgress.length" class="outcome-in-progress">
         <li v-for="series in readiness.inProgress" :key="series.key">{{ series.text }}</li>

@@ -12,6 +12,8 @@ use App\Models\Room;
 use App\Models\Subtopic;
 use App\Models\Topic;
 use App\Models\User;
+use App\Services\MachineLearning\LogisticModel;
+use App\Support\LleTaxonomy;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
@@ -301,6 +303,93 @@ trait BuildsBlisData
             'correct_answers' => $sourceIds->count(),
             'score_percent' => 100,
         ])->save();
+
+        return $attempt;
+    }
+
+    /**
+     * A battery exam opening on $start (Manila time), so filed under that
+     * date's term, with a question set of $items questions for each subject
+     * in $subjects.
+     *
+     * @param  list<string>  $subjects  subject keys
+     */
+    protected function makeBatteryExam(User $owner, Room $room, string $start, array $subjects = LogisticModel::SUBJECTS, int $items = 4, string $type = Exam::TYPE_BATTERY): Exam
+    {
+        $banks = array_map(
+            fn (string $key): QuestionBank => $this->makeBank($owner, $items, ['subject' => LleTaxonomy::subjectName($key)]),
+            $subjects,
+        );
+
+        $exam = $this->makeExam($owner, null, [$room], [
+            'exam_type' => $type,
+            'total_items' => $items * count($subjects),
+            'schedule_start_at' => Carbon::parse($start . ' 08:00', 'Asia/Manila'),
+            'scheduled_at' => Carbon::parse($start . ' 08:00', 'Asia/Manila'),
+        ]);
+        $exam->syncQuestionBanks(array_map(static fn (QuestionBank $bank): int => $bank->id, $banks));
+
+        return $exam;
+    }
+
+    /**
+     * A handed-in sitting of a multi-subject exam at $at (Manila time): in
+     * each subject's set the first $right[subject] items answered right, the
+     * next $blank left blank, the rest wrong.
+     *
+     * @param  array<string, int>  $right  by subject key
+     */
+    protected function makeBatterySitting(Exam $exam, Room $room, User $student, array $right, string $at, int $blank = 0): ExamAttempt
+    {
+        $submittedAt = Carbon::parse($at, 'Asia/Manila');
+        $room->members()->syncWithoutDetaching([$student->id]);
+
+        $attempt = ExamAttempt::create([
+            'exam_id' => $exam->id,
+            'room_id' => $room->id,
+            'user_id' => $student->id,
+            'status' => ExamAttempt::STATUS_SUBMITTED,
+            'total_items' => (int) $exam->total_items,
+            'duration_minutes' => (int) $exam->duration_minutes,
+            'answered_count' => 0,
+            'correct_answers' => 0,
+            'score_percent' => 0,
+            'started_at' => $submittedAt->copy()->subHour(),
+            'expires_at' => $submittedAt->copy()->addMinutes(10),
+            'submitted_at' => $submittedAt,
+        ]);
+
+        $number = 1;
+        $banks = QuestionBank::query()->with('questions.options')->findMany($exam->resolvedQuestionBankIds());
+
+        foreach ($banks as $bank) {
+            $count = $right[LleTaxonomy::subjectKey($bank->subject)] ?? 0;
+
+            foreach ($bank->questions->sortBy('item_number')->values() as $index => $question) {
+                ExamAttemptQuestion::create([
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $question->id,
+                    'item_number' => $number++,
+                    'is_bookmarked' => false,
+                ]);
+
+                if ($index >= $count && $index < $count + $blank) {
+                    continue;
+                }
+
+                $isRight = $index < $count;
+                $option = $question->options->firstWhere('is_correct', $isRight);
+
+                ExamAttemptAnswer::create([
+                    'exam_attempt_id' => $attempt->id,
+                    'question_bank_question_id' => $question->id,
+                    'question_bank_option_id' => $option->id,
+                    'answer_text' => $option->option_text,
+                    'is_correct' => $isRight,
+                    'answered_at' => $submittedAt,
+                ]);
+            }
+        }
 
         return $attempt;
     }

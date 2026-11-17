@@ -59,8 +59,8 @@
         <div class="profile-top-grid">
           <article class="profile-card" aria-labelledby="profile-outcome-heading">
             <header class="profile-card-head">
-              <h3 id="profile-outcome-heading"><Gauge :size="17" />Estimated Outcome</h3>
-              <p>From the latest completed pre-test or mock board series</p>
+              <h3 id="profile-outcome-heading"><Gauge :size="17" />{{ readiness.early ? 'Early Estimate' : 'Estimated Outcome' }}</h3>
+              <p>{{ readiness.early ? 'From battery exams, until a pre-test or mock board is finished' : 'From the latest completed pre-test or mock board series' }}</p>
             </header>
 
             <EstimatedOutcome
@@ -225,7 +225,7 @@ import EstimatedOutcome from '@/components/EstimatedOutcome.vue'
 import TopicMastery from '@/components/TopicMastery.vue'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
-import { describeReadiness } from '../composables/readiness'
+import { describeStaffReadiness } from '../composables/readiness'
 import { formatCompactDate } from '../composables/useDashboardFormatters'
 
 /*
@@ -263,8 +263,9 @@ const studyPlan = computed(() => profile.value?.study_plan ?? [])
 const mastery = computed(() => profile.value?.mastery ?? [])
 const recentAttempts = computed(() => profile.value?.recent_attempts ?? [])
 
-// Worded for someone reading about the student, not for the student.
-const readiness = computed(() => describeReadiness(profile.value?.predictive_model, 'staff'))
+// Worded for someone reading about the student, not for the student; with
+// the early estimate from battery exams where the model in use allows it.
+const readiness = computed(() => describeStaffReadiness(profile.value?.predictive_model, profile.value?.early_estimate))
 
 const trendPoints = computed(() => (
   (profile.value?.history ?? [])

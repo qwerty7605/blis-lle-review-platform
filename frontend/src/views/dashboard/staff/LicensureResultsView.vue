@@ -181,6 +181,7 @@
         <p class="muted lle-intro">
           {{ modelInUse }}
         </p>
+        <p class="muted lle-intro">{{ earlyEstimates }}</p>
 
         <dl class="lle-model-facts">
           <div>
@@ -617,6 +618,17 @@ const modelInUse = computed(() => {
   return live.source === 'weka'
     ? `The Estimated Outcome uses version ${live.version}, trained in WEKA on ${live.trained_on} review-exam records (ridge ${live.ridge}).`
     : `The Estimated Outcome uses version ${live.version}, retrained here on ${live.trained_on} rows (ridge ${live.ridge}).`
+})
+
+// The early estimate from battery exams follows the version in use
+// (BatteryEarlyEstimate.php): on only while it passed its battery checks.
+const earlyEstimates = computed(() => {
+  const live = (modelStatus.value?.versions ?? []).find((version) => version.active)
+  if (!live) return ''
+
+  return live.battery?.ready
+    ? `Early estimates from battery exams are on: version ${live.version} passed its battery checks. Teachers see one on the Student Profile of a student from 3rd year on who has not finished a pre-test or mock board.`
+    : 'Early estimates from battery exams are off until the version in use passes its battery checks. They then show on the Student Profile of a student from 3rd year on who has not finished a pre-test or mock board.'
 })
 
 function fixed(value, places = 3) {
