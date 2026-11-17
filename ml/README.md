@@ -169,6 +169,8 @@ Nothing retrains by itself.
    reach ROC area 0.70 and FAILED recall 0.60, beat ZeroR on Kappa, and at
    least 10 of the graduates who gave them failed the LLE. That decides
    nothing about step 6. Nothing shows a battery estimate yet.
+   A licensure result of "did not take" is never a label: a graduate's first
+   sitting is their first pass or fail.
 8. Every version is kept in `let_models` with its figures, ridge,
    coefficients and evaluation, and a file under
    `storage/app/private/let-models/`. An administrator can put any version

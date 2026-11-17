@@ -18,9 +18,9 @@ use Illuminate\Support\Carbon;
  * Never used: regular mock exams, battery exams of the 1st and 2nd years or
  * of a semester missing a subject, sittings submitted after the LLE date (an
  * exam's latest sitting on or before that day is the one that counts),
- * anything the model itself predicted (a row needs an lle_results record,
- * typed in from the real results), and demo accounts, whose results are
- * invented.
+ * anything the model itself predicted (a row needs an lle_results pass or
+ * fail, typed in from the real results; "did not take" is no outcome), and
+ * demo accounts, whose results are invented.
  */
 class LetTrainingSetBuilder
 {
@@ -51,8 +51,11 @@ class LetTrainingSetBuilder
 
         // The first sitting is the one the review exams were preparation
         // for. A retake is a real result too, but its rows would be the same
-        // student's same series counted twice.
+        // student's same series counted twice. "Did not take" is no sitting
+        // and no outcome: a year recorded so stays out, and a later pass or
+        // fail is the first sitting.
         $sittings = LleResult::query()
+            ->taken()
             ->with('student')
             ->orderBy('exam_year')
             ->orderBy('id')

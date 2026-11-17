@@ -5,7 +5,6 @@
 :root[data-theme='dark'] {
   --dk-auto-0b0d17: #d6dae9;
   --dk-auto-0d1547-a09: rgba(190, 206, 255, 0.09);
-  --dk-auto-0d1547-a16: rgba(190, 206, 255, 0.16);
   --dk-auto-0d1547-a18: rgba(190, 206, 255, 0.18);
   --dk-auto-1a3a8c: #a1b8e5;
   --dk-auto-315cbf: #8ea5d1;
@@ -73,6 +72,7 @@
   --dk-bg-3949ab: #3949ab;
   --dk-bg-43506f: #43506f;
   --dk-bg-43a047-a22: rgba(97, 189, 99, 0.275);
+  --dk-bg-4b5567: #4b5567;
   --dk-bg-4d1f4a: #4d1f4a;
   --dk-bg-4fa86f: #4fa86f;
   --dk-bg-545e78: #545e78;
@@ -95,7 +95,6 @@
   --dk-bg-c9433d: #c9433d;
   --dk-bg-c98a1e: #c98a1e;
   --dk-bg-c98a1e-a07: rgba(214, 150, 48, 0.088);
-  --dk-bg-c98a1e-a10: rgba(214, 150, 48, 0.125);
   --dk-bg-c98a1e-a14: rgba(214, 150, 48, 0.175);
   --dk-bg-c9902a: #c9902a;
   --dk-bg-c9a227-a06: rgba(201, 162, 39, 0.075);
@@ -311,7 +310,6 @@
   --dk-fg-6b5310: #e3c27c;
   --dk-fg-6b7793: #8d9ab7;
   --dk-fg-6f2323: #f69d97;
-  --dk-fg-7a5309: #cba161;
   --dk-fg-7a5512: #e3c27c;
   --dk-fg-7e5964: #c097a2;
   --dk-fg-8a5a0b: #cc9855;
@@ -442,7 +440,6 @@
   --dk-line-c62828-a50: rgba(228, 124, 114, 0.5);
   --dk-line-c62828-a85: rgba(228, 124, 114, 0.85);
   --dk-line-c9433d: #de776e;
-  --dk-line-c98a1e-a35: rgba(183, 123, 14, 0.35);
   --dk-line-c98a1e-a55: rgba(183, 123, 14, 0.55);
   --dk-line-c9a227: rgba(194, 161, 64, 0.35);
   --dk-line-c9a84c-a26: rgba(201, 168, 76, 0.26);

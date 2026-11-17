@@ -22,6 +22,9 @@ use Illuminate\Support\Collection;
  *  - An exam year after this one, or a date taken after today or outside the
  *    exam year (the date decides which pre-tests and mock boards count as
  *    taken before the LLE when the model is retrained).
+ *  - A general average or a date taken for a student who did not take the
+ *    exam. "Did not take" is a record like any other for the rules above:
+ *    nothing is recorded after a pass, so neither is it.
  *
  * What can happen but is usually a slip (a fail at 75 or more, a student not
  * marked graduated, replacing a result on record) is accepted: the Licensure
@@ -40,6 +43,10 @@ class LleResultRules
         // R.A. 9246, approved 19 February 2004, Sec. 17.
         2004 => 75.0,
     ];
+
+    public const NOT_TAKEN_AVERAGE_MESSAGE = 'A student who did not take the LLE has no general average. Leave it empty.';
+
+    public const NOT_TAKEN_DATE_MESSAGE = 'A student who did not take the LLE has no date taken. Leave it empty.';
 
     public static function passingAverageFor(int $examYear): ?float
     {
@@ -134,12 +141,22 @@ class LleResultRules
                 (int) $passedBefore->exam_year,
             );
         } elseif ($result === LleResult::RESULT_PASS && $later !== null) {
-            $problems['result'] = sprintf(
-                '%s already has a result for %d, and nothing can come after a pass. Record %d as Failed, or check the year.',
-                $name,
-                (int) $later->exam_year,
-                $examYear,
-            );
+            $problems['result'] = $later->result === LleResult::RESULT_DID_NOT_TAKE
+                ? sprintf(
+                    '%s is recorded as not taking the LLE in %d, and nothing can come after a pass. Remove that record first, or check the year.',
+                    $name,
+                    (int) $later->exam_year,
+                )
+                : sprintf(
+                    '%s already has a result for %d, and nothing can come after a pass. Record %d as Failed, or check the year.',
+                    $name,
+                    (int) $later->exam_year,
+                    $examYear,
+                );
+        }
+
+        if ($result === LleResult::RESULT_DID_NOT_TAKE && $rating !== null && $rating !== '') {
+            $problems['rating'] = self::NOT_TAKEN_AVERAGE_MESSAGE;
         }
 
         $mark = self::passingAverageFor($examYear);
@@ -149,6 +166,19 @@ class LleResultRules
         }
 
         return $problems;
+    }
+
+    /**
+     * One Student's date taken. By Batch's date is the whole list's, and is
+     * kept only for the students who sat (LleResultController::storeBatch).
+     *
+     * @return array<string, string>
+     */
+    public function notTakenDateProblems(string $result, ?string $takenAt): array
+    {
+        return $result === LleResult::RESULT_DID_NOT_TAKE && filled($takenAt)
+            ? ['taken_at' => self::NOT_TAKEN_DATE_MESSAGE]
+            : [];
     }
 
     public static function belowPassingMessage(float $mark): string

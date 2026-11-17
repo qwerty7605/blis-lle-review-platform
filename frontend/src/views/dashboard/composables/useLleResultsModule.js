@@ -6,7 +6,9 @@ import { decimalProblem, examDateProblem, isFullYear, lengthProblem, useFieldChe
 import {
   belowPassingProblem,
   currentYear,
+  DID_NOT_TAKE,
   examYearProblem,
+  RESULT_LABELS,
   replacedReason,
   sittingOrderProblem,
   unusualReasons,
@@ -267,6 +269,15 @@ export function useLleResultsModule() {
 
   const canSubmit = computed(() => !saving.value)
 
+  // Someone who did not sit has no date taken and no general average: the
+  // page turns both fields off, and they are emptied here so nothing typed
+  // before is sent (the server refuses either).
+  watch(() => form.result, (result) => {
+    if (result !== DID_NOT_TAKE) return
+    form.taken_at = ''
+    form.rating = ''
+  })
+
   // LleResultController::store and LleResultRules (lleResultChecks.js).
   const resultChecks = useFieldChecks('lle-result', {
     user_id: () => (form.user_id ? '' : 'Search for the student and choose them from the list.'),
@@ -356,10 +367,11 @@ export function useLleResultsModule() {
       })
 
       const name = data?.result?.student?.name ?? 'Student'
+      const label = RESULT_LABELS[form.result] ?? form.result
       // 200 rather than 201: the year was already on record and is replaced.
       saveNotice.value = status === 200
-        ? `Replaced the ${form.exam_year} result for ${name} with ${form.result.toUpperCase()}.`
-        : `Recorded ${form.result.toUpperCase()} for ${name} (${form.exam_year}).`
+        ? `Replaced the ${form.exam_year} result for ${name} with "${label}".`
+        : `Recorded "${label}" for ${name} (${form.exam_year}).`
       resetForm()
       resultChecks.reset()
       page.value = 1
