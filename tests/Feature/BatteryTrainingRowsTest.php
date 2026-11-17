@@ -5,12 +5,9 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\Exam;
 use App\Models\ExamAttempt;
-use App\Models\ExamAttemptAnswer;
-use App\Models\ExamAttemptQuestion;
 use App\Models\ExamSeries;
 use App\Models\LetModel;
 use App\Models\LleResult;
-use App\Models\QuestionBank;
 use App\Models\Room;
 use App\Models\User;
 use App\Services\MachineLearning\BatterySemesterFeatureBuilder;
@@ -344,90 +341,16 @@ class BatteryTrainingRowsTest extends TestCase
         return $student;
     }
 
-    /**
-     * A battery exam opening on $start, so filed under that date's term,
-     * with a question set of $items questions for each subject in $subjects.
-     *
-     * @param  list<string>  $subjects
-     */
+    /** @param  list<string>  $subjects */
     private function batteryExam(string $start, array $subjects = LogisticModel::SUBJECTS, int $items = 4, string $type = Exam::TYPE_BATTERY): Exam
     {
-        $banks = array_map(
-            fn (string $key): QuestionBank => $this->makeBank($this->teacher, $items, ['subject' => LleTaxonomy::subjectName($key)]),
-            $subjects,
-        );
-
-        $exam = $this->makeExam($this->teacher, null, [$this->room], [
-            'exam_type' => $type,
-            'total_items' => $items * count($subjects),
-            'schedule_start_at' => Carbon::parse($start . ' 08:00', 'Asia/Manila'),
-            'scheduled_at' => Carbon::parse($start . ' 08:00', 'Asia/Manila'),
-        ]);
-        $exam->syncQuestionBanks(array_map(static fn (QuestionBank $bank): int => $bank->id, $banks));
-
-        return $exam;
+        return $this->makeBatteryExam($this->teacher, $this->room, $start, $subjects, $items, $type);
     }
 
-    /**
-     * A handed-in sitting of $exam at $at: in each subject's set the first
-     * $right[subject] items answered right, the next $blank left blank, the
-     * rest wrong.
-     *
-     * @param  array<string, int>  $right
-     */
+    /** @param  array<string, int>  $right */
     private function sit(Exam $exam, User $student, array $right, string $at, int $blank = 0): ExamAttempt
     {
-        $submittedAt = Carbon::parse($at, 'Asia/Manila');
-        $this->room->members()->syncWithoutDetaching([$student->id]);
-
-        $attempt = ExamAttempt::create([
-            'exam_id' => $exam->id,
-            'room_id' => $this->room->id,
-            'user_id' => $student->id,
-            'status' => ExamAttempt::STATUS_SUBMITTED,
-            'total_items' => (int) $exam->total_items,
-            'duration_minutes' => (int) $exam->duration_minutes,
-            'answered_count' => 0,
-            'correct_answers' => 0,
-            'score_percent' => 0,
-            'started_at' => $submittedAt->copy()->subHour(),
-            'expires_at' => $submittedAt->copy()->addMinutes(10),
-            'submitted_at' => $submittedAt,
-        ]);
-
-        $number = 1;
-        $banks = QuestionBank::query()->with('questions.options')->findMany($exam->resolvedQuestionBankIds());
-
-        foreach ($banks as $bank) {
-            $count = $right[LleTaxonomy::subjectKey($bank->subject)] ?? 0;
-
-            foreach ($bank->questions->sortBy('item_number')->values() as $index => $question) {
-                ExamAttemptQuestion::create([
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $question->id,
-                    'item_number' => $number++,
-                    'is_bookmarked' => false,
-                ]);
-
-                if ($index >= $count && $index < $count + $blank) {
-                    continue;
-                }
-
-                $isRight = $index < $count;
-                $option = $question->options->firstWhere('is_correct', $isRight);
-
-                ExamAttemptAnswer::create([
-                    'exam_attempt_id' => $attempt->id,
-                    'question_bank_question_id' => $question->id,
-                    'question_bank_option_id' => $option->id,
-                    'answer_text' => $option->option_text,
-                    'is_correct' => $isRight,
-                    'answered_at' => $submittedAt,
-                ]);
-            }
-        }
-
-        return $attempt;
+        return $this->makeBatterySitting($exam, $this->room, $student, $right, $at, $blank);
     }
 
     /** @return array<string, int> the same number right in every subject */

@@ -168,7 +168,10 @@ Nothing retrains by itself.
    from battery exams (`battery_ready`) only if its battery rows on their own
    reach ROC area 0.70 and FAILED recall 0.60, beat ZeroR on Kappa, and at
    least 10 of the graduates who gave them failed the LLE. That decides
-   nothing about step 6. Nothing shows a battery estimate yet.
+   nothing about step 6. While the version in use is ready, teachers see an
+   early estimate from battery exams on the Student Profile of a student
+   from 3rd year on with no finished pre-test or mock board
+   (`BatteryEarlyEstimate`); with any other version in use it is off.
    A licensure result of "did not take" is never a label: a graduate's first
    sitting is their first pass or fail.
 8. Every version is kept in `let_models` with its figures, ridge,

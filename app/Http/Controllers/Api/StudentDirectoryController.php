@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\MachineLearning\BatteryEarlyEstimate;
 use App\Services\StudentAnalyticsService;
 use App\Services\StudentDirectoryService;
 use Illuminate\Http\Request;
@@ -84,6 +85,9 @@ class StudentDirectoryController extends Controller
                 'rooms' => $rooms,
             ],
             ...$this->studentAnalytics->build($student),
+            // Staff only for now; it shows only while the model in use is
+            // ready for battery exams (BatteryEarlyEstimate).
+            'early_estimate' => app(BatteryEarlyEstimate::class)->for($student),
         ]);
     }
 }

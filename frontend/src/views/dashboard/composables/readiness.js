@@ -75,3 +75,52 @@ export function describeReadiness(model, audience = 'self') {
     inProgress,
   }
 }
+
+const YEAR_WORDS = { 3: '3rd year', 4: '4th year', 5: '5th year' }
+
+function yearText(level) {
+  return YEAR_WORDS[level] ?? `year ${level}`
+}
+
+// "Battery exams, 2nd Semester, AY 2026-2027 (3rd year): missing IT; an early
+// estimate needs all six subjects in one semester."
+function batteryProgressText(pending) {
+  const missing = Array.isArray(pending?.missing) ? pending.missing : []
+
+  return `Battery exams, ${pending.label} (${yearText(pending.year_level)}): missing ${missing.join(', ')}; an early estimate needs all six subjects in one semester.`
+}
+
+/*
+ * The staff profile's Estimated Outcome card, with the early estimate from
+ * battery exams (BatteryEarlyEstimate.php) in it. That shows only where the
+ * Estimated Outcome is still locked and the model in use is ready for
+ * battery exams; anything else reads as describeReadiness() does. Staff
+ * only: students never get `early_estimate`.
+ */
+export function describeStaffReadiness(model, early) {
+  const base = describeReadiness(model, 'staff')
+  if (base.ready || !early) return base
+
+  const pending = early.pending ? [{ key: 'battery', text: batteryProgressText(early.pending) }] : []
+
+  if (early.status !== 'ready') {
+    return early.status === 'locked' ? { ...base, inProgress: [...base.inProgress, ...pending] } : base
+  }
+
+  return {
+    ready: true,
+    early: true,
+    label: early.label,
+    tone: early.at_risk ? 'danger' : 'success',
+    percent: Number(early.percent_passing ?? 0),
+    headline: `Early estimate of the chance of passing: ${early.percent_passing}%`,
+    detail: early.note,
+    seriesText: `Based on battery exams, ${early.semester?.label ?? 'one semester'} (${yearText(early.semester?.year_level)})`,
+    scoresTitle: 'Subject scores that semester',
+    scores: (early.scores ?? []).map((row) => ({ key: row.key, subject: row.subject, score: formatScore(row.score) })),
+    // What is still needed for the Estimated Outcome itself, then any later
+    // semester short of a subject.
+    inProgress: [...base.inProgress, ...pending],
+    lockedDetail: base.detail,
+  }
+}
