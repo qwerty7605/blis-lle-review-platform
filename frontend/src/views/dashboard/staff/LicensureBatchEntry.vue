@@ -4,7 +4,7 @@
       <label class="field-stack">
         <span class="field-label">
           Batch
-          <InfoTip text="A batch is the year its students were admitted. Choose one to list its students, then mark each as passed or failed from the published list. Leave a student blank if they did not take the exam." />
+          <InfoTip text="A batch is the year its students were admitted. Choose one to list its students, then mark each from the published list: Passed, Failed, or Did Not Take for a student who did not sit the exam that year. A student left blank is not saved." />
         </span>
         <select v-model="admissionYear" class="text-input" :disabled="batchesLoading">
           <option value="">{{ batchesLoading ? 'Loading batches...' : 'Choose a batch' }}</option>
@@ -44,15 +44,23 @@
           <input v-model.trim="search" type="search" placeholder="Find a student in this batch" aria-label="Find a student in this batch" />
         </label>
 
+        <!-- Every student still blank at once. Did Not Take is the safe
+             one for a list that only names the examinees: Failed for
+             everyone left would record failures that never happened. -->
         <div class="lleb-tools-actions">
-          <button type="button" class="ghost-btn" :disabled="saving" @click="markBlank('pass')">Mark the Rest as Passed</button>
-          <button type="button" class="ghost-btn" :disabled="saving" @click="markBlank('fail')">Mark the Rest as Failed</button>
+          <div class="lleb-mark-rest" role="group" aria-labelledby="lleb-mark-rest-label">
+            <span id="lleb-mark-rest-label" class="lleb-mark-rest-label">Mark the rest as</span>
+            <button type="button" class="ghost-btn" :disabled="saving" @click="markBlank('pass')">Passed</button>
+            <button type="button" class="ghost-btn" :disabled="saving" @click="markBlank('fail')">Failed</button>
+            <button type="button" class="ghost-btn" :disabled="saving" @click="markBlank(DID_NOT_TAKE)">Did Not Take</button>
+          </div>
           <button type="button" class="ghost-btn" :disabled="saving || !hasChanges" @click="resetRows">Undo Changes</button>
         </div>
       </div>
 
       <p class="lleb-count" role="status">
         <strong>{{ counts.pass }}</strong> passed &middot; <strong>{{ counts.fail }}</strong> failed &middot;
+        <strong>{{ counts.absent }}</strong> did not take &middot;
         <strong>{{ counts.blank }}</strong> left blank
         <template v-if="counts.locked > 0"> &middot; <strong>{{ counts.locked }}</strong> passed in an earlier year</template>
       </p>
@@ -62,13 +70,13 @@
           v-for="row in visibleRows"
           :key="row.id"
           class="lleb-row"
-          :class="{ 'is-changed': isChanged(row), 'is-flagged': rowFlags(row).length > 0, 'is-locked': isLocked(row) }"
+          :class="{ 'is-changed': isChanged(row), 'is-flagged': rowFlags(row).length > 0, 'is-locked': isLocked(row), 'has-average': takesAverage(row) }"
         >
           <span class="lleb-row-copy">
             <strong>{{ row.name }}</strong>
             <span>
               {{ row.student_id || 'No student ID' }}
-              <template v-if="row.recorded"> &middot; on record as {{ row.recorded === 'pass' ? 'Passed' : 'Failed' }}</template>
+              <template v-if="row.recorded"> &middot; on record as {{ RESULT_LABELS[row.recorded] }}</template>
             </span>
             <!-- Nothing comes after a pass (LleResultRules), so these are
                  locked rather than listed blank for "Mark the Rest". -->
@@ -76,7 +84,7 @@
               Passed in {{ lockedBy(row).exam_year }}. Nothing can be recorded after a pass.
             </span>
             <span v-else-if="laterFor(row)" class="lleb-row-note">
-              Has a result for {{ laterFor(row).exam_year }}, so {{ examYear }} can only be Failed.
+              {{ laterFor(row).result === DID_NOT_TAKE ? 'On record as not taking it' : 'Has a result' }} in {{ laterFor(row).exam_year }}, so {{ examYear }} cannot be Passed.
             </span>
             <span v-for="reason in rowFlags(row)" :key="reason" class="lleb-row-flag">
               <AlertTriangle :size="13" aria-hidden="true" />
@@ -101,6 +109,14 @@
               :disabled="isLocked(row)"
               @click="setResult(row, 'fail')"
             >Failed</button>
+            <button
+              type="button"
+              class="lleb-choice-btn is-absent"
+              :class="{ active: row.result === DID_NOT_TAKE }"
+              :aria-pressed="row.result === DID_NOT_TAKE"
+              :disabled="isLocked(row)"
+              @click="setResult(row, DID_NOT_TAKE)"
+            >Did Not Take</button>
           </span>
 
           <input
@@ -116,7 +132,7 @@
             max="100"
             placeholder="Average"
             :aria-label="`General average for ${row.name}, optional`"
-            :disabled="!row.result || isLocked(row)"
+            :disabled="!takesAverage(row)"
             @blur="row.ratingLeft = true"
           />
         </li>
@@ -132,7 +148,7 @@
     <div v-if="rows.length > 0" class="management-toolbar">
       <div class="management-actions">
         <InfoTip
-          :text="`Only students marked passed or failed are saved. A student already on record for ${examYear || 'this year'} is corrected, not added twice.`"
+          :text="`Only students given a result (Passed, Failed or Did Not Take) are saved. A student already on record for ${examYear || 'this year'} is corrected, not added twice. Did Not Take is never counted as a sitting: not in the passing rate, and not as an outcome for the Estimated Outcome model.`"
           label="About saving results"
         />
         <button type="button" class="primary-btn" :disabled="!canSave" @click="save">
@@ -156,9 +172,11 @@ import { decimalProblem, examDateProblem, problemMessage, useFieldChecks, yearPr
 import {
   belowPassingProblem,
   currentYear,
+  DID_NOT_TAKE,
   earlierPass,
   examYearProblem,
   laterSitting,
+  RESULT_LABELS,
   replacedReason,
   unusualReasons,
 } from '@/utils/lleResultChecks'
@@ -285,15 +303,18 @@ const visibleRows = computed(() => {
 const lockedBy = (row) => earlierPass(row.others, examYear.value)
 const laterFor = (row) => laterSitting(row.others, examYear.value)
 const isLocked = (row) => Boolean(lockedBy(row))
+// Only a sitting has a general average.
+const takesAverage = (row) => Boolean(row.result) && row.result !== DID_NOT_TAKE && !isLocked(row)
 
 const counts = computed(() => ({
   pass: rows.value.filter((row) => row.result === 'pass').length,
   fail: rows.value.filter((row) => row.result === 'fail').length,
+  absent: rows.value.filter((row) => row.result === DID_NOT_TAKE).length,
   blank: rows.value.filter((row) => !row.result && !isLocked(row)).length,
   locked: rows.value.filter((row) => !row.result && isLocked(row)).length,
 }))
 
-// Pressing the chosen result again clears it: back to "did not take it".
+// Pressing the chosen result again clears it: back to blank, not saved.
 // A result already on record cannot be cleared here, only corrected; removing
 // one is done from the list of recorded results below.
 function setResult(row, result) {
@@ -306,6 +327,7 @@ function setResult(row, result) {
   }
 
   row.result = result
+  if (result === DID_NOT_TAKE) row.rating = ''
 }
 
 function isChanged(row) {
@@ -317,7 +339,7 @@ const changedEntries = computed(() => rows.value.filter(isChanged).map((row) => 
   user_id: row.id,
   result: row.result,
   // An empty average means "not published", not zero.
-  rating: row.rating === '' || row.rating === null ? null : Number(row.rating),
+  rating: row.result === DID_NOT_TAKE || row.rating === '' || row.rating === null ? null : Number(row.rating),
 })))
 
 const hasChanges = computed(() => rows.value.some((row) => row.result !== row.recorded || ratingText(row.rating) !== row.recordedRating))
@@ -346,7 +368,7 @@ const canSave = computed(() => !saving.value && changedEntries.value.length > 0)
 // average once its field is left (7 on the way to 78 is not one) or Save
 // is pressed.
 function ratingProblem(row) {
-  if (!row.result) return { message: '', early: false }
+  if (!takesAverage(row)) return { message: '', early: false }
 
   const format = problemMessage(decimalProblem(row.rating, { label: 'General average', min: 0, max: 100 }))
   if (format) return { message: format, early: true }
@@ -515,8 +537,23 @@ async function record() {
 
 .lleb-tools-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.lleb-mark-rest {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lleb-mark-rest-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  white-space: nowrap;
 }
 
 .lleb-count {
@@ -643,6 +680,12 @@ async function record() {
   color: #ffffff;
 }
 
+/* Neither: a slate grey, apart from both by lightness as well as hue. */
+.lleb-choice-btn.is-absent.active {
+  background: var(--dk-bg-4b5567, #4b5567);
+  color: var(--dk-fg-ffffff, #ffffff);
+}
+
 /* min-width: the shared .text-input holds every field to 180px, which on a
    phone squeezed the Passed/Failed pair until "Failed" was cut off. */
 .lleb-rating {
@@ -678,22 +721,43 @@ async function record() {
     flex-basis: 100%;
   }
 
-  /* From nothing, so the average keeps its place on the same line. */
+  /* Three choices take the second line; the average, which only a pass or
+     a fail has, a third one once either is chosen. */
   .lleb-choice {
-    flex: 1 1 0;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
   .lleb-choice-btn {
     flex: 1 1 0;
+    padding: 0 6px;
   }
 
   .lleb-rating {
-    width: 96px;
+    display: none;
+    width: 100%;
+  }
+
+  .lleb-row.has-average .lleb-rating {
+    display: block;
   }
 
   .lleb-tools-actions,
-  .lleb-tools-actions .ghost-btn {
+  .lleb-mark-rest {
+    width: 100%;
+  }
+
+  .lleb-mark-rest .ghost-btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding-inline: 6px;
+  }
+
+  .lleb-mark-rest-label {
+    flex-basis: 100%;
+  }
+
+  .lleb-tools-actions > .ghost-btn {
     width: 100%;
     justify-content: center;
   }

@@ -10,13 +10,22 @@ import { early } from './fieldChecks'
  *  - a pass with a general average under the passing average of its year
  *    (R.A. 9246, Sec. 17);
  *  - any result after the student passed, and a pass before another of
- *    their results;
- *  - an exam year after this one.
+ *    their results ("did not take" counts as a result for both);
+ *  - an exam year after this one;
+ *  - a general average or date taken for a student who did not take it
+ *    (the page empties and turns off those fields instead).
  *
  * Asked about before saving, since each can be right (unusualReasons(),
  * replacedReason()): a fail at the passing average or more (a subject under
- * 50%), a student not marked graduated, and changing a result on record.
+ * 50%), a student not marked graduated who passed or failed, and changing a
+ * result on record.
  */
+
+/** What each `result` is called on the page. */
+export const RESULT_LABELS = { pass: 'Passed', fail: 'Failed', did_not_take: 'Did not take' }
+
+/** "Did not take": accounted for that exam year without sitting it. */
+export const DID_NOT_TAKE = 'did_not_take'
 
 /**
  * The lowest passing average for an exam year. `passingAverages` is the
@@ -117,7 +126,9 @@ export function sittingOrderProblem({ name, examYear, result, otherResults }) {
   const later = laterSitting(others, year)
 
   if (result === 'pass' && later) {
-    return early(`${name} already has a result for ${later.exam_year}, and nothing can come after a pass. Record ${year} as Failed, or check the year.`)
+    return early(later.result === DID_NOT_TAKE
+      ? `${name} is recorded as not taking the LLE in ${later.exam_year}, and nothing can come after a pass. Remove that record first, or check the year.`
+      : `${name} already has a result for ${later.exam_year}, and nothing can come after a pass. Record ${year} as Failed, or check the year.`)
   }
 
   return ''
@@ -134,8 +145,10 @@ const STATUS_LABELS = {
 /**
  * Why a result that can be right still deserves a second look, as
  * sentences: a fail at the passing average or more (only when a subject was
- * under 50%), and a student not marked graduated (nobody sits the LLE before
- * graduating, but the End of School Year step may not have been run).
+ * under 50%), and a student not marked graduated who passed or failed
+ * (nobody sits the LLE before graduating, but the End of School Year step
+ * may not have been run). Not for "did not take", which is just what a
+ * student who has not graduated would get.
  */
 export function unusualReasons({ result, rating, examYear, passingAverages, studentStatus }) {
   const reasons = []
@@ -146,15 +159,13 @@ export function unusualReasons({ result, rating, examYear, passingAverages, stud
     reasons.push(`Failed with an average of ${formatAverage(raw)}. That happens only when a subject was under 50%.`)
   }
 
-  if (result && studentStatus !== 'graduated') {
+  if (result && result !== DID_NOT_TAKE && studentStatus !== 'graduated') {
     const status = STATUS_LABELS[studentStatus]
     reasons.push(`Not marked graduated${status ? ` (${status})` : ''}. Only graduates can take the LLE.`)
   }
 
   return reasons
 }
-
-const RESULT_LABELS = { pass: 'Passed', fail: 'Failed' }
 
 /**
  * Saving over a result on record. `whole`: the One Student form, which

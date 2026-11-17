@@ -199,6 +199,49 @@ class LleResultBatchTest extends TestCase
         $this->assertDatabaseCount('lle_results', 0);
     }
 
+    public function test_a_list_can_say_who_did_not_take_the_exam(): void
+    {
+        $ana = $this->student('Ana Cruz', 2022);
+        $ben = $this->student('Ben Dizon', 2022);
+        $cara = $this->student('Cara Lim', 2022);
+
+        Sanctum::actingAs($this->staff());
+
+        // Did not take has no general average.
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2026,
+            'entries' => [['user_id' => $cara->id, 'result' => LleResult::RESULT_DID_NOT_TAKE, 'rating' => 60]],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('errors', ['entries.0.rating' => ['Cara Lim: ' . \App\Services\LleResultRules::NOT_TAKEN_AVERAGE_MESSAGE]]);
+
+        $this->postJson('/api/lle-results/batch', [
+            'exam_year' => 2026,
+            'taken_at' => '2026-09-13',
+            'entries' => [
+                ['user_id' => $ana->id, 'result' => LleResult::RESULT_PASS, 'rating' => 82],
+                ['user_id' => $ben->id, 'result' => LleResult::RESULT_FAIL],
+                ['user_id' => $cara->id, 'result' => LleResult::RESULT_DID_NOT_TAKE],
+            ],
+        ])->assertOk()->assertJsonPath('recorded', 3);
+
+        // The list's date is for those who sat.
+        $this->assertSame('2026-09-13', LleResult::where('user_id', $ben->id)->first()->taken_at->toDateString());
+        $this->assertNull(LleResult::where('user_id', $cara->id)->first()->taken_at);
+
+        // Equals, not Same: MySQL's JSON type re-sorts an object's keys.
+        $this->assertEquals(
+            ['passed' => 1, 'failed' => 1, 'did_not_take' => 1],
+            collect(AuditLog::query()->where('action', 'lle-result.record-batch')->first()->metadata)->only(['passed', 'failed', 'did_not_take'])->all(),
+        );
+
+        // The roster shows it like any other record.
+        $this->getJson('/api/lle-results/batch?admission_year=2022&exam_year=2026')
+            ->assertOk()
+            ->assertJsonPath('students.2.name', 'Cara Lim')
+            ->assertJsonPath('students.2.result', LleResult::RESULT_DID_NOT_TAKE);
+    }
+
     public function test_it_is_for_staff_and_administrators_only(): void
     {
         $ana = $this->student('Ana Cruz', 2022);

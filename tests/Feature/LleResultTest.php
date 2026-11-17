@@ -400,6 +400,71 @@ class LleResultTest extends TestCase
         $this->assertDatabaseMissing('users', ['id' => $id]);
     }
 
+    public function test_a_student_who_did_not_take_the_exam_is_recorded_with_no_date_or_average(): void
+    {
+        $staff = $this->makeUser('lle-staff-dnt@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $student = $this->makeUser('lle-absent@example.com', User::ROLE_STUDENT, '2301930', 4);
+
+        Sanctum::actingAs($staff);
+
+        $payload = ['user_id' => $student->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_DID_NOT_TAKE];
+
+        // Nobody who did not sit has a date taken or a general average.
+        $this->postJson('/api/lle-results', $payload + ['rating' => 70])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.rating.0', LleResultRules::NOT_TAKEN_AVERAGE_MESSAGE);
+        $this->postJson('/api/lle-results', $payload + ['taken_at' => '2025-09-14'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.taken_at.0', LleResultRules::NOT_TAKEN_DATE_MESSAGE);
+        $this->assertDatabaseCount('lle_results', 0);
+
+        $this->postJson('/api/lle-results', $payload + ['remarks' => 'Did not apply.'])
+            ->assertCreated()
+            ->assertJsonPath('result.result', LleResult::RESULT_DID_NOT_TAKE)
+            ->assertJsonPath('result.taken_at', null)
+            ->assertJsonPath('result.rating', null);
+
+        // A sitting in a later year is the student's first; a pass may follow.
+        $this->postJson('/api/lle-results', [
+            'user_id' => $student->id,
+            'exam_year' => 2026,
+            'result' => LleResult::RESULT_PASS,
+            'rating' => 80,
+        ])->assertCreated();
+
+        $this->getJson('/api/lle-results?result=did_not_take')
+            ->assertOk()
+            ->assertJsonCount(1, 'results')
+            ->assertJsonPath('results.0.exam_year', 2025);
+        $this->assertFalse(LleResult::where('exam_year', 2025)->first()->wasTaken());
+        $this->assertSame(1, LleResult::query()->taken()->count());
+    }
+
+    public function test_did_not_take_follows_the_order_of_the_student_s_other_records(): void
+    {
+        $staff = $this->makeUser('lle-staff-dnt-order@example.com', User::ROLE_STAFF_MASTER_EXAMINER);
+        $licensed = $this->makeUser('lle-dnt-licensed@example.com', User::ROLE_STUDENT, '2301931', 4);
+        $later = $this->makeUser('lle-dnt-later@example.com', User::ROLE_STUDENT, '2301932', 4);
+
+        LleResult::create(['user_id' => $licensed->id, 'exam_year' => 2024, 'result' => LleResult::RESULT_PASS]);
+        LleResult::create(['user_id' => $later->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_DID_NOT_TAKE]);
+
+        Sanctum::actingAs($staff);
+
+        // Nothing is recorded after a pass, a did-not-take included.
+        $this->postJson('/api/lle-results', ['user_id' => $licensed->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_DID_NOT_TAKE])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.result.0', 'Lle-dnt-licensed User passed the LLE in 2024, so no result can be recorded for a later year.');
+
+        // A pass before a later record says which record is in the way.
+        $this->postJson('/api/lle-results', ['user_id' => $later->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_PASS])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.result.0', 'Lle-dnt-later User is recorded as not taking the LLE in 2026, and nothing can come after a pass. Remove that record first, or check the year.');
+
+        $this->postJson('/api/lle-results', ['user_id' => $later->id, 'exam_year' => 2025, 'result' => LleResult::RESULT_FAIL])
+            ->assertCreated();
+    }
+
     private function makeUser(string $email, string $role, ?string $studentId = null, ?int $yearLevel = null): User
     {
         return User::factory()->create([

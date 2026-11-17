@@ -118,6 +118,7 @@ class LleResultController extends Controller
 
         $examYear = (int) $validated['exam_year'];
         $problems = $this->rules->sittingProblems($examYear, $validated['taken_at'] ?? null)
+            + $this->rules->notTakenDateProblems($validated['result'], $validated['taken_at'] ?? null)
             + $this->rules->resultProblems(
                 (string) $student->name,
                 $examYear,
@@ -265,8 +266,8 @@ class LleResultController extends Controller
         $validated = $request->validate([
             'exam_year' => ['required', 'integer', 'min:1900', 'max:2999'],
             'taken_at' => ['nullable', 'date'],
-            // Only the students given a result: one left blank did not sit
-            // the exam, or is not on the list yet, and is not sent at all.
+            // Only the students given a result (passed, failed or did not
+            // take): one left blank is not on the list yet, and is not sent.
             'entries' => ['required', 'array', 'min:1', 'max:1000'],
             'entries.*.user_id' => ['required', 'integer', 'distinct'],
             'entries.*.result' => ['required', Rule::in(LleResult::RESULTS)],
@@ -323,7 +324,9 @@ class LleResultController extends Controller
                 $result = LleResult::query()->updateOrCreate(
                     ['user_id' => (int) $entry['user_id'], 'exam_year' => (int) $validated['exam_year']],
                     [
-                        'taken_at' => $validated['taken_at'] ?? null,
+                        // The list's date is the sitting's: nobody who did not
+                        // take the exam took it then.
+                        'taken_at' => $entry['result'] === LleResult::RESULT_DID_NOT_TAKE ? null : ($validated['taken_at'] ?? null),
                         'result' => $entry['result'],
                         'rating' => $entry['rating'] ?? null,
                         'recorded_by' => $actor->id,
@@ -349,6 +352,7 @@ class LleResultController extends Controller
                 'corrected' => $entries->count() - $created,
                 'passed' => $entries->where('result', LleResult::RESULT_PASS)->count(),
                 'failed' => $entries->where('result', LleResult::RESULT_FAIL)->count(),
+                'did_not_take' => $entries->where('result', LleResult::RESULT_DID_NOT_TAKE)->count(),
             ],
             $request,
         );

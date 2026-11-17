@@ -273,4 +273,22 @@ class LetModelRetrainingTest extends TestCase
         $this->assertSame(80.0, $mockRow['features']['management']);
         $this->assertNotContains('student:' . $late->id, array_column($set['results'], 'key'));
     }
+
+    public function test_did_not_take_is_never_a_training_label(): void
+    {
+        // Did not sit in 2026, then failed in 2027: the 2027 fail is their
+        // first sitting, and their series before it is the row.
+        $retaker = $this->graduate($this->preTest, 45, LleResult::RESULT_FAIL, Carbon::create(2025, 9, 1), Carbon::create(2027, 3, 14));
+        LleResult::create(['user_id' => $retaker->id, 'exam_year' => 2026, 'result' => LleResult::RESULT_DID_NOT_TAKE]);
+
+        // Never sat at all: no row, and not counted as left out either.
+        $absent = $this->graduate($this->preTest, 55, LleResult::RESULT_PASS, Carbon::create(2025, 9, 1), Carbon::create(2026, 3, 15));
+        LleResult::query()->where('user_id', $absent->id)->update(['result' => LleResult::RESULT_DID_NOT_TAKE, 'taken_at' => null]);
+
+        $set = app(LetTrainingSetBuilder::class)->build();
+
+        $this->assertSame([['key' => 'student:' . $retaker->id, 'label' => LetPredictionService::RESULT_FAIL, 'rows' => 1, 'battery_rows' => 0]], $set['results']);
+        $this->assertSame(0, $set['skipped']);
+        $this->assertCount(1, $set['graduates']);
+    }
 }

@@ -11,7 +11,7 @@
           <Award :size="18" />
           <h3>
             Record a licensure result
-            <InfoTip text="Board results are published by the PRC, so they are transcribed here once a batch has sat the exam. Each recorded outcome, with every pre-test and mock board that graduate completed before the LLE, gives the Estimated Outcome model one training row per series." />
+            <InfoTip text="Board results are published by the PRC, so they are transcribed here once a batch has sat the exam. Each pass or fail, with every pre-test and mock board that graduate completed before the LLE, gives the Estimated Outcome model one training row per series. Did Not Take is no outcome: it is never a training row and never counted in the passing rate." />
           </h3>
         </div>
       </header>
@@ -78,7 +78,7 @@
 
         <div class="lle-field">
           <label for="lle-date">Date taken</label>
-          <input id="lle-date" v-model="form.taken_at" type="date" class="text-input" v-bind="resultChecks.bind('taken_at')" />
+          <input id="lle-date" v-model="form.taken_at" type="date" class="text-input" :disabled="notTaken" v-bind="resultChecks.bind('taken_at')" />
           <FieldError :checks="resultChecks" field="taken_at" />
         </div>
 
@@ -87,6 +87,7 @@
           <select id="lle-result" v-model="form.result" class="text-input" v-bind="resultChecks.bind('result')">
             <option value="pass">Passed</option>
             <option value="fail">Failed</option>
+            <option value="did_not_take">Did not take</option>
           </select>
           <FieldError :checks="resultChecks" field="result" />
         </div>
@@ -101,7 +102,8 @@
             step="0.01"
             min="0"
             max="100"
-            placeholder="Optional"
+            :placeholder="notTaken ? 'None' : 'Optional'"
+            :disabled="notTaken"
             v-bind="resultChecks.bind('rating')"
           />
           <FieldError :checks="resultChecks" field="rating" />
@@ -359,6 +361,7 @@
             <option value="">All outcomes</option>
             <option value="pass">Passed</option>
             <option value="fail">Failed</option>
+            <option value="did_not_take">Did not take</option>
           </select>
         </div>
       </div>
@@ -386,8 +389,8 @@
                   <strong>{{ result.student?.name ?? 'Unknown student' }}</strong>
                   <span>{{ resultRowMeta(result) }}</span>
                 </span>
-                <span class="pill" :class="result.result === 'pass' ? 'success' : 'danger'">
-                  {{ result.result === 'pass' ? 'Passed' : 'Failed' }}
+                <span class="pill" :class="RESULT_PILLS[result.result] ?? 'neutral'">
+                  {{ RESULT_LABELS[result.result] ?? result.result }}
                 </span>
                 <ChevronDown :size="18" class="directory-row-more directory-row-chevron" aria-hidden="true" />
               </summary>
@@ -445,8 +448,8 @@
                 <td>{{ result.exam_year }}</td>
                 <td>{{ formatTakenAt(result.taken_at) }}</td>
                 <td>
-                  <span class="pill" :class="result.result === 'pass' ? 'success' : 'danger'">
-                    {{ result.result === 'pass' ? 'Passed' : 'Failed' }}
+                  <span class="pill" :class="RESULT_PILLS[result.result] ?? 'neutral'">
+                    {{ RESULT_LABELS[result.result] ?? result.result }}
                   </span>
                 </td>
                 <td class="numeric">{{ formatRating(result.rating) }}</td>
@@ -506,6 +509,7 @@ import {
   Users,
 } from 'lucide-vue-next'
 import { useLleResultsModule } from '../composables/useLleResultsModule'
+import { DID_NOT_TAKE, RESULT_LABELS } from '@/utils/lleResultChecks'
 import LicensureBatchEntry from './LicensureBatchEntry.vue'
 import LicensureSaveCheck from './LicensureSaveCheck.vue'
 import { estimatePageWidth, useElementWidth, usePhoneLayout } from '../composables/useViewport'
@@ -533,6 +537,9 @@ function formatRating(value) {
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric.toFixed(2) : '—'
 }
+
+// Did not take is no outcome: a plain grey pill, neither colour.
+const RESULT_PILLS = { pass: 'success', fail: 'danger', did_not_take: 'neutral' }
 
 function resultRowMeta(result) {
   return [result.student?.student_id, result.exam_year ? `${result.exam_year} exam` : null]
@@ -584,6 +591,9 @@ const {
 
 // A batch is how results arrive, so that is the way the page opens.
 const recordMode = ref('batch')
+
+// No date or average for someone who did not sit (the module empties them).
+const notTaken = computed(() => form.result === DID_NOT_TAKE)
 
 // The list of recorded results and the model's count of what it can learn
 // from both changed.
