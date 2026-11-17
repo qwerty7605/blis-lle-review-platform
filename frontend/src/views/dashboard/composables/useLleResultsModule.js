@@ -34,7 +34,8 @@ function currentExamYear() {
   return currentYear()
 }
 
-export function useLleResultsModule() {
+// onResultsChanged: called after this module saves or removes a result.
+export function useLleResultsModule({ onResultsChanged = () => {} } = {}) {
   const auth = useAuthStore()
   const services = useDashboardDataServices()
 
@@ -375,6 +376,7 @@ export function useLleResultsModule() {
       resetForm()
       resultChecks.reset()
       page.value = 1
+      onResultsChanged()
       await Promise.all([loadResults(), loadModelStatus({ silent: true })])
     } catch (error) {
       if (!resultChecks.takeServerErrors(error)) saveError.value = firstApiError(error, 'Unable to record that result.')
@@ -390,6 +392,7 @@ export function useLleResultsModule() {
 
     try {
       await services.removeLleResult(result.id)
+      onResultsChanged()
       await Promise.all([
         loadResults(),
         loadModelStatus({ silent: true }),

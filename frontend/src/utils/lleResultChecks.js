@@ -195,3 +195,41 @@ export function replacedReason({ examYear, recordedResult, recordedRating, resul
 
   return ''
 }
+
+/**
+ * Figures typed in for the passing-rate trend. The server's copy is
+ * LlePassingRateTrend::figureProblems(), with the same sentences: both
+ * counts or neither, no more passers than takers, and a rate when there are
+ * no counts.
+ */
+export const PASSING_RATE_MESSAGES = {
+  passersToo: 'Enter how many passed too, or leave both numbers empty.',
+  takersToo: 'Enter how many took it too, or leave both numbers empty.',
+  morePassers: 'More passed than took it. Check both numbers.',
+  rateNeeded: 'Enter the passing rate, or how many passed and how many took it.',
+}
+
+/**
+ * Passers over takers as a percentage to two places, as the PRC reports it
+ * (LlePassingRate::rateOf()).
+ */
+export function rateOf(passers, takers) {
+  const took = Number(takers)
+
+  return took > 0 ? Math.round((Number(passers) / took) * 10000) / 100 : 0
+}
+
+/**
+ * The problem with the pair of counts, if any, and which field it belongs
+ * under: { field: 'passers' | 'takers', message } or null.
+ */
+export function countsProblem(passers, takers) {
+  const passed = String(passers ?? '').trim()
+  const took = String(takers ?? '').trim()
+
+  if (passed !== '' && took === '') return { field: 'takers', message: PASSING_RATE_MESSAGES.takersToo }
+  if (took !== '' && passed === '') return { field: 'passers', message: PASSING_RATE_MESSAGES.passersToo }
+  if (passed !== '' && took !== '' && Number(passed) > Number(took)) return { field: 'passers', message: PASSING_RATE_MESSAGES.morePassers }
+
+  return null
+}

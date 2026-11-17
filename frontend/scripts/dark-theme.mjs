@@ -67,6 +67,10 @@ const OVERRIDES = {
   // so its white text reads at 4.5:1, as GitHub's and others' dark red does.
   '--dk-bg-lnu-danger-strong': '#d93a3d',
   '--dk-bg-lnu-danger-strong-hover': '#c22f33',
+  // The passing-rate trend's legend keys: the strokes JsChart draws its two
+  // lines with in the dark theme (LNU's indigo lifted, National unchanged).
+  '--dk-line-3949ab': '#7f8ce0',
+  '--dk-line-d55181': '#d55181',
 }
 
 // Brand tokens whose role depends on where they are used. Light values are
