@@ -6,6 +6,7 @@ use App\Models\Exam;
 use App\Models\ExamAttempt;
 use App\Models\User;
 use App\Support\LleTaxonomy;
+use App\Support\PassingMark;
 use Illuminate\Support\Str;
 
 /**
@@ -14,7 +15,9 @@ use Illuminate\Support\Str;
  *
  * Two endpoints serve it: the student reading their own (/student/analytics)
  * and staff or an admin reading a student's (/students/{student}/analytics).
- * One builder means the teacher sees exactly the numbers the student does.
+ * One builder means the teacher sees exactly the numbers the student does:
+ * real percentages, judged against the students' passing mark. When that mark
+ * is above 75 the teacher's page shows them as grades (`passing`, PassingMark).
  */
 class StudentAnalyticsService
 {
@@ -122,8 +125,10 @@ class StudentAnalyticsService
             ->filter(fn ($score) => !is_null($score))
             ->values();
 
+        $mark = PassingMark::current();
+
         $subjectProfiles = collect($canonicalSubjects)
-            ->map(function (string $subjectLabel) use ($attempts) {
+            ->map(function (string $subjectLabel) use ($attempts, $mark) {
                 $subjectAttempts = $attempts
                     ->filter(fn (array $attempt) => $attempt['subject'] === $subjectLabel)
                     ->values();
@@ -147,9 +152,10 @@ class StudentAnalyticsService
                         ? (float) $latestScore
                         : (float) $scores->avg();
 
-                    if ($referenceScore >= 85) {
+                    // 85 and 75 on the teachers' scale: they move with the mark.
+                    if ($referenceScore >= $mark->scoreFor(85)) {
                         $performanceBand = 'strong';
-                    } elseif ($referenceScore >= 75) {
+                    } elseif ($mark->passes($referenceScore)) {
                         $performanceBand = 'developing';
                     } else {
                         $performanceBand = 'focus';
@@ -221,8 +227,9 @@ class StudentAnalyticsService
                     : null,
                 'latest_score_delta' => $latestDelta,
                 'focus_subjects_count' => $focusSubjectsCount,
-                'passing_threshold' => 75,
+                'passing_threshold' => $mark->mark,
             ],
+            'passing' => $mark->toArray(),
             'subjects' => $subjectProfiles,
             'history' => $history,
             'recent_attempts' => $attempts->take(6)->values(),

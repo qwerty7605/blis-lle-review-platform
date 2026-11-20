@@ -271,6 +271,8 @@ export function useReviewBotModule() {
 
       result.value = {
         scorePercent: Number(data?.score_percent ?? 0),
+        // The student's passing mark the score is coloured against.
+        passingMark: data?.passing_mark ?? null,
         correctAnswers: Number(data?.correct_answers ?? 0),
         totalItems: Number(data?.total_items ?? 0),
         subject: data?.subject ?? '',

@@ -66,8 +66,10 @@
             <EstimatedOutcome
               class="profile-outcome"
               :readiness="readiness"
-              :average-score-display="formatScore(stats.average_score_percent)"
+              :average-score-display="staffScore(stats.average_score_percent)"
+              :average-label="grades ? 'Average Grade' : 'Average Score'"
               :focus-subjects-count="stats.focus_subjects_count"
+              :passing-mark="Number(stats.passing_threshold ?? 75)"
             />
           </article>
 
@@ -80,11 +82,11 @@
             <div class="profile-trend-stats">
               <div class="profile-stat">
                 <span>Average</span>
-                <strong>{{ formatScore(stats.average_score_percent) }}</strong>
+                <strong>{{ staffScore(stats.average_score_percent) }}</strong>
               </div>
               <div class="profile-stat">
                 <span>Latest</span>
-                <strong>{{ formatScore(stats.latest_score_percent) }}</strong>
+                <strong>{{ staffScore(stats.latest_score_percent) }}</strong>
               </div>
               <div class="profile-stat">
                 <span>Exams taken</span>
@@ -93,7 +95,7 @@
             </div>
 
             <div class="profile-trend-chart">
-              <ScoreTrendChart :points="trendPoints" :threshold="stats.passing_threshold" variant="compact" />
+              <ScoreTrendChart :points="trendPoints" :threshold="grades ? STAFF_MARK : stats.passing_threshold" :unit="grades ? '' : '%'" variant="compact" />
             </div>
           </article>
         </div>
@@ -103,7 +105,7 @@
           <header class="profile-card-head">
             <h3 id="profile-subjects-heading">
               <LayoutGrid :size="17" />Subjects
-              <InfoTip :text="`Average score across every finished exam in each subject. The pass mark is ${stats.passing_threshold}%.`" />
+              <InfoTip :text="grades ? `Average across every finished exam in each subject, as a grade. ${gradeTip(passing)}` : `Average score across every finished exam in each subject. The pass mark is ${stats.passing_threshold}%.`" />
             </h3>
           </header>
 
@@ -112,19 +114,19 @@
               <div class="profile-subject-top">
                 <strong>{{ subject.label }}</strong>
                 <span class="profile-subject-score" :class="`is-${scoreTone(subject.average_score_percent)}`">
-                  {{ formatScore(subject.average_score_percent) }}
+                  {{ staffScore(subject.average_score_percent) }}
                 </span>
               </div>
 
               <div
                 class="profile-bar"
                 role="img"
-                :aria-label="`${subject.label}: ${formatScore(subject.average_score_percent)} average`"
+                :aria-label="`${subject.label}: ${staffScore(subject.average_score_percent)} average`"
               >
                 <span
                   class="profile-bar-fill"
                   :class="`is-${scoreTone(subject.average_score_percent)}`"
-                  :style="{ width: `${clampPercent(subject.average_score_percent)}%` }"
+                  :style="{ width: `${clampPercent(staffValue(subject.average_score_percent, passing))}%` }"
                 />
               </div>
 
@@ -132,8 +134,8 @@
                 <template v-if="subject.attempts_count === 0">No finished exam yet</template>
                 <template v-else>
                   {{ subject.attempts_count }} {{ subject.attempts_count === 1 ? 'exam' : 'exams' }}
-                  · latest {{ formatScore(subject.latest_score_percent) }}
-                  · best {{ formatScore(subject.best_score_percent) }}
+                  · latest {{ staffScore(subject.latest_score_percent) }}
+                  · best {{ staffScore(subject.best_score_percent) }}
                 </template>
               </p>
             </li>
@@ -190,7 +192,8 @@
                   <span>{{ attemptContext(attempt) }}</span>
                 </div>
                 <span class="profile-row-score" :class="`is-${scoreTone(attempt.score_percent)}`">
-                  {{ formatScore(attempt.score_percent) }}
+                  {{ staffScore(attempt.score_percent) }}
+                  <small v-if="grades && attempt.score_percent !== null" class="profile-row-real">{{ formatScore(attempt.score_percent) }}</small>
                 </span>
               </li>
             </ul>
@@ -227,6 +230,7 @@ import { useLiveRefresh } from '@/utils/liveRefresh'
 import ScoreTrendChart from '@/components/charts/ScoreTrendChart.vue'
 import { describeStaffReadiness } from '../composables/readiness'
 import { formatCompactDate } from '../composables/useDashboardFormatters'
+import { STAFF_MARK, converts, gradeText, gradeTip, staffValue } from '@/utils/passingMark'
 
 /*
  * One student as a teacher or an administrator sees them: who they are, then
@@ -262,6 +266,10 @@ const subjects = computed(() => profile.value?.subjects ?? [])
 const studyPlan = computed(() => profile.value?.study_plan ?? [])
 const mastery = computed(() => profile.value?.mastery ?? [])
 const recentAttempts = computed(() => profile.value?.recent_attempts ?? [])
+// The students' passing mark; once it is above 75 a teacher reads scores as
+// grades, where that mark is 75 (utils/passingMark.js).
+const passing = computed(() => profile.value?.passing ?? null)
+const grades = computed(() => converts(passing.value))
 
 // Worded for someone reading about the student, not for the student; with
 // the early estimate from battery exams where the model in use allows it.
@@ -274,7 +282,7 @@ const trendPoints = computed(() => (
       id: attempt.attempt_id,
       // The chart prints `sublabel` under each dot and uses `label` on hover.
       label: attempt.title || attempt.subject || attempt.label,
-      value: Number(attempt.score_percent),
+      value: staffValue(attempt.score_percent, passing.value),
       sublabel: attempt.label,
     }))
 ))
@@ -298,6 +306,11 @@ function formatScore(value) {
   return value === null || value === undefined ? 'N/A' : `${Number(value).toFixed(1)}%`
 }
 
+// An exam score or average as this page reads it: a grade once grades show.
+function staffScore(value) {
+  return grades.value && value !== null && value !== undefined ? gradeText(value, passing.value) : formatScore(value)
+}
+
 function formatWholeScore(value) {
   return value === null || value === undefined ? 'N/A' : `${Math.round(Number(value))}%`
 }
@@ -306,13 +319,14 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value ?? 0)))
 }
 
-// Same bands the rest of the app uses: at or above the 75% pass mark, within
-// reach of it, or well below.
+// Same bands the rest of the app uses: at or above the pass mark, within
+// reach of it, or well below. Read on the teachers' scale, so they move with
+// the students' mark.
 function scoreTone(value) {
   if (value === null || value === undefined) return 'none'
 
-  const score = Number(value)
-  if (score >= 75) return 'good'
+  const score = staffValue(value, passing.value)
+  if (score >= STAFF_MARK) return 'good'
   if (score >= 50) return 'mid'
   return 'low'
 }
@@ -677,6 +691,15 @@ watch(() => route.params.studentId, loadProfile, { immediate: true })
   flex-shrink: 0;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* The real score under a grade, in the exam list (the details). */
+.profile-row-real {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--lnu-text-muted);
+  text-align: right;
 }
 
 /* Amber rather than red for a low score, as on the student's own pages. */

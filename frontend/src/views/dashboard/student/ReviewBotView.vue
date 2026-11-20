@@ -238,7 +238,7 @@
           </div>
 
           <template v-else>
-            <div v-if="result" class="review-result" :class="scoreToneClass(result.scorePercent)">
+            <div v-if="result" class="review-result" :class="scoreToneClass(result.scorePercent, result.passingMark)">
               <div class="review-result-score">
                 <span class="review-result-kicker">Score</span>
                 <strong>{{ result.scorePercent }}%</strong>
@@ -343,6 +343,7 @@
 
 <script setup>
 import InfoTip from '@/components/InfoTip.vue'
+import { passes, scoreFor } from '@/utils/passingMark'
 import { computed, nextTick, ref, watch } from 'vue'
 import { AlertCircle, BookOpen, Info, RefreshCw, Sparkles, Target } from 'lucide-vue-next'
 import { useReviewBotModule } from '../composables/useReviewBotModule'
@@ -444,9 +445,11 @@ function shortSubjectLabel(subject) {
   return SUBJECT_SHORT_NAMES[subject] ?? subject
 }
 
-function scoreToneClass(score) {
-  if (score >= 85) return 'strong'
-  if (score >= 75) return 'steady'
+// Against the student's passing mark; 85 is on the teachers' scale, so it
+// moves with the mark.
+function scoreToneClass(score, passing) {
+  if (score >= scoreFor(85, passing)) return 'strong'
+  if (passes(score, passing)) return 'steady'
   return 'focus'
 }
 

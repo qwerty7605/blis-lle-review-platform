@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Support\PassingMark;
 use App\Support\SchoolCalendar;
 use App\Support\SystemSettings;
 use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
+    public const PASSING_MARK_MESSAGE = 'Enter a whole number from ' . PassingMark::MIN . ' to ' . PassingMark::MAX . '.';
+
     public function legal()
     {
         $legalKeys = ['terms_of_use_text', 'privacy_policy_text'];
@@ -53,7 +56,7 @@ class SettingsController extends Controller
         ]);
     }
 
-    public function show(Request $request, SchoolCalendar $calendar)
+    public function show(Request $request, SchoolCalendar $calendar, SystemSettings $systemSettings)
     {
         $user = $request->user();
 
@@ -84,6 +87,8 @@ class SettingsController extends Controller
         $months = $calendar->startMonths();
         $settings['first_semester_start_month'] = $months['first'];
         $settings['second_semester_start_month'] = $months['second'];
+        // Likewise the mark in use: a stored value outside 75-95 reads as 75.
+        $settings['students_passing_mark'] = $systemSettings->studentsPassingMark();
 
         return response()->json([
             'settings' => $settings,
@@ -92,7 +97,7 @@ class SettingsController extends Controller
         ]);
     }
 
-    public function update(Request $request, SchoolCalendar $calendar)
+    public function update(Request $request, SchoolCalendar $calendar, SystemSettings $systemSettings)
     {
         $user = $request->user();
 
@@ -104,6 +109,7 @@ class SettingsController extends Controller
             'platform_name' => ['sometimes', 'required', 'string', 'max:255'],
             'first_semester_start_month' => ['sometimes', 'required', 'integer', 'between:1,12'],
             'second_semester_start_month' => ['sometimes', 'required', 'integer', 'between:1,12'],
+            'students_passing_mark' => ['sometimes', 'required', 'integer', 'between:' . PassingMark::MIN . ',' . PassingMark::MAX],
             'allow_public_registration' => ['sometimes', 'required', 'boolean'],
             'announcement_banner' => ['sometimes', 'nullable', 'string', 'max:500'],
             'terms_of_use_text' => ['sometimes', 'required', 'string', 'max:20000'],
@@ -111,7 +117,10 @@ class SettingsController extends Controller
         ], [
             'first_semester_start_month.*' => 'Pick the month the 1st semester starts.',
             'second_semester_start_month.*' => 'Pick the month the 2nd semester starts.',
+            'students_passing_mark.*' => self::PASSING_MARK_MESSAGE,
         ]);
+
+        $markBefore = $systemSettings->studentsPassingMark();
 
         // The pair has to make a calendar, whichever of the two was sent.
         $monthsBefore = $calendar->startMonths();
@@ -152,6 +161,13 @@ class SettingsController extends Controller
         $metadata = ['keys' => array_keys($validated)];
         if ($monthsAfter !== $monthsBefore) {
             $metadata['semester_start_months'] = ['from' => $monthsBefore, 'to' => $monthsAfter];
+        }
+
+        // A new mark re-judges every score already on record, on every page,
+        // so it is written down with what it was before.
+        $markAfter = $systemSettings->studentsPassingMark();
+        if ($markAfter !== $markBefore) {
+            $metadata['students_passing_mark'] = ['from' => $markBefore, 'to' => $markAfter];
         }
 
         $this->recordAudit(

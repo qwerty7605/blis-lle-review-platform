@@ -3,6 +3,7 @@ import { studentAnalyticsApi } from '@/api/studentAnalytics.api'
 import { LIBRARY_SUBJECT_CATEGORIES } from '@/constants/librarySubjects'
 import { formatDateTime } from './useDashboardFormatters'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { markOf, passes, scoreFor } from '@/utils/passingMark'
 
 function firstApiError(error, fallbackMessage) {
   const messages = Object.values(error?.response?.data?.errors ?? {}).flat()
@@ -14,11 +15,13 @@ function asList(value) {
   return Array.isArray(value) ? value : []
 }
 
-function scoreTone(score) {
+// Against the student's passing mark; 85 and 60 are on the teachers' scale,
+// so they move with it.
+function scoreTone(score, passing) {
   const numericScore = Number(score ?? 0)
-  if (numericScore >= 85) return 'success'
-  if (numericScore >= 75) return 'navy'
-  if (numericScore >= 60) return 'gold'
+  if (numericScore >= scoreFor(85, passing)) return 'success'
+  if (passes(numericScore, passing)) return 'navy'
+  if (numericScore >= scoreFor(60, passing)) return 'gold'
   return 'danger'
 }
 
@@ -61,6 +64,8 @@ export function useStudentInsightsModule() {
   // The board exam model's answer for this student, as the server words it
   // (BoardExamOutlook.php); null until the first load.
   const predictiveModel = ref(null)
+  // The student's passing mark (75 to 95, set by the administrator).
+  const passingMark = computed(() => markOf(stats.value?.passing_threshold))
 
   const subjects = computed(() => {
     const incoming = new Map(
@@ -81,7 +86,7 @@ export function useStudentInsightsModule() {
 
       return {
         ...subject,
-        scoreTone: scoreTone(subject.average_score_percent ?? subject.latest_score_percent ?? 0),
+        scoreTone: scoreTone(subject.average_score_percent ?? subject.latest_score_percent ?? 0, passingMark.value),
         trendTone: trendTone(subject.trend),
         bandLabel: bandLabel(subject.performance_band),
         coveragePercent: Math.max(0, Math.min(100, Number(subject.average_score_percent ?? 0))),
@@ -93,7 +98,7 @@ export function useStudentInsightsModule() {
     asList(historyRows.value).map((attempt) => ({
       ...attempt,
       score: Number(attempt.score_percent ?? 0),
-      scoreTone: scoreTone(attempt.score_percent),
+      scoreTone: scoreTone(attempt.score_percent, passingMark.value),
       submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a',
     }))
   ))
@@ -102,7 +107,7 @@ export function useStudentInsightsModule() {
     asList(recentAttemptRows.value).map((attempt) => ({
       ...attempt,
       scoreDisplay: attempt.score_percent === null ? 'N/A' : `${Number(attempt.score_percent).toFixed(1)}%`,
-      scoreTone: scoreTone(attempt.score_percent),
+      scoreTone: scoreTone(attempt.score_percent, passingMark.value),
       submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a',
     }))
   ))
@@ -117,7 +122,7 @@ export function useStudentInsightsModule() {
       ...row,
       rank: index + 1,
       score: row.score === null || row.score === undefined ? null : Number(row.score),
-      scoreTone: scoreTone(row.score),
+      scoreTone: scoreTone(row.score, passingMark.value),
       reviewQuery: {
         subject: row.subject,
         ...(row.topic_id ? { topic_id: String(row.topic_id) } : {}),
@@ -308,7 +313,7 @@ export function useStudentInsightsModule() {
       headline = {
         key: 'on_track',
         label: 'You are on track',
-        text: 'Every subject you have attempted so far is already at 75% or higher.',
+        text: `Every subject you have attempted so far is already at ${passingMark.value}% or higher.`,
       }
     }
 
@@ -324,7 +329,7 @@ export function useStudentInsightsModule() {
         points.push({
           key: 'also_review',
           label: 'Also review',
-          text: `${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} still below the 75% passing mark.`,
+          text: `${others.join(' and ')} ${others.length === 1 ? 'is' : 'are'} still below the ${passingMark.value}% passing mark.`,
         })
       }
     }

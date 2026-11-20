@@ -9,6 +9,7 @@ use App\Models\ReviewBotAttemptQuestion;
 use App\Models\ReviewBotItemState;
 use App\Models\User;
 use App\Support\LleTaxonomy;
+use App\Support\PassingMark;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -28,6 +29,11 @@ use RuntimeException;
  */
 class ReviewBotService
 {
+    /**
+     * A practice score under this is still a weak spot; at or above the other
+     * the student moves on. On the teachers' scale (PassingMark::scoreFor()):
+     * the second is the students' passing mark itself.
+     */
     private const WEAK_SCORE_THRESHOLD = 60.0;
     private const STRONG_SCORE_THRESHOLD = 75.0;
 
@@ -813,6 +819,8 @@ class ReviewBotService
             'improved' => $improved,
             'previous_score_percent' => $previousAttempt?->score_percent !== null ? (float) $previousAttempt->score_percent : null,
             'recommendation' => $this->buildRecommendation($attempt, $scorePercent),
+            // The mark the page colours this score against.
+            'passing_mark' => PassingMark::current()->mark,
         ];
     }
 
@@ -821,7 +829,9 @@ class ReviewBotService
      */
     protected function buildRecommendation(ReviewBotAttempt $attempt, float $scorePercent): array
     {
-        if ($scorePercent < self::WEAK_SCORE_THRESHOLD) {
+        $mark = PassingMark::current();
+
+        if ($scorePercent < $mark->scoreFor(self::WEAK_SCORE_THRESHOLD)) {
             return [
                 'action' => 'repeat_topic',
                 'message' => 'This is still a weak spot. Review the explanations above, then try this same topic again.',
@@ -829,7 +839,7 @@ class ReviewBotService
             ];
         }
 
-        if ($scorePercent >= self::STRONG_SCORE_THRESHOLD) {
+        if ($scorePercent >= $mark->scoreFor(self::STRONG_SCORE_THRESHOLD)) {
             $student = $attempt->student ?? User::find($attempt->user_id);
             $nextWeakArea = $student ? $this->resolveWeakArea($student) : [];
 

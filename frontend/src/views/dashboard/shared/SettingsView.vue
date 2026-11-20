@@ -81,6 +81,37 @@
             </p>
           </fieldset>
 
+          <fieldset class="settings-calendar">
+            <legend class="field-label">
+              Students' Passing Mark
+              <InfoTip
+                label="How the students' passing mark works"
+                text="Students keep their real score and need this mark to pass an exam. Teachers and administrators see each score as a grade on the usual scale, where this mark is 75 (the LLE's passing average), so both see the same students passing. At 75 nothing is converted. The Estimated Outcome and the LLE results do not change."
+              />
+            </legend>
+
+            <label class="field-stack settings-passing-field">
+              <span class="settings-calendar-label">Passing Mark (%)</span>
+              <input
+                v-model.number="settingsForm.students_passing_mark"
+                type="number"
+                inputmode="numeric"
+                min="75"
+                max="95"
+                step="1"
+                class="text-input"
+                :disabled="!settingsCanEdit"
+                v-bind="settingsChecks.bind('students_passing_mark')"
+              />
+              <FieldError :checks="settingsChecks" field="students_passing_mark" />
+            </label>
+
+            <p v-if="passingMarkPreview" class="settings-calendar-now">{{ passingMarkPreview }}</p>
+            <p v-if="settingsCanEdit && passingMarkChanged" class="feedback info" role="note">
+              Saving re-judges every exam already taken, on every page, at once: a score that passed before may not pass now.
+            </p>
+          </fieldset>
+
           <label class="check-item">
             <input v-model="settingsForm.allow_public_registration" type="checkbox" :disabled="!settingsCanEdit" />
             <span>Allow public student registration</span>
@@ -178,6 +209,8 @@ const {
   settingsCanEdit,
   settingsForm,
   currentTerm,
+  passingMarkPreview,
+  passingMarkChanged,
   settingsChecks,
   loadSystemSettings,
   saveSystemSettings,
@@ -260,6 +293,11 @@ const readOnlyDocuments = computed(() => [
 
 .settings-calendar-note {
   color: var(--ink-muted);
+}
+
+/* A three-digit number: as wide as one month picker, not the whole card. */
+.settings-passing-field {
+  max-width: 220px;
 }
 
 @media (max-width: 480px) {

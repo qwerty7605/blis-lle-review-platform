@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ExamAttempt;
 use App\Models\QuestionBankQuestion;
 use App\Models\User;
+use App\Support\PassingMark;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -30,7 +31,10 @@ use Illuminate\Support\Facades\DB;
  */
 class TeacherActionPlanner
 {
-    /** A cohort topic under this is worth acting on. */
+    /**
+     * A cohort topic under this is worth acting on. On the teachers' scale
+     * (PassingMark::scoreFor()), so it moves with the students' mark.
+     */
     private const WEAK_TOPIC_SCORE = 60.0;
 
     /** At or below this correct rate an item looks miskeyed rather than hard. */
@@ -39,7 +43,7 @@ class TeacherActionPlanner
     /** Fewer answers than this and a low correct rate is just a small sample. */
     private const SUSPECT_ITEM_MIN_ANSWERS = 5;
 
-    /** Students averaging under this are the ones to follow up with. */
+    /** Students averaging under this are the ones to follow up with (teachers' scale). */
     private const STUDENT_CONCERN_SCORE = 60.0;
 
     /** Below this many published items a topic counts as having no practice. */
@@ -56,11 +60,12 @@ class TeacherActionPlanner
         $topics = $this->asRows($analytics['topic_performance'] ?? []);
         $students = $this->asRows($analytics['students_needing_attention'] ?? []);
         $published = $this->publishedCountsByTopic();
+        $weakTopicScore = PassingMark::current()->scoreFor(self::WEAK_TOPIC_SCORE);
 
         $weakTopics = array_values(array_filter(
             $topics,
             fn (array $row): bool => ($row['score'] ?? null) !== null
-                && (float) $row['score'] < self::WEAK_TOPIC_SCORE,
+                && (float) $row['score'] < $weakTopicScore,
         ));
 
         $uncovered = array_values(array_filter(
@@ -267,18 +272,25 @@ class TeacherActionPlanner
      */
     private function followUpStudents(array $students): ?array
     {
+        $mark = PassingMark::current();
+        $concernScore = $mark->scoreFor(self::STUDENT_CONCERN_SCORE);
+
         $behind = array_values(array_filter(
             $students,
             fn (array $row): bool => ($row['average_score_percent'] ?? null) !== null
-                && (float) $row['average_score_percent'] < self::STUDENT_CONCERN_SCORE,
+                && (float) $row['average_score_percent'] < $concernScore,
         ));
 
         if ($behind === []) {
             return null;
         }
 
+        // Teachers read an average as a grade once the students' mark is
+        // above 75, as everywhere else on their pages.
         $names = array_slice(array_map(
-            fn (array $row): string => sprintf('%s (%s%%)', $row['name'], $this->percent($row['average_score_percent'])),
+            fn (array $row): string => $mark->converts()
+                ? sprintf('%s (grade %s)', $row['name'], $this->percent($mark->grade((float) $row['average_score_percent'])))
+                : sprintf('%s (%s%%)', $row['name'], $this->percent($row['average_score_percent'])),
             $behind,
         ), 0, 3);
 

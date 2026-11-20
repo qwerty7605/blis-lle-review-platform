@@ -6,6 +6,7 @@ import { now } from '@/utils/clock'
 import { useLiveRefresh } from '@/utils/liveRefresh'
 import { formatCompactDate, formatDateTime, parseDateTime } from './useDashboardFormatters'
 import { describeReadiness } from './readiness'
+import { markOf, passes, scoreFor } from '@/utils/passingMark'
 import {
   canStudentOpenExam,
   examHasQuestionSet,
@@ -179,22 +180,24 @@ function noticeWhen(exam, dueAt) {
   return { label: '', text: 'n/a' }
 }
 
-function scoreTone(scorePercent) {
+// Against the student's passing mark (`passing`, from their analytics); the
+// 50 is on the teachers' scale, so it moves with the mark.
+function scoreTone(scorePercent, passing) {
   const score = Number(scorePercent ?? 0)
-  if (score >= 75) return 'success'
-  if (score >= 50) return 'gold'
+  if (passes(score, passing)) return 'success'
+  if (score >= scoreFor(50, passing)) return 'gold'
   return 'danger'
 }
 
-function lastExamSuggestion(scorePercent, subject) {
+function lastExamSuggestion(scorePercent, subject, passing) {
   const score = Number(scorePercent ?? 0)
   const subjectLabel = subject || 'this subject'
 
-  if (score >= 75) {
+  if (passes(score, passing)) {
     return "Solid result — keep this consistency going into your next exam."
   }
-  if (score >= 50) {
-    return `Decent attempt — a bit more review on ${subjectLabel} should push you past 75%.`
+  if (score >= scoreFor(50, passing)) {
+    return `Decent attempt — a bit more review on ${subjectLabel} should push you past ${markOf(passing)}%.`
   }
   return `This is a weak spot — revisit ${subjectLabel} before your next attempt.`
 }
@@ -281,6 +284,9 @@ export function useStudentDashboardModule() {
     })
   })
 
+  // The student's passing mark, from the analytics this page also loads.
+  const passingMark = computed(() => markOf(insightStats.value?.passing_threshold))
+
   const recentExamCards = computed(() => (
     recentExams.value.map((attempt) => {
       const scorePercent = Number(attempt.score_percent ?? 0)
@@ -288,7 +294,7 @@ export function useStudentDashboardModule() {
       return {
         ...attempt,
         scoreDisplay: `${scorePercent.toFixed(1)}%`,
-        scoreTone: scoreTone(scorePercent),
+        scoreTone: scoreTone(scorePercent, passingMark.value),
         submittedAtText: attempt.submitted_at ? formatDateTime(attempt.submitted_at) : 'Submission time unavailable',
         submittedAtCompact: attempt.submitted_at ? formatCompactDate(attempt.submitted_at) : 'n/a',
       }
@@ -301,7 +307,7 @@ export function useStudentDashboardModule() {
   const performanceFeed = computed(() => (
     recentExamCards.value.map((attempt) => ({
       ...attempt,
-      suggestion: lastExamSuggestion(attempt.score_percent, attempt.subject),
+      suggestion: lastExamSuggestion(attempt.score_percent, attempt.subject, passingMark.value),
       statusLabel: lastExamStatusLabel(attempt.scoreTone),
     }))
   ))
@@ -321,6 +327,7 @@ export function useStudentDashboardModule() {
         ? 'N/A'
         : `${Number(stats.average_score_percent).toFixed(1)}%`,
       focusSubjectsCount: Number(stats?.focus_subjects_count ?? 0),
+      passingMark: passingMark.value,
     }
   })
 

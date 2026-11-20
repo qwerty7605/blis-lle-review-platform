@@ -5,12 +5,12 @@ namespace App\Services;
 use App\Models\ExamAttempt;
 use App\Models\User;
 use App\Support\LleTaxonomy;
+use App\Support\PassingMark;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ExamResultFeedbackService
 {
-    private const PASSING_SCORE = 75.0;
     private const TOPIC_MIN_ITEMS = 3;
 
     public function __construct(
@@ -71,16 +71,20 @@ class ExamResultFeedbackService
     }
 
     /**
+     * Against the students' passing mark (PassingMark), the one this page is
+     * read by.
+     *
      * @return array{is_passing: bool, passing_score: float, delta: float}
      */
     protected function buildPassStatus(ExamAttempt $attempt): array
     {
         $score = round((float) ($attempt->score_percent ?? 0), 2);
+        $mark = PassingMark::current();
 
         return [
-            'is_passing' => $score >= self::PASSING_SCORE,
-            'passing_score' => self::PASSING_SCORE,
-            'delta' => round($score - self::PASSING_SCORE, 2),
+            'is_passing' => $mark->passes($score),
+            'passing_score' => (float) $mark->mark,
+            'delta' => round($score - $mark->mark, 2),
         ];
     }
 
@@ -101,7 +105,8 @@ class ExamResultFeedbackService
             return [];
         }
 
-        $weakThreshold = 60.0;
+        // 60 on the teachers' scale, so it moves with the students' mark.
+        $weakThreshold = PassingMark::current()->scoreFor(60);
 
         $weakTopicIds = collect($this->dashboardAnalyticsService->buildTopicWeaknessPerformance($student))
             ->filter(fn (array $topic): bool => (float) ($topic['score'] ?? 100.0) < $weakThreshold
@@ -194,17 +199,20 @@ class ExamResultFeedbackService
             ->all();
     }
 
+    /** Cut-offs on the teachers' scale, so they move with the students' mark. */
     protected function topicLevel(float $scorePercent): string
     {
-        if ($scorePercent >= 80.0) {
+        $mark = PassingMark::current();
+
+        if ($scorePercent >= $mark->scoreFor(80)) {
             return 'strong';
         }
 
-        if ($scorePercent >= 60.0) {
+        if ($scorePercent >= $mark->scoreFor(60)) {
             return 'average';
         }
 
-        if ($scorePercent >= 40.0) {
+        if ($scorePercent >= $mark->scoreFor(40)) {
             return 'weak';
         }
 
@@ -413,8 +421,9 @@ class ExamResultFeedbackService
     protected function buildReadinessLevel(ExamAttempt $attempt): array
     {
         $score = round((float) ($attempt->score_percent ?? 0), 2);
+        $mark = PassingMark::current();
 
-        if ($score >= 90) {
+        if ($score >= $mark->scoreFor(90)) {
             return [
                 'level' => 'exam_ready',
                 'label' => 'Exam Ready',
@@ -422,7 +431,7 @@ class ExamResultFeedbackService
             ];
         }
 
-        if ($score >= self::PASSING_SCORE) {
+        if ($mark->passes($score)) {
             return [
                 'level' => 'near_ready',
                 'label' => 'Near Ready',
@@ -430,7 +439,7 @@ class ExamResultFeedbackService
             ];
         }
 
-        if ($score >= 60) {
+        if ($score >= $mark->scoreFor(60)) {
             return [
                 'level' => 'developing',
                 'label' => 'Developing',
@@ -453,8 +462,9 @@ class ExamResultFeedbackService
     {
         $score = round((float) ($attempt->score_percent ?? 0), 2);
         $focusLabel = (string) ($primaryFocus['label'] ?? 'this exam');
+        $mark = PassingMark::current();
 
-        if ($score >= 90) {
+        if ($score >= $mark->scoreFor(90)) {
             return [
                 'tone' => 'excellent',
                 'label' => 'Outstanding result',
@@ -465,7 +475,7 @@ class ExamResultFeedbackService
             ];
         }
 
-        if ($score >= self::PASSING_SCORE) {
+        if ($mark->passes($score)) {
             return [
                 'tone' => 'passing',
                 'label' => 'Passing result',
@@ -476,7 +486,7 @@ class ExamResultFeedbackService
             ];
         }
 
-        if ($score >= 60) {
+        if ($score >= $mark->scoreFor(60)) {
             return [
                 'tone' => 'review',
                 'label' => 'Close, but needs review',

@@ -1,4 +1,5 @@
 import { formatDateTime } from './useDashboardFormatters'
+import { passes, scoreFor } from '@/utils/passingMark'
 
 // Pure, framework-agnostic result-summary building -- deliberately not a Vue
 // computed, so both the live exam-taking overlay's Vue state (useRoomsModule)
@@ -29,11 +30,12 @@ export function topicLevelPillTone(level) {
   return TOPIC_LEVEL_TONES[level] ?? 'neutral'
 }
 
-export function scoreBarTone(scorePercent) {
+// Cut-offs on the teachers' scale, so they move with the students' mark.
+export function scoreBarTone(scorePercent, passing = null) {
   const score = Number(scorePercent ?? 0)
-  if (score >= 80) return 'success'
-  if (score >= 60) return 'neutral'
-  if (score >= 40) return 'gold'
+  if (score >= scoreFor(80, passing)) return 'success'
+  if (score >= scoreFor(60, passing)) return 'neutral'
+  if (score >= scoreFor(40, passing)) return 'gold'
   return 'danger'
 }
 
@@ -49,23 +51,25 @@ export function buildExamResultSummary({ attempt, feedback, questionsCount = 0 }
   const rawScore = Number(attempt?.score_percent ?? 0)
   const score = Number.isFinite(rawScore) ? rawScore : 0
   const submittedAtText = attempt?.submitted_at ? formatDateTime(attempt.submitted_at) : 'n/a'
+  // The student's own passing mark, as the server judged this attempt.
+  const passing = feedback?.pass_status?.passing_score ?? null
 
   let tone = 'needs-work'
   let label = 'Needs more review'
   let headline = 'Keep practicing and review the missed items.'
   let message = 'Focus on the questions you missed, then review the correct answers before your next attempt.'
 
-  if (score >= 90) {
+  if (score >= scoreFor(90, passing)) {
     tone = 'excellent'
     label = 'Outstanding result'
     headline = 'Strong finish.'
     message = 'You cleared this exam with a high score. Review the full breakdown if you want to confirm every item.'
-  } else if (score >= 75) {
+  } else if (passes(score, passing)) {
     tone = 'passing'
     label = 'Passing result'
     headline = 'You passed this attempt.'
     message = 'Your score is in a good range. Check the answer review for the few items that still need cleanup.'
-  } else if (score >= 60) {
+  } else if (score >= scoreFor(60, passing)) {
     tone = 'review'
     label = 'Close, but needs review'
     headline = 'You are within reach.'

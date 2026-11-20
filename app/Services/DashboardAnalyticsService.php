@@ -10,13 +10,13 @@ use App\Models\Room;
 use App\Models\User;
 use App\Services\MachineLearning\MasteryProfileBuilder;
 use App\Support\LleTaxonomy;
+use App\Support\PassingMark;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class DashboardAnalyticsService
 {
-    public const PASSING_SCORE = 75.0;
     private const STUDENT_HISTORY_LIMIT = 6;
     private const STUDENT_ACTIVITY_LIMIT = 8;
     private const STAFF_ACTIVITY_LIMIT = 14;
@@ -99,8 +99,9 @@ class DashboardAnalyticsService
         $countingAttempts = $submittedAttempts->unique('exam_id')->values();
 
         $scoreValues = $this->extractScores($countingAttempts);
+        $mark = PassingMark::current();
         $passingAttempts = $scoreValues
-            ->filter(fn (float $score) => $score >= self::PASSING_SCORE)
+            ->filter(fn (float $score) => $mark->passes($score))
             ->count();
         $completedExams = $submittedAttempts
             ->pluck('exam_id')
@@ -157,7 +158,8 @@ class DashboardAnalyticsService
                     ->count(),
                 'passing_attempts' => (int) $passingAttempts,
                 'failing_attempts' => max(0, (int) $countingAttempts->count() - (int) $passingAttempts),
-                'passing_threshold' => self::PASSING_SCORE,
+                // The students' passing mark: what this student is judged against.
+                'passing_threshold' => (float) $mark->mark,
                 'average_score_percent' => $scoreValues->isNotEmpty()
                     ? round((float) $scoreValues->avg(), 2)
                     : null,
@@ -174,9 +176,10 @@ class DashboardAnalyticsService
             'subjects' => $subjects,
             'topic_performance' => $topicPerformance,
             'focus_subjects' => collect($subjects)
-                ->filter(fn (array $subject) => (float) ($subject['score'] ?? 0) < self::PASSING_SCORE)
+                ->filter(fn (array $subject) => !$mark->passes((float) ($subject['score'] ?? 0)))
                 ->values()
                 ->all(),
+            'passing' => $mark->toArray(),
             // An object or null, never []: an empty PHP array serialises to a
             // JSON array, and [] is truthy in JavaScript, so a caller testing
             // `if (weak_area)` would render a recommendation block with
@@ -315,14 +318,15 @@ class DashboardAnalyticsService
             ->values();
 
         $submittedScoreValues = $this->extractScores($submittedLatestAttempts);
+        $mark = PassingMark::current();
         $passingLatestAttempts = $submittedScoreValues
-            ->filter(fn (float $score) => $score >= self::PASSING_SCORE)
+            ->filter(fn (float $score) => $mark->passes($score))
             ->count();
         $sessionEnrollments = (int) $sessionRows
             ->sum(fn ($session) => (int) ($studentCountsByRoomId[(int) $session->room_id] ?? 0));
 
         $sessionPerformance = collect($sessionRows)
-            ->map(function ($session) use ($latestAttemptsBySession, $studentCountsByRoomId): array {
+            ->map(function ($session) use ($latestAttemptsBySession, $studentCountsByRoomId, $mark): array {
                 $sessionAttempts = $latestAttemptsBySession->get(
                     $this->sessionKey((int) $session->exam_id, (int) $session->room_id),
                     collect(),
@@ -335,7 +339,7 @@ class DashboardAnalyticsService
                 $studentsStarted = (int) $sessionAttempts->count();
                 $studentsSubmitted = (int) $submittedAttempts->count();
                 $passingCount = $submittedScores
-                    ->filter(fn (float $score) => $score >= self::PASSING_SCORE)
+                    ->filter(fn (float $score) => $mark->passes($score))
                     ->count();
                 $latestSubmission = $submittedAttempts
                     ->sortByDesc(fn (ExamAttempt $attempt) => $this->attemptSubmissionTimestamp($attempt))
@@ -400,6 +404,9 @@ class DashboardAnalyticsService
             ],
             'subject_performance' => $this->buildSubjectPerformance($submittedLatestAttempts),
             'session_performance' => $sessionPerformance,
+            // Every figure above is a real percentage; the page shows teachers
+            // grades from them when the students' mark is above 75.
+            'passing' => $mark->toArray(),
             // Distribution, trend, cohort topic accuracy, watchlist and room
             // comparison -- the parts of the picture the flat averages above
             // cannot show. Same scoping, so the numbers agree with each other.
@@ -424,16 +431,18 @@ class DashboardAnalyticsService
      */
     private function buildSubjectPerformance(Collection $submittedAttempts): array
     {
+        $mark = PassingMark::current();
+
         return $submittedAttempts
             ->groupBy(fn (ExamAttempt $attempt) => $this->normalizeSubjectLabel($attempt->exam?->subject))
-            ->map(function (Collection $attempts, string $label): array {
+            ->map(function (Collection $attempts, string $label) use ($mark): array {
                 $sortedAttempts = $attempts
                     ->sortByDesc(fn (ExamAttempt $attempt) => $this->attemptSubmissionTimestamp($attempt))
                     ->values();
                 $scores = $this->extractScores($sortedAttempts);
                 $latestAttempt = $sortedAttempts->first();
                 $passingCount = $scores
-                    ->filter(fn (float $score) => $score >= self::PASSING_SCORE)
+                    ->filter(fn (float $score) => $mark->passes($score))
                     ->count();
 
                 return [
@@ -988,6 +997,8 @@ class DashboardAnalyticsService
     /**
      * Score bands for the distribution histogram. Split at the passing mark so
      * "how many cleared it" is readable off the chart without doing sums.
+     * Teachers' scale: a score is banded by its grade (PassingMark), which is
+     * the score itself while the students' mark is 75.
      */
     private const SCORE_BANDS = [
         ['label' => '0-59', 'min' => 0.0, 'max' => 59.9999],
@@ -1005,20 +1016,21 @@ class DashboardAnalyticsService
      */
     private function buildScoreDistribution(Collection $attempts): array
     {
-        $scores = $this->extractScores($attempts);
-        $total = $scores->count();
+        $mark = PassingMark::current();
+        $grades = $this->extractScores($attempts)->map(fn (float $score): float => (float) $mark->grade($score));
+        $total = $grades->count();
 
         return collect(self::SCORE_BANDS)
-            ->map(function (array $band) use ($scores, $total): array {
-                $count = $scores
-                    ->filter(fn (float $score): bool => $score >= $band['min'] && $score <= $band['max'])
+            ->map(function (array $band) use ($grades, $total): array {
+                $count = $grades
+                    ->filter(fn (float $grade): bool => $grade >= $band['min'] && $grade <= $band['max'])
                     ->count();
 
                 return [
                     'label' => $band['label'],
                     'count' => $count,
                     'percent' => $total > 0 ? round(($count / $total) * 100, 1) : 0.0,
-                    'is_passing' => $band['min'] >= self::PASSING_SCORE,
+                    'is_passing' => $band['min'] >= PassingMark::STAFF_MARK,
                 ];
             })
             ->all();
@@ -1125,12 +1137,14 @@ class DashboardAnalyticsService
      */
     private function buildStudentRanking(Collection $attempts, string $direction, int $limit): array
     {
+        $mark = PassingMark::current();
+
         $rows = $attempts
             ->groupBy('user_id')
-            ->map(function (Collection $studentAttempts): array {
+            ->map(function (Collection $studentAttempts) use ($mark): array {
                 $scores = $this->extractScores($studentAttempts);
                 $student = $studentAttempts->first()?->student;
-                $passing = $scores->filter(fn (float $score): bool => $score >= self::PASSING_SCORE)->count();
+                $passing = $scores->filter(fn (float $score): bool => $mark->passes($score))->count();
 
                 $weakestSubject = $studentAttempts
                     ->groupBy(fn (ExamAttempt $attempt) => $this->normalizeSubjectLabel($attempt->exam?->subject))
@@ -1161,11 +1175,11 @@ class DashboardAnalyticsService
         // students who are doing fine. An empty list is the honest answer.
         if ($direction === 'asc') {
             $rows = $rows
-                ->filter(fn (array $row): bool => (float) $row['average_score_percent'] < self::PASSING_SCORE)
+                ->filter(fn (array $row): bool => !$mark->passes((float) $row['average_score_percent']))
                 ->sortBy('average_score_percent');
         } else {
             $rows = $rows
-                ->filter(fn (array $row): bool => (float) $row['average_score_percent'] >= self::PASSING_SCORE)
+                ->filter(fn (array $row): bool => $mark->passes((float) $row['average_score_percent']))
                 ->sortByDesc('average_score_percent');
         }
 
@@ -1181,12 +1195,14 @@ class DashboardAnalyticsService
      */
     private function buildRoomComparison(Collection $attempts): array
     {
+        $mark = PassingMark::current();
+
         return $attempts
             ->groupBy('room_id')
-            ->map(function (Collection $roomAttempts): array {
+            ->map(function (Collection $roomAttempts) use ($mark): array {
                 $scores = $this->extractScores($roomAttempts);
                 $room = $roomAttempts->first()?->room;
-                $passing = $scores->filter(fn (float $score): bool => $score >= self::PASSING_SCORE)->count();
+                $passing = $scores->filter(fn (float $score): bool => $mark->passes($score))->count();
 
                 return [
                     'room_id' => (int) ($room?->id ?? 0),
@@ -1227,6 +1243,7 @@ class DashboardAnalyticsService
     public function buildStudyPlan(User $student, int $limit = 5): array
     {
         $mastery = $this->masteryProfileBuilder->build($student);
+        $mark = PassingMark::current();
 
         $subtopicRows = collect($this->attachMastery($this->buildSubtopicWeaknessPerformance($student), $mastery['subtopics'], 'subtopic_id'));
         $topicRows = collect($this->attachMastery($this->buildTopicWeaknessPerformance($student), $mastery['topics'], 'topic_id'));
@@ -1267,7 +1284,7 @@ class DashboardAnalyticsService
                     ])
             )
             ->filter(fn (array $row): bool => $row['score'] !== null
-                && (float) $row['score'] < self::PASSING_SCORE
+                && !$mark->passes((float) $row['score'])
                 && $row['attempted_count'] > 0)
             // Least likely to be known first, and where two areas trace to the
             // same mastery the one with more answered items leads -- an
