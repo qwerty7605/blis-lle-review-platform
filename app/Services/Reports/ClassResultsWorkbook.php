@@ -3,6 +3,7 @@
 namespace App\Services\Reports;
 
 use App\Services\ReportExportService;
+use App\Support\PassingMark;
 use App\Support\Reports\ReportOutput;
 use App\Support\Reports\SheetStyle;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -45,9 +46,13 @@ class ClassResultsWorkbook
     private function about($sheet, array $session): void
     {
         $summary = $session['summary'] ?? [];
-        $passing = (int) ($summary['passing_score'] ?? ReportExportService::PASSING_SCORE);
-        $percent = fn ($value) => $value === null ? '–' : rtrim(rtrim(number_format((float) $value, 2), '0'), '.') . '%';
+        $mark = ReportExportService::markOf($summary['passing'] ?? null);
+        $passing = $mark->mark;
+        $number = fn ($value) => rtrim(rtrim(number_format((float) $value, 2), '0'), '.');
+        $percent = fn ($value) => $value === null ? '–' : $number($value) . '%';
+        $grade = fn ($value) => $value === null ? '–' : $number($mark->grade((float) $value));
         $submitted = (int) ($summary['attempts_submitted'] ?? 0);
+        $passedLine = $submitted > 0 ? (($summary['passed_count'] ?? 0) . " of {$submitted} (" . $percent($summary['pass_rate_percent'] ?? null) . ')') : '–';
 
         $notes = [
             "Scores: one row per student in the room, from their latest attempt (the score that counts everywhere in BLIS). Attempt 2 means the score is from a retake. A student who has not taken the exam is listed as \"Not taken\".",
@@ -58,43 +63,77 @@ class ClassResultsWorkbook
             $notes[] = 'This exam shuffles its questions, so each student may get a different selection: an empty cell means that question was not in that student\'s exam.';
         }
         $notes[] = "Questions: each question, how many students got it right out of everyone who was given it (a blank counts as wrong), and its difficulty: Easy when 76% or more got it right, Hard when 25% or fewer did, Average in between.";
-        $notes[] = "Passed means a score of {$passing}% or more. Times are Philippine time.";
+        if ($mark->converts()) {
+            $staff = PassingMark::STAFF_MARK;
+            $notes[] = "Grade: each score on LNU's review scale, where {$staff} is passing. Students are held to a passing mark of {$passing}% (System Settings), so a score of {$passing}% is a grade of {$staff}. Score % is the share of the questions the student got right.";
+            $notes[] = "Passed means a grade of {$staff} or more, which is a score of {$passing}% or more. Times are Philippine time.";
+        } else {
+            $notes[] = "Passed means a score of {$passing}% or more. Times are Philippine time.";
+        }
 
-        SheetStyle::about($sheet, 'Class Results', 'Exported from BLIS on ' . ReportOutput::time(now()), [
+        $facts = [
             ['Exam', $session['exam']['title'] ?? ''],
             ['Subject', $session['exam']['subject'] ?? '–'],
             ['Room', trim(($session['room']['name'] ?? '') . ' (' . ($session['room']['code'] ?? '') . ')')],
             ['Students in the room', (string) ($summary['students_total'] ?? 0)],
             ['Submitted', (string) $submitted],
-            ['Average score', $percent($summary['average_score_percent'] ?? null)],
-            ["Passed ({$passing}% and above)", $submitted > 0 ? (($summary['passed_count'] ?? 0) . " of {$submitted} (" . $percent($summary['pass_rate_percent'] ?? null) . ')') : '–'],
-            ['Highest / lowest', $percent($summary['highest_score_percent'] ?? null) . ' / ' . $percent($summary['lowest_score_percent'] ?? null)],
-        ], $notes);
+        ];
+
+        if ($mark->converts()) {
+            // Averages are of the scores; a grade is worked out from them last.
+            array_push(
+                $facts,
+                ['Average grade', $grade($summary['average_score_percent'] ?? null) . ' (' . $percent($summary['average_score_percent'] ?? null) . ')'],
+                ['Passed (grade ' . PassingMark::STAFF_MARK . ' and above)', $passedLine],
+                ['Highest / lowest grade', $grade($summary['highest_score_percent'] ?? null) . ' / ' . $grade($summary['lowest_score_percent'] ?? null)
+                    . ' (' . $percent($summary['highest_score_percent'] ?? null) . ' / ' . $percent($summary['lowest_score_percent'] ?? null) . ')'],
+            );
+        } else {
+            array_push(
+                $facts,
+                ['Average score', $percent($summary['average_score_percent'] ?? null)],
+                ["Passed ({$passing}% and above)", $passedLine],
+                ['Highest / lowest', $percent($summary['highest_score_percent'] ?? null) . ' / ' . $percent($summary['lowest_score_percent'] ?? null)],
+            );
+        }
+
+        SheetStyle::about($sheet, 'Class Results', 'Exported from BLIS on ' . ReportOutput::time(now()), $facts, $notes);
     }
 
     private function scores($sheet, array $session): void
     {
         $sheet->setTitle('Scores');
         $maxItems = (int) ($session['max_items'] ?? 0);
-        $headers = ReportExportService::resultsHeaders();
-        $headers[4] = 'Score %';
+        $mark = ReportExportService::markOf($session['summary']['passing'] ?? null);
+        $headers = ReportExportService::resultsHeaders($mark);
         $leading = count($headers);
+        // Columns by name: a Grade column follows Score % once the students'
+        // mark is above 75.
+        $column = array_flip($headers);
+        $letter = fn (string $name): string => Coordinate::stringFromColumnIndex($column[$name] + 1);
         array_push($headers, ...ReportExportService::questionHeaders($session));
 
         $rows = [];
         foreach (($session['rows'] ?? []) as $row) {
-            $line = $this->reports->resultsLine($row);
-            $moment = ReportOutput::local($line[9]);
-            $line[9] = $moment ? ExcelDate::PHPToExcel($moment->format('Y-m-d H:i:s')) : '';
+            $line = $this->reports->resultsLine($row, $mark);
+            $moment = ReportOutput::local($line[$column['Submitted']]);
+            $line[$column['Submitted']] = $moment ? ExcelDate::PHPToExcel($moment->format('Y-m-d H:i:s')) : '';
             for ($item = 1; $item <= $maxItems; $item++) {
                 $line[] = self::MARKS[$row['item_status_labels'][$item] ?? ''][0] ?? '';
             }
             $rows[] = $line;
         }
 
-        $widths = [1 => 30, 2 => 13, 3 => 32, 4 => 13, 5 => 10, 6 => 10, 7 => 8, 8 => 13, 9 => 9, 10 => 21];
-        for ($column = $leading + 1; $column <= $leading + $maxItems; $column++) {
-            $widths[$column] = 5.5;
+        $widthByName = [
+            'Student Name' => 30, 'Student ID' => 13, 'Email' => 32, 'Status' => 13, 'Score %' => 10, 'Grade' => 9,
+            'Correct' => 10, 'Items' => 8, 'Result' => 15, 'Attempt' => 9, 'Submitted' => 21,
+        ];
+        $widths = [];
+        foreach ($column as $name => $index) {
+            $widths[$index + 1] = $widthByName[$name] ?? 10;
+        }
+        for ($index = $leading + 1; $index <= $leading + $maxItems; $index++) {
+            $widths[$index] = 5.5;
         }
         SheetStyle::table($sheet, $headers, $rows, [1, 3], $widths, 2);
 
@@ -104,18 +143,22 @@ class ClassResultsWorkbook
         }
 
         $sheet->getStyle("B2:B{$last}")->getNumberFormat()->setFormatCode('@');
-        $sheet->getStyle("E2:E{$last}")->getNumberFormat()->setFormatCode('0.00');
-        $sheet->getStyle("J2:J{$last}")->getNumberFormat()->setFormatCode('mmm d, yyyy h:mm AM/PM');
+        $sheet->getStyle($letter('Score %') . "2:" . $letter('Score %') . $last)->getNumberFormat()->setFormatCode('0.00');
+        if (isset($column['Grade'])) {
+            $sheet->getStyle($letter('Grade') . "2:" . $letter('Grade') . $last)->getNumberFormat()->setFormatCode('0.00');
+        }
+        $sheet->getStyle($letter('Submitted') . "2:" . $letter('Submitted') . $last)->getNumberFormat()->setFormatCode('mmm d, yyyy h:mm AM/PM');
 
         foreach ($rows as $index => $line) {
             $r = $index + 2;
-            if ($line[7] === 'Passed') {
-                SheetStyle::tint($sheet, "H{$r}", '1E6B34', null, true);
-            } elseif ($line[7] !== '') {
-                SheetStyle::tint($sheet, "H{$r}", '8A5A00', null, true);
+            $result = $line[$column['Result']];
+            if ($result === 'Passed') {
+                SheetStyle::tint($sheet, $letter('Result') . $r, '1E6B34', null, true);
+            } elseif ($result !== '') {
+                SheetStyle::tint($sheet, $letter('Result') . $r, '8A5A00', null, true);
             }
-            if ($line[3] !== 'Submitted') {
-                SheetStyle::tint($sheet, "A{$r}:J{$r}", SheetStyle::MUTED);
+            if ($line[$column['Status']] !== 'Submitted') {
+                SheetStyle::tint($sheet, "A{$r}:" . $letter('Submitted') . $r, SheetStyle::MUTED);
             }
 
             for ($item = 1; $item <= $maxItems; $item++) {

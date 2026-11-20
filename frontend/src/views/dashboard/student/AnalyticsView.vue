@@ -299,6 +299,7 @@
             :readiness="readiness"
             :average-score-display="averageScore === null ? 'N/A' : `${averageScore.toFixed(1)}%`"
             :focus-subjects-count="stats.focus_subjects_count"
+            :passing-mark="Number(stats.passing_threshold ?? 75)"
           />
 
         </article>
@@ -472,13 +473,14 @@ function historyTone(row) {
   return Number(row.score_percent) >= Number(stats.value.passing_threshold ?? 75) ? 'is-passing' : 'is-below'
 }
 
-const overviewDescription = 'The big number is your average across every finished exam. '
-  + 'The line plots your last exams in order, oldest to newest (A1 is the oldest) against the gold 75% passing mark -- '
-  + 'hover a point to see which exam it was and its exact score.'
+// Worded with the student's own passing mark, which the administrator sets.
+const overviewDescription = computed(() => 'The big number is your average across every finished exam. '
+  + `The line plots your last exams in order, oldest to newest (A1 is the oldest) against the gold ${Number(stats.value.passing_threshold ?? 75)}% passing mark -- `
+  + 'hover a point to see which exam it was and its exact score.')
 
-const studyPlanDescription = 'Your weakest mapped areas, worst first, based on how you actually answered '
-  + 'the individual questions -- not whole exam scores. Only areas below the 75% passing mark are listed. '
-  + 'Review opens the Review Bot already filtered to that area.'
+const studyPlanDescription = computed(() => 'Your weakest mapped areas, worst first, based on how you actually answered '
+  + `the individual questions -- not whole exam scores. Only areas below the ${Number(stats.value.passing_threshold ?? 75)}% passing mark are listed. `
+  + 'Review opens the Review Bot already filtered to that area.')
 
 const subjectsDescription = 'The percentage is your average score across every finished exam in this subject, '
   + 'and the bar plots it from 0 to 100%. Last = your most recent score, Best = your highest, '

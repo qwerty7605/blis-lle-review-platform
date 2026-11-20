@@ -102,7 +102,7 @@
             <template v-else>
               <p class="rp-callout">
                 <strong>{{ passingCount }}</strong> of <strong>{{ analytics.graded_attempts }}</strong>
-                results cleared the 75% mark
+                results {{ reportGrades ? 'reached grade 75' : 'cleared the 75% mark' }}
                 <span class="rp-callout-sub">({{ passingShare }}%)</span>
               </p>
 
@@ -113,7 +113,7 @@
                 :tooltip-titles="distributionChart.titles"
                 value-labels
                 :height="230"
-                aria-label="Number of graded results in each score band"
+                :aria-label="reportGrades ? 'Number of graded results in each grade band' : 'Number of graded results in each score band'"
               />
 
               <div class="rp-legend">
@@ -153,9 +153,9 @@
                 :datasets="trendChart.datasets"
                 :tooltip-titles="trendChart.titles"
                 :threshold="75"
-                threshold-label="75% pass mark"
+                :threshold-label="reportGrades ? 'Pass mark (grade 75)' : '75% pass mark'"
                 :max="100"
-                unit="%"
+                :unit="reportGrades ? '' : '%'"
                 :height="230"
                 aria-label="Average score per session, oldest to newest"
               />
@@ -201,7 +201,7 @@
 
             <div v-else-if="studentsNeedingAttention.length === 0" class="rp-empty is-good">
               <ShieldCheck :size="22" />
-              <h4>Everyone is at or above 75%</h4>
+              <h4>{{ reportGrades ? 'Everyone is at or above grade 75' : 'Everyone is at or above 75%' }}</h4>
               <p>No student in your sessions is averaging below the passing mark.</p>
             </div>
 
@@ -216,7 +216,7 @@
                     <template v-if="student.weakest_subject"> · weakest: {{ student.weakest_subject }}</template>
                   </p>
                 </div>
-                <strong class="rp-student-score">{{ student.average_score_percent }}%</strong>
+                <strong class="rp-student-score">{{ staffScore(student.average_score_percent) }}</strong>
               </li>
             </ol>
 
@@ -224,7 +224,7 @@
               <span class="rp-top-label">Top performers</span>
               <div class="rp-top-row">
                 <span v-for="student in topPerformers" :key="student.id" class="rp-top-chip">
-                  {{ student.name }}<em>{{ student.average_score_percent }}%</em>
+                  {{ student.name }}<em>{{ staffScore(student.average_score_percent) }}</em>
                 </span>
               </div>
             </div>
@@ -321,9 +321,9 @@
               :labels="subjectChart.labels"
               :datasets="subjectChart.datasets"
               :threshold="75"
-              threshold-label="75%"
+              :threshold-label="reportGrades ? 'Grade 75' : '75%'"
               :max="100"
-              unit="%"
+              :unit="reportGrades ? '' : '%'"
               value-labels
               :height="subjectChart.height"
               aria-label="Average exam score by subject"
@@ -362,8 +362,8 @@
                 <div class="rp-room-stats">
                   <span class="rp-room-stat">
                     <em>Avg</em>
-                    <strong :class="Number(room.average_score_percent) >= 75 ? 'rp-ok' : 'rp-bad'">
-                      {{ room.average_score_percent }}%
+                    <strong :class="staffValue(room.average_score_percent, reportPassing) >= 75 ? 'rp-ok' : 'rp-bad'">
+                      {{ staffScore(room.average_score_percent) }}
                     </strong>
                   </span>
                   <span class="rp-room-stat">
@@ -408,8 +408,8 @@
               <div class="rp-session-metrics">
                 <span class="pill neutral">{{ session.students_submitted }}/{{ session.students_total }} submitted</span>
                 <span class="pill navy">{{ formatPercent(session.completion_rate_percent) }} done</span>
-                <strong :class="Number(session.average_score_percent ?? 0) >= 75 ? 'rp-ok' : 'rp-bad'">
-                  {{ formatPercent(session.average_score_percent) }}
+                <strong :class="staffValue(session.average_score_percent ?? 0, reportPassing) >= 75 ? 'rp-ok' : 'rp-bad'">
+                  {{ staffScore(session.average_score_percent) }}
                 </strong>
               </div>
             </article>
@@ -651,6 +651,7 @@ import NextStepsList from '@/components/NextStepsList.vue'
 import JsChart from '@/components/charts/JsChart.vue'
 import { useAuthStore } from '@/store/auth.store'
 import { vScrollHint } from '@/utils/scrollHint'
+import { STAFF_MARK, passes, staffValue } from '@/utils/passingMark'
 import OwnerFilter from '../shared/OwnerFilter.vue'
 
 const {
@@ -660,6 +661,9 @@ const {
   reportSessionPerformance,
   reportSubjectPerformance,
   reportAnalytics,
+  reportPassing,
+  reportGrades,
+  staffScore,
   reportTargetsLoading,
   reportStudentsLoading,
   reportActionPlan,
@@ -697,7 +701,10 @@ const reportScopeText = computed(() => {
 
 watch(reportTeacherId, () => loadReports())
 
-const PASSING_SCORE = 75
+// Scores arrive as real percentages. Once the students' passing mark is
+// above 75 this page plots and colours grades, where that mark is 75
+// (utils/passingMark.js); topic accuracy stays a share of questions right.
+const gradeOf = (score) => staffValue(score, reportPassing.value)
 
 // Chart colours: below the pass mark and at or above it. Chosen as a pair that
 // stays distinguishable with colour-blind vision (amber against indigo).
@@ -759,13 +766,14 @@ const heroSummary = computed(() => {
   const students = Number(analytics.value.students_graded ?? 0)
 
   return `${graded} graded ${graded === 1 ? 'result' : 'results'} from ${students} `
-    + `${students === 1 ? 'student' : 'students'} so far. ${passingShare.value}% cleared the 75% pass mark.`
+    + `${students === 1 ? 'student' : 'students'} so far. ${passingShare.value}% `
+    + (reportGrades.value ? 'reached grade 75, the pass mark.' : 'cleared the 75% pass mark.')
 })
 
 // How many results fell in each score band.
 const distributionChart = computed(() => ({
   labels: scoreDistribution.value.map((band) => band.label),
-  titles: scoreDistribution.value.map((band) => `Scores ${band.label} (${band.percent}% of results)`),
+  titles: scoreDistribution.value.map((band) => `${reportGrades.value ? 'Grades' : 'Scores'} ${band.label} (${band.percent}% of results)`),
   datasets: [{
     label: 'Results',
     data: scoreDistribution.value.map((band) => Number(band.count ?? 0)),
@@ -779,8 +787,8 @@ const trendChart = computed(() => ({
   labels: analytics.value.trend.map((row) => row.label),
   titles: analytics.value.trend.map((row) => row.exam_title),
   datasets: [{
-    label: 'Average score',
-    data: analytics.value.trend.map((row) => Math.round(Number(row.average_score_percent ?? 0) * 10) / 10),
+    label: reportGrades.value ? 'Average grade' : 'Average score',
+    data: analytics.value.trend.map((row) => Math.round(gradeOf(row.average_score_percent ?? 0) * 10) / 10),
   }],
 }))
 
@@ -791,9 +799,9 @@ const subjectChart = computed(() => {
   return {
     labels: rows.map((subject) => subject.label),
     datasets: [{
-      label: 'Average score',
-      data: rows.map((subject) => Math.round(Number(subject.score ?? 0) * 10) / 10),
-      colors: rows.map((subject) => (Number(subject.score ?? 0) >= PASSING_SCORE ? COLOR_PASSING : COLOR_BELOW)),
+      label: reportGrades.value ? 'Average grade' : 'Average score',
+      data: rows.map((subject) => Math.round(gradeOf(subject.score ?? 0) * 10) / 10),
+      colors: rows.map((subject) => (gradeOf(subject.score ?? 0) >= STAFF_MARK ? COLOR_PASSING : COLOR_BELOW)),
     }],
     // One row per subject, so the chart grows with the list.
     height: Math.max(180, rows.length * 44 + 50),
@@ -805,8 +813,8 @@ const trendDelta = computed(() => {
   const points = analytics.value.trend
   if (points.length < 2) return null
 
-  const first = Number(points[0].average_score_percent ?? 0)
-  const last = Number(points[points.length - 1].average_score_percent ?? 0)
+  const first = gradeOf(points[0].average_score_percent ?? 0)
+  const last = gradeOf(points[points.length - 1].average_score_percent ?? 0)
 
   return Math.round((last - first) * 10) / 10
 })
@@ -816,21 +824,22 @@ const trendSummary = computed(() => {
   if (points.length === 0) return ''
 
   const last = points[points.length - 1]
-  const lastScore = Math.round(Number(last.average_score_percent ?? 0))
+  const lastValue = Math.round(gradeOf(last.average_score_percent ?? 0))
+  const lastScore = reportGrades.value ? `grade ${lastValue}` : `${lastValue}%`
 
   if (trendDelta.value === null) {
-    return `Latest session "${last.exam_title}" averaged ${lastScore}%.`
+    return `Latest session "${last.exam_title}" averaged ${lastScore}.`
   }
 
   if (trendDelta.value > 0) {
-    return `Up ${trendDelta.value} points since the first session — latest averaged ${lastScore}%.`
+    return `Up ${trendDelta.value} points since the first session — latest averaged ${lastScore}.`
   }
 
   if (trendDelta.value < 0) {
-    return `Down ${Math.abs(trendDelta.value)} points since the first session — latest averaged ${lastScore}%.`
+    return `Down ${Math.abs(trendDelta.value)} points since the first session — latest averaged ${lastScore}.`
   }
 
-  return `Flat across ${points.length} sessions — latest averaged ${lastScore}%.`
+  return `Flat across ${points.length} sessions — latest averaged ${lastScore}.`
 })
 
 const weakestTopics = computed(() => topicPerformance.value.slice(0, 5))
@@ -841,7 +850,7 @@ const strongestTopics = computed(() => {
   const weakIds = new Set(weakestTopics.value.map((topic) => topic.topic_id))
 
   return [...topicPerformance.value]
-    .filter((topic) => !weakIds.has(topic.topic_id) && Number(topic.score) >= PASSING_SCORE)
+    .filter((topic) => !weakIds.has(topic.topic_id) && passes(topic.score, reportPassing.value))
     .sort((left, right) => Number(right.score) - Number(left.score))
     .slice(0, 3)
 })

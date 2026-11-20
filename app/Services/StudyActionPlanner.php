@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\QuestionBankQuestion;
 use App\Models\User;
+use App\Support\PassingMark;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -45,8 +46,6 @@ class StudyActionPlanner
 
     /** Rough pace for the effort estimate. Deliberately round, not precise. */
     private const SECONDS_PER_ITEM = 45;
-
-    private const PASSING_SCORE = 75.0;
 
     private const MAX_ACTIONS = 4;
 
@@ -233,9 +232,12 @@ class StudyActionPlanner
      */
     private function closeTheGapToPassing(array $subjectPerformance, array $published): ?array
     {
+        // The student's own passing mark (PassingMark): this plan is theirs.
+        $mark = PassingMark::current();
+
         $closest = collect($subjectPerformance)
             ->filter(fn (array $row): bool => ($row['score'] ?? null) !== null
-                && (float) $row['score'] < self::PASSING_SCORE
+                && !$mark->passes((float) $row['score'])
                 && (int) ($row['attempted_count'] ?? 0) >= 3)
             ->sortByDesc('score')
             ->first();
@@ -251,7 +253,7 @@ class StudyActionPlanner
             return null;
         }
 
-        $gap = round(self::PASSING_SCORE - (float) $closest['score'], 1);
+        $gap = round($mark->mark - (float) $closest['score'], 1);
         $size = min(self::DRILL_SIZE, $available);
 
         return [
@@ -261,16 +263,17 @@ class StudyActionPlanner
             'title' => $subject,
             'subject' => '',
             'summary' => sprintf(
-                'You average %s%% here, %s points below the 75%% passing mark. It is the subject you are closest to passing.',
+                'You average %s%% here, %s points below the %d%% passing mark. It is the subject you are closest to passing.',
                 $this->percent($closest['score']),
                 $gap,
+                $mark->mark,
             ),
             'advice' => $this->advice(
                 "{$subject} is the closest you are to passing a subject.",
                 [
                     $this->block('Where you stand', [
                         sprintf('You are averaging %s%% across the questions you have answered in it.', $this->percent($closest['score'])),
-                        sprintf('That leaves you %s points short of the 75%% pass mark.', $gap),
+                        sprintf('That leaves you %s points short of the %d%% pass mark.', $gap, $mark->mark),
                     ]),
                     $this->block('Why start here', [
                         'Of the subjects you are currently failing, this is the one nearest to turning around, so points here are cheaper than points anywhere else.',

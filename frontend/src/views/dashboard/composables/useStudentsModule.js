@@ -4,8 +4,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { formatDateTime } from './useDashboardFormatters'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
-
-const PASSING_SCORE = 75
+import { STAFF_MARK, converts, gradeText, markOf, passes } from '@/utils/passingMark'
 
 // Fixed page size -- deliberately not user-adjustable, so the table always
 // paginates the same way for every staff member looking at the directory.
@@ -87,9 +86,10 @@ function formatPercent(value, fallback = 'N/A') {
   }).format(numeric)}%`
 }
 
-function scoreTone(student) {
+// Against the students' passing mark (`passing` from the directory).
+function scoreToneFor(student, passing) {
   if (Number(student?.attempts_submitted ?? 0) < 1) return 'neutral'
-  return Number(student?.average_score_percent ?? 0) >= PASSING_SCORE ? 'success' : 'danger'
+  return passes(Number(student?.average_score_percent ?? 0), passing) ? 'success' : 'danger'
 }
 
 export function useStudentsModule() {
@@ -104,6 +104,15 @@ export function useStudentsModule() {
   const directoryLoading = ref(false)
   const directoryError = ref('')
   const directorySummary = ref({})
+  // The students' passing mark; once it is above 75 scores read as grades
+  // here (utils/passingMark.js).
+  const directoryPassing = ref(null)
+  const grades = computed(() => converts(directoryPassing.value))
+  const scoreTone = (student) => scoreToneFor(student, directoryPassing.value)
+  // An average or latest score as a teacher reads it.
+  const staffScore = (value) => (grades.value && value !== null && value !== undefined
+    ? gradeText(value, directoryPassing.value)
+    : formatPercent(value))
   const directoryStudents = ref([])
   const directoryMeta = ref({
     current_page: 1,
@@ -192,6 +201,7 @@ export function useStudentsModule() {
       if (token !== requestToken) return
 
       directorySummary.value = data?.summary ?? {}
+      directoryPassing.value = data?.passing ?? null
       directoryStudents.value = Array.isArray(data?.students) ? data.students : []
       directoryMeta.value = data?.meta ?? directoryMeta.value
 
@@ -306,11 +316,11 @@ export function useStudentsModule() {
       },
       {
         key: 'average-score',
-        label: 'Average Score',
+        label: grades.value ? 'Average Grade' : 'Average Score',
         // Summary figures cover every current student, not just the page or
         // the active filter -- computing them per filter would mean a second
         // full rollup on every keystroke.
-        value: formatPercent(summary.average_score_percent),
+        value: staffScore(summary.average_score_percent),
         note: `Across ${summary.students_with_results ?? 0} students with graded attempts`,
         tone: 'gold',
       },
@@ -318,7 +328,9 @@ export function useStudentsModule() {
         key: 'average-pass-rate',
         label: 'Average Pass Rate',
         value: formatPercent(summary.average_pass_rate_percent),
-        note: `Share of attempts at or above ${PASSING_SCORE}%`,
+        note: grades.value
+          ? `Share of attempts at grade ${STAFF_MARK} or above (a score of ${markOf(directoryPassing.value)}%)`
+          : `Share of attempts at or above ${markOf(directoryPassing.value)}%`,
         tone: 'neutral',
       },
     ]
@@ -378,6 +390,8 @@ export function useStudentsModule() {
     yearLevelShortLabel,
     formatPercent,
     scoreTone,
+    staffScore,
+    grades,
     isArchivedStudent,
     roomNamesLabel,
     latestExamLabel,

@@ -42,10 +42,10 @@
           text-anchor="start"
           dominant-baseline="middle"
         >
-          {{ threshold }}%
+          {{ threshold }}{{ unit }}
         </text>
         <text v-else :x="width - padding.right" :y="yFor(threshold) - 6" class="trend-threshold-label" text-anchor="end">
-          Passing — {{ threshold }}%
+          Passing — {{ unit ? `${threshold}${unit}` : `grade ${threshold}` }}
         </text>
       </g>
 
@@ -86,7 +86,7 @@
       :style="tooltipStyle"
     >
       <strong>{{ plotted[hoveredIndex].label }}</strong>
-      <span>{{ plotted[hoveredIndex].value.toFixed(1) }}%</span>
+      <span>{{ unit ? `${plotted[hoveredIndex].value.toFixed(1)}${unit}` : `Grade ${plotted[hoveredIndex].value.toFixed(1)}` }}</span>
       <small v-if="plotted[hoveredIndex].sublabel">{{ plotted[hoveredIndex].sublabel }}</small>
     </div>
   </div>
@@ -99,6 +99,8 @@ import { useElementWidth } from '@/views/dashboard/composables/useViewport'
 const props = defineProps({
   points: { type: Array, default: () => [] }, // [{ id, label, value, sublabel, tone }]
   threshold: { type: Number, default: 75 },
+  // '%' for scores; '' when a teacher's page plots grades (utils/passingMark.js).
+  unit: { type: String, default: '%' },
   // 'full' = standalone chart card (own gridlines/axis). 'compact' = inline
   // inside a summary card: line, points, threshold marker and x labels only.
   variant: { type: String, default: 'full' },

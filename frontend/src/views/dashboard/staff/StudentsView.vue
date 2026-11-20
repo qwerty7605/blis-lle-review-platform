@@ -160,7 +160,7 @@
                 <div>
                   <dt>Latest</dt>
                   <dd>
-                    {{ formatPercent(student.latest_score_percent) }}
+                    {{ staffScore(student.latest_score_percent) }}
                     <small v-if="latestExamLabel(student)" class="muted">{{ latestExamLabel(student) }}</small>
                   </dd>
                 </div>
@@ -256,7 +256,7 @@
                 </th>
                 <th class="numeric" :aria-sort="sortAriaValue('average_score_percent')">
                   <button type="button" class="directory-sort-btn" @click="toggleStudentSort('average_score_percent')">
-                    Avg Score
+                    {{ grades ? 'Avg Grade' : 'Avg Score' }}
                     <span class="directory-sort-arrow">{{ sortIndicator('average_score_percent') }}</span>
                   </button>
                 </th>
@@ -331,12 +331,12 @@
                 </td>
                 <td class="numeric">
                   <span class="pill" :class="scoreTone(student)">
-                    {{ formatPercent(student.average_score_percent) }}
+                    {{ staffScore(student.average_score_percent) }}
                   </span>
                 </td>
                 <td class="numeric">{{ formatPercent(student.pass_rate_percent) }}</td>
                 <td>
-                  <strong>{{ formatPercent(student.latest_score_percent) }}</strong>
+                  <strong>{{ staffScore(student.latest_score_percent) }}</strong>
                   <small v-if="latestExamLabel(student)" class="muted students-cell-line" :title="latestExamLabel(student)">
                     {{ latestExamLabel(student) }}
                   </small>
@@ -520,6 +520,8 @@ const {
   yearLevelShortLabel,
   formatPercent,
   scoreTone,
+  staffScore,
+  grades,
   isArchivedStudent,
   roomNamesLabel,
   latestExamLabel,
@@ -654,7 +656,7 @@ function lastActivityDateLabel(student) {
 
 function studentScoreLabel(student) {
   if (Number(student?.attempts_submitted ?? 0) < 1) return 'No attempts'
-  return `Avg ${formatPercent(student.average_score_percent)}`
+  return `Avg ${staffScore(student.average_score_percent)}`
 }
 
 watch(useRows, () => {

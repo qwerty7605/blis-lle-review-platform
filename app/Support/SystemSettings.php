@@ -26,6 +26,9 @@ class SystemSettings
         // starts in. They replaced a typed "Academic Term" that nothing read.
         'first_semester_start_month' => SchoolCalendar::DEFAULT_FIRST_SEMESTER_MONTH,
         'second_semester_start_month' => SchoolCalendar::DEFAULT_SECOND_SEMESTER_MONTH,
+        // The mark students are judged against; teachers see grades where it
+        // is 75 (PassingMark).
+        'students_passing_mark' => PassingMark::DEFAULT,
         'allow_public_registration' => true,
         'announcement_banner' => '',
         'terms_of_use_text' => self::DEFAULT_TERMS_OF_USE,
@@ -41,6 +44,7 @@ class SystemSettings
     public const INTEGER_KEYS = [
         'first_semester_start_month',
         'second_semester_start_month',
+        'students_passing_mark',
     ];
 
     /** What raw() reads, in one query. */
@@ -48,6 +52,7 @@ class SystemSettings
         'announcement_banner',
         'first_semester_start_month',
         'second_semester_start_month',
+        'students_passing_mark',
     ];
 
     public const DEFAULT_TERMS_OF_USE = <<<'TEXT'
@@ -118,6 +123,17 @@ class SystemSettings
         }
 
         return ['first' => (int) $first, 'second' => (int) $second];
+    }
+
+    /**
+     * The students' passing mark. A stored value outside 75-95 reads as 75,
+     * so a bad row can only ever mean "no conversion".
+     */
+    public function studentsPassingMark(): int
+    {
+        $mark = $this->raw('students_passing_mark', (string) PassingMark::DEFAULT);
+
+        return PassingMark::valid($mark) ? (int) $mark : PassingMark::DEFAULT;
     }
 
     private function raw(string $key, string $default): string

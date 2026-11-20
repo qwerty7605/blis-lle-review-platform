@@ -153,6 +153,7 @@
               :readiness="readiness"
               :average-score-display="outcomeStats.averageScoreDisplay"
               :focus-subjects-count="outcomeStats.focusSubjectsCount"
+              :passing-mark="outcomeStats.passingMark"
             />
           </template>
         </article>

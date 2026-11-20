@@ -3,6 +3,7 @@
 namespace App\Services\Reports;
 
 use App\Services\ReportExportService;
+use App\Support\PassingMark;
 use App\Support\Reports\ReportOutput;
 use App\Support\Reports\SheetStyle;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
@@ -23,17 +24,30 @@ class RoomGradebookWorkbook
         $book = new Spreadsheet();
         $book->getProperties()->setCreator('BLIS')->setTitle('Gradebook - ' . ($gradebook['room']['name'] ?? ''));
         $summary = $gradebook['summary'] ?? [];
+        $mark = ReportExportService::markOf($gradebook['passing'] ?? null);
+        $average = $summary['average_score_percent'] ?? null;
+        $staff = PassingMark::STAFF_MARK;
 
-        SheetStyle::about($book->getActiveSheet(), 'Room Gradebook', 'Exported from BLIS on ' . ReportOutput::time(now()), [
+        $facts = [
             ['Room', trim(($gradebook['room']['name'] ?? '') . ' (' . ($gradebook['room']['code'] ?? '') . ')')],
             ['Students', (string) ($summary['students_total'] ?? 0)],
             ['Exams', (string) ($summary['exams_total'] ?? 0)],
-            ['Average of all scores', $summary['average_score_percent'] === null ? '–' : number_format((float) $summary['average_score_percent'], 2) . '%'],
-        ], [
+            ['Average of all scores', $average === null ? '–' : number_format((float) $average, 2) . '%'],
+        ];
+        $notes = [
             'Gradebook: one row per student currently in the room and one column per exam the room has had, with the student\'s latest score on it.',
             'An empty cell means the student has not submitted that exam. Exams Taken and Average % count only the exams they have submitted.',
-            'Scores of ' . (int) ReportExportService::PASSING_SCORE . '% and above are passing.',
-        ]);
+        ];
+
+        if ($mark->converts()) {
+            $facts[] = ['Average grade', $average === null ? '–' : number_format((float) $mark->grade((float) $average), 2)];
+            $notes[] = "Each score (%) is followed by its grade on LNU's review scale, where {$staff} is passing. Students are held to a passing mark of {$mark->mark}% (System Settings), so a score of {$mark->mark}% is a grade of {$staff}. An average grade is worked out from the average score.";
+            $notes[] = "Scores under {$mark->mark}% and grades under {$staff} are shown in amber.";
+        } else {
+            $notes[] = "Scores of {$mark->mark}% and above are passing.";
+        }
+
+        SheetStyle::about($book->getActiveSheet(), 'Room Gradebook', 'Exported from BLIS on ' . ReportOutput::time(now()), $facts, $notes);
 
         $sheet = $book->createSheet();
         $sheet->setTitle('Gradebook');
@@ -56,9 +70,17 @@ class RoomGradebookWorkbook
             $sheet->getStyle("B2:B{$last}")->getNumberFormat()->setFormatCode('@');
             $sheet->getStyle("E2:{$lastLetter}{$last}")->getNumberFormat()->setFormatCode('0.00');
 
+            // Below passing in amber: a score under the students' mark, a
+            // grade under 75 (the same students either way).
+            $kinds = $table['kinds'] ?? [];
             foreach ($table['rows'] as $index => $row) {
                 foreach ($row as $column => $value) {
-                    if ($column >= 4 && is_float($value) && $value < ReportExportService::PASSING_SCORE) {
+                    $below = match ($kinds[$column] ?? null) {
+                        'score' => is_float($value) && !$mark->passes($value),
+                        'grade' => is_float($value) && $value < $staff,
+                        default => false,
+                    };
+                    if ($below) {
                         SheetStyle::tint($sheet, Coordinate::stringFromColumnIndex($column + 1) . ($index + 2), '8A5A00');
                     }
                 }

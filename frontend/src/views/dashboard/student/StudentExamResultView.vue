@@ -74,7 +74,7 @@
       <section class="exam-result-hero" :class="`is-${summary.tone}`">
         <div class="exam-result-copy">
           <div class="exam-result-badge">
-            <CheckCircle2 v-if="summary.score >= 75" :size="18" />
+            <CheckCircle2 v-if="summary.passStatus ? summary.passStatus.is_passing : summary.score >= 75" :size="18" />
             <AlertCircle v-else :size="18" />
             <span>{{ summary.label }}</span>
           </div>
@@ -177,7 +177,7 @@
           <div class="exam-score-bar">
             <div
               class="exam-score-bar-fill"
-              :class="scoreBarTone(subject.score_percent)"
+              :class="scoreBarTone(subject.score_percent, summary.passStatus?.passing_score)"
               :style="{ width: `${Math.min(100, Math.max(0, subject.score_percent ?? 0))}%` }"
             ></div>
           </div>
@@ -205,7 +205,7 @@
               <div class="exam-score-bar small">
                 <div
                   class="exam-score-bar-fill"
-                  :class="scoreBarTone(topic.score_percent)"
+                  :class="scoreBarTone(topic.score_percent, summary.passStatus?.passing_score)"
                   :style="{ width: `${Math.min(100, Math.max(0, topic.score_percent ?? 0))}%` }"
                 ></div>
               </div>

@@ -5,6 +5,14 @@
     $showAnswers = $showAnswers ?? true;
     $submitted = ($attempt['status'] ?? null) === 'submitted';
     $passing = (int) ($attempt['passing_score'] ?? 75);
+    // The teacher's copy shows the grade once the students' mark is above 75
+    // (PassingMark); the student's copy reads their score against their mark.
+    $forStudent = $forStudent ?? false;
+    $mark = \App\Services\ReportExportService::markOf($attempt['passing'] ?? null);
+    $grades = !$forStudent && $mark->converts();
+    $staff = \App\Support\PassingMark::STAFF_MARK;
+    $number = fn ($value) => rtrim(rtrim(number_format((float) $value, 2), '0'), '.');
+    $hasScore = $submitted && !is_null($attempt['score_percent'] ?? null);
     $marks = [
         'Correct' => ['✓', 'mark-correct'],
         'Wrong' => ['✗', 'mark-wrong'],
@@ -38,11 +46,28 @@
 
     <table class="score" style="margin-top: 10px">
         <tr>
-            <td style="width: 32%"><span class="big">{{ $submitted && !is_null($attempt['score_percent'] ?? null) ? rtrim(rtrim(number_format((float) $attempt['score_percent'], 2), '0'), '.') . '%' : '–' }}</span></td>
+            <td style="width: 32%">
+                @if ($grades && $hasScore)
+                    <span class="big">Grade {{ $number($mark->grade((float) $attempt['score_percent'])) }}</span>
+                @else
+                    <span class="big">{{ $hasScore ? $number($attempt['score_percent']) . '%' : '–' }}</span>
+                @endif
+            </td>
             <td>
-                <span class="verdict">{{ $attempt['correct_answers'] ?? 0 }} of {{ $attempt['total_items'] ?? 0 }} correct · {{ $attempt['answered_count'] ?? 0 }} answered</span><br>
+                <span class="verdict">
+                    @if ($grades && $hasScore)
+                        Score {{ $number($attempt['score_percent']) }}% ·
+                    @endif
+                    {{ $attempt['correct_answers'] ?? 0 }} of {{ $attempt['total_items'] ?? 0 }} correct · {{ $attempt['answered_count'] ?? 0 }} answered
+                </span><br>
                 @if ($submitted)
-                    @if ($attempt['passed'] ?? false)
+                    @if ($grades)
+                        @if ($attempt['passed'] ?? false)
+                            <span class="pass">Passed</span> <span class="muted">(grade {{ $staff }}, a score of {{ $mark->mark }}%)</span>
+                        @else
+                            <span class="below">Below passing: grade {{ $staff }} is a score of {{ $mark->mark }}%</span>
+                        @endif
+                    @elseif ($attempt['passed'] ?? false)
                         <span class="pass">Passed</span> <span class="muted">(pass mark {{ $passing }}%)</span>
                     @else
                         <span class="below">Below the {{ $passing }}% pass mark</span>

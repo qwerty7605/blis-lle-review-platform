@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Exam;
 use App\Models\Room;
 use App\Models\User;
+use App\Support\PassingMark;
 use App\Support\Search;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -182,6 +183,9 @@ class StudentDirectoryService
                 ->map(fn (User $student): array => $this->directoryRecord($student))
                 ->all(),
             'summary' => $this->directorySummary(),
+            // Real percentages; the page shows them as grades when the
+            // students' mark is above 75.
+            'passing' => PassingMark::current()->toArray(),
             'meta' => [
                 'current_page' => $page,
                 'last_page' => $lastPage,
@@ -212,6 +216,7 @@ class StudentDirectoryService
         return [
             'students' => [],
             'summary' => $this->directorySummary(),
+            'passing' => PassingMark::current()->toArray(),
             'meta' => [
                 'current_page' => $page,
                 'last_page' => max(1, (int) ceil($total / $perPage)),
@@ -282,12 +287,14 @@ class StudentDirectoryService
      * Per-student rollup over the deduplicated session attempts.
      *
      * `pass_rate_percent` counts every submitted attempt in the denominator but
-     * only non-null scores at or above the threshold in the numerator, which is
-     * what the PHP it replaces did: NULL >= 75 yields NULL and SUM skips it.
+     * only non-null scores at or above the students' passing mark in the
+     * numerator, which is what the PHP it replaces did: NULL >= 75 yields NULL
+     * and SUM skips it.
      */
     private function attemptStatsSubquery(?array $userIds = null): \Illuminate\Database\Query\Builder
     {
-        $passing = DashboardAnalyticsService::PASSING_SCORE;
+        // An integer from a validated setting, never request input.
+        $passing = (int) PassingMark::current()->mark;
 
         return DB::table('exam_attempts as ea')
             ->joinSub($this->latestSessionAttemptIds($userIds), 'latest_ids', 'ea.id', '=', 'latest_ids.id')
@@ -377,8 +384,9 @@ class StudentDirectoryService
         // 4.2k students. Cached briefly so it is paid once a minute rather
         // than once a keystroke; the trade is that the cards can lag a newly
         // archived student by up to the TTL.
+        // Keyed by the mark: a new one shows on the next load, not a minute later.
         return Cache::remember(
-            self::DIRECTORY_SUMMARY_CACHE_KEY,
+            self::DIRECTORY_SUMMARY_CACHE_KEY . ':' . PassingMark::current()->mark,
             self::DIRECTORY_SUMMARY_CACHE_SECONDS,
             fn (): array => $this->computeDirectorySummary(),
         );

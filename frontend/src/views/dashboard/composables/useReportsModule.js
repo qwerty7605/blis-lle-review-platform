@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { DoorOpen, FileText } from 'lucide-vue-next'
 import { useDashboardDataServices } from './useDashboardDataServices'
 import { useLiveRefresh } from '@/utils/liveRefresh'
+import { STAFF_MARK, converts, gradeText, staffValue } from '@/utils/passingMark'
 
 // "Skipped 3: 2 did not take the exam, 1 demo account." for the bulk email.
 const SKIP_REASONS = {
@@ -119,6 +120,15 @@ export function useReportsModule() {
   // from DashboardAnalyticsService::buildStaffAnalytics() and scoped the same
   // way as the metrics above, so the two never disagree.
   const reportAnalytics = ref({})
+  // The students' passing mark; once it is above 75 this page reads scores as
+  // grades, where that mark is 75 (utils/passingMark.js). Every figure the
+  // server sends stays a real percentage.
+  const reportPassing = ref(null)
+  const reportGrades = computed(() => converts(reportPassing.value))
+  // An average score as a teacher reads it here.
+  const staffScore = (value) => (reportGrades.value && value !== null && value !== undefined
+    ? gradeText(value, reportPassing.value)
+    : formatPercent(value))
   const reportActionRows = ref([])
   const reportTargetsLoading = ref(false)
   const reportStudentsLoading = ref(false)
@@ -187,10 +197,10 @@ export function useReportsModule() {
         icon: DoorOpen,
       },
       {
-        label: 'Average Score',
-        value: formatPercent(data.average_score_percent),
+        label: reportGrades.value ? 'Average Grade' : 'Average Score',
+        value: staffScore(data.average_score_percent),
         trend: `${formatPercent(data.pass_rate_percent)} pass rate`,
-        positive: Number(data.average_score_percent ?? 0) >= 75,
+        positive: Number(staffValue(data.average_score_percent ?? 0, reportPassing.value)) >= STAFF_MARK,
         tone: 'navy',
         icon: FileText,
       },
@@ -405,6 +415,7 @@ export function useReportsModule() {
       reportSessionPerformance.value = data.session_performance ?? []
       reportSubjectPerformance.value = data.subject_performance ?? []
       reportAnalytics.value = data.analytics ?? {}
+      reportPassing.value = data.passing ?? null
       reportActionRows.value = Array.isArray(data.action_plan) ? data.action_plan : []
     } catch (error) {
       if (!silent) reportError.value = firstApiError(error, 'Unable to load report data.')
@@ -488,6 +499,9 @@ export function useReportsModule() {
     reportSessionPerformance,
     reportSubjectPerformance,
     reportAnalytics,
+    reportPassing,
+    reportGrades,
+    staffScore,
     reportTargetsLoading,
     reportStudentsLoading,
     reportExportingKey,

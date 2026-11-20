@@ -9,6 +9,7 @@ use App\Models\ExamAttemptQuestion;
 use App\Models\QuestionBankQuestion;
 use App\Models\Room;
 use App\Models\User;
+use App\Support\PassingMark;
 use App\Support\Reports\ReportOutput;
 use Illuminate\Support\Collection;
 
@@ -119,6 +120,9 @@ class ReportExportService
                 'name' => $room->name,
                 'code' => $room->code,
             ],
+            // Scores are real percentages; the teacher's file adds grades
+            // beside them when the students' mark is above 75.
+            'passing' => PassingMark::current()->toArray(),
             'exams' => $exams->map(fn (Exam $exam) => [
                 'id' => (int) $exam->id,
                 'title' => (string) $exam->title,
@@ -139,21 +143,43 @@ class ReportExportService
     }
 
     /**
-     * @return array{headers: array<int, string>, rows: array<int, array<int, mixed>>}
+     * The Gradebook's columns. Once the students' passing mark is above 75
+     * each score is followed by its grade (PassingMark), the average's grade
+     * taken from the average score. `kinds` says what each column holds, for
+     * the Excel file's amber: a score under the mark, a grade under 75.
+     *
+     * @return array{headers: array<int, string>, rows: array<int, array<int, mixed>>, kinds: array<int, string>}
      */
     public function buildRoomGradebookTable(array $gradebook): array
     {
-        $headers = [
-            'Student Name',
-            'Student ID',
-            'Email',
-            'Exams Taken',
-            'Average %',
-        ];
+        $mark = self::markOf($gradebook['passing'] ?? null);
+        $grades = $mark->converts();
+
+        $headers = ['Student Name', 'Student ID', 'Email', 'Exams Taken', 'Average %'];
+        $kinds = ['text', 'text', 'text', 'count', 'score'];
+
+        if ($grades) {
+            $headers[] = 'Average Grade';
+            $kinds[] = 'grade';
+        }
 
         foreach (($gradebook['exams'] ?? []) as $exam) {
             $headers[] = (string) ($exam['title'] ?? 'Exam') . ' (%)';
+            $kinds[] = 'score';
+
+            if ($grades) {
+                $headers[] = (string) ($exam['title'] ?? 'Exam') . ' (Grade)';
+                $kinds[] = 'grade';
+            }
         }
+
+        // Blank, not "N/A": a column of numbers stays numbers when it is
+        // opened or imported somewhere else.
+        $cells = function (mixed $score) use ($mark, $grades): array {
+            $value = is_null($score) ? '' : (float) $score;
+
+            return $grades ? [$value, $value === '' ? '' : (float) $mark->grade($value)] : [$value];
+        };
 
         $rows = [];
 
@@ -165,15 +191,11 @@ class ReportExportService
                 (string) ($student['student_id'] ?? ''),
                 (string) ($student['email'] ?? ''),
                 (int) ($summary['completed_exams'] ?? 0),
-                is_null($summary['average_score_percent'] ?? null) ? '' : (float) $summary['average_score_percent'],
+                ...$cells($summary['average_score_percent'] ?? null),
             ];
 
             foreach (($row['exam_entries'] ?? []) as $entry) {
-                // Blank, not "N/A": a column of numbers stays numbers when
-                // it is opened or imported somewhere else.
-                $line[] = is_null($entry['score_percent'] ?? null)
-                    ? ''
-                    : (float) $entry['score_percent'];
+                array_push($line, ...$cells($entry['score_percent'] ?? null));
             }
 
             $rows[] = $line;
@@ -182,11 +204,19 @@ class ReportExportService
         return [
             'headers' => $headers,
             'rows' => $rows,
+            'kinds' => $kinds,
         ];
     }
 
-    /** The pass mark every report reads a score against. */
-    public const PASSING_SCORE = DashboardAnalyticsService::PASSING_SCORE;
+    /**
+     * The students' passing mark a report was built with (`passing` in its
+     * data), so a file reads the same mark throughout. Data without one, as
+     * built by hand in tests, reads as 75: no grades.
+     */
+    public static function markOf(mixed $passing): PassingMark
+    {
+        return new PassingMark((int) (is_array($passing) ? ($passing['mark'] ?? PassingMark::DEFAULT) : PassingMark::DEFAULT));
+    }
 
     /**
      * Class results for one exam in one room: each current student's latest
@@ -230,6 +260,7 @@ class ReportExportService
 
         $attemptsByStudentId = $attempts->groupBy('user_id');
         $latestAttemptsByStudentId = $attemptsByStudentId->map(fn (Collection $group) => $group->first());
+        $mark = PassingMark::current();
 
         // The answer key's order, then anything a student was given that is no
         // longer in the exam's sets (a set changed after they sat it).
@@ -262,6 +293,7 @@ class ReportExportService
         $shortAnswerDump = [];
 
         $rows = $students->map(function (User $student) use (
+            $mark,
             $attemptsByStudentId,
             $latestAttemptsByStudentId,
             $columnIds,
@@ -348,7 +380,7 @@ class ReportExportService
                         'answered_count' => (int) $attempt->answered_count,
                         'correct_answers' => (int) $attempt->correct_answers,
                         'score_percent' => $score,
-                        'passed' => $submitted && $score !== null ? $score >= self::PASSING_SCORE : null,
+                        'passed' => $submitted && $score !== null ? $mark->passes($score) : null,
                         'attempt_number' => (int) $attemptsByStudentId->get((int) $student->id)->count(),
                         'started_at' => $attempt->started_at,
                         'submitted_at' => $attempt->submitted_at,
@@ -442,7 +474,9 @@ class ReportExportService
                 'attempts_submitted' => (int) $submittedRows->count(),
                 'passed_count' => (int) $passedCount,
                 'pass_rate_percent' => $submittedRows->isNotEmpty() ? round(($passedCount / $submittedRows->count()) * 100, 2) : null,
-                'passing_score' => self::PASSING_SCORE,
+                // The students' passing mark, as a score.
+                'passing_score' => (float) $mark->mark,
+                'passing' => $mark->toArray(),
                 'average_score_percent' => $scoreValues->isNotEmpty() ? round((float) $scoreValues->avg(), 2) : null,
                 'highest_score_percent' => $scoreValues->isNotEmpty() ? (float) $scoreValues->max() : null,
                 'lowest_score_percent' => $scoreValues->isNotEmpty() ? (float) $scoreValues->min() : null,
@@ -493,7 +527,9 @@ class ReportExportService
     public function buildCompleteResultsTable(array $session): array
     {
         $maxItems = (int) ($session['max_items'] ?? 0);
-        $headers = self::resultsHeaders();
+        $mark = self::markOf($session['summary']['passing'] ?? null);
+        $headers = self::resultsHeaders($mark);
+        $submittedColumn = array_search('Submitted', $headers, true);
 
         foreach (self::questionHeaders($session) as $header) {
             $headers[] = $header;
@@ -502,8 +538,8 @@ class ReportExportService
         $rows = [];
 
         foreach (($session['rows'] ?? []) as $row) {
-            $line = $this->resultsLine($row);
-            $line[9] = ReportOutput::local($row['attempt']['submitted_at'] ?? null)?->format('Y-m-d H:i') ?? '';
+            $line = $this->resultsLine($row, $mark);
+            $line[$submittedColumn] = ReportOutput::local($row['attempt']['submitted_at'] ?? null)?->format('Y-m-d H:i') ?? '';
 
             for ($itemNumber = 1; $itemNumber <= $maxItems; $itemNumber++) {
                 $line[] = self::STATUS_TEXT[$row['item_status_labels'][$itemNumber] ?? ''] ?? '';
@@ -528,10 +564,22 @@ class ReportExportService
         return array_map(fn ($item) => 'Q' . (int) $item['item_number'], $session['item_summary'] ?? []);
     }
 
-    /** @return array<int, string> */
-    public static function resultsHeaders(): array
+    /**
+     * The leading columns. With the students' passing mark above 75 a Grade
+     * column follows Score % (PassingMark), so find a column by its name,
+     * not its position.
+     *
+     * @return array<int, string>
+     */
+    public static function resultsHeaders(?PassingMark $mark = null): array
     {
-        return ['Student Name', 'Student ID', 'Email', 'Status', 'Score %', 'Correct', 'Items', 'Result', 'Attempt', 'Submitted'];
+        $headers = ['Student Name', 'Student ID', 'Email', 'Status', 'Score %', 'Correct', 'Items', 'Result', 'Attempt', 'Submitted'];
+
+        if ($mark?->converts()) {
+            array_splice($headers, 5, 0, ['Grade']);
+        }
+
+        return $headers;
     }
 
     /**
@@ -540,13 +588,15 @@ class ReportExportService
      *
      * @return array<int, mixed>
      */
-    public function resultsLine(array $row): array
+    public function resultsLine(array $row, ?PassingMark $mark = null): array
     {
+        $mark ??= new PassingMark();
         $attempt = $row['attempt'] ?? null;
         $student = $row['student'] ?? [];
         $submitted = ($attempt['status'] ?? null) === ExamAttempt::STATUS_SUBMITTED;
+        $score = $submitted && isset($attempt['score_percent']) ? round((float) $attempt['score_percent'], 2) : '';
 
-        return [
+        $line = [
             (string) ($student['name'] ?? ''),
             (string) ($student['student_id'] ?? ''),
             (string) ($student['email'] ?? ''),
@@ -555,17 +605,24 @@ class ReportExportService
                 $submitted => 'Submitted',
                 default => 'In progress',
             },
-            $submitted && isset($attempt['score_percent']) ? round((float) $attempt['score_percent'], 2) : '',
+            $score,
             $submitted ? (int) ($attempt['correct_answers'] ?? 0) : '',
             $attempt ? (int) ($attempt['total_items'] ?? 0) : '',
             match ($attempt['passed'] ?? null) {
                 true => 'Passed',
-                false => 'Below ' . (int) self::PASSING_SCORE . '%',
+                // The teacher's file reads on the teacher's scale.
+                false => $mark->converts() ? 'Below grade ' . PassingMark::STAFF_MARK : 'Below ' . $mark->mark . '%',
                 default => '',
             },
             $attempt ? (int) ($attempt['attempt_number'] ?? 1) : '',
             $attempt['submitted_at'] ?? null,
         ];
+
+        if ($mark->converts()) {
+            array_splice($line, 5, 0, [$score === '' ? '' : (float) $mark->grade($score)]);
+        }
+
+        return $line;
     }
 
     /**
@@ -753,6 +810,9 @@ class ReportExportService
         $binary = ReportOutput::pdf('reports.student_report_pdf', [
             'report' => $report,
             'showAnswers' => $showAnswers,
+            // The student's copy reads their score against their mark; the
+            // teacher's adds the grade.
+            'forStudent' => $forStudent,
         ])->output();
 
         return ['report' => $report, 'binary' => $binary, 'filename' => $this->studentReportFilename($report)];
@@ -816,6 +876,7 @@ class ReportExportService
 
         $answeredCount = (int) $attempt->answers->count();
         $correctAnswers = (int) $attempt->answers->where('is_correct', true)->count();
+        $mark = PassingMark::current();
         $scorePercent = is_null($attempt->score_percent)
             ? ($totalItems > 0 ? round(($correctAnswers / $totalItems) * 100, 2) : 0.0)
             : (float) $attempt->score_percent;
@@ -869,8 +930,12 @@ class ReportExportService
                 'answered_count' => $answeredCount,
                 'correct_answers' => $correctAnswers,
                 'score_percent' => $scorePercent,
-                'passed' => $attempt->status === ExamAttempt::STATUS_SUBMITTED ? $scorePercent >= self::PASSING_SCORE : null,
-                'passing_score' => self::PASSING_SCORE,
+                'passed' => $attempt->status === ExamAttempt::STATUS_SUBMITTED ? $mark->passes($scorePercent) : null,
+                // The students' passing mark, as a score; the teacher's copy
+                // also shows the grade (`passing`, PassingMark).
+                'passing_score' => (float) $mark->mark,
+                'grade' => $mark->grade($scorePercent),
+                'passing' => $mark->toArray(),
                 'attempt_number' => $sittingNumber === false ? 1 : $sittingNumber + 1,
                 'attempts_total' => max(1, count($sittingIds)),
                 'started_at' => $attempt->started_at,

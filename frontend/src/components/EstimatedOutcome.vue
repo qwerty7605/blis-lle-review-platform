@@ -32,7 +32,7 @@
 
       <div class="outcome-stat-row">
         <div class="outcome-stat">
-          <span class="outcome-stat-label">Average Score</span>
+          <span class="outcome-stat-label">{{ averageLabel }}</span>
           <strong class="outcome-stat-value">{{ averageScoreDisplay }}</strong>
         </div>
         <!-- Subjects whose latest score is under the passing mark. -->
@@ -43,6 +43,11 @@
           </strong>
         </div>
       </div>
+      <!-- With LNU's review mark above the LLE's 75 the two figures answer
+           different questions; say which is which. -->
+      <p v-if="passingMark > 75" class="outcome-detail">
+        The chance is of passing the real LLE, at its 75% general average. Below Passing Mark counts subjects under LNU's review passing mark of {{ passingMark }}%.
+      </p>
     </div>
   </div>
 </template>
@@ -63,7 +68,11 @@ defineProps({
   // From describeReadiness() in views/dashboard/composables/readiness.js.
   readiness: { type: Object, required: true },
   averageScoreDisplay: { type: String, default: 'N/A' },
+  // "Average Grade" on a teacher's page once grades show (utils/passingMark.js).
+  averageLabel: { type: String, default: 'Average Score' },
   focusSubjectsCount: { type: Number, default: 0 },
+  // The students' passing mark (75 to 95).
+  passingMark: { type: Number, default: 75 },
 })
 </script>
 
