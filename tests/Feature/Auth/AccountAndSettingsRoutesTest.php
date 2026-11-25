@@ -22,15 +22,15 @@ class AccountAndSettingsRoutesTest extends TestCase
     public function test_staff_read_the_system_settings_and_only_an_administrator_may_edit_them(): void
     {
         SystemSetting::create(['key' => 'allow_public_registration', 'value' => '0']);
-        SystemSetting::create(['key' => 'platform_name', 'value' => 'BLIS']);
+        SystemSetting::create(['key' => 'announcement_banner', 'value' => 'Exams resume Monday.']);
 
         Sanctum::actingAs($this->makeTeacher());
         $this->getJson('/api/settings/system')
             ->assertOk()
             ->assertJsonPath('settings.allow_public_registration', false)
-            ->assertJsonPath('settings.platform_name', 'BLIS')
+            ->assertJsonPath('settings.announcement_banner', 'Exams resume Monday.')
             ->assertJsonPath('can_edit', false);
-        $this->putJson('/api/settings/system', ['platform_name' => 'X'])->assertForbidden();
+        $this->putJson('/api/settings/system', ['announcement_banner' => 'X'])->assertForbidden();
 
         Sanctum::actingAs($this->makeAdmin());
         $this->getJson('/api/settings/system')->assertOk()->assertJsonPath('can_edit', true);

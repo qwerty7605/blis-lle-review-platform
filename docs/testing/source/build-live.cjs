@@ -67,7 +67,7 @@ const rows = cases.map((item) => {
 const lastId = `WEB_${String(total).padStart(3, '0')}`
 
 const html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>LNU LLE Platform (BLIS) Test Cases, live site</title>
+<html lang="en"><head><meta charset="utf-8"><title>LNU BLIS Platform Test Cases, live site</title>
 <style>
   @page { size: A4 landscape; margin: 9mm 8mm 12mm 8mm; }
   * { box-sizing: border-box; }
@@ -109,7 +109,7 @@ const html = `<!doctype html>
   .end td { height: 8mm; }
 </style></head>
 <body>
-  <div class="title"><h1>LNU LLE PLATFORM (BLIS)</h1><p>Test Case: live website</p></div>
+  <div class="title"><h1>LNU BLIS PLATFORM</h1><p>Test Case: live website</p></div>
   <div class="meta">
     <div><b>Tester:</b> <span class="line"></span></div>
     <div><b>Date tested:</b> <span class="line"></span></div>
@@ -131,7 +131,7 @@ const html = `<!doctype html>
       <ul>
         <li>Use only the accounts on this page and the ones you create during the tests. Do not edit, disable, archive or delete any other account, room or exam.</li>
         <li>Do not click <b>Review and confirm</b> on the End of School Year page. Closing the school year moves every real student up a year.</li>
-        <li>Do not turn on <b>Enable maintenance mode</b> and do not untick <b>Allow public student registration</b> in Settings. Both affect every real user at once.</li>
+        <li>Do not untick <b>Allow public student registration</b> in Settings. It affects every real user at once.</li>
         <li>If you put an announcement on the site for a test, clear it again in the test that follows.</li>
       </ul>
     </div>
@@ -172,7 +172,7 @@ const html = `<!doctype html>
       <p>This edition describes the website after the update of 14 October 2026: the Core Subject field when uploading questions, editing each question's topic and subtopic from the Edit Question Set window, the "Confirmed" tag status, School Year and Semester on an exam, Archive in the Delete Exam window, the Student list in the Export Center, and the new Estimated Outcome (locked until all 6 subject exams of a semester are done, then an early warning or a board readiness prediction) with its model versions on the Licensure page. If the tests for these fail, first ask the developer whether that update is on the website yet.</p>
     </div>
     <div class="block"><h3>What is not in this edition</h3>
-      <p>The tests that cannot or should not be run on the real website are left out: the white box tests (they need the server and its database), maintenance mode, closing registration, closing the school year, and emailing reports to test addresses that do not exist. They are in the full edition, which is run on a local copy.</p>
+      <p>The tests that cannot or should not be run on the real website are left out: the white box tests (they need the server and its database), closing registration, closing the school year, and emailing reports to test addresses that do not exist. They are in the full edition, which is run on a local copy.</p>
     </div>
     <div class="block"><h3>After testing</h3>
       <p>The tests leave data on the website: the accounts in the second table, the room QA Room 1A with its exams and results, the six question banks and the Review Bot questions of Teacher A, and one licensure test entry if it was not removed. Give this list to the developer so it can be taken off the website.</p>
@@ -220,7 +220,7 @@ console.log(`cases: ${total}`)
     preferCSSPageSize: true,
     displayHeaderFooter: true,
     headerTemplate: '<span></span>',
-    footerTemplate: '<div style="width:100%;font-family:Arial;font-size:7.5pt;color:#444;padding:0 9mm;display:flex;justify-content:space-between;"><span>LNU LLE Platform (BLIS) Test Case: live website</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>',
+    footerTemplate: '<div style="width:100%;font-family:Arial;font-size:7.5pt;color:#444;padding:0 9mm;display:flex;justify-content:space-between;"><span>LNU BLIS Platform Test Case: live website</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>',
   })
   const faults = await page.evaluate(() => [...document.querySelectorAll('.part tbody td')].filter((td) => td.scrollWidth > td.clientWidth + 1).map((td) => td.parentElement.querySelector('.id')?.textContent))
   console.log('cells wider than their column:', faults.length, faults.slice(0, 8))

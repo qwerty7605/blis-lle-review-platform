@@ -23,7 +23,7 @@ const REMOVED = new Set([
   'lle-model-left-out',
   // Would disturb real users: everyone locked out, registration closed,
   // the legal text changed, every student moved up a year.
-  'set-maint-on', 'set-maint-admin', 'set-maint-off', 'set-reg-off', 'set-reg-on', 'set-terms-edit',
+  'set-reg-off', 'set-reg-on', 'set-terms-edit',
   'ye-groups', 'ye-cancel', 'ye-apply', 'ye-check', 'ye-warning', 'ye-restore-graduate',
 ])
 
@@ -88,7 +88,7 @@ const OVERRIDES = {
   },
   'users-self-disable': { d: 'Own account: the Admin account you are signed in with' },
   'users-self-unverify': { d: 'Own account: the Admin account you are signed in with' },
-  'users-self-role': { d: 'Own account: the Admin account you are signed in with\nRole: Staff / Master Examiner' },
+  'users-self-role': { d: 'Own account: the Admin account you are signed in with\nRole: Teacher' },
   'lib-empty': {
     p: 'Signed in as Teacher A, who has not uploaded a question bank yet (skip this test if the account already has one)',
   },

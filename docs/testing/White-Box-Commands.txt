@@ -1,4 +1,4 @@
-LNU LLE PLATFORM (BLIS) - WHITE BOX TESTS: COMMANDS AND CONSOLE LINES
+LNU BLIS PLATFORM - WHITE BOX TESTS: COMMANDS AND CONSOLE LINES
 Copy from this file instead of retyping from the PDF. The Test IDs match Part B of BLIS-Test-Cases.pdf.
 
 CONSOLE HELPER (paste once per page load, after signing in as the account named in the test):
@@ -13,7 +13,7 @@ WB_002
 docker compose exec -T php php artisan test --compact --filter="RegistrationEmailVerificationTest|PasswordPolicyTest|PasswordResetTest|StudentIdLengthTest|UserDirectoryVerificationStateTest"
 
 WB_003
-docker compose exec -T php php artisan test --compact --filter="CampusRateLimitTest|MaintenanceModeTest|PublicNoticeTest|HealthCheckTest"
+docker compose exec -T php php artisan test --compact --filter="CampusRateLimitTest|PublicNoticeTest|HealthCheckTest"
 
 WB_004
 docker compose exec -T php php artisan test --compact --filter="ExamAttemptStartTest|ExamAndRoomDeletionTest|StudentExamAvailabilityFlagTest|ExamResultFeedbackTest|ExamItemAnalyticsTest"
@@ -171,29 +171,23 @@ WB_070
 api('PUT','/settings/system',{announcement_banner:'x'.repeat(501)})
 
 WB_071
-api('GET','/rooms')
-api('GET','/settings/public/notice')
-api('GET','/auth/me')
-api('GET','/admin/users')
-
-WB_072
 api('GET','/admin/users?search=%25')
 api('GET','/admin/users?search=_')
 
-WB_073
+WB_072
 for (let i = 0; i < 125; i++) api('GET','/rooms')
 
-WB_078
+WB_077
 api('GET','/predictions/let/model')
 
-WB_079
+WB_078
 api('POST','/predictions/let/model/retrain')
 
-WB_080
+WB_079
 docker compose logs --tail 20 queue
 
-WB_081
+WB_080
 api('POST','/predictions/let/model/activate',{version:1})
 
-WB_082
+WB_081
 api('GET','/student/analytics')

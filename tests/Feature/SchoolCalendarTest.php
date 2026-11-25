@@ -67,7 +67,7 @@ class SchoolCalendarTest extends TestCase
         $this->assertSame(['first' => 6, 'second' => 11], $entry->metadata['semester_start_months']['to']);
 
         // A save that leaves the months alone says nothing about them.
-        $this->putJson('/api/settings/system', ['platform_name' => 'BLIS'])->assertOk();
+        $this->putJson('/api/settings/system', ['announcement_banner' => 'Exams resume Monday.'])->assertOk();
         $this->assertArrayNotHasKey('semester_start_months', AuditLog::query()->where('action', 'settings.update')->latest('id')->first()->metadata);
     }
 

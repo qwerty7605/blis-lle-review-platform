@@ -32,12 +32,6 @@
 
       <template v-else>
         <div class="settings-grid">
-          <label class="field-stack">
-            <span class="field-label">Platform Name</span>
-            <input v-model.trim="settingsForm.platform_name" type="text" class="text-input" maxlength="255" :disabled="!settingsCanEdit" v-bind="settingsChecks.bind('platform_name')" />
-            <FieldError :checks="settingsChecks" field="platform_name" />
-          </label>
-
           <fieldset class="settings-calendar">
             <legend class="field-label">
               School Calendar

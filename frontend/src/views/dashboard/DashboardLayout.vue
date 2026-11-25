@@ -41,7 +41,7 @@
           </span>
           <span v-if="showSidebarLabels" class="layout-brand-text">
             <strong>BLIS</strong>
-            <small>LNU LLE Platform</small>
+            <small>{{ PLATFORM_NAME }}</small>
           </span>
         </button>
       </div>
@@ -250,6 +250,7 @@ import { getDashboardNavItems } from './config/dashboardNavigation'
 import { ANNOUNCEMENT_CHANGED_EVENT } from './composables/useSettingsModule'
 import { useCompactLayout } from './composables/useViewport'
 import { closeGuide, guideActive, useGuide } from '@/guides/useGuide'
+import { PLATFORM_NAME } from '@/brand'
 import {
   ChevronDown,
   ChevronLeft,
@@ -305,7 +306,7 @@ const pageSubtitle = computed(() => String(route.meta?.sub ?? 'Manage your modul
 
 const displayName = computed(() => auth.user?.name ?? 'User')
 const displayRole = computed(() => {
-  if (normalizedRole.value === 'staff_master_examiner') return 'Staff / Master Examiner'
+  if (normalizedRole.value === 'staff_master_examiner') return 'Teacher'
   if (normalizedRole.value === 'admin') return 'Administrator'
   return 'Student'
 })

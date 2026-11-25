@@ -36,7 +36,7 @@ function firstApiError(error, fallbackMessage) {
 function displayMemberRole(role) {
   const normalized = String(role ?? '').toLowerCase()
   if (normalized === 'admin') return 'Administrator'
-  if (normalized === 'staff_master_examiner') return 'Staff / Master Examiner'
+  if (normalized === 'staff_master_examiner') return 'Teacher'
   return 'Student'
 }
 
@@ -206,7 +206,7 @@ export function useUsersModule(options = {}) {
       options: [
         { value: '', label: 'All roles' },
         { value: 'student', label: 'Student' },
-        { value: 'staff_master_examiner', label: 'Staff / Master Examiner' },
+        { value: 'staff_master_examiner', label: 'Teacher' },
         { value: 'admin', label: 'Admin' },
       ],
     },
@@ -350,7 +350,7 @@ export function useUsersModule(options = {}) {
   const managementAccountGroups = computed(() => ([
     {
       key: 'staff-accounts',
-      label: 'Staff / Master Examiners',
+      label: 'Teachers',
       role: 'staff_master_examiner',
     },
     {
@@ -394,7 +394,7 @@ export function useUsersModule(options = {}) {
     },
     {
       key: 'management',
-      title: 'Staff and Admin Accounts',
+      title: 'Teacher and Admin Accounts',
       description: 'Management accounts stay separate from the student directory.',
       noun: 'account',
       countTone: 'neutral',
@@ -428,7 +428,7 @@ export function useUsersModule(options = {}) {
     },
     {
       key: 'staff-admin',
-      label: 'Staff and Admin',
+      label: 'Teachers and Admins',
       value: usersSummary.value.staff_and_admin,
       tone: 'navy',
     },

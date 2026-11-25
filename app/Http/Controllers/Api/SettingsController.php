@@ -106,7 +106,6 @@ class SettingsController extends Controller
         }
 
         $validated = $request->validate([
-            'platform_name' => ['sometimes', 'required', 'string', 'max:255'],
             'first_semester_start_month' => ['sometimes', 'required', 'integer', 'between:1,12'],
             'second_semester_start_month' => ['sometimes', 'required', 'integer', 'between:1,12'],
             'students_passing_mark' => ['sometimes', 'required', 'integer', 'between:' . PassingMark::MIN . ',' . PassingMark::MAX],

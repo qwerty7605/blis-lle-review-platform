@@ -62,7 +62,7 @@ ${rows(part)}
 const total = parts.reduce((sum, part) => sum + part.count, 0)
 
 const html = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>LNU LLE Platform (BLIS) Test Cases</title>
+<html lang="en"><head><meta charset="utf-8"><title>LNU BLIS Platform Test Cases</title>
 <style>
   @page { size: A4 landscape; margin: 9mm 8mm 12mm 8mm; }
   * { box-sizing: border-box; }
@@ -105,7 +105,7 @@ const html = `<!doctype html>
   .end td { height: 8mm; }
 </style></head>
 <body>
-  <div class="title"><h1>LNU LLE PLATFORM (BLIS)</h1><p>Test Case</p></div>
+  <div class="title"><h1>LNU BLIS PLATFORM</h1><p>Test Case</p></div>
   <div class="meta">
     <div><b>Tester:</b> <span class="line"></span></div>
     <div><b>Date tested:</b> <span class="line"></span></div>
@@ -201,7 +201,7 @@ console.log(`cases: ${parts.map((p) => `${p.code} ${p.count}`).join(', ')} | tot
     preferCSSPageSize: true,
     displayHeaderFooter: true,
     headerTemplate: '<span></span>',
-    footerTemplate: '<div style="width:100%;font-family:Arial;font-size:7.5pt;color:#444;padding:0 9mm;display:flex;justify-content:space-between;"><span>LNU LLE Platform (BLIS) Test Case</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>',
+    footerTemplate: '<div style="width:100%;font-family:Arial;font-size:7.5pt;color:#444;padding:0 9mm;display:flex;justify-content:space-between;"><span>LNU BLIS Platform Test Case</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>',
   })
   // Rows that are too tall or cells whose text runs outside them would be layout faults.
   const faults = await page.evaluate(() => {

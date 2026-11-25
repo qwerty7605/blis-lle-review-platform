@@ -6,7 +6,7 @@ const cases = require('./cases-wb.cjs').filter((item) => !item.section)
 const isCode = (line) => /^(api\(|Promise\.|for \(|document\.|localStorage|docker |cd |npx )/.test(line.trim())
 
 const out = [
-  'LNU LLE PLATFORM (BLIS) - WHITE BOX TESTS: COMMANDS AND CONSOLE LINES',
+  'LNU BLIS PLATFORM - WHITE BOX TESTS: COMMANDS AND CONSOLE LINES',
   'Copy from this file instead of retyping from the PDF. The Test IDs match Part B of BLIS-Test-Cases.pdf.',
   '',
   'CONSOLE HELPER (paste once per page load, after signing in as the account named in the test):',

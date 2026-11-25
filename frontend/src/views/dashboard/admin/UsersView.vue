@@ -381,7 +381,7 @@
               <span class="field-label">Role</span>
               <select v-model="userForm.role" class="text-input">
                 <option value="student">Student</option>
-                <option value="staff_master_examiner">Staff / Master Examiner</option>
+                <option value="staff_master_examiner">Teacher</option>
                 <option value="admin">Admin</option>
               </select>
             </label>
@@ -402,7 +402,7 @@
           <div v-if="studentDetailsWillBeRemoved" class="feedback info" role="status">
             <AlertCircle :size="15" />
             <span>
-              Saving makes this a staff account and removes its student details:
+              Saving makes this a teacher or administrator account and removes its student details:
               <template v-if="editedUserBefore.student_id">student ID {{ editedUserBefore.student_id }}, </template>year level and student status.
             </span>
           </div>

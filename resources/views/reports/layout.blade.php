@@ -58,7 +58,7 @@
         <img src="data:image/png;base64,{{ base64_encode(file_get_contents(resource_path('images/report-logo.png'))) }}" alt="">
         <div class="brand">
             <strong>BLIS</strong>
-            <span>LNU LLE Platform</span>
+            <span>{{ config('app.name') }}</span>
         </div>
         <div class="kind">@yield('kind')</div>
     </header>

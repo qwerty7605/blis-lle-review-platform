@@ -92,7 +92,7 @@ export async function resolveBlobApiError(error, fallbackMessage) {
 export function displayMemberRole(role) {
   const normalized = String(role ?? '').toLowerCase()
   if (normalized === 'admin') return 'Administrator'
-  if (normalized === 'staff_master_examiner') return 'Staff / Master Examiner'
+  if (normalized === 'staff_master_examiner') return 'Teacher'
   return 'Student'
 }
 

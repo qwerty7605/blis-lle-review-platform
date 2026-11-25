@@ -63,7 +63,7 @@ export const dashboardModules = {
   room: {
     key: 'room',
     routeName: 'dashboard-room-management',
-    label: 'Room',
+    label: 'Rooms',
     title: 'Rooms',
     sub: 'Create rooms, review enrollment, and track assigned exams',
     icon: DoorOpen,

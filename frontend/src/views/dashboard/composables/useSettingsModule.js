@@ -34,7 +34,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
   // The mark as last loaded or saved, to say what saving a new one does.
   const savedPassingMark = ref(DEFAULT_MARK)
   const settingsForm = reactive({
-    platform_name: '',
     first_semester_start_month: 8,
     second_semester_start_month: 1,
     students_passing_mark: DEFAULT_MARK,
@@ -46,7 +45,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
 
   // SettingsController::updateSystem.
   const settingsChecks = useFieldChecks('settings', {
-    platform_name: () => requiredProblem(settingsForm.platform_name, 'Enter the platform name.'),
     // Shown as soon as the two match: another pick is the only fix.
     second_semester_start_month: () => (Number(settingsForm.first_semester_start_month) === Number(settingsForm.second_semester_start_month)
       ? early('The 2nd semester cannot start in the same month as the 1st.')
@@ -68,7 +66,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
       const { data } = await services.getSystemSettings()
       const settings = data.settings ?? {}
       settingsCanEdit.value = Boolean(data.can_edit)
-      settingsForm.platform_name = settings.platform_name ?? ''
       settingsForm.first_semester_start_month = Number(settings.first_semester_start_month) || 8
       settingsForm.second_semester_start_month = Number(settings.second_semester_start_month) || 1
       currentTerm.value = data.current_term?.label ?? ''
@@ -100,7 +97,6 @@ export function useSettingsModule({ enabled = () => true } = {}) {
 
     try {
       const { data } = await services.saveSystemSettings({
-        platform_name: settingsForm.platform_name.trim(),
         first_semester_start_month: Number(settingsForm.first_semester_start_month),
         second_semester_start_month: Number(settingsForm.second_semester_start_month),
         students_passing_mark: Number(settingsForm.students_passing_mark),

@@ -8,7 +8,7 @@
             <img :src="blisLogoWhite" alt="BLIS logo" />
           </div>
           <div>
-            <p class="auth-panel-name">LNU LLE Platform</p>
+            <p class="auth-panel-name">{{ PLATFORM_NAME }}</p>
             <p class="auth-panel-org">BLIS | Leyte Normal University</p>
           </div>
         </div>
@@ -57,6 +57,7 @@
 
 <script setup>
 import './auth.css'
+import { PLATFORM_NAME } from '@/brand'
 import blisLogo from '@/assets/blis-logo.png'
 import blisLogoWhite from '@/assets/blis-logo-white.png'
 import lnuSeal from '@/assets/lnu-seal.png'

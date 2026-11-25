@@ -21,7 +21,6 @@ class SystemSettings
      * an administrator saves one. /settings/system answers these keys only.
      */
     public const DEFAULTS = [
-        'platform_name' => 'LNU LLE Platform',
         // The school calendar (SchoolCalendar): the month each semester
         // starts in. They replaced a typed "Academic Term" that nothing read.
         'first_semester_start_month' => SchoolCalendar::DEFAULT_FIRST_SEMESTER_MONTH,
