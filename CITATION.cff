@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use or refer to this software, please cite it as below."
+type: software
+title: "LNU BLIS Platform: Mock Librarians' Licensure Examination and Review System"
+abstract: >-
+  A web platform for the Bachelor of Library and Information Science (BLIS)
+  programme of Leyte Normal University. Students take timed mock board
+  examinations and practise their weak topics; teachers build examinations from
+  their own question sets and follow each class; a logistic regression model
+  estimates each student's chance of passing the Librarians' Licensure
+  Examination (LLE) from their mock board scores.
+authors:
+  - given-names: Eujan Eol
+    family-names: Zeta
+  - given-names: Julius Rey
+    family-names: dela Peña
+  - given-names: Wayne Martin
+    family-names: Tabalanza
+  - given-names: Prince Andrew
+    family-names: Yan
+version: 1.0.0
+date-released: 2026-11-26
+repository-code: "https://github.com/qwerty7605/blis-lle-review-platform"
+url: "https://lnu-blis.live"
+keywords:
+  - licensure examination
+  - library and information science
+  - mock examination
+  - learning analytics
+  - logistic regression
+  - Laravel
+  - Vue
