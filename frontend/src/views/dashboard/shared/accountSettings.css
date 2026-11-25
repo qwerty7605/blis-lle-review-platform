@@ -304,3 +304,10 @@
   line-height: 1.5;
   color: var(--ink-soft);
 }
+
+.account-guides-btn {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

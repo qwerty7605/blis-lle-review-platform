@@ -168,6 +168,26 @@
 
       <div v-if="themeError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ themeError }}</span></div>
     </article>
+
+    <!-- Guides -->
+    <article class="surface-card account-card" data-guide="guides">
+      <header class="account-card-head">
+        <h3>Guides</h3>
+      </header>
+
+      <p class="account-note">
+        Each page has a short guide that shows what its parts are for. It appears the first time you open the page.
+        Press <b>Guide</b> at the top of any page to see it again, or show every guide again from the start here.
+      </p>
+
+      <button type="button" class="ghost-btn account-guides-btn" :disabled="guidesResetting" @click="showGuidesAgain">
+        <RotateCcw :size="15" />
+        <span>{{ guidesResetting ? 'Resetting...' : 'Show the Guides Again' }}</span>
+      </button>
+
+      <div v-if="guidesMessage" class="feedback success" role="status"><CheckCircle2 :size="15" /><span>{{ guidesMessage }}</span></div>
+      <div v-if="guidesError" class="feedback danger" role="alert"><AlertCircle :size="15" /><span>{{ guidesError }}</span></div>
+    </article>
   </div>
 </template>
 
@@ -175,7 +195,7 @@
 import FieldError from '@/components/FieldError.vue'
 import InfoTip from '@/components/InfoTip.vue'
 import { computed, reactive, ref, watch } from 'vue'
-import { AlertCircle, CheckCircle2, Circle, Monitor, Moon, RefreshCw, Sun } from 'lucide-vue-next'
+import { AlertCircle, CheckCircle2, Circle, Monitor, Moon, RefreshCw, RotateCcw, Sun } from 'lucide-vue-next'
 import { accountApi } from '@/api/account.api'
 import { useAuthStore } from '@/store/auth.store'
 import { passwordChecklist } from '@/utils/password'
@@ -188,6 +208,7 @@ import {
   useFieldChecks,
 } from '@/utils/fieldChecks'
 import { setThemeChoice, themeChoice } from '@/utils/theme'
+import { useGuide } from '@/guides/useGuide'
 
 const auth = useAuthStore()
 
@@ -372,6 +393,27 @@ async function chooseTheme(value) {
     auth.user = { ...auth.user, ...data.user }
   } catch (error) {
     themeError.value = generalError(error, 'Applied here, but it could not be saved to your account. Try again.')
+  }
+}
+
+// Every page's guide (and the welcome) is offered again, starting with this one.
+const guide = useGuide()
+const guidesResetting = ref(false)
+const guidesMessage = ref('')
+const guidesError = ref('')
+
+async function showGuidesAgain() {
+  guidesResetting.value = true
+  guidesMessage.value = ''
+  guidesError.value = ''
+
+  try {
+    await guide.resetAll()
+    guidesMessage.value = 'Done. Each page will show its guide again the next time you open it.'
+  } catch (error) {
+    guidesError.value = generalError(error, 'The guides could not be reset. Try again.')
+  } finally {
+    guidesResetting.value = false
   }
 }
 </script>

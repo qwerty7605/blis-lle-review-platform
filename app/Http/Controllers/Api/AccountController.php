@@ -204,7 +204,16 @@ class AccountController extends Controller
             // Defaults saved before this setting existed come without it.
             'exam_defaults.answers_shown_after' => ['sometimes', Rule::in(Exam::ANSWER_TIMINGS)],
             'theme' => ['sometimes', Rule::in(['light', 'dark', 'system'])],
+            // The in-app guides this person has finished or skipped, by key
+            // ("welcome", "student:dashboard-home", ...). The page sends the
+            // whole list each time; an empty list shows them all again.
+            'guides_seen' => ['sometimes', 'array', 'max:100'],
+            'guides_seen.*' => ['string', 'max:64', 'regex:/^[a-z0-9:_-]+$/'],
         ]);
+
+        if (array_key_exists('guides_seen', $validated)) {
+            $validated['guides_seen'] = array_values(array_unique($validated['guides_seen']));
+        }
 
         $user->forceFill(['preferences' => array_merge($user->preferences ?? [], $validated)])->save();
 

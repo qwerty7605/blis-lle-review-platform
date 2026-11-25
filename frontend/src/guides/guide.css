@@ -1,0 +1,132 @@
+/* The in-app guide's note, in the app's own look (driver.js draws it; these
+   rules restyle its defaults). Only design tokens, so dark mode follows. */
+
+.driver-popover.blis-guide {
+  font-family: var(--font-display);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 20px 20px 16px;
+  min-width: 260px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+/* The highlight says where; an arrow in the wrong colour in dark mode helps no one. */
+.driver-popover.blis-guide .driver-popover-arrow {
+  display: none;
+}
+
+.driver-popover.blis-guide .driver-popover-title {
+  font: 600 17px/1.3 var(--font-display);
+  color: var(--ink);
+  padding-right: 28px;
+}
+
+.driver-popover.blis-guide .driver-popover-description {
+  margin-top: 6px;
+  font: 400 14px/1.55 var(--font-display);
+  color: var(--ink-muted);
+}
+
+.driver-popover.blis-guide .driver-popover-description b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.driver-popover.blis-guide .driver-popover-close-btn {
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 20px;
+}
+
+.driver-popover.blis-guide .driver-popover-close-btn:hover,
+.driver-popover.blis-guide .driver-popover-close-btn:focus-visible {
+  color: var(--ink);
+  background: var(--surface-muted);
+}
+
+.driver-popover.blis-guide .driver-popover-footer {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.driver-popover.blis-guide .driver-popover-progress-text {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.driver-popover.blis-guide .driver-popover-navigation-btns {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.driver-popover.blis-guide .driver-popover-footer-btn,
+.driver-popover.blis-guide .blis-guide-skip {
+  font: 600 13px/1 var(--font-display);
+  border-radius: var(--radius-sm);
+  padding: 9px 14px;
+  min-height: 36px;
+  text-shadow: none;
+  cursor: pointer;
+}
+
+.driver-popover.blis-guide .driver-popover-prev-btn {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+}
+
+.driver-popover.blis-guide .driver-popover-next-btn {
+  color: var(--dk-fg-lnu-gold-light, var(--lnu-gold-light));
+  background: var(--dk-bg-lnu-navy, var(--lnu-navy));
+  border: 1px solid var(--dk-line-lnu-navy, var(--lnu-navy));
+}
+
+.driver-popover.blis-guide .driver-popover-next-btn:hover,
+.driver-popover.blis-guide .driver-popover-next-btn:focus-visible {
+  background: var(--dk-bg-lnu-navy-light, var(--lnu-navy-light));
+}
+
+.driver-popover.blis-guide .blis-guide-skip {
+  color: var(--ink-soft);
+  background: none;
+  border: 0;
+  padding-left: 0;
+  padding-right: 4px;
+}
+
+.driver-popover.blis-guide .blis-guide-skip:hover,
+.driver-popover.blis-guide .blis-guide-skip:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.driver-popover.blis-guide button:focus-visible {
+  outline: 2px solid var(--dk-line-lnu-gold, var(--lnu-gold));
+  outline-offset: 2px;
+}
+
+/* Touch screens get the same 44px controls as the rest of the app. */
+@media (pointer: coarse) {
+  .driver-popover.blis-guide .driver-popover-footer-btn,
+  .driver-popover.blis-guide .blis-guide-skip {
+    min-height: 44px;
+  }
+
+  .driver-popover.blis-guide .driver-popover-close-btn {
+    width: 44px;
+    height: 44px;
+    top: 4px;
+    right: 4px;
+  }
+}

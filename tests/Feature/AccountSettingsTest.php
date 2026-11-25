@@ -235,6 +235,33 @@ class AccountSettingsTest extends TestCase
         $this->assertSame(['theme' => 'dark'], $student->fresh()->preferences);
     }
 
+    public function test_the_guides_someone_has_seen_are_kept_with_their_account(): void
+    {
+        $student = $this->user(User::ROLE_STUDENT);
+
+        $this->as($student)->putJson('/api/account/preferences', ['theme' => 'dark'])->assertOk();
+
+        $this->as($student)->putJson('/api/account/preferences', ['guides_seen' => ['welcome', 'student:dashboard-home', 'welcome']])
+            ->assertOk()
+            ->assertJsonPath('user.preferences.guides_seen', ['welcome', 'student:dashboard-home']);
+
+        // Saving the list leaves the other preferences alone.
+        $this->assertSame('dark', $student->fresh()->preferences['theme']);
+
+        // An empty list is how "Show the guides again" starts them over.
+        $this->as($student)->putJson('/api/account/preferences', ['guides_seen' => []])
+            ->assertOk()
+            ->assertJsonPath('user.preferences.guides_seen', []);
+
+        $this->as($student)->putJson('/api/account/preferences', ['guides_seen' => ['<script>']])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['guides_seen.0']);
+
+        $this->as($student)->putJson('/api/account/preferences', ['guides_seen' => array_map(fn ($i) => "g{$i}", range(1, 101))])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['guides_seen']);
+    }
+
     public function test_exam_defaults_keep_to_the_limits_an_exam_is_saved_under(): void
     {
         $this->as($this->user(User::ROLE_STAFF_MASTER_EXAMINER))->putJson('/api/account/preferences', ['exam_defaults' => [

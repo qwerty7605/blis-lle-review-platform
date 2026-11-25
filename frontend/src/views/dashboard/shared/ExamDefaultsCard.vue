@@ -1,5 +1,5 @@
 <template>
-  <article class="surface-card account-card">
+  <article class="surface-card account-card" data-guide="exam-defaults">
     <header class="account-card-head">
       <h3>New Exam Defaults <InfoTip text="What the New Exam form starts with. You can still change any of it for a single exam." /></h3>
     </header>

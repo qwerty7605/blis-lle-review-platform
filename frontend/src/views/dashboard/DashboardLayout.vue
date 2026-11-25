@@ -166,6 +166,21 @@
 
         <!-- Pages move their main action up here on narrow screens. -->
         <div id="layout-topbar-actions" class="layout-topbar-actions"></div>
+
+        <!-- Replays this page's guide (src/guides/). -->
+        <button
+          v-if="pageHasGuide"
+          type="button"
+          class="layout-guide-btn"
+          data-guide-button
+          :aria-label="`Show the guide to ${pageTitle}`"
+          title="Show this page's guide"
+          :disabled="guideActive"
+          @click="replayGuide"
+        >
+          <CircleHelp :size="20" />
+          <span v-if="!isMobileViewport" class="layout-guide-label">Guide</span>
+        </button>
       </header>
 
       <!--
@@ -234,10 +249,12 @@ import { lockScroll, unlockScroll } from '@/utils/scrollLock'
 import { getDashboardNavItems } from './config/dashboardNavigation'
 import { ANNOUNCEMENT_CHANGED_EVENT } from './composables/useSettingsModule'
 import { useCompactLayout } from './composables/useViewport'
+import { closeGuide, guideActive, useGuide } from '@/guides/useGuide'
 import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   LogOut,
   Megaphone,
   Menu,
@@ -461,7 +478,27 @@ function closeLogoutModal() {
   if (!loggingOut.value) showLogoutModal.value = false
 }
 
+// The in-app guide: offered once per page, replayed with the "?" button.
+const guide = useGuide()
+const pageHasGuide = computed(() => guide.hasGuide(currentRouteName.value))
+
+function replayGuide() {
+  guide.start(currentRouteName.value)
+}
+
+watch(
+  currentRouteName,
+  (name, previous) => {
+    if (previous !== undefined) closeGuide()
+    if (name) guide.offer(name)
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(closeGuide)
+
 async function handleLogout() {
+  closeGuide()
   loggingOut.value = true
   try {
     await auth.logout()
@@ -886,6 +923,35 @@ onBeforeUnmount(() => {
   background: var(--dk-bg-ffffff-a10, rgba(255, 255, 255, 0.1));
 }
 
+.layout-guide-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 14px/1 var(--font-display);
+  cursor: pointer;
+}
+
+.layout-guide-btn:hover {
+  background: var(--surface-muted);
+}
+
+.layout-guide-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.layout-guide-btn:focus-visible {
+  outline: 2px solid var(--dk-line-lnu-gold, var(--lnu-gold));
+  outline-offset: 2px;
+}
+
 .layout-menu-btn:focus-visible,
 .layout-drawer-close:focus-visible {
   outline: 2px solid var(--dk-line-lnu-gold-light, var(--lnu-gold-light));
@@ -983,6 +1049,22 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 900px) {
+  /* On the navy app bar the guide button is a plain white icon, like the menu button. */
+  .layout-guide-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+    border: 0;
+    border-radius: 14px;
+    background: transparent;
+    color: var(--dk-fg-lnu-white, var(--lnu-white));
+  }
+
+  .layout-guide-btn:hover {
+    background: var(--dk-bg-ffffff-a10, rgba(255, 255, 255, 0.1));
+  }
+
   .layout-shell {
     display: block;
   }

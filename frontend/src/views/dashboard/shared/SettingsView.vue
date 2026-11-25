@@ -17,7 +17,7 @@
       <span>{{ settingsError }}</span>
     </div>
 
-    <article class="surface-card">
+    <article class="surface-card" data-guide="system-settings">
       <header class="surface-head">
         <h3>System Settings</h3>
         <span class="pill" :class="settingsCanEdit ? 'success' : 'neutral'">
