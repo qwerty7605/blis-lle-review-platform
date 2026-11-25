@@ -148,21 +148,20 @@ curl -I http://<elastic-ip>/dashboard/rooms   # 200, not 404 — history fallbac
 curl    http://<elastic-ip>/up          # 200, and it really checks MySQL
 ```
 
-Create the first admin account:
+Create the first admin account. The website cannot: sign-up only makes
+students, and only an administrator can make another one on the Users page.
+On the server:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm -e XDG_CONFIG_HOME=/tmp php php artisan tinker
+docker compose -f docker-compose.prod.yml exec php php artisan blis:create-admin
 ```
 
-Then inside tinker, with your own name, address and a password that
-satisfies the policy (`email_verified_at` is not mass-assignable, so it is set
-on its own):
-
-```php
-$admin = new App\Models\User(['name' => 'Your Name', 'email' => 'you@lnu.edu.ph', 'role' => 'admin', 'is_active' => true, 'password' => 'a-long-password']);
-$admin->email_verified_at = now();
-$admin->save();
-```
+It asks for a name, an email address and a password (hidden, typed twice; at
+least 8 characters with upper and lower case, a number and a symbol), and
+makes a verified, active administrator. The password is never an option on
+the command line, so it is not left in the shell history. `--name=` and
+`--email=` skip those two questions. Run it again the same way if every
+administrator is ever locked out.
 
 Do not use the demo admin's address (`DEMO_ADMIN_EMAIL`, section 9): the demo
 seeder stops if that address already belongs to a real account.
@@ -409,8 +408,8 @@ $P run --rm php php artisan up
 
 ### 5. Create the real administrator account
 
-As in section 4 (the tinker commands under "Create the first admin
-account"). Everyone was signed out by step 4; sign in with the new account at
+As in section 4 (`php artisan blis:create-admin` under "Create the first
+admin account"). Everyone was signed out by step 4; sign in with the new account at
 `https://lnu-blis.live/login` to check it works.
 
 ### 6. Demo data: only if wanted
