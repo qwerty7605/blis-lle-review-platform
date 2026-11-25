@@ -118,6 +118,7 @@ Nobody should have to reload a page to see what changed. Four pieces keep that t
 - Seed only: `docker compose exec -T php php artisan db:seed`
 - Run migrations: `docker compose exec -T php php artisan migrate`
 - Watch queued job logs: `docker compose logs -f queue`
+- Make an administrator (the first one, or after a lockout; the website never makes one): `docker compose exec php php artisan blis:create-admin`. It asks for name, email and a hidden password typed twice (the password policy applies), and creates a verified, active admin, logged `admin.user.create` with no actor and `via: console`. The password is never an option. Tests: `tests/Feature/CreateAdminCommandTest.php`.
 - Re-check scoring by hand: `docker compose exec -T php php artisan scoring:export` (30 submitted attempts, seed 1; `--count`, `--seed`, `--exam=`): two CSV files under `storage/app/private/scoring-check/`, every dealt item with its key, the answer and the stored result, and each attempt's stored score beside the score worked out from the key. Tests: `tests/Feature/ScoringExportTest.php`.
 - Install PHP deps in container: `docker compose exec -T php composer install`
 - List users/roles quickly:
