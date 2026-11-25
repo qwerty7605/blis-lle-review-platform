@@ -1,0 +1,15 @@
+Copyright (c) 2026 The BLIS development team, Leyte Normal University.
+All rights reserved.
+
+This source code is published for viewing and evaluation only, for example as
+part of the authors' portfolios. No licence is granted to copy, modify,
+distribute, host, or use it, in whole or in part, for any purpose, without the
+prior written permission of the copyright holders.
+
+The examinee data in ml/data/ is anonymised research data of Leyte Normal
+University's Bachelor of Library and Information Science programme and is
+covered by the same terms. The Leyte Normal University name and seal belong to
+the university.
+
+Third-party packages used by this project (listed in composer.json and
+frontend/package.json) remain under their own licences.
