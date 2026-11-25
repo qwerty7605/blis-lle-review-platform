@@ -44,7 +44,7 @@ npm install
 npm run dev                        # http://localhost:5173
 ```
 
-The seeded accounts and demo data are listed in `AGENTS.md` ("Current Seed Users").
+The seeded accounts and demo data are listed in `AGENTS.md` ("Seed Data").
 phpMyAdmin is at http://localhost:8081 in development only.
 
 ## Tests
@@ -53,7 +53,7 @@ phpMyAdmin is at http://localhost:8081 in development only.
 docker compose exec -T php php artisan test
 ```
 
-About 760 backend tests. `AGENTS.md` ("Tests") describes running them in a throwaway container
+About 920 backend tests. `AGENTS.md` ("Tests") describes running them in a throwaway container
 so the development database is left alone, and measuring coverage.
 
 ## Where things are

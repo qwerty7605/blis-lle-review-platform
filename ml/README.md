@@ -87,10 +87,24 @@ Mean confusion matrix (actual FAILED / PASSED by predicted FAILED / PASSED):
   the made-up datasets of the trainer check.
 - `tools/compare_logistic.php` — the same in the app's code, compared with
   WEKA's output (`vectors`, `base`, `generate`, `check`).
-- `tools/weka-stable.jar` — WEKA 3.8.6, from Maven Central. Not needed by the
-  running app; only by the tools above.
+- `tools/weka-stable.jar` — WEKA 3.8.6. **Not in the repository**: download it
+  first (see "Getting WEKA" below). Not needed by the running app; only by the
+  tools above.
 - `tools/org/bounce/net/DefaultAuthenticator.java` — a stand-in for a class
   WEKA wants at start-up that is not inside `weka-stable.jar`.
+
+## Getting WEKA
+
+WEKA is GPL-licensed software from the University of Waikato and is not
+committed here. The tools above expect the exact 3.8.6 build from Maven Central:
+
+```bash
+curl -fL -o ml/tools/weka-stable.jar \
+  https://repo1.maven.org/maven2/nz/ac/waikato/cms/weka/weka-stable/3.8.6/weka-stable-3.8.6.jar
+sha1sum ml/tools/weka-stable.jar   # 7e16bf3b95a17458da6729473d3a0344ef906a16
+```
+
+The file is listed in `.gitignore`, so it stays out of commits.
 
 ## Where the app uses this
 
