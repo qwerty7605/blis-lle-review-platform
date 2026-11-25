@@ -41,3 +41,6 @@ ml/tools/**/*.class
 /docs/testing/BLIS-Test-Cases-Live-Site.pdf
 /docs/testing/source/live-accounts.json
 /docs/testing/source/*.html
+
+# WEKA is downloaded separately (ml/README.md, "Getting WEKA"); it is GPL-licensed and not part of this repo.
+/ml/tools/weka-stable.jar
