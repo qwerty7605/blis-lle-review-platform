@@ -32,7 +32,7 @@ final class DemoData
         'teacher3@lnu.edu.ph',
     ];
 
-    public const DEFAULT_ADMIN_EMAIL = '2300001@lnu.edu.ph';
+    public const DEFAULT_ADMIN_EMAIL = 'admin@blis.test';
 
     public const DEFAULT_ADMIN_PASSWORD = 'Qazwsxedc_123';
 
