@@ -44,3 +44,6 @@ ml/tools/**/*.class
 
 # WEKA is downloaded separately (ml/README.md, "Getting WEKA"); it is GPL-licensed and not part of this repo.
 /ml/tools/weka-stable.jar
+
+# The Relevant Source Code appendix is built by docs/relevant-source-code/build.mjs and kept with the paper, not here.
+/docs/relevant-source-code/*.docx
