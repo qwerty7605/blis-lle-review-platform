@@ -135,7 +135,7 @@
               v-model="registrarListText"
               class="text-input textarea-input"
               rows="4"
-              placeholder="e.g. 2300001, 2301291, 2301305"
+              placeholder="e.g. 2300001, 2300002, 2300015"
               aria-label="Student IDs of graduating students"
               :class="{ 'is-invalid': registrarListSkipped.length > 0 }"
               :aria-describedby="registrarListSkipped.length > 0 ? 'registrar-list-skipped' : undefined"
